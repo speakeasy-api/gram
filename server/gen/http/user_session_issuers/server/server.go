@@ -18,13 +18,12 @@ import (
 
 // Server lists the userSessionIssuers service endpoint HTTP handlers.
 type Server struct {
-	Mounts                         []*MountPoint
-	CreateUserSessionIssuer        http.Handler
-	UpdateUserSessionIssuer        http.Handler
-	ListUserSessionIssuers         http.Handler
-	GetUserSessionIssuer           http.Handler
-	DeleteUserSessionIssuer        http.Handler
-	MigrateLegacyGramRegistrations http.Handler
+	Mounts                  []*MountPoint
+	CreateUserSessionIssuer http.Handler
+	UpdateUserSessionIssuer http.Handler
+	ListUserSessionIssuers  http.Handler
+	GetUserSessionIssuer    http.Handler
+	DeleteUserSessionIssuer http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,14 +58,12 @@ func New(
 			{"ListUserSessionIssuers", "GET", "/rpc/userSessionIssuers.list"},
 			{"GetUserSessionIssuer", "GET", "/rpc/userSessionIssuers.get"},
 			{"DeleteUserSessionIssuer", "DELETE", "/rpc/userSessionIssuers.delete"},
-			{"MigrateLegacyGramRegistrations", "POST", "/rpc/userSessionIssuers.migrateLegacyGramRegistrations"},
 		},
-		CreateUserSessionIssuer:        NewCreateUserSessionIssuerHandler(e.CreateUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateUserSessionIssuer:        NewUpdateUserSessionIssuerHandler(e.UpdateUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListUserSessionIssuers:         NewListUserSessionIssuersHandler(e.ListUserSessionIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetUserSessionIssuer:           NewGetUserSessionIssuerHandler(e.GetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteUserSessionIssuer:        NewDeleteUserSessionIssuerHandler(e.DeleteUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		MigrateLegacyGramRegistrations: NewMigrateLegacyGramRegistrationsHandler(e.MigrateLegacyGramRegistrations, mux, decoder, encoder, errhandler, formatter),
+		CreateUserSessionIssuer: NewCreateUserSessionIssuerHandler(e.CreateUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateUserSessionIssuer: NewUpdateUserSessionIssuerHandler(e.UpdateUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListUserSessionIssuers:  NewListUserSessionIssuersHandler(e.ListUserSessionIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetUserSessionIssuer:    NewGetUserSessionIssuerHandler(e.GetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteUserSessionIssuer: NewDeleteUserSessionIssuerHandler(e.DeleteUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -80,7 +77,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListUserSessionIssuers = m(s.ListUserSessionIssuers)
 	s.GetUserSessionIssuer = m(s.GetUserSessionIssuer)
 	s.DeleteUserSessionIssuer = m(s.DeleteUserSessionIssuer)
-	s.MigrateLegacyGramRegistrations = m(s.MigrateLegacyGramRegistrations)
 }
 
 // MethodNames returns the methods served.
@@ -93,7 +89,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListUserSessionIssuersHandler(mux, h.ListUserSessionIssuers)
 	MountGetUserSessionIssuerHandler(mux, h.GetUserSessionIssuer)
 	MountDeleteUserSessionIssuerHandler(mux, h.DeleteUserSessionIssuer)
-	MountMigrateLegacyGramRegistrationsHandler(mux, h.MigrateLegacyGramRegistrations)
 }
 
 // Mount configures the mux to serve the userSessionIssuers endpoints.
@@ -348,60 +343,6 @@ func NewDeleteUserSessionIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteUserSessionIssuer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionIssuers")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountMigrateLegacyGramRegistrationsHandler configures the mux to serve the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint.
-func MountMigrateLegacyGramRegistrationsHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/userSessionIssuers.migrateLegacyGramRegistrations", f)
-}
-
-// NewMigrateLegacyGramRegistrationsHandler creates a HTTP handler which loads
-// the HTTP request and calls the "userSessionIssuers" service
-// "migrateLegacyGramRegistrations" endpoint.
-func NewMigrateLegacyGramRegistrationsHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeMigrateLegacyGramRegistrationsRequest(mux, decoder)
-		encodeResponse = EncodeMigrateLegacyGramRegistrationsResponse(encoder)
-		encodeError    = EncodeMigrateLegacyGramRegistrationsError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "migrateLegacyGramRegistrations")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

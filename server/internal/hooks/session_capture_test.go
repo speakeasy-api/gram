@@ -14,6 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type alwaysEnabledFeatures struct{}
@@ -122,6 +125,79 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	}
 }
 
+// TestPersistConversationEvent_WritesClickHouseTelemetry guards the fix for
+// the onboarding "Confirm traffic" step never showing prompt/response
+// traffic: UserPromptSubmit and Stop previously only reached Postgres via
+// persistConversationEvent, so ClickHouse-backed consumers of
+// event_source="hook" rows (like ListRecentHookEventsForOnboarding) only ever
+// saw tool calls. This asserts both conversation event types now also land in
+// ClickHouse, the same way persistToolCallEvent's tool events do.
+func TestPersistConversationEvent_WritesClickHouseTelemetry(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	enabled := func(context.Context, string) (bool, error) { return true, nil }
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	const wantUserID = "conversation-telemetry-user"
+	const wantUserEmail = "conversation-telemetry@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
+
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		UserEmail: wantUserEmail,
+		UserID:    wantUserID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+
+	prompt := "hello from the onboarding wizard"
+	lastAssistantMessage := "hi there"
+	model := "claude-opus"
+
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName:        "Stop",
+		SessionID:            &sessionID,
+		LastAssistantMessage: &lastAssistantMessage,
+		Model:                &model,
+	}, metadata))
+
+	var rows []telemetryrepo.RecentHookEvent
+	require.Eventually(t, func() bool {
+		var listErr error
+		rows, listErr = telemetryrepo.New(ti.chConn).ListRecentHookEventsForOnboarding(ctx, telemetryrepo.ListRecentHookEventsForOnboardingParams{
+			ProjectIDs: []string{authCtx.ProjectID.String()},
+			Limit:      10,
+		})
+		return listErr == nil && len(rows) >= 2
+	}, 2*time.Second, 50*time.Millisecond)
+
+	var sawPrompt, sawStop bool
+	for _, row := range rows {
+		require.NotNil(t, row.EventName)
+		switch *row.EventName {
+		case "UserPromptSubmit":
+			sawPrompt = true
+		case "Stop":
+			sawStop = true
+		}
+	}
+	assert.True(t, sawPrompt, "UserPromptSubmit must be visible to the onboarding hook-event feed")
+	assert.True(t, sawStop, "Stop (assistant reply) must be visible to the onboarding hook-event feed")
+}
+
 // The three Claude surfaces must resolve distinctly: cowork self-identifies
 // on the OTEL service.name, Claude Code Desktop on the desktop hook adapter
 // slug, and the CLI on the shared "claude-code" name. Non-Claude values must
@@ -168,6 +244,15 @@ func TestPreferClaudeServiceName(t *testing.T) {
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code"))
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code-desktop"))
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "cowork"))
+	// The bare "claude" adapter slug the hooks binary sends for Claude Code
+	// marks a Claude-family sender without naming a surface, so any cached
+	// surface survives it instead of being clobbered.
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude", "claude-code"))
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude", "claude-code-desktop"))
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude", "cowork"))
+	assert.Equal(t, "claude", preferClaudeServiceName("claude", ""))
+	// And any Claude surface upgrades a cached bare slug.
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", "claude"))
 }
 
 // A session whose OTEL stream reports service.name "cowork" must persist its

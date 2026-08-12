@@ -1,17 +1,19 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
@@ -37,20 +39,20 @@ function RedirectURICallout(): JSX.Element {
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Redirect URI</Label>
-      <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+      <div className="bg-muted/50 p-4 font-mono text-sm">
         <div className="flex items-center justify-between gap-2">
           <code className="break-all">{redirectURI}</code>
           <CopyButton
-            size="inline"
+            size="xs"
             text={redirectURI}
             tooltip="Copy redirect URI"
           />
         </div>
       </div>
-      <Type muted small>
+      <Text muted small>
         Register this as the callback / redirect URI on the upstream provider's
         OAuth app before pasting credentials below.
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -63,12 +65,25 @@ function RedirectURICallout(): JSX.Element {
 
 // IssuerUrlField is the single Issuer URL input. Split out from the Endpoints
 // section so callers can render a Slug field between them.
+//
+// `onIssuerUrlSettled` fires on blur, once the operator has stopped typing.
+// Callers use it to run the duplicate preflight: these sheets make no automatic
+// network calls while typing, and blur is what keeps that true.
+//
+// `duplicateWarning` is a slot rather than something this component fetches, so
+// every surface renders the warning in the same place — directly under the
+// field it is about — while each tier keeps its own scope and its own idea of
+// what "use the existing one instead" means.
 export function IssuerUrlField({
   issuerUrl,
   onIssuerUrlChange,
+  onIssuerUrlSettled,
+  duplicateWarning,
 }: {
   issuerUrl: string;
   onIssuerUrlChange: (value: string) => void;
+  onIssuerUrlSettled?: (value: string) => void;
+  duplicateWarning?: JSX.Element | null;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -76,11 +91,13 @@ export function IssuerUrlField({
       <Input
         value={issuerUrl}
         onChange={onIssuerUrlChange}
+        onBlur={() => onIssuerUrlSettled?.(issuerUrl)}
         placeholder="https://login.example.com"
       />
-      <Type muted small>
+      <Text muted small>
         Issuer URL of the upstream authorization server.
-      </Type>
+      </Text>
+      {duplicateWarning}
     </Stack>
   );
 }
@@ -128,15 +145,15 @@ export function EndpointsFields({
       <Stack gap={1}>
         <Label className="text-sm font-medium">Endpoints</Label>
         {showDiscoverControls && (
-          <Type muted small>
+          <Text muted small>
             Discover fetches the issuer's RFC 8414 metadata and fills these
             fields in. Edit anything that needs to be overridden.
-          </Type>
+          </Text>
         )}
         {showResetControls && (
-          <Type muted small>
+          <Text muted small>
             Restore discovered values for modified endpoints.
-          </Type>
+          </Text>
         )}
       </Stack>
 
@@ -317,11 +334,11 @@ export function ClientCredentialsFields({
           <Label className="text-sm font-medium">
             OAuth Client Credentials
           </Label>
-          <Type muted small>
+          <Text muted small>
             The platform acts as an OAuth client against the upstream issuer.
             Register a client with the issuer out-of-band and paste the
             credentials here.
-          </Type>
+          </Text>
         </Stack>
       )}
 
@@ -336,9 +353,9 @@ export function ClientCredentialsFields({
             placeholder="client_abc123"
           />
         ) : (
-          <Type small mono className="break-all">
+          <Text small mono className="break-all">
             {clientId || "—"}
-          </Type>
+          </Text>
         )}
       </Stack>
 
@@ -388,11 +405,11 @@ export function OverridesFields({
           onChange={onScopeOverrideChange}
           placeholder="read, write, openid"
         />
-        <Type muted small>
+        <Text muted small>
           Comma-separated. When provided, the platform requests these scopes
           during the OAuth dance; otherwise it falls back to the issuer's
           scopes_supported.
-        </Type>
+        </Text>
       </Stack>
 
       <Stack gap={2}>
@@ -404,11 +421,11 @@ export function OverridesFields({
           onChange={onAudienceOverrideChange}
           placeholder="https://api.example.com"
         />
-        <Type muted small>
+        <Text muted small>
           When provided, the platform includes this audience in authorize and
           token requests (RFC 8707). Required by some providers (e.g. Auth0) to
           return JWT access tokens.
-        </Type>
+        </Text>
       </Stack>
     </Stack>
   );
@@ -499,9 +516,9 @@ export function ClientTypeFields({
             </Select>
           </>
         )}
-        <Type muted small>
+        <Text muted small>
           {clientTypeHelp(clientType, availableTypes)}
-        </Type>
+        </Text>
       </Stack>
       {credentials}
     </Stack>

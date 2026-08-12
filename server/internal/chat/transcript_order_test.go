@@ -213,3 +213,56 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 		require.Equal(t, first, m.CreatedAt, "batch rows must share one created_at stamp")
 	}
 }
+
+func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "correlated timestamp")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	_, err := writer.WriteCorrelated(ctx, ti.projectID, repo.CreateChatMessageParams{
+		ChatID:     chatID,
+		ProjectID:  ti.projectID,
+		Role:       "user",
+		Content:    "correlated prompt",
+		Model:      conv.ToPGTextEmpty(""),
+		MessageID:  conv.ToPGText("agent-prompt:v1:test"),
+		ToolCallID: conv.ToPGTextEmpty(""),
+		Source:     conv.ToPGText("litellm"),
+	}, "agent-prompt:v1:test")
+	require.NoError(t, err)
+
+	messages, err := repo.New(ti.conn).ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.True(t, messages[0].CreatedAt.Valid)
+	require.False(t, messages[0].CreatedAt.Time.IsZero())
+
+	eventTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	_, err = writer.WriteCorrelated(ctx, ti.projectID, repo.CreateChatMessageParams{
+		ChatID:     chatID,
+		ProjectID:  ti.projectID,
+		Role:       "user",
+		Content:    "correlated prompt",
+		Model:      conv.ToPGTextEmpty(""),
+		MessageID:  conv.ToPGText("agent-prompt:v1:test"),
+		ToolCallID: conv.ToPGTextEmpty(""),
+		Source:     conv.ToPGText("codex"),
+		CreatedAt:  conv.ToPGTimestamptz(eventTime),
+	}, "agent-prompt:v1:test")
+	require.NoError(t, err)
+
+	messages, err = repo.New(ti.conn).ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.True(t, eventTime.Equal(messages[0].CreatedAt.Time))
+}

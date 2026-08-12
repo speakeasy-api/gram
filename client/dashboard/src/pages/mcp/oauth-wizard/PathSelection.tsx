@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import {
   ServerIcon,
@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { ReactNode } from "react";
 import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
@@ -22,9 +22,9 @@ export function PathSelection(): JSX.Element {
     <div className="space-y-4">
       {discovered && <OAuthDetectedCallout discovered={discovered} />}
 
-      <Type muted small>
+      <Text muted small>
         Choose how you want to configure OAuth for this MCP server.
-      </Type>
+      </Text>
 
       <div className="flex flex-col gap-4">
         {canAutoConfigure && (
@@ -38,10 +38,10 @@ export function PathSelection(): JSX.Element {
               </Badge>,
             ]}
           >
-            <Type muted small>
+            <Text muted small>
               Automatically set up OAuth Proxy based on pre-discovered details
               about this MCP server.
-            </Type>
+            </Text>
           </PathOptionCard>
         )}
 
@@ -62,11 +62,11 @@ export function PathSelection(): JSX.Element {
             ),
           ]}
         >
-          <Type muted small>
+          <Text muted small>
             Use existing OAuth credentials from the upstream service to
             authenticate users. Best for internal MCP servers or when the
             upstream service doesn’t support MCP-native OAuth.
-          </Type>
+          </Text>
         </PathOptionCard>
         <PathOptionCard
           title="External OAuth"
@@ -78,11 +78,11 @@ export function PathSelection(): JSX.Element {
             )
           }
         >
-          <Type muted small>
+          <Text muted small>
             Allow MCP clients to interact directly with an external OAuth
             provider. The external provider must support dynamic client
             registration (DCR).
-          </Type>
+          </Text>
         </PathOptionCard>
       </div>
     </div>
@@ -97,26 +97,26 @@ const OAuthDetectedCallout = ({
   const { name, version } = discovered;
 
   let description: ReactNode = (
-    <Type muted small className="mt-1">
+    <Text muted small className="mt-1">
       We discovered OAuth {version} metadata from this server. The configuration
       will be pre-filled for either selection below.
-    </Type>
+    </Text>
   );
   if (version == "2.0") {
     description = (
-      <Type muted small className="mt-1">
+      <Text muted small className="mt-1">
         We discovered OAuth 2.0 metadata from this server. These details will be
         pre-filled for the OAuth Proxy configuration below.
-      </Type>
+      </Text>
     );
   }
 
   return (
-    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 rounded-md border p-4">
+    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 border p-4">
       <div>
-        <Type small className="font-medium">
+        <Text small className="font-medium">
           OAuth detected from {name}
-        </Type>
+        </Text>
         {description}
       </div>
     </div>
@@ -136,14 +136,14 @@ function PathOptionCard(props: {
     <button
       type="button"
       className={cn(
-        "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
+        "border-border flex flex-col items-start gap-2 border p-6 text-left transition-colors",
         "hover:border-primary hover:bg-muted/50",
       )}
       onClick={props.onClick}
     >
       <div className="flex items-center gap-2">
         <Icon className="text-muted-foreground w-5" />
-        <Type className="font-medium">{props.title}</Type>
+        <Text className="font-medium">{props.title}</Text>
       </div>
       <div className="flex gap-2">{props.badges}</div>
       {props.children}

@@ -28,6 +28,8 @@ type User struct {
 	Email             string
 	ProfilePictureURL string
 	ExternalID        string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 // ListMembers lists all active organization memberships for the given org.

@@ -15,6 +15,10 @@ import {
 export type ShadowMCPInventoryURLState = {
   access: string;
   allowedPolicyIds: Array<string>;
+  /**
+   * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
+   */
+  blockedPolicyIds: Array<string>;
   latestRequest?: ShadowMCPInventoryRequestSummary | undefined;
   requestCount: number;
 };
@@ -27,12 +31,14 @@ export const ShadowMCPInventoryURLState$inboundSchema: z.ZodMiniType<
   z.object({
     access: z.string(),
     allowed_policy_ids: z.array(z.string()),
+    blocked_policy_ids: z.array(z.string()),
     latest_request: z.optional(ShadowMCPInventoryRequestSummary$inboundSchema),
     request_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "allowed_policy_ids": "allowedPolicyIds",
+      "blocked_policy_ids": "blockedPolicyIds",
       "latest_request": "latestRequest",
       "request_count": "requestCount",
     });

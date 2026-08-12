@@ -22,7 +22,7 @@ var _ = Service("adminExternalCredentials", func() {
 		Description("Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.")
 
 		Payload(func() {
-			Extend(extcred.CreateGcpIamCredentialForm)
+			Extend(CreatePlatformGcpIamCredentialForm)
 			security.SessionPayload()
 		})
 
@@ -70,7 +70,7 @@ var _ = Service("adminExternalCredentials", func() {
 			Attribute("id", String, "The ID of the credential to update.", func() {
 				Format(FormatUUID)
 			})
-			Extend(extcred.CreateGcpIamCredentialForm)
+			Extend(CreatePlatformGcpIamCredentialForm)
 			Required("id")
 			security.SessionPayload()
 		})
@@ -160,6 +160,28 @@ var _ = Service("adminExternalCredentials", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteGcpIam")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteGcpIamPlatformCredential"}`)
 	})
+})
+
+// CreatePlatformGcpIamCredentialForm is the input for creating a platform GCP
+// IAM credential. The authentication approach is inferred from which fields are
+// provided:
+//
+//   - wif_* triple set: Workload Identity Federation (impersonate_service_account
+//     is an optional hop).
+//   - impersonate_service_account only: direct impersonation.
+//   - none: Gram's ambient attached identity.
+//
+// The platform tier keeps all three because these records describe Gram's own
+// infrastructure identity. The organization tier accepts impersonation only —
+// see externalcredentials.CreateGcpIamCredentialForm for why.
+var CreatePlatformGcpIamCredentialForm = Type("CreatePlatformGcpIamCredentialForm", func() {
+	Attribute("name", String, "A human-readable name for the credential.")
+	Attribute("impersonate_service_account", String, "The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.")
+	Attribute("wif_pool_id", String, "Workload Identity Federation pool ID. Set together with the other wif_* fields.")
+	Attribute("wif_provider_id", String, "Workload Identity Federation provider ID. Set together with the other wif_* fields.")
+	Attribute("wif_project_number", String, "GCP project number backing the WIF pool. Set together with the other wif_* fields.")
+
+	Required("name")
 })
 
 // VerifyPlatformCredentialResult is the outcome of a live "who am I" probe

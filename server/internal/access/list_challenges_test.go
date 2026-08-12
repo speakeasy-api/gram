@@ -461,6 +461,7 @@ func challengeAuthContext(t *testing.T, ctx context.Context) *contextvalues.Auth
 }
 
 // insertCHChallenge inserts a minimal challenge row into ClickHouse for testing.
+// The row carries a fully specified resource, as challenges logged by Require do.
 func insertCHChallenge(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope string) {
 	t.Helper()
 	insertCHChallengeWithUser(t, ti, orgID, challengeID, outcome, principalURN, scope, nil, nil)
@@ -468,6 +469,23 @@ func insertCHChallenge(t *testing.T, ti *testInstance, orgID, challengeID, outco
 
 // insertCHChallengeWithUser inserts a challenge row with optional user enrichment fields.
 func insertCHChallengeWithUser(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope string, userID, userEmail *string) {
+	t.Helper()
+	insertCHChallengeRow(t, ti, orgID, challengeID, outcome, principalURN, scope, "org", orgID, userID, userEmail)
+}
+
+// insertCHChallengeUnattributed inserts a challenge row with no scope and no
+// resource, as batch Filter and FindMatched calls log it: those record a single
+// row for the whole batch with a nil focus check, so the dimensions that
+// identify what was checked are never written.
+func insertCHChallengeUnattributed(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN string) {
+	t.Helper()
+	insertCHChallengeRow(t, ti, orgID, challengeID, outcome, principalURN, "", "", "", nil, nil)
+}
+
+// insertCHChallengeRow inserts a challenge row into ClickHouse for testing. An
+// empty scope/resourceKind/resourceID models the rows written by batch Filter
+// and FindMatched calls, which log without a focus check.
+func insertCHChallengeRow(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope, resourceKind, resourceID string, userID, userEmail *string) {
 	t.Helper()
 
 	err := ti.chConn.Exec(t.Context(), `
@@ -490,7 +508,7 @@ func insertCHChallengeWithUser(t *testing.T, ti *testInstance, orgID, challengeI
 			?, ?,
 			array(),
 			'require', ?, 'no_grants',
-			?, '', '', '',
+			?, ?, ?, '',
 			array(),
 			array(), array(), array(), array(),
 			array(), array(), array(), array(),
@@ -500,7 +518,7 @@ func insertCHChallengeWithUser(t *testing.T, ti *testInstance, orgID, challengeI
 		principalURN,
 		userID, userEmail,
 		outcome,
-		scope,
+		scope, resourceKind, resourceID,
 	)
 	require.NoError(t, err)
 }

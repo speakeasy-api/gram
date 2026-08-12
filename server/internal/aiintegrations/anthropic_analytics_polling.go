@@ -44,10 +44,13 @@ const (
 	anthropicAnalyticsPageLimit   = 1000
 
 	anthropicAnalyticsProviderTag = "anthropic"
-	// anthropicAnalyticsAccountType classifies analytics rows as team
-	// accounts: the Admin Analytics API only reports seat users of the
-	// organization's Claude Enterprise plan.
-	anthropicAnalyticsAccountType = "team"
+	// complianceAccountTypeTeam classifies imported provider-feed rows as
+	// team accounts: every enterprise compliance/analytics feed only reports
+	// the organization's own seat users, so the account behind a row is the
+	// company's by construction — unlike session telemetry, which must
+	// classify from email resolution (see hooks.classifyAccount). The value
+	// matches the hooks package's account_type "team".
+	complianceAccountTypeTeam = "team"
 )
 
 const (
@@ -453,7 +456,7 @@ func newClaudeChatLogParams(cfg Config, urn string, body string, bucketStart tim
 		attr.HookSourceKey:            anthropicAnalyticsHookSource,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
 		attr.ProviderKey:              anthropicAnalyticsProviderTag,
-		attr.AccountTypeKey:           anthropicAnalyticsAccountType,
+		attr.AccountTypeKey:           complianceAccountTypeTeam,
 	}
 	if model != "" {
 		attrs[attr.GenAIResponseModelKey] = model

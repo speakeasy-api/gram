@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const testState = vi.hoisted(() => ({
   metadataOnly: false,
   mutate: vi.fn(),
-  skillsEnabled: true,
 }));
 
 vi.mock("@/components/require-scope", () => ({
@@ -26,7 +25,6 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
     data: {
       skillCaptureMetadataOnly: testState.metadataOnly,
-      skillsEnabled: testState.skillsEnabled,
     },
   }),
 }));
@@ -41,7 +39,6 @@ import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
 beforeEach(() => {
   testState.metadataOnly = false;
   testState.mutate.mockReset();
-  testState.skillsEnabled = true;
 });
 
 afterEach(cleanup);
@@ -65,12 +62,5 @@ describe("SkillContentUploadSetting", () => {
         },
       },
     });
-  });
-
-  it("stays hidden when Skills is disabled", () => {
-    testState.skillsEnabled = false;
-    render(<SkillContentUploadSetting />);
-
-    expect(screen.queryByText("Upload Skill Content")).toBeNull();
   });
 });

@@ -11,6 +11,13 @@ func sessionCacheKey(sessionID string) string {
 	return fmt.Sprintf("session:metadata:%s", sessionID)
 }
 
+// sessionNativeHooksCacheKey records that a session has a durably captured
+// native prompt, so model-proxy prompts can remain telemetry-only when no shared
+// turn identifier is available.
+func sessionNativeHooksCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:native-prompt:v1:%s:%s", projectID, sessionID)
+}
+
 // hookPendingCacheKey returns the Redis key for buffered hooks for a session
 func hookPendingCacheKey(sessionID string) string {
 	return fmt.Sprintf("hook:pending:%s", sessionID)
@@ -22,6 +29,15 @@ func hookPendingCacheKey(sessionID string) string {
 // the user is actively working but garbage-collect dead sessions.
 func sessionMCPListCacheKey(sessionID string) string {
 	return fmt.Sprintf("session:mcp-list:%s", sessionID)
+}
+
+// sessionMCPInventoryReadCacheKey returns the Redis key recording whether a
+// session's sender managed to read its MCP server list. It rides beside the
+// snapshot rather than inside it because an empty-but-read list has no entries
+// to carry the fact, and that is exactly the case the guard has to tell apart
+// from an unread one.
+func sessionMCPInventoryReadCacheKey(sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-read:%s", sessionID)
 }
 
 // hookIdempotencyCacheKey returns the Redis key marking a hook invocation as
@@ -70,6 +86,13 @@ const (
 // sessionMCPListTTL is how long the parsed MCP list survives without any
 // hook activity for its session id. Each hook received refreshes it.
 const sessionMCPListTTL = 12 * time.Hour
+
+// sessionMCPInventoryReadTTL outlives the snapshot on purpose. The snapshot
+// expiring costs detail — the guard falls back to a name-only deny — but the
+// read status expiring flips the guard off entirely, because an absent status
+// is indistinguishable from a sender that never reported one. A session idle
+// past the snapshot TTL must not silently stop being enforced.
+const sessionMCPInventoryReadTTL = 7 * 24 * time.Hour
 
 // hookIdempotencyTTL bounds how long a hook idempotency token blocks a repeat
 // persistence. It only needs to outlive a sender's retry window (a handful of

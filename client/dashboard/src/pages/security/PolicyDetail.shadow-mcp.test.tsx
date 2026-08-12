@@ -6,15 +6,19 @@ import { render, waitFor } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { StandardPolicyEditor } from "./PolicyDetail";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { PolicyNew, StandardPolicyEditor } from "./PolicyDetail";
 
 const mocks = vi.hoisted(() => ({
   saveDisabledRenders: [] as boolean[],
   selectionRenders: [] as string[][],
+  modeRenders: [] as string[],
   step: "action" as string | null,
   mutateCreate: vi.fn(),
   mutateUpdate: vi.fn(),
+  kind: null as string | null,
+  category: null as string | null,
+  detectorSelections: [] as Array<{ category: string; selected: boolean }>,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -22,7 +26,17 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/components/page-layout", () => ({
-  Page: () => null,
+  Page: Object.assign(({ children }: { children?: ReactNode }) => children, {
+    Header: Object.assign(
+      ({ children }: { children?: ReactNode }) => children,
+      { Breadcrumbs: () => null },
+    ),
+    Body: ({ children }: { children?: ReactNode }) => children,
+  }),
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => children,
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -34,16 +48,23 @@ vi.mock("@/routes", () => ({
 }));
 
 vi.mock("nuqs", () => ({
-  useQueryState: () => [mocks.step, vi.fn()],
+  useQueryState: (name: string) => {
+    if (name === "kind") return [mocks.kind, vi.fn()];
+    if (name === "category") return [mocks.category, vi.fn()];
+    return [mocks.step, vi.fn()];
+  },
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
   ShadowMCPPolicyServerSelector: ({
     selectedURLs,
+    mode = "allow",
   }: {
     selectedURLs: ReadonlySet<string>;
+    mode?: string;
   }) => {
     mocks.selectionRenders.push([...selectedURLs].sort());
+    mocks.modeRenders.push(mode);
     return null;
   },
 }));
@@ -73,10 +94,22 @@ vi.mock("./use-cel-status", () => ({
 vi.mock("./PolicyCenter", () => ({
   ActionPicker: () => null,
   CustomizeRulesSheet: () => null,
-  DetectorCard: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
   ScopeCard: () => null,
+}));
+
+vi.mock("./DetectorCard", () => ({
+  DetectorCard: ({
+    category,
+    selected,
+  }: {
+    category: string;
+    selected: boolean;
+  }) => {
+    mocks.detectorSelections.push({ category, selected });
+    return null;
+  },
 }));
 
 vi.mock("@/pages/chatLogs/ChatTranscript", () => ({
@@ -96,9 +129,9 @@ vi.mock("@/pages/chatLogs/claudeUsage", () => ({
   formatUsageCost: () => "$0.00",
 }));
 
-vi.mock("@speakeasy-api/moonshine", async (importOriginal) => {
+vi.mock("@/components/ui/Button", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@speakeasy-api/moonshine")>();
+    await importOriginal<typeof import("@/components/ui/Button")>();
 
   function buttonLabel(children: ReactNode): string | undefined {
     for (const child of Children.toArray(children)) {
@@ -128,10 +161,13 @@ vi.mock("@speakeasy-api/moonshine", async (importOriginal) => {
   return { ...actual, Button: TestButton };
 });
 
-function inventoryServer(): ShadowMCPInventoryServer {
+function inventoryServer(
+  overrides: Partial<ShadowMCPInventoryServer> = {},
+): ShadowMCPInventoryServer {
   return {
     access: "allowed",
     allowedPolicyIds: ["policy-1"],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://github.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,
@@ -143,6 +179,7 @@ function inventoryServer(): ShadowMCPInventoryServer {
     topUsers: [],
     urlHost: "github.example.com",
     userCount: 1,
+    ...overrides,
   };
 }
 
@@ -178,11 +215,38 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
   beforeEach(() => {
     mocks.saveDisabledRenders.length = 0;
     mocks.selectionRenders.length = 0;
+    mocks.modeRenders.length = 0;
     mocks.step = "action";
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
     vi.clearAllMocks();
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("preselects the prompt injection detector from the setup link", () => {
+    mocks.kind = "standard";
+    mocks.category = "prompt_injection";
+    mocks.step = null;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <PolicyNew />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      mocks.detectorSelections.find(
+        (selection) => selection.category === "prompt_injection",
+      )?.selected,
+    ).toBe(true);
   });
 
   it("keeps save blocked until cached inventory preselection initializes", async () => {
@@ -209,5 +273,46 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
     });
     expect(mocks.saveDisabledRenders[0]).toBe(true);
     expect(mocks.selectionRenders[0]).toEqual([]);
+    expect(mocks.modeRenders.at(-1)).toBe("allow");
+  });
+
+  it("seeds an allow_all policy's selection from its blocked-URL grants", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), [
+      inventoryServer(),
+      inventoryServer({
+        access: "blocked",
+        allowedPolicyIds: [],
+        blockedPolicyIds: ["policy-1"],
+        canonicalServerUrl: "https://sketchy.example.com/mcp",
+        serverName: "Sketchy",
+        serverSlug: "sketchy-11111111",
+        urlHost: "sketchy.example.com",
+      }),
+    ]);
+
+    const allowAllPolicy: RiskPolicy = {
+      ...blockingPolicyWithDirtyDraftName(),
+      shadowMcpDisposition: "allow_all",
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <StandardPolicyEditor policy={allowAllPolicy} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      // The selection comes from the inventory's per-URL block-grant view
+      // (blockedPolicyIds), and the selector flips to block mode.
+      expect(mocks.selectionRenders.at(-1)).toEqual([
+        "https://sketchy.example.com/mcp",
+      ]);
+      expect(mocks.modeRenders.at(-1)).toBe("block");
+    });
   });
 });

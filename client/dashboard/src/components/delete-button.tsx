@@ -1,21 +1,21 @@
 import { cn } from "@/lib/utils";
 import { Trash2Icon } from "lucide-react";
-import { Button } from "./ui/button";
+import { Button } from "./ui/Button";
 
 export function DeleteButton({
   tooltip,
   onClick,
-  size = "default",
+  size = "md",
   className,
 }: {
   tooltip: string;
-  size?: "default" | "sm";
+  size?: "md" | "sm";
   onClick: () => void;
   className?: string;
 }): JSX.Element {
   return (
     <Button
-      variant="ghost"
+      variant="tertiary"
       size={size}
       className={cn(
         "text-muted-foreground hover:text-destructive hover:border-destructive",

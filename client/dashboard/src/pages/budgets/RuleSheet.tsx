@@ -1,15 +1,15 @@
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
@@ -17,9 +17,9 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
 import { Archive, Check, Loader2, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
@@ -280,7 +280,7 @@ function RuleForm({
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Field label="Budget per person">
             <div className="flex items-center">
-              <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center rounded-l-md border border-r-0 px-3 text-sm">
+              <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center border border-r-0 px-3 text-sm">
                 $
               </span>
               <input
@@ -290,7 +290,7 @@ function RuleForm({
                 onChange={(e) =>
                   patch({ limitUsd: Math.max(0, Number(e.target.value) || 0) })
                 }
-                className="border-input dark:bg-input/30 h-9 w-full min-w-0 rounded-r-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                className="border-input dark:bg-input/30 h-9 w-full min-w-0 border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               />
             </div>
           </Field>
@@ -332,9 +332,9 @@ function RuleForm({
                     ),
                   })
                 }
-                className="border-input dark:bg-input/30 h-9 w-full min-w-0 rounded-l-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                className="border-input dark:bg-input/30 h-9 w-full min-w-0 border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               />
-              <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center rounded-r-md border border-l-0 px-3 text-sm">
+              <span className="border-input bg-muted text-muted-foreground inline-flex h-9 items-center border border-l-0 px-3 text-sm">
                 %
               </span>
             </div>
@@ -360,7 +360,7 @@ function RuleForm({
               <label
                 key={option.value}
                 htmlFor={`action-${option.value}`}
-                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5"
+                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 border px-3 py-2.5"
               >
                 <RadioGroupItem
                   id={`action-${option.value}`}
@@ -379,11 +379,11 @@ function RuleForm({
         </div>
 
         {/* Usage preview */}
-        <div className="bg-muted/30 space-y-2 rounded-lg border p-4">
+        <div className="bg-muted/30 space-y-2 border p-4">
           <div className="flex items-center justify-between">
-            <Type variant="small" className="font-medium">
+            <Text variant="small" className="font-medium">
               Current usage this {draft.windowKind} window
-            </Type>
+            </Text>
             {previewLoading && (
               <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
             )}
@@ -416,7 +416,7 @@ function RuleForm({
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         {onArchive ? (
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={onArchive}
             disabled={submitting}
@@ -449,7 +449,7 @@ function RuleForm({
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               onClick={handleConfirmSubmit}
               disabled={submitting}
             >
@@ -545,7 +545,7 @@ function MatchedActors({
     : "";
 
   return (
-    <div className="border-border rounded-lg border">
+    <div className="border-border border">
       <div className="border-border bg-muted/40 flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
         <Users className="size-3.5" />
         {preview.matchedCount} matched{" "}
@@ -652,7 +652,7 @@ function TargetConditionField({
   const operators = operatorsForAttribute(attribute);
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2 border p-3">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_1fr]">
         <Select
           value={condition.attribute}

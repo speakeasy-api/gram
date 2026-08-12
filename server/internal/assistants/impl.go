@@ -98,7 +98,6 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
-
 	items, err := s.core.ListAssistants(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list assistants").LogError(ctx, s.logger)
@@ -242,6 +241,11 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	if len(payload.SkillIds) > 0 {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+			return nil, err
+		}
+	}
 	// Messages are sent as the calling user, so a user identity is required.
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "sending a message requires a user identity").LogError(ctx, s.logger)
@@ -280,8 +284,53 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		idempotencyKey = *payload.IdempotencyKey
 	}
 
-	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey)
+	skillIDs := make([]uuid.UUID, 0, len(payload.SkillIds))
+	seenSkillIDs := make(map[uuid.UUID]struct{}, len(payload.SkillIds))
+	for _, rawSkillID := range payload.SkillIds {
+		skillID, err := uuid.Parse(rawSkillID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id").LogError(ctx, s.logger)
+		}
+		if _, exists := seenSkillIDs[skillID]; exists {
+			continue
+		}
+		seenSkillIDs[skillID] = struct{}{}
+		skillIDs = append(skillIDs, skillID)
+	}
+
+	attachments := make([]DashboardAttachmentInput, 0, len(payload.Attachments))
+	for _, attachment := range payload.Attachments {
+		// A JSON `null` inside the array survives decoding as a nil element.
+		if attachment == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "attachment entries cannot be null")
+		}
+		assetID, err := uuid.Parse(attachment.AssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid attachment asset id").LogError(ctx, s.logger)
+		}
+		name := ""
+		if attachment.Name != nil {
+			name = *attachment.Name
+		}
+		attachments = append(attachments, DashboardAttachmentInput{AssetID: assetID, Name: name})
+	}
+
+	// A turn must say something: empty text is only allowed when files carry it.
+	if payload.Message == "" && len(attachments) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "message text is required when no attachments are sent")
+	}
+
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs, attachments)
 	if err != nil {
+		if errors.Is(err, ErrAssistantTurnSkillContextTooLarge) {
+			return nil, oops.E(oops.CodeBadRequest, err, "selected skill context is too large").LogError(ctx, s.logger)
+		}
+		if errors.Is(err, ErrAssistantTurnAttachmentUnavailable) {
+			return nil, oops.E(oops.CodeBadRequest, err, "one or more attachments are unavailable").LogError(ctx, s.logger)
+		}
+		if errors.Is(err, ErrAssistantTurnSkillUnavailable) {
+			return nil, oops.E(oops.CodeBadRequest, err, "one or more selected skills are unavailable").LogError(ctx, s.logger)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").LogError(ctx, s.logger)
 		}

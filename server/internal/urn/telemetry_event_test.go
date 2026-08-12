@@ -57,6 +57,13 @@ func TestTelemetryEventBuildsCanonicalIdentity(t *testing.T) {
 		"urn:telemetry:provider_api:metric:usage",
 		urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderAPI, urn.TelemetryEventKindMetric, "usage").String(),
 	)
+	require.Equal(t,
+		"urn:telemetry:provider_otel:span:chat",
+		urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderOTEL, urn.TelemetryEventKindSpan, "chat").String(),
+	)
+	span, err := urn.ParseTelemetryEvent("urn:telemetry:provider_otel:span:chat")
+	require.NoError(t, err)
+	require.Equal(t, urn.TelemetryEventKindSpan, span.Kind)
 }
 
 func TestTelemetryEventSanitizesTypeSegment(t *testing.T) {

@@ -131,12 +131,28 @@ if err != nil || !enabled {
 
 ### Checking in the React dashboard
 
-Use the `useTelemetry()` hook from `client/dashboard/src/contexts/Telemetry.tsx` — never import PostHog hooks directly:
+New frontend code should use the typed `useFeatureFlag()` hook from
+`client/dashboard/src/hooks/useFeatureFlag.ts`:
 
 ```tsx
-const telemetry = useTelemetry();
-const myFeatureEnabled = telemetry.isFeatureEnabled("my-new-feature") ?? false;
+const assistants = useFeatureFlag(FEATURE_FLAGS.assistants);
+
+if (assistants.status === "loading") return null;
+if (assistants.status === "missing" || assistants.status === "error") {
+  return <FeatureUnavailable />;
+}
+
+const assistantsEnabled = assistants.status === "enabled";
 ```
+
+Add new frontend keys to the `FEATURE_FLAGS` registry in
+`client/dashboard/src/lib/featureFlags.ts`; its values generate the hook's
+`FeatureFlag` type. The hook distinguishes loading, enabled, disabled, missing,
+and error states and stays reactive as PostHog reloads flags. On localhost,
+the development telemetry provider reports every flag as enabled.
+
+PostHog flags control rollout UI only. Never use them for authorization or
+entitlement enforcement, and never import PostHog hooks directly.
 
 ---
 

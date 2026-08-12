@@ -1,0 +1,1 @@
+ALTER TABLE `risk_findings` ADD COLUMN `user_email` String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD(1));

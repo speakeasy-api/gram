@@ -352,6 +352,51 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 	return items, nil
 }
 
+const listProjectsByOrganizationLimited = `-- name: ListProjectsByOrganizationLimited :many
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListProjectsByOrganizationLimitedParams struct {
+	OrganizationID string
+	LimitValue     int32
+}
+
+func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg ListProjectsByOrganizationLimitedParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByOrganizationLimited, arg.OrganizationID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.OrganizationID,
+			&i.LogoAssetID,
+			&i.FunctionsRunnerVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec
 UPDATE organization_metadata
 SET whitelisted = $1,

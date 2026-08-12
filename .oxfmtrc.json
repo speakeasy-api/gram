@@ -4,6 +4,7 @@
   "experimentalSortPackageJson": false,
   "ignorePatterns": [
     "**/CHANGELOG.md",
+    "**/*.mdx",
     "/.speakeasy/**",
     "/client/dashboard/index.html",
     "/client/dashboard/public/external/**",

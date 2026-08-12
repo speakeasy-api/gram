@@ -1,21 +1,22 @@
 import { AccountRow } from "@/components/observe/account-display";
+import { getInitials } from "@/lib/initials";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { MetricCard } from "@/components/chart/MetricCard";
+} from "@/components/ui/Popover";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
 import { Page } from "@/components/page-layout";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import {
@@ -50,14 +51,10 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import { slugify } from "@/lib/constants";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeView = "employees" | "unattributed";
@@ -458,7 +455,8 @@ export function InsightsEmployeesContent(): JSX.Element {
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
+              <Page.Eyebrow />
+              <h1 className="text-display-sm font-thin">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track platform adoption for organization members in this project
                 over {rangeLabel}. Employees with tool or agent session activity
@@ -514,61 +512,54 @@ export function InsightsEmployeesContent(): JSX.Element {
             <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title={isUnattributedView ? "Unknown users" : "Employees"}
                   value={totalEmployees}
+                  tone="information"
                   icon="user"
-                  accentColor="blue"
                   subtext={
                     isUnattributedView
                       ? "Usage not matched to a member"
                       : "Organization members"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Enrolled"
                   value={enrolledEmployees}
+                  tone="success"
                   displayValue={isUnattributedView ? "-" : undefined}
                   icon="circle-check"
-                  accentColor="green"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
                       : "Platform activity present"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
+                  tone={notEnrolledEmployees > 0 ? "destructive" : "neutral"}
                   displayValue={isUnattributedView ? "-" : undefined}
                   icon="triangle-alert"
-                  accentColor="orange"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
                       : "No platform activity found"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Token Count"
                   value={totalTokenCount}
+                  tone="information"
                   icon="gauge"
-                  accentColor="purple"
                   subtext={
                     isUnattributedView
                       ? undefined
                       : `${enrollmentRate.toFixed(0)}% enrolled`
                   }
                 />
-              </section>
+              </StatTileGroup>
 
               <EmployeeTable
                 key={view}
@@ -840,7 +831,7 @@ function EmployeeTable({
           </p>
           <div className="flex items-center gap-1">
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
@@ -848,7 +839,7 @@ function EmployeeTable({
               <ChevronLeft className="size-4" />
             </Button>
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
@@ -878,7 +869,7 @@ function EnrollmentLegend() {
 
   return (
     <>
-      <section className="bg-muted/40 border-border flex flex-col gap-4 rounded-xl border p-5 md:flex-row md:items-center md:justify-between">
+      <section className="bg-muted/40 border-border flex flex-col gap-4 border p-5 md:flex-row md:items-center md:justify-between">
         <div className="max-w-3xl space-y-1">
           <h2 className="text-sm font-semibold">How enrollment works</h2>
           <p className="text-muted-foreground text-sm">
@@ -942,14 +933,14 @@ function EmployeesLoadingState({
         )}
       >
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="bg-card rounded-lg border p-5">
+          <div key={index} className="bg-card border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
           </div>
         ))}
       </section>
-      <section className="bg-card rounded-xl border p-5">
+      <section className="bg-card border p-5">
         <Skeleton className="h-5 w-44" />
         <Skeleton className="mt-2 h-4 w-80" />
         <div className="mt-6 space-y-3">
@@ -999,7 +990,7 @@ function DeviceAgentCell({
   now: number;
 }) {
   if (status === "loading") {
-    return <Skeleton className="h-5 w-20 rounded-md" />;
+    return <Skeleton className="h-5 w-20" />;
   }
   if (status === "error") {
     return (
@@ -1042,7 +1033,7 @@ function AccountsPopover({
           type="button"
           // Don't let the row's navigate handler fire when opening the popover.
           onClick={(e) => e.stopPropagation()}
-          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
+          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 px-1.5 py-1 transition-colors"
         >
           <span className={cn("text-muted-foreground", labelClassName)}>
             {label}
@@ -1105,15 +1096,6 @@ function LastActivityCell({ employee }: { employee: Employee }) {
       accounts={[employee.mostRecentAccount]}
     />
   );
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 async function fetchEmployeeUsage(

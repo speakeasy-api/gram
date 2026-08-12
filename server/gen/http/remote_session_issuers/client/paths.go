@@ -37,6 +37,11 @@ func GetRemoteSessionIssuerRemoteSessionIssuersPath() string {
 	return "/rpc/remoteSessionIssuers.get"
 }
 
+// GetRemoteSessionIssuerDuplicatePreflightRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service getRemoteSessionIssuerDuplicatePreflight HTTP endpoint.
+func GetRemoteSessionIssuerDuplicatePreflightRemoteSessionIssuersPath() string {
+	return "/rpc/remoteSessionIssuers.getDuplicatePreflight"
+}
+
 // DeleteRemoteSessionIssuerRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service deleteRemoteSessionIssuer HTTP endpoint.
 func DeleteRemoteSessionIssuerRemoteSessionIssuersPath() string {
 	return "/rpc/remoteSessionIssuers.delete"

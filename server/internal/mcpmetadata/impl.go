@@ -1546,6 +1546,11 @@ func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoi
 		if err != nil {
 			return "", fmt.Errorf("load custom domain: %w", err)
 		}
+		// A domain-root endpoint serves MCP at the bare domain, so install
+		// snippets use that instead of the also-valid /mcp/<slug> path.
+		if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
+			return fmt.Sprintf("https://%s", customDomain.Domain), nil
+		}
 		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
 	}
 	mcpURL, err := url.JoinPath(baseURL, endpoint.Slug)

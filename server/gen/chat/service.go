@@ -417,6 +417,8 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter by Gram user ID
+	UserID *string
 	// Filter by agent source. Comma-separated list of exact source values (e.g.
 	// 'claude-code,Codex,playground') matched against each session's inferred
 	// source; empty for no filter. Use chat.listSources to discover the available

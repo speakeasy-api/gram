@@ -300,56 +300,6 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOAuthServer"}`)
 	})
 
-	Method("addOAuthProxyServer", func() {
-		Description("Associate an OAuth proxy server with a toolset (admin only)")
-
-		Payload(func() {
-			Extend(AddOAuthProxyServerForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-		})
-
-		Result(shared.Toolset)
-
-		HTTP(func() {
-			Param("slug")
-			POST("/rpc/toolsets.addOAuthProxyServer")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "addOAuthProxyServer")
-		Meta("openapi:extension:x-speakeasy-name-override", "addOAuthProxyServer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOAuthProxyServer"}`)
-	})
-
-	Method("updateOAuthProxyServer", func() {
-		Description("Update an existing OAuth proxy server associated with a toolset")
-
-		Payload(func() {
-			Extend(UpdateOAuthProxyServerForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-		})
-
-		Result(shared.Toolset)
-
-		HTTP(func() {
-			Param("slug")
-			POST("/rpc/toolsets.updateOAuthProxyServer")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "updateOAuthProxyServer")
-		Meta("openapi:extension:x-speakeasy-name-override", "updateOAuthProxyServer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOAuthProxyServer"}`)
-	})
-
 	Method("setUserSessionIssuer", func() {
 		Description("Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.")
 
@@ -445,20 +395,6 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 	Attribute("external_oauth_server", shared.ExternalOAuthServerForm, "The external OAuth server data to create and associate with the toolset")
 	security.ProjectPayload()
 	Required("slug", "external_oauth_server")
-})
-
-var AddOAuthProxyServerForm = Type("AddOAuthProxyServerForm", func() {
-	Attribute("slug", shared.Slug, "The slug of the toolset to update")
-	Attribute("oauth_proxy_server", shared.OAuthProxyServerForm, "The OAuth proxy server data to create and associate with the toolset")
-	security.ProjectPayload()
-	Required("slug", "oauth_proxy_server")
-})
-
-var UpdateOAuthProxyServerForm = Type("UpdateOAuthProxyServerForm", func() {
-	Attribute("slug", shared.Slug, "The slug of the toolset whose OAuth proxy server to update")
-	Attribute("oauth_proxy_server", shared.OAuthProxyServerUpdateForm, "The OAuth proxy server fields to update")
-	security.ProjectPayload()
-	Required("slug", "oauth_proxy_server")
 })
 
 var SetUserSessionIssuerForm = Type("SetUserSessionIssuerForm", func() {

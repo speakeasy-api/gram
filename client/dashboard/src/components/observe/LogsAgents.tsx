@@ -21,9 +21,11 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { Badge } from "@/components/ui/badge";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import {
@@ -735,7 +737,7 @@ function AgentSessionsPageContent({
           />
           {hasAssistantFilter && (
             <Badge
-              variant="secondary"
+              variant="neutral"
               className="w-fit gap-1.5 px-2.5 py-1 text-xs"
             >
               <Icon name="bot" className="size-3" />
@@ -749,7 +751,7 @@ function AgentSessionsPageContent({
                 type="button"
                 onClick={clearAssistantFilter}
                 aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
               >
                 <Icon name="x" className="size-3" />
               </button>
@@ -864,14 +866,14 @@ function AgentSessionsPageContent({
               />
             </div>
             {(hasMore || offset > 0) && (
-              <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
+              <div className="bg-card flex shrink-0 items-center justify-center gap-4 border-t p-4 pb-20">
                 <Button
                   onClick={() => setOffset(Math.max(0, offset - limit))}
                   disabled={offset === 0}
                 >
                   Previous
                 </Button>
-                <span className="text-muted-foreground text-sm tabular-nums">
+                <span className="text-muted-foreground font-mono text-xs tabular-nums">
                   Page {Math.floor(offset / limit) + 1}
                   {total > 0 && ` of ${Math.ceil(total / limit)}`}
                 </span>

@@ -1,0 +1,6 @@
+# Build-scoped ignore for agents/runtime-image/Dockerfile (context = repo root).
+# The image only consumes files under agents/, so exclude everything else to
+# keep the build context small.
+*
+!agents/
+agents/runner/target/

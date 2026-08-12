@@ -61,14 +61,17 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 		}
 		for _, s := range spans {
 			findings = append(findings, scanners.Finding{
-				RuleID:              r.rule.RuleID,
-				Description:         r.rule.DisplayDescription(),
-				Match:               s.Value,
-				StartPos:            s.Start,
-				EndPos:              s.End,
-				Tags:                []string{},
-				Source:              SourceCustom,
-				Confidence:          1.0,
+				RuleID:      r.rule.RuleID,
+				Description: r.rule.DisplayDescription(),
+				Match:       s.Value,
+				StartPos:    s.Start,
+				EndPos:      s.End,
+				Tags:        []string{},
+				Source:      SourceCustom,
+				Confidence:  1.0,
+				// The span's ToolCallID is the tool NAME (per-name grouping
+				// key), not a recorded call id, so it must never be published
+				// as McpLookupToolCallID / tool_call_id.
 				DeadLetterReason:    "",
 				McpLookupToolCallID: "",
 				SpanGroupKey:        s.ToolCallID,

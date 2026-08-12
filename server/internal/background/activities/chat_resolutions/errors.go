@@ -70,12 +70,40 @@ func IsInsufficientCredits(err error) bool {
 	return false
 }
 
+// ErrTypeInferenceDisabled tags the non-retryable Temporal application error
+// emitted when an operator locked the organization's platform key down.
+const ErrTypeInferenceDisabled = "ChatResolutionInferenceDisabled"
+
+func newInferenceDisabledError(cause error) error {
+	return temporal.NewNonRetryableApplicationError(
+		"organization inference is disabled",
+		ErrTypeInferenceDisabled,
+		cause,
+	)
+}
+
+// IsInferenceDisabled reports whether err is a locked-down-key failure, either
+// pre- or post-activity boundary.
+func IsInferenceDisabled(err error) bool {
+	if openrouter.IsPlatformKeyDisabled(err) {
+		return true
+	}
+	var appErr *temporal.ApplicationError
+	if errors.As(err, &appErr) {
+		return appErr.Type() == ErrTypeInferenceDisabled
+	}
+	return false
+}
+
 // loadMessagesAtPinnedGeneration verifies that the chat's current generation
 // still matches the pinned one and returns the messages at that generation. On
 // mismatch it returns a non-retryable Temporal error so the workflow can
 // continue-as-new on the new generation instead of acting on stale indices.
 func loadMessagesAtPinnedGeneration(ctx context.Context, queries *repo.Queries, chatID, projectID uuid.UUID, expectedGeneration int32) ([]repo.ChatMessage, error) {
-	currentGen, err := queries.GetMaxGenerationForChat(ctx, chatID)
+	currentGen, err := queries.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get max generation for chat: %w", err)
 	}

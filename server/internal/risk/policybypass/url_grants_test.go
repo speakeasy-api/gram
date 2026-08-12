@@ -59,13 +59,14 @@ func TestReconcilePolicyURLsAddsRemovesAndPreserves(t *testing.T) {
 	oldAudience := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, "old-user")}
 	newAudience := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeRole, "security-admins")}
 
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, policyID, "https://remove.example.com/mcp", oldAudience))
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, policyID, "https://keep.example.com/mcp", oldAudience))
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, otherPolicyID, "https://remove.example.com/mcp", oldAudience))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, "https://remove.example.com/mcp", oldAudience))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, "https://keep.example.com/mcp", oldAudience))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, otherPolicyID, "https://remove.example.com/mcp", oldAudience))
 
 	input := ReconcilePolicyURLsInput{
 		OrganizationID: organizationID,
 		PolicyID:       policyID,
+		Scope:          authz.ScopeRiskPolicyBypass,
 		DesiredURLs:    []string{"https://keep.example.com/mcp", "https://add.example.com/mcp"},
 		Principals:     newAudience,
 	}
@@ -86,7 +87,7 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 	policyID := uuid.NewString()
 	serverURL := "https://remove-mixed.example.com/mcp"
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "old-user")
-	mixedSelector := URLSelector(policyID, serverURL)
+	mixedSelector := URLSelector(authz.ScopeRiskPolicyBypass, policyID, serverURL)
 	mixedSelector[authz.SelectorKeyServerIdentity] = "shadow-server"
 
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
@@ -95,7 +96,6 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   mixedSelector,
 	}))
@@ -105,7 +105,6 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	}))
@@ -113,6 +112,7 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 	require.NoError(t, ReconcilePolicyURLs(ctx, conn, ReconcilePolicyURLsInput{
 		OrganizationID: organizationID,
 		PolicyID:       policyID,
+		Scope:          authz.ScopeRiskPolicyBypass,
 		DesiredURLs:    nil,
 		Principals:     nil,
 	}))
@@ -127,7 +127,6 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 	require.Contains(t, grants, authz.Grant{
 		PrincipalUrn: principal.String(),
 		Scope:        authz.ScopeRiskPolicyBypass,
-		Effect:       authz.PolicyEffectAllow,
 		Selector:     authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	})
 }
@@ -138,7 +137,7 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 	ctx, conn, organizationID := newURLGrantTestDatabase(t)
 	policyID := uuid.NewString()
 	serverURL := "https://retain-mixed.example.com/mcp"
-	mixedSelector := URLSelector(policyID, serverURL)
+	mixedSelector := URLSelector(authz.ScopeRiskPolicyBypass, policyID, serverURL)
 	mixedSelector[authz.SelectorKeyServerIdentity] = "shadow-server"
 
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
@@ -147,7 +146,6 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, "old-user")},
 		Selector:   mixedSelector,
 	}))
@@ -156,6 +154,7 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 	require.NoError(t, ReconcilePolicyURLs(ctx, conn, ReconcilePolicyURLsInput{
 		OrganizationID: organizationID,
 		PolicyID:       policyID,
+		Scope:          authz.ScopeRiskPolicyBypass,
 		DesiredURLs:    []string{serverURL},
 		Principals:     []urn.Principal{newPrincipal},
 	}))
@@ -164,8 +163,7 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 		{
 			PrincipalUrn: newPrincipal.String(),
 			Scope:        authz.ScopeRiskPolicyBypass,
-			Effect:       authz.PolicyEffectAllow,
-			Selector:     URLSelector(policyID, serverURL),
+			Selector:     URLSelector(authz.ScopeRiskPolicyBypass, policyID, serverURL),
 		},
 	}, policyURLGrants(t, ctx, conn, organizationID, policyID))
 }
@@ -177,10 +175,10 @@ func TestReplacePolicyURLAudienceReplacesExactURLAudience(t *testing.T) {
 	policyID := uuid.NewString()
 	serverURL := "https://replace.example.com/mcp"
 
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, policyID, serverURL, []urn.Principal{
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, serverURL, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "old-user"),
 	}))
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, policyID, serverURL, []urn.Principal{
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, serverURL, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeRole, "security-admins"),
 	}))
 
@@ -199,21 +197,20 @@ func TestRevokePolicyURLPreservesUnrelatedGrants(t *testing.T) {
 	targetURL := "https://remove.example.com/mcp"
 	keepURL := "https://keep.example.com/mcp"
 
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, policyID, targetURL, []urn.Principal{principal}))
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, policyID, keepURL, []urn.Principal{principal}))
-	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, otherPolicyID, targetURL, []urn.Principal{principal}))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, targetURL, []urn.Principal{principal}))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, keepURL, []urn.Principal{principal}))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, otherPolicyID, targetURL, []urn.Principal{principal}))
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
 		Resource: authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	}))
 
-	require.NoError(t, RevokePolicyURL(ctx, conn, organizationID, policyID, targetURL))
+	require.NoError(t, RevokePolicyURL(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, targetURL))
 
 	require.Equal(t, map[string][]string{
 		keepURL: {"user:user-one"},
@@ -229,7 +226,6 @@ func TestRevokePolicyURLPreservesUnrelatedGrants(t *testing.T) {
 	require.Contains(t, grants, authz.Grant{
 		PrincipalUrn: principal.String(),
 		Scope:        authz.ScopeRiskPolicyBypass,
-		Effect:       authz.PolicyEffectAllow,
 		Selector:     authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	})
 }
@@ -246,7 +242,7 @@ func policyURLGrantPrincipals(
 	principalsByURL := map[string][]string{}
 	for _, grant := range policyURLGrants(t, ctx, db, organizationID, policyID) {
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
-		if !maps.Equal(grant.Selector, URLSelector(policyID, serverURL)) {
+		if !maps.Equal(grant.Selector, URLSelector(authz.ScopeRiskPolicyBypass, policyID, serverURL)) {
 			continue
 		}
 		principalsByURL[serverURL] = append(principalsByURL[serverURL], grant.PrincipalUrn)
@@ -276,7 +272,7 @@ func policyURLGrants(
 
 	result := make([]authz.Grant, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow || grant.Selector[authz.SelectorKeyServerURL] == "" {
+		if grant.Selector[authz.SelectorKeyServerURL] == "" {
 			continue
 		}
 		result = append(result, grant)

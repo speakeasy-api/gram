@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -45,6 +46,20 @@ const (
 // non-managed assistant already occupies the managed assistant's name in the
 // project. The caller should ask the user to rename or remove it.
 var ErrManagedAssistantNameTaken = errors.New("an assistant with the managed assistant's name already exists in this project")
+
+// ErrAssistantTurnSkillUnavailable means at least one skill selected for a
+// dashboard turn is not an active project skill with a valid version.
+var ErrAssistantTurnSkillUnavailable = errors.New("one or more selected skills are unavailable")
+
+// ErrAssistantTurnSkillContextTooLarge prevents selected skill contents from
+// overwhelming the model context or the trigger event payload.
+var ErrAssistantTurnSkillContextTooLarge = errors.New("selected skill context is too large")
+
+const maxAssistantTurnSkillContextBytes = 256 * 1024
+
+// ErrAssistantTurnAttachmentUnavailable means at least one attachment id sent
+// with a dashboard turn is not a chat attachment asset in the project.
+var ErrAssistantTurnAttachmentUnavailable = errors.New("one or more attachments are unavailable")
 
 // managedAssistantName composes a project's managed-assistant display name. The
 // project name is embedded so the per-project assistants stay distinguishable
@@ -159,6 +174,12 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 		ProjectID:   projectID,
 	}); err != nil {
 		return fmt.Errorf("soft-delete managed assistant: %w", err)
+	}
+	if err := queries.RetireAssistantMCPOAuthClients(ctx, assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: row.ID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("retire managed assistant mcp oauth clients: %w", err)
 	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, row.ID, actor, actorDisplayName); err != nil {
 		return err
@@ -302,10 +323,42 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 // dashboardIngestPayload is the wire shape the dashboard trigger definition
 // decodes in BuildDirectEvent.
 type dashboardIngestPayload struct {
-	Text           string `json:"text"`
-	UserID         string `json:"user_id"`
-	CorrelationID  string `json:"correlation_id"`
-	IdempotencyKey string `json:"idempotency_key"`
+	Text           string                      `json:"text"`
+	UserID         string                      `json:"user_id"`
+	CorrelationID  string                      `json:"correlation_id"`
+	IdempotencyKey string                      `json:"idempotency_key"`
+	SkillContext   []dashboardTurnSkillContext `json:"skill_context,omitempty"`
+	Attachments    []dashboardTurnAttachment   `json:"attachments,omitempty"`
+}
+
+// DashboardAttachmentInput names one uploaded file the caller wants attached
+// to a dashboard turn. Name is the client's display name; it falls back to the
+// stored asset name when empty.
+type DashboardAttachmentInput struct {
+	AssetID uuid.UUID
+	Name    string
+}
+
+// dashboardTurnAttachment is the metadata a dashboard turn carries for one
+// uploaded file. Only the asset id is authoritative — the bytes and the
+// storage URL are re-resolved from the project's assets when the turn runs, so
+// a stale or tampered payload cannot point the runtime at another blob.
+type dashboardTurnAttachment struct {
+	AssetID uuid.UUID `json:"asset_id"`
+	// ProjectID scopes the asset: serving the bytes back to a reopened thread
+	// needs both ids, and DecodeTurn has no project context of its own.
+	ProjectID     uuid.UUID `json:"project_id"`
+	Name          string    `json:"name"`
+	ContentType   string    `json:"content_type"`
+	ContentLength int64     `json:"content_length"`
+}
+
+type dashboardTurnSkillContext struct {
+	SkillID           uuid.UUID `json:"skill_id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	ResolvedVersionID uuid.UUID `json:"resolved_version_id"`
+	Content           string    `json:"content"`
 }
 
 // DashboardSendResult is what the sendMessage endpoint returns to the dashboard.
@@ -325,8 +378,41 @@ type DashboardSendResult struct {
 // returned), or an existing chat id to continue it. idempotencyKey may be empty
 // — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
-func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string) (DashboardSendResult, error) {
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID, attachments []DashboardAttachmentInput) (DashboardSendResult, error) {
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
+	if err != nil {
+		return DashboardSendResult{}, err
+	}
+
+	skillContext := make([]dashboardTurnSkillContext, 0, len(skillIDs))
+	if len(skillIDs) > 0 {
+		rows, err := assistantrepo.New(s.db).ResolveAssistantTurnSkills(ctx, assistantrepo.ResolveAssistantTurnSkillsParams{
+			ProjectID: projectID,
+			SkillIds:  skillIDs,
+		})
+		if err != nil {
+			return DashboardSendResult{}, fmt.Errorf("resolve dashboard turn skills: %w", err)
+		}
+		if len(rows) != len(skillIDs) {
+			return DashboardSendResult{}, ErrAssistantTurnSkillUnavailable
+		}
+		totalContentBytes := 0
+		for _, row := range rows {
+			totalContentBytes += len(row.Content)
+			skillContext = append(skillContext, dashboardTurnSkillContext{
+				SkillID:           row.SkillID,
+				Name:              row.Name,
+				ResolvedVersionID: row.ResolvedVersionID,
+				Description:       conv.FromPGTextOrEmpty[string](row.Description),
+				Content:           row.Content,
+			})
+		}
+		if totalContentBytes > maxAssistantTurnSkillContextBytes {
+			return DashboardSendResult{}, ErrAssistantTurnSkillContextTooLarge
+		}
+	}
+
+	turnAttachments, err := s.resolveDashboardTurnAttachments(ctx, projectID, attachments)
 	if err != nil {
 		return DashboardSendResult{}, err
 	}
@@ -348,7 +434,14 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
 	}
-	payload, err := json.Marshal(dashboardIngestPayload{Text: text, UserID: userID, CorrelationID: correlationID, IdempotencyKey: idempotencyKey})
+	payload, err := json.Marshal(dashboardIngestPayload{
+		Text:           text,
+		UserID:         userID,
+		CorrelationID:  correlationID,
+		IdempotencyKey: idempotencyKey,
+		SkillContext:   skillContext,
+		Attachments:    turnAttachments,
+	})
 	if err != nil {
 		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)
 	}
@@ -367,7 +460,28 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		return result, nil
 	}
 
-	threadID, err := assistantrepo.New(s.db).GetAssistantThreadIDByCorrelation(ctx, assistantrepo.GetAssistantThreadIDByCorrelationParams{
+	queries := assistantrepo.New(s.db)
+	observationCtx, cancelObservations := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancelObservations()
+	for _, skill := range skillContext {
+		if _, err := queries.RecordAssistantSkillObservation(observationCtx, assistantrepo.RecordAssistantSkillObservationParams{
+			AssistantID:    assistant.ID,
+			SessionID:      chatID.String(),
+			SkillVersionID: skill.ResolvedVersionID,
+			ProjectID:      projectID,
+			SkillID:        skill.SkillID,
+		}); err != nil {
+			s.logger.ErrorContext(observationCtx, "record selected assistant skill observation",
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogAssistantID(assistant.ID.String()),
+				attr.SlogChatID(chatID.String()),
+				attr.SlogName(skill.Name),
+			)
+		}
+	}
+
+	threadID, err := queries.GetAssistantThreadIDByCorrelation(ctx, assistantrepo.GetAssistantThreadIDByCorrelationParams{
 		ProjectID:     projectID,
 		AssistantID:   assistant.ID,
 		CorrelationID: correlationID,

@@ -1,21 +1,23 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/Dialog";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useMigrateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/migrateOrganizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerMigratePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerMigratePreflight.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MigrateImpact } from "./MigrateImpact";
 import { issuerDisplayName } from "./issuerDisplay";
 
 // MigrateIssuerDialog consolidates one identity provider onto another that
@@ -102,10 +104,10 @@ export function MigrateIssuerDialog({
             Consolidate into
           </Label>
           {candidates.length === 0 ? (
-            <Type small muted>
+            <Text small muted>
               No other provider in this organization can absorb this one. A
               target must be organizational, or belong to the same project.
-            </Type>
+            </Text>
           ) : (
             <Select value={targetId} onValueChange={setTargetId}>
               <SelectTrigger>
@@ -157,77 +159,5 @@ export function MigrateIssuerDialog({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
-  );
-}
-
-// MigrateImpact renders the server's authoritative preflight: what moves, what
-// blocks the migration, and what changes without blocking it. Blockers are
-// rendered as errors because the mutation rejects them; warnings are rendered as
-// warnings because the target's values simply become authoritative.
-function MigrateImpact({
-  isLoading,
-  hasFailed,
-  clientCount,
-  mcpServerNames,
-  endpointMismatches,
-  conflictingMcpServerNames,
-  warnings,
-}: {
-  isLoading: boolean;
-  hasFailed: boolean;
-  clientCount: number | undefined;
-  mcpServerNames: string[] | undefined;
-  endpointMismatches: string[] | undefined;
-  conflictingMcpServerNames: string[] | undefined;
-  warnings: string[] | undefined;
-}): JSX.Element {
-  if (isLoading) {
-    return (
-      <Type small muted>
-        Checking impact…
-      </Type>
-    );
-  }
-
-  // Without a preflight there is nothing trustworthy to show. Say so rather than
-  // rendering a zero impact summary that reads like a clean migration.
-  if (hasFailed) {
-    return (
-      <Alert variant="error" dismissible={false}>
-        Could not check the impact of this migration. Try again.
-      </Alert>
-    );
-  }
-
-  const count = clientCount ?? 0;
-
-  return (
-    <Stack gap={2}>
-      <Type small muted>
-        {count} {count === 1 ? "client moves" : "clients move"} to the target
-        provider.
-        {mcpServerNames && mcpServerNames.length > 0
-          ? ` Affected MCP servers: ${mcpServerNames.join(", ")}.`
-          : ""}
-      </Type>
-
-      {endpointMismatches && endpointMismatches.length > 0 && (
-        <Alert variant="error" dismissible={false}>
-          {`These providers describe different authorization servers (${endpointMismatches.join(", ")} differ). Consolidating them would break existing sessions.`}
-        </Alert>
-      )}
-
-      {conflictingMcpServerNames && conflictingMcpServerNames.length > 0 && (
-        <Alert variant="error" dismissible={false}>
-          {`Both providers already have a client on these MCP servers: ${conflictingMcpServerNames.join(", ")}. Remove one client per server, then try again.`}
-        </Alert>
-      )}
-
-      {warnings && warnings.length > 0 && (
-        <Alert variant="warning" dismissible={false}>
-          {warnings.join(" ")}
-        </Alert>
-      )}
-    </Stack>
   );
 }

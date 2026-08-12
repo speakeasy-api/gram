@@ -1,4 +1,4 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { CircleDashed, TriangleAlert } from "lucide-react";
 import type { McpActivityStatus } from "./mcp-activity";
@@ -62,7 +62,7 @@ export function MCPActivityIndicator({
         aria-label={config.label}
         tabIndex={0}
         className={cn(
-          "focus-visible:ring-ring inline-flex items-center rounded-sm focus-visible:ring-2 focus-visible:outline-none",
+          "focus-visible:ring-ring inline-flex items-center focus-visible:ring-2 focus-visible:outline-none",
           config.color,
           className,
         )}

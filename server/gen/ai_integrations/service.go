@@ -64,12 +64,13 @@ type AIIntegrationConfig struct {
 	// Organization the config belongs to.
 	OrganizationID string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string
-	// Provider organization identifier. Required for anthropic_compliance and
-	// codex_compliance; omitted for providers that do not need one.
+	// Provider scope identifier. Required for anthropic_compliance and
+	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
+	// UUID); omitted for providers that do not need one.
 	ExternalOrganizationID *string
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
@@ -143,7 +144,7 @@ type DeleteConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 }
 
@@ -153,7 +154,7 @@ type GetConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 }
 
@@ -174,7 +175,7 @@ type ListSchedulesPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 }
 
@@ -184,7 +185,7 @@ type RetrySchedulePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -197,7 +198,7 @@ type SetScheduleEnabledPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -212,12 +213,13 @@ type UpsertConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, and codex_compliance.
+	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
 	// Provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey string
-	// Provider organization identifier. Required for anthropic_compliance and
-	// codex_compliance.
+	// Provider scope identifier. Required for anthropic_compliance and
+	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
+	// UUID).
 	ExternalOrganizationID *string
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.

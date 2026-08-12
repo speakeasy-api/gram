@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code";
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 
 export function GettingStartedInstructions(): JSX.Element {
   const commands = [
@@ -24,16 +24,13 @@ export function GettingStartedInstructions(): JSX.Element {
         <Stack key={index} gap={2}>
           <Stack direction="horizontal" gap={3} align="center">
             <div className="bg-muted flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
-              <Type small className="text-muted-foreground font-medium">
+              <Text small className="text-muted-foreground font-medium">
                 {index + 1}
-              </Type>
+              </Text>
             </div>
-            <Type className="font-medium">{item.label}</Type>
+            <Text className="font-medium">{item.label}</Text>
           </Stack>
-          <CodeBlock
-            language="bash"
-            className="!bg-muted/50 !rounded-lg !border-0"
-          >
+          <CodeBlock language="bash" className="!bg-muted/50 !border-0">
             {item.command}
           </CodeBlock>
         </Stack>

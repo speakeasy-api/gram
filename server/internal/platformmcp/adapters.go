@@ -1,0 +1,385 @@
+package platformmcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+type JWTAuthenticator struct {
+	signer      *sessiontokens.Signer
+	store       *platformrepo.Queries
+	credentials *CredentialCodec
+	issuer      string
+	audience    string
+}
+
+func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, issuer, audience string) (*JWTAuthenticator, error) {
+	credentials, err := NewCredentialCodec(encryptionClient)
+	if err != nil {
+		return nil, fmt.Errorf("create platform MCP credential codec: %w", err)
+	}
+	return &JWTAuthenticator{
+		signer:      signer,
+		store:       platformrepo.New(db),
+		credentials: credentials,
+		issuer:      issuer,
+		audience:    audience,
+	}, nil
+}
+
+func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
+	if a.signer == nil || a.store == nil || a.credentials == nil || a.issuer == "" || a.audience == "" {
+		return Principal{}, ErrUnavailable
+	}
+
+	claims, err := a.signer.Validate(token, a.audience)
+	if err != nil || claims.Issuer != a.issuer {
+		return Principal{}, ErrUnauthorized
+	}
+	subject, err := urn.ParseSessionSubject(claims.Subject)
+	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+		return Principal{}, ErrUnauthorized
+	}
+
+	organizationID, err := a.credentials.OrganizationID(accessJTICredential, claims.ID)
+	if err != nil {
+		return Principal{}, ErrUnauthorized
+	}
+	session, err := a.store.GetActivePlatformMCPSessionByJTI(ctx, platformrepo.GetActivePlatformMCPSessionByJTIParams{
+		OrganizationID: organizationID,
+		Jti:            claims.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Principal{}, ErrUnauthorized
+		}
+		return Principal{}, fmt.Errorf("lookup active platform mcp session: %w", err)
+	}
+	if session.SubjectUrn != subject.String() || session.ClientID != claims.ClientID || session.ConnectionGeneration != session.ActiveGeneration {
+		return Principal{}, ErrUnauthorized
+	}
+
+	return Principal{
+		UserID:         subject.ID,
+		OrganizationID: session.OrganizationID,
+		ConnectionID:   session.ConnectionID.String(),
+		Generation:     session.ConnectionGeneration.String(),
+		ClientID:       session.ClientID,
+	}, nil
+}
+
+type LiveOrgAdminAuthorizer struct {
+	db     *pgxpool.Pool
+	engine *authz.Engine
+}
+
+func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine}
+}
+
+// LiveOrganizationSelector returns only organizations where the current user
+// holds the same live org:admin grant required to authorize Platform MCP.
+type LiveOrganizationSelector struct {
+	db         *pgxpool.Pool
+	authorizer Authorizer
+}
+
+func NewLiveOrganizationSelector(db *pgxpool.Pool, authorizer Authorizer) *LiveOrganizationSelector {
+	return &LiveOrganizationSelector{db: db, authorizer: authorizer}
+}
+
+func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, userID string) ([]OrganizationOption, error) {
+	if s == nil || s.db == nil || s.authorizer == nil || userID == "" {
+		return nil, ErrUnavailable
+	}
+	organizations, err := organizationsrepo.New(s.db).ListOrganizationsForUser(ctx, pgtype.Text{String: userID, Valid: true})
+	if err != nil {
+		return nil, fmt.Errorf("list organizations for Platform MCP selection: %w", err)
+	}
+	options := make([]OrganizationOption, 0, len(organizations))
+	for _, organization := range organizations {
+		if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: ""}); err != nil {
+			if isAuthorizationDenied(err) {
+				continue
+			}
+			return nil, fmt.Errorf("check organization admin eligibility: %w", err)
+		}
+		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name})
+	}
+	return options, nil
+}
+
+func isAuthorizationDenied(err error) bool {
+	if errors.Is(err, ErrForbidden) {
+		return true
+	}
+	var shareable *oops.ShareableError
+	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
+}
+
+func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
+	if a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return ErrUnavailable
+	}
+
+	member, err := organizationsrepo.New(a.db).HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{
+		UserID:         principal.UserID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("check active organization membership: %w", err)
+	}
+	if !member {
+		return ErrForbidden
+	}
+
+	principals, err := authz.ResolveUserPrincipals(ctx, a.db, principal.OrganizationID, principal.UserID)
+	if err != nil {
+		return fmt.Errorf("resolve live admin principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, a.db, principal.OrganizationID, principals)
+	if err != nil {
+		return fmt.Errorf("load live admin grants: %w", err)
+	}
+	if err := a.engine.EvaluateLoadedGrants(ctx, grants, authz.Check{
+		Scope:        authz.ScopeOrgAdmin,
+		ResourceKind: "",
+		ResourceID:   principal.OrganizationID,
+		Dimensions:   nil,
+	}); err != nil {
+		return fmt.Errorf("require live org admin: %w", err)
+	}
+	return nil
+}
+
+type PostgresNewModelEligibility struct {
+	store *platformrepo.Queries
+}
+
+func NewPostgresNewModelEligibility(db *pgxpool.Pool) *PostgresNewModelEligibility {
+	return &PostgresNewModelEligibility{store: platformrepo.New(db)}
+}
+
+func (e *PostgresNewModelEligibility) EligibleForPlatformMCP(ctx context.Context, organizationID string) (bool, error) {
+	if e == nil || e.store == nil || organizationID == "" {
+		return false, ErrUnavailable
+	}
+	eligible, err := e.store.IsPlatformMCPNewModelEligible(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("check Platform MCP new-model eligibility: %w", err)
+	}
+	return eligible, nil
+}
+
+// Lifecycle is the safe management projection for the active organization. It
+// deliberately excludes OAuth client, subject, token, JTI, and session values.
+type Lifecycle struct {
+	DefaultProjectID     string
+	MarketplacePublished bool
+	Connections          []LifecycleConnection
+}
+
+type LifecycleConnection struct {
+	ID             string
+	AuthorizedAt   *time.Time
+	ReauthorizedAt *time.Time
+	Ready          bool
+}
+
+type PostgresLifecycleStore struct {
+	store *platformrepo.Queries
+	oauth *PostgresOAuthStore
+}
+
+func NewPostgresLifecycleStore(db *pgxpool.Pool) *PostgresLifecycleStore {
+	return &PostgresLifecycleStore{store: platformrepo.New(db), oauth: NewPostgresOAuthStore(db)}
+}
+
+func (s *PostgresLifecycleStore) GetLifecycle(ctx context.Context, organizationID string) (Lifecycle, error) {
+	if s == nil || s.store == nil || organizationID == "" {
+		return Lifecycle{}, ErrUnavailable
+	}
+	row, err := s.store.GetPlatformMCPLifecycle(ctx, organizationID)
+	if err != nil {
+		return Lifecycle{}, fmt.Errorf("get Platform MCP lifecycle: %w", err)
+	}
+	connections, err := s.store.ListPlatformMCPConnections(ctx, organizationID)
+	if err != nil {
+		return Lifecycle{}, fmt.Errorf("list Platform MCP connections: %w", err)
+	}
+	lifecycle := Lifecycle{
+		DefaultProjectID:     uuidString(row.DefaultProjectID),
+		MarketplacePublished: row.MarketplacePublished,
+		Connections:          make([]LifecycleConnection, 0, len(connections)),
+	}
+	for _, connection := range connections {
+		lifecycle.Connections = append(lifecycle.Connections, LifecycleConnection{
+			ID:             connection.ID.String(),
+			AuthorizedAt:   timePointer(connection.AuthorizedAt),
+			ReauthorizedAt: timePointer(connection.ReauthorizedAt),
+			Ready:          connection.Ready,
+		})
+	}
+	return lifecycle, nil
+}
+
+func (s *PostgresLifecycleStore) RevokeConnection(ctx context.Context, organizationID, connectionID string, now time.Time) error {
+	if s == nil || s.oauth == nil {
+		return ErrUnavailable
+	}
+	return s.oauth.RevokeConnection(ctx, organizationID, connectionID, now)
+}
+
+type PostgresReadinessRecorder struct {
+	store *platformrepo.Queries
+}
+
+func NewPostgresReadinessRecorder(db *pgxpool.Pool) *PostgresReadinessRecorder {
+	return &PostgresReadinessRecorder{store: platformrepo.New(db)}
+}
+
+func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal Principal, _ time.Time) error {
+	if r == nil || r.store == nil || principal.OrganizationID == "" || principal.ConnectionID == "" || principal.Generation == "" {
+		return ErrUnavailable
+	}
+	connectionID, err := uuid.Parse(principal.ConnectionID)
+	if err != nil {
+		return fmt.Errorf("parse Platform MCP readiness connection id: %w", err)
+	}
+	generation, err := uuid.Parse(principal.Generation)
+	if err != nil {
+		return fmt.Errorf("parse Platform MCP readiness generation: %w", err)
+	}
+	if err := r.store.RecordPlatformMCPConnectionReady(ctx, platformrepo.RecordPlatformMCPConnectionReadyParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("record Platform MCP connection readiness: %w", err)
+	}
+	return nil
+}
+
+type PostgresReader struct {
+	reader *readmodel.Reader
+}
+
+func NewPostgresReader(db *pgxpool.Pool) *PostgresReader {
+	return &PostgresReader{reader: readmodel.New(db)}
+}
+
+func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
+	if r.reader == nil {
+		return ListProjectsOutput{}, ErrUnavailable
+	}
+	limit := boundedLimit(input.Limit)
+	rows, err := r.reader.ListProjectsLimited(ctx, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
+	if err != nil {
+		return ListProjectsOutput{}, fmt.Errorf("list platform mcp projects: %w", err)
+	}
+
+	rows, truncated := boundedRows(rows, limit)
+	output := ListProjectsOutput{Projects: make([]Project, 0, len(rows)), Truncated: truncated}
+	for _, row := range rows {
+		output.Projects = append(output.Projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+	}
+	return output, nil
+}
+
+func (r *PostgresReader) ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error) {
+	if r.reader == nil {
+		return ListProjectMCPsOutput{}, ErrUnavailable
+	}
+	projectID, err := uuid.Parse(input.ProjectID)
+	if err != nil {
+		return ListProjectMCPsOutput{}, fmt.Errorf("parse project id: %w", err)
+	}
+	project, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ListProjectMCPsOutput{MCPs: []MCP{}, Truncated: false}, nil
+		}
+		return ListProjectMCPsOutput{}, fmt.Errorf("get project for platform mcp servers: %w", err)
+	}
+
+	limit := boundedLimit(input.Limit)
+	rows, err := r.reader.ListMCPServersLimited(ctx, project.ID, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
+	if err != nil {
+		return ListProjectMCPsOutput{}, fmt.Errorf("list platform mcp servers: %w", err)
+	}
+
+	rows, truncated := boundedRows(rows, limit)
+	output := ListProjectMCPsOutput{MCPs: make([]MCP, 0, len(rows)), Truncated: truncated}
+	for _, row := range rows {
+		output.MCPs = append(output.MCPs, mcpFromRow(row.ID, row.ProjectID, row.Name.String, row.Slug.String, row.Visibility))
+	}
+	return output, nil
+}
+
+func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
+	if r.reader == nil {
+		return MCP{}, ErrUnavailable
+	}
+	projectID, err := uuid.Parse(input.ProjectID)
+	if err != nil {
+		return MCP{}, fmt.Errorf("parse project id: %w", err)
+	}
+	mcpID, err := uuid.Parse(input.MCPID)
+	if err != nil {
+		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+	}
+	if _, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return MCP{}, ErrForbidden
+		}
+		return MCP{}, fmt.Errorf("get project for platform mcp server: %w", err)
+	}
+	row, err := r.reader.GetMCPServer(ctx, mcpID, projectID, principal.OrganizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return MCP{}, ErrForbidden
+		}
+		return MCP{}, fmt.Errorf("get platform mcp server: %w", err)
+	}
+	return mcpFromRow(row.ID, row.ProjectID, row.Name.String, row.Slug.String, row.Visibility), nil
+}
+
+func boundedRows[T any](rows []T, limit int) ([]T, bool) {
+	if len(rows) <= limit {
+		return rows, false
+	}
+	return rows[:limit], true
+}
+
+func uuidString(value uuid.NullUUID) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.UUID.String()
+}
+
+func mcpFromRow(id, projectID uuid.UUID, name, slug, visibility string) MCP {
+	return MCP{
+		ID:         id.String(),
+		ProjectID:  projectID.String(),
+		Name:       name,
+		Slug:       slug,
+		Visibility: visibility,
+	}
+}

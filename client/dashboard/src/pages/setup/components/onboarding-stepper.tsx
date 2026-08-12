@@ -53,32 +53,33 @@ export function OnboardingStepper({
             {/* Step indicator */}
             <div className="relative z-10 flex-shrink-0">
               {isCurrent ? (
-                /* Active step: dark filled rounded rectangle */
-                <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-foreground text-sm font-semibold text-background">
+                /* Active step: dark filled square */
+                <div className="flex h-[28px] w-[28px] items-center justify-center bg-foreground text-sm font-semibold text-background">
                   {index + 1}
                 </div>
               ) : isCompleted ? (
-                /* Completed step: dark circle with checkmark */
+                /* Completed step: outlined square with a bold green checkmark;
+                   active keeps the solid ink fill, upcoming stays outlined */
                 <button
                   onClick={() => onStepClick?.(index)}
-                  className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all duration-200 ease-out hover:scale-[1.2] hover:bg-foreground/80"
+                  className="border-border text-default-success flex h-[28px] w-[28px] cursor-pointer items-center justify-center border bg-background transition-all duration-200 ease-out hover:scale-[1.2] hover:border-foreground"
                 >
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  <Check className="h-4 w-4" strokeWidth={3} />
                 </button>
               ) : canJump ? (
-                /* Upcoming but jumpable: outlined circle as a button so the
+                /* Upcoming but jumpable: outlined square as a button so the
                    number itself previews the step, matching the content click. */
                 <button
                   onClick={() => onStepClick?.(index)}
-                  className="border-border text-muted-foreground flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full border bg-background text-sm font-normal transition-all duration-200 ease-out hover:scale-[1.2] hover:text-foreground"
+                  className="border-border text-muted-foreground flex h-[28px] w-[28px] cursor-pointer items-center justify-center border bg-background text-sm font-normal transition-all duration-200 ease-out hover:scale-[1.2] hover:text-foreground"
                 >
                   {index + 1}
                 </button>
               ) : (
-                /* Upcoming step: light outlined circle with white fill to cover track */
+                /* Upcoming step: light outlined square with white fill to cover track */
                 <div
                   className={cn(
-                    "flex h-[28px] w-[28px] items-center justify-center rounded-full border bg-background text-sm font-normal",
+                    "flex h-[28px] w-[28px] items-center justify-center border bg-background text-sm font-normal",
                     isLocked
                       ? "border-border text-muted-foreground/40"
                       : "border-border text-muted-foreground",

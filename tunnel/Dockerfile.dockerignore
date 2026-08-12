@@ -1,0 +1,7 @@
+# Build-scoped ignore for tunnel/Dockerfile (context = repo root). The image
+# only consumes the Go module files and tunnel/, so exclude everything else to
+# keep the build context small.
+*
+!go.mod
+!go.sum
+!tunnel/

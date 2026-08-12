@@ -16,7 +16,7 @@ import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import type {
   MultiSelectGroup,
   MultiSelectOption,
-} from "@/components/ui/multi-select";
+} from "@/components/ui/MultiSelect";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
@@ -458,7 +458,7 @@ export function ObserveFilterBar({
         customBuilder={attributeSearchControl}
         extraChips={
           localToolsExcluded && (
-            <span className="border-border text-muted-foreground inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-dashed px-3 text-sm font-medium">
+            <span className="border-border text-muted-foreground inline-flex h-10 shrink-0 items-center gap-2 border border-dashed px-3 font-mono text-[11px] tracking-wide uppercase">
               Local tools excluded
               <button
                 type="button"

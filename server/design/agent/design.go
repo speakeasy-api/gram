@@ -17,7 +17,7 @@ var _ = Service("agent", func() {
 	shared.DeclareErrorResponses()
 
 	Method("getPlugins", func() {
-		Description("Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.")
+		Description("Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.")
 
 		// Authenticated with an API key carrying the `agent_user` scope — the
 		// per-user key minted by token-exchange, so the enrolled user is the key
@@ -97,15 +97,77 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listSyncedUsers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncedAgentUsers"}`)
 	})
+
+	Method("getConfiguration", func() {
+		Description("Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(DeviceAgentConfigurationModel)
+
+		HTTP(func() {
+			GET("/rpc/agent.getConfiguration")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDeviceAgentConfiguration")
+		Meta("openapi:extension:x-speakeasy-name-override", "getConfiguration")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeviceAgentConfiguration"}`)
+	})
+
+	Method("updateConfiguration", func() {
+		Description("Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, and sync_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.")
+			Required("config")
+		})
+
+		Result(DeviceAgentConfigurationModel)
+
+		HTTP(func() {
+			POST("/rpc/agent.updateConfiguration")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateDeviceAgentConfiguration")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateConfiguration")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateDeviceAgentConfiguration"}`)
+	})
 })
 
 // --- Types ---
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
 	Required("etag", "marketplaces", "plugins")
-	Attribute("etag", String, "Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins the agent should enable. Each entry references one of the marketplaces above by name.")
+	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
+})
+
+var DeviceAgentConfigurationModel = Type("DeviceAgentConfiguration", func() {
+	Description("Versioned organization-wide settings delivered to enrolled device agents. Agents must ignore unknown config keys. Remote settings override the shareable local/MDM settings after a successful fetch; per-device identity and secrets always remain local.")
+	Required("schema_version", "config", "is_configured", "etag")
+	Attribute("schema_version", Int, "Schema version for this remote configuration envelope.", func() {
+		Minimum(1)
+	})
+	Attribute("config", MapOf(String, Any), "Forward-compatible non-secret settings document. Platform values use false, user, or managed enforcement layers.")
+	Attribute("is_configured", Boolean, "Whether an administrator has saved a remote configuration. False means agents should not add a remote resolver layer.")
+	Attribute("etag", String, "Opaque revision identifier for this configuration.")
+	Attribute("updated_at", String, func() {
+		Description("When this remote configuration was last saved. Absent when is_configured is false.")
+		Format(FormatDateTime)
+	})
 })
 
 var AgentMarketplaceModel = Type("AgentMarketplace", func() {

@@ -75,7 +75,7 @@ var Definitions = []Definition{
 	{
 		Category:    CategoryShadowMCP,
 		Label:       "Shadow MCP",
-		Description: "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+		Description: "Tool calls that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
 		Icon:        "shield-off",
 		Source:      "shadow_mcp",
 	},

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
@@ -55,10 +56,13 @@ type Service struct {
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
-	policyBypass       *risk.PolicyBypassEvaluator
-	spendGate          *spendrules.Gate
-	shadowMCPClient    *shadowmcp.Client
-	writer             *chat.ChatMessageWriter
+	// piScanner flags captured skill manifests that read as prompt injections.
+	// Optional: when nil, skill capture stores content and scans nothing.
+	piScanner       *promptinjection.Scanner
+	policyBypass    *risk.PolicyBypassEvaluator
+	spendGate       *spendrules.Gate
+	shadowMCPClient *shadowmcp.Client
+	writer          *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
 	efficacySignaler efficacy.Signaler
@@ -200,6 +204,7 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
+	piScanner *promptinjection.Scanner,
 	policyBypass *risk.PolicyBypassEvaluator,
 	spendGate *spendrules.Gate,
 	shadowMCPClient *shadowmcp.Client,
@@ -224,6 +229,7 @@ func NewService(
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
+		piScanner:          piScanner,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,

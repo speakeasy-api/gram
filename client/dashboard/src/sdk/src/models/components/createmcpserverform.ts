@@ -22,7 +22,7 @@ export type CreateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
+ * Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided.
  */
 export type CreateMcpServerForm = {
   /**
@@ -50,6 +50,10 @@ export type CreateMcpServerForm = {
    */
   tunneledMcpServerId?: string | undefined;
   /**
+   * The ID of the unproxied MCP server to use as the backend
+   */
+  unproxiedMcpServerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: CreateMcpServerFormVisibility;
@@ -68,6 +72,7 @@ export type CreateMcpServerForm$Outbound = {
   tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
   tunneled_mcp_server_id?: string | undefined;
+  unproxied_mcp_server_id?: string | undefined;
   visibility: string;
 };
 
@@ -83,6 +88,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
     toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
     tunneledMcpServerId: z.optional(z.string()),
+    unproxiedMcpServerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
@@ -92,6 +98,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
       toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
       tunneledMcpServerId: "tunneled_mcp_server_id",
+      unproxiedMcpServerId: "unproxied_mcp_server_id",
     });
   }),
 );

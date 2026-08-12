@@ -24,10 +24,6 @@ import {
   OAuthEnablementMetadata$inboundSchema,
 } from "./oauthenablementmetadata.js";
 import {
-  OAuthProxyServer,
-  OAuthProxyServer$inboundSchema,
-} from "./oauthproxyserver.js";
-import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
 } from "./prompttemplate.js";
@@ -94,7 +90,6 @@ export type Toolset = {
    */
   name: string;
   oauthEnablementMetadata: OAuthEnablementMetadata;
-  oauthProxyServer?: OAuthProxyServer | undefined;
   /**
    * The organization ID this toolset belongs to
    */
@@ -186,7 +181,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     mcp_slug: z.optional(z.string()),
     name: z.string(),
     oauth_enablement_metadata: OAuthEnablementMetadata$inboundSchema,
-    oauth_proxy_server: z.optional(OAuthProxyServer$inboundSchema),
     organization_id: z.string(),
     origin: z.optional(ToolsetOrigin$inboundSchema),
     project_id: z.string(),
@@ -221,7 +215,6 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
       "oauth_enablement_metadata": "oauthEnablementMetadata",
-      "oauth_proxy_server": "oauthProxyServer",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "prompt_templates": "promptTemplates",

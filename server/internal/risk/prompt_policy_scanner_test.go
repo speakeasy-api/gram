@@ -90,7 +90,6 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policy.ID.String(),
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policy.ID.String()),
 	}))

@@ -58,4 +58,7 @@ type RiskResult struct {
 	MatchRedacted *string
 	// When this result was created.
 	CreatedAt string
+	// When this result was manually marked as a false positive. Null when not
+	// dismissed.
+	FalsePositiveAt *string
 }

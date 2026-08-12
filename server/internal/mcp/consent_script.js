@@ -55,19 +55,45 @@
     });
   }
 
-  // Connect / Reconnect: each link navigates to a freshly minted upstream
-  // challenge. The first click navigates normally; a second click before
-  // the page unloads would target a challenge that is about to be (or has
-  // been) discarded, so we mark the link busy and swallow further clicks.
-  var links = document.querySelectorAll("a[data-connect-link]");
-  Array.prototype.forEach.call(links, function (link) {
-    link.addEventListener("click", function (event) {
-      if (link.getAttribute("aria-disabled") === "true") {
-        event.preventDefault();
-        return;
-      }
-      link.setAttribute("aria-disabled", "true");
-      showPending(link, "Connecting…");
+  // Connect / Reconnect and Refresh now each make an upstream request. Guard
+  // both against repeat clicks and make their pending state visible.
+  function guardActionButtons(selector, pendingLabel) {
+    var buttons = document.querySelectorAll(selector);
+    Array.prototype.forEach.call(buttons, function (button) {
+      button.addEventListener("click", function (event) {
+        if (button.getAttribute("aria-disabled") === "true") {
+          event.preventDefault();
+          return;
+        }
+        button.setAttribute("aria-disabled", "true");
+        showPending(button, pendingLabel);
+        // Preserve the clicked button's action in the form submission, then
+        // make the pending state native for keyboard and assistive technology.
+        window.setTimeout(function () {
+          button.disabled = true;
+        }, 0);
+      });
     });
-  });
+  }
+  guardActionButtons("button[data-connect-link]", "Connecting…");
+  guardActionButtons("button[data-refresh-link]", "Refreshing…");
+
+  // Auto refresh: the page-level combobox drives every provider at once. A
+  // change syncs each card's hidden auto_refresh input (so a subsequent
+  // Connect carries the choice) and, when a stored session exists to update,
+  // posts the hidden form to persist it immediately.
+  var autoRefresh = document.querySelector("select[data-auto-refresh-select]");
+  if (autoRefresh) {
+    autoRefresh.addEventListener("change", function () {
+      var value = autoRefresh.value === "on" ? "on" : "off";
+      var inputs = document.querySelectorAll("input[data-auto-refresh-input]");
+      Array.prototype.forEach.call(inputs, function (input) {
+        input.value = value;
+      });
+      var form = document.getElementById("auto-refresh-form");
+      if (form && form.hasAttribute("data-auto-refresh-persist")) {
+        form.submit();
+      }
+    });
+  }
 })();

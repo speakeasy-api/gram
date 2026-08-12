@@ -1,6 +1,8 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useProductTier } from "@/hooks/useProductTier";
-import { Button, Icon, IconName } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { IconName } from "@/components/ui/Icon/names";
 import React from "react";
 
 interface EnterpriseGateProps {
@@ -23,16 +25,16 @@ export function EnterpriseGate({
   }
 
   return (
-    <div className="bg-muted/20 m-8 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-24">
+    <div className="bg-muted/20 m-8 flex flex-col items-center justify-center border border-dashed px-8 py-24">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name={icon} className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         {title}
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         {description}
-      </Type>
+      </Text>
       <Button variant="brand" asChild>
         <a
           href="https://www.speakeasy.com/book-demo"

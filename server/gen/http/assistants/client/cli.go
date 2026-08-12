@@ -248,12 +248,9 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 	{
 		err = json.Unmarshal([]byte(assistantsSendMessageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"attachments\": [\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         }\n      ],\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aaa\",\n      \"skill_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
-		if utf8.RuneCountInString(body.Message) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", body.Message, utf8.RuneCountInString(body.Message), 1, true))
-		}
 		if utf8.RuneCountInString(body.Message) > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", body.Message, utf8.RuneCountInString(body.Message), 10000, false))
 		}
@@ -263,6 +260,22 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 		if body.IdempotencyKey != nil {
 			if utf8.RuneCountInString(*body.IdempotencyKey) > 255 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 255, false))
+			}
+		}
+		if len(body.SkillIds) > 10 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.skill_ids", body.SkillIds, len(body.SkillIds), 10, false))
+		}
+		for _, e := range body.SkillIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_ids[*]", e, goa.FormatUUID))
+		}
+		if len(body.Attachments) > 5 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attachments", body.Attachments, len(body.Attachments), 5, false))
+		}
+		for _, e := range body.Attachments {
+			if e != nil {
+				if err2 := ValidateSendMessageAttachmentRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
 			}
 		}
 		if err != nil {
@@ -286,6 +299,22 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 		Message:        body.Message,
 		ChatID:         body.ChatID,
 		IdempotencyKey: body.IdempotencyKey,
+	}
+	if body.SkillIds != nil {
+		v.SkillIds = make([]string, len(body.SkillIds))
+		for i, val := range body.SkillIds {
+			v.SkillIds[i] = val
+		}
+	}
+	if body.Attachments != nil {
+		v.Attachments = make([]*assistants.SendMessageAttachment, len(body.Attachments))
+		for i, val := range body.Attachments {
+			if val == nil {
+				v.Attachments[i] = nil
+				continue
+			}
+			v.Attachments[i] = marshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

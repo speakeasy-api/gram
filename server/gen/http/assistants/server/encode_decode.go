@@ -1858,3 +1858,18 @@ func unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *As
 
 	return res
 }
+
+// unmarshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment
+// builds a value of type *assistants.SendMessageAttachment from a value of
+// type *SendMessageAttachmentRequestBody.
+func unmarshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment(v *SendMessageAttachmentRequestBody) *assistants.SendMessageAttachment {
+	if v == nil {
+		return nil
+	}
+	res := &assistants.SendMessageAttachment{
+		AssetID: *v.AssetID,
+		Name:    v.Name,
+	}
+
+	return res
+}

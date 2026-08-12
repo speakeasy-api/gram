@@ -13,10 +13,13 @@
  * no knowledge of a specific host app's naming.
  */
 const CONTEXT_BLOCK_RE = /^\s*<([\w-]*context)>([\s\S]*?)<\/\1>\s*/i;
+const SKILL_NAME_RE = /^Name:\s*([^\r\n]+)/;
 
 export interface ContextBlock {
   tag: string;
   body: string;
+  /** Present for hidden skill envelopes so the UI can render only the label. */
+  skillName?: string;
 }
 
 export interface SplitText {
@@ -34,7 +37,13 @@ export function splitContextBlocks(text: string): SplitText {
   // `lastIndex` forward, which the `^` anchor never matches past position 0.
   let match = CONTEXT_BLOCK_RE.exec(rest);
   while (match) {
-    blocks.push({ tag: match[1]!, body: match[2]!.trim() });
+    const tag = match[1]!;
+    const body = match[2]!.trim();
+    const skillName =
+      tag.toLowerCase() === "skill-context"
+        ? SKILL_NAME_RE.exec(body)?.[1]?.trim()
+        : undefined;
+    blocks.push({ tag, body, ...(skillName ? { skillName } : {}) });
     rest = rest.slice(match[0].length);
     match = CONTEXT_BLOCK_RE.exec(rest);
   }

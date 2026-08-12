@@ -1,8 +1,9 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Network, Server } from "lucide-react";
 
 function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
@@ -13,26 +14,28 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
       params={[toolset.slug]}
       className="hover:no-underline"
     >
-      <DotCard icon={<Network className="text-muted-foreground h-10 w-10" />}>
+      <Card.Entity
+        icon={<Network className="text-muted-foreground h-10 w-10" />}
+      >
         <div className="mb-1 flex items-start justify-between gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="text-md group-hover:text-primary truncate transition-colors"
           >
             {toolset.name}
-          </Type>
+          </Text>
           <Badge className="shrink-0">
             {`${toolset.toolUrns?.length || 0} tool${(toolset.toolUrns?.length || 0) !== 1 ? "s" : ""}`}
           </Badge>
         </div>
-        <Type small muted className="truncate">
+        <Text small muted className="truncate">
           {toolset.slug}
-        </Type>
+        </Text>
         {toolset.description && (
-          <Type small muted className="mt-2 line-clamp-2">
+          <Text small muted className="mt-2 line-clamp-2">
             {toolset.description}
-          </Type>
+          </Text>
         )}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
@@ -44,20 +47,20 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
                 className={`relative inline-flex h-2.5 w-2.5 rounded-full ${toolset.mcpEnabled ? "bg-green-500" : "bg-red-500"}`}
               />
             </div>
-            <Type variant="small" muted>
+            <Text variant="small" muted>
               {toolset.mcpEnabled
                 ? toolset.mcpIsPublic
                   ? "Public"
                   : "Private"
                 : "Disabled"}
-            </Type>
+            </Text>
           </div>
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
             <span>Open</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
-      </DotCard>
+      </Card.Entity>
     </routes.mcp.details.Link>
   );
 }
@@ -78,13 +81,13 @@ export function SourceMCPServersTab({
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border p-12 text-center">
+        <div className="border p-12 text-center">
           <Server className="text-muted-foreground mx-auto mb-3 h-10 w-10 opacity-40" />
-          <Type className="mb-1 block font-medium">No MCP servers yet</Type>
-          <Type muted small className="mx-auto mb-4 block max-w-sm">
+          <Text className="mb-1 block font-medium">No MCP servers yet</Text>
+          <Text muted small className="mx-auto mb-4 block max-w-sm">
             Create an MCP server that includes tools from this source to expose
             them to AI agents and clients.
-          </Type>
+          </Text>
           <routes.mcp.Link className="hover:no-underline">
             <Button variant="secondary" size="sm">
               <Button.LeftIcon>

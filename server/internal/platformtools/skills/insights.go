@@ -180,7 +180,7 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		}
 	} else {
 		listed, err := t.skills.List(ctx, &genskills.ListPayload{
-			Cursor: nil, Limit: 200, Search: nil, SourceKinds: nil, Classifications: nil, Sort: "name",
+			Cursor: nil, Limit: 200, Search: nil, SourceKinds: nil, Classifications: nil, Tags: nil, Sort: "name",
 			SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		})
 		if err != nil {

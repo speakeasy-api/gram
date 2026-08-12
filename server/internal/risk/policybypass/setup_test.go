@@ -11,15 +11,15 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testinfra"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-var cloneTestDatabase testinfra.PostgresDBCloneFunc
+var cloneTestDatabase testenv.PostgresDBCloneFunc
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, cloneFunc, err := testinfra.NewTestPostgres(ctx)
+	pgContainer, cloneFunc, err := testenv.NewTestPostgres(ctx)
 	if err != nil {
 		log.Fatalf("launch test postgres: %v", err)
 	}

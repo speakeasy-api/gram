@@ -18,9 +18,11 @@ import (
 
 // Server lists the agent service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	GetPlugins      http.Handler
-	ListSyncedUsers http.Handler
+	Mounts              []*MountPoint
+	GetPlugins          http.Handler
+	ListSyncedUsers     http.Handler
+	GetConfiguration    http.Handler
+	UpdateConfiguration http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +54,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetPlugins", "GET", "/rpc/agent.getPlugins"},
 			{"ListSyncedUsers", "GET", "/rpc/agent.listSyncedUsers"},
+			{"GetConfiguration", "GET", "/rpc/agent.getConfiguration"},
+			{"UpdateConfiguration", "POST", "/rpc/agent.updateConfiguration"},
 		},
-		GetPlugins:      NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
-		ListSyncedUsers: NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
+		GetPlugins:          NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
+		ListSyncedUsers:     NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
+		GetConfiguration:    NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
+		UpdateConfiguration: NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +71,8 @@ func (s *Server) Service() string { return "agent" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPlugins = m(s.GetPlugins)
 	s.ListSyncedUsers = m(s.ListSyncedUsers)
+	s.GetConfiguration = m(s.GetConfiguration)
+	s.UpdateConfiguration = m(s.UpdateConfiguration)
 }
 
 // MethodNames returns the methods served.
@@ -74,6 +82,8 @@ func (s *Server) MethodNames() []string { return agent.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPluginsHandler(mux, h.GetPlugins)
 	MountListSyncedUsersHandler(mux, h.ListSyncedUsers)
+	MountGetConfigurationHandler(mux, h.GetConfiguration)
+	MountUpdateConfigurationHandler(mux, h.UpdateConfiguration)
 }
 
 // Mount configures the mux to serve the agent endpoints.
@@ -164,6 +174,112 @@ func NewListSyncedUsersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listSyncedUsers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetConfigurationHandler configures the mux to serve the "agent" service
+// "getConfiguration" endpoint.
+func MountGetConfigurationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agent.getConfiguration", f)
+}
+
+// NewGetConfigurationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "getConfiguration" endpoint.
+func NewGetConfigurationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetConfigurationRequest(mux, decoder)
+		encodeResponse = EncodeGetConfigurationResponse(encoder)
+		encodeError    = EncodeGetConfigurationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getConfiguration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateConfigurationHandler configures the mux to serve the "agent"
+// service "updateConfiguration" endpoint.
+func MountUpdateConfigurationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.updateConfiguration", f)
+}
+
+// NewUpdateConfigurationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "updateConfiguration" endpoint.
+func NewUpdateConfigurationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateConfigurationRequest(mux, decoder)
+		encodeResponse = EncodeUpdateConfigurationResponse(encoder)
+		encodeError    = EncodeUpdateConfigurationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateConfiguration")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

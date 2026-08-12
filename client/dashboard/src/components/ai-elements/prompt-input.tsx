@@ -5,7 +5,7 @@ import {
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
-} from "@/components/ui/input-group";
+} from "@/components/ui/InputGroup";
 
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart } from "ai";
@@ -550,7 +550,7 @@ export type PromptInputSubmitProps = ComponentProps<typeof InputGroupButton> & {
 
 export const PromptInputSubmit = ({
   className,
-  variant = "default",
+  variant = "primary",
   size = "icon-md",
   status,
   children,

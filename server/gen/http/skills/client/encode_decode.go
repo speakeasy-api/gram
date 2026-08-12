@@ -1037,6 +1037,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		for _, value := range p.Classifications {
 			values.Add("classifications", value)
 		}
+		for _, value := range p.Tags {
+			values.Add("tags", value)
+		}
 		values.Add("sort", p.Sort)
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -1238,6 +1241,244 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("skills", "list", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTagsRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "listTags" endpoint
+func (c *Client) BuildListTagsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTagsSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listTags", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTagsRequest returns an encoder for requests sent to the skills
+// listTags server.
+func EncodeListTagsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListTagsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listTags", "*skills.ListTagsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListTagsResponse returns a decoder for responses returned by the
+// skills listTags endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListTagsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTagsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTagsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			res := NewListTagsListSkillTagsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTagsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTagsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTagsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTagsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTagsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTagsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTagsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTagsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+				}
+				err = ValidateListTagsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listTags", err)
+				}
+				return nil, NewListTagsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTagsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+				}
+				err = ValidateListTagsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listTags", err)
+				}
+				return nil, NewListTagsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listTags", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTagsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listTags", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -5352,6 +5593,10 @@ func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 	}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
+	}
 
 	return res
 }
@@ -5582,6 +5827,19 @@ func unmarshalSkillDriftResponseBodyToSkillsSkillDrift(v *SkillDriftResponseBody
 	res.TargetVersionIds = make([]string, len(v.TargetVersionIds))
 	for i, val := range v.TargetVersionIds {
 		res.TargetVersionIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalSkillPromptInjectionFindingResponseBodyToSkillsSkillPromptInjectionFinding
+// builds a value of type *skills.SkillPromptInjectionFinding from a value of
+// type *SkillPromptInjectionFindingResponseBody.
+func unmarshalSkillPromptInjectionFindingResponseBodyToSkillsSkillPromptInjectionFinding(v *SkillPromptInjectionFindingResponseBody) *skills.SkillPromptInjectionFinding {
+	res := &skills.SkillPromptInjectionFinding{
+		RuleID:      *v.RuleID,
+		Description: *v.Description,
+		Confidence:  *v.Confidence,
 	}
 
 	return res

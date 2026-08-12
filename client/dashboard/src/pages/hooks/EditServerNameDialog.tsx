@@ -1,10 +1,10 @@
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import type { ServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ServerNameOverride } from "@gram/client/models/components/servernameoverride.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { useCallback, useMemo, useState } from "react";
 
 interface EditServerNameDialogProps {
@@ -187,7 +187,7 @@ export function EditServerNameDialog({
                     </Label>
                     {server.id && (
                       <Button
-                        variant="ghost"
+                        variant="tertiary"
                         size="sm"
                         onClick={() => {
                           void handleDelete(server.id);
@@ -279,7 +279,7 @@ export function EditServerNameDialog({
 
         <Dialog.Footer>
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
           >
@@ -287,7 +287,7 @@ export function EditServerNameDialog({
           </Button>
           {groupedOverrides.length > 0 && !isGrouped && (
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               onClick={() => {
                 void handleDelete(groupedOverrides[0]!.id!);
               }}

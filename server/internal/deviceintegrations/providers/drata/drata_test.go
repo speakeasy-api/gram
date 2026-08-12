@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,7 @@ import (
 const (
 	testConnectionID = "8711"
 	testResourceID   = "42"
+	testOrgID        = "org_test"
 )
 
 // fakeDrata is an httptest stand-in for the Custom Connections API: the
@@ -61,34 +63,143 @@ type fakeDrata struct {
 	// empty-fleet clear path.
 	deletedRecords []string
 
+	// existingConnections is the collection the list endpoint returns, as
+	// {id, clientAlias} maps — pre-seed to exercise find-existing.
+	existingConnections []map[string]any
+	// connectionsPageForever makes the list endpoint hand back an advancing,
+	// never-null cursor with no match, driving the page-cap guard.
+	connectionsPageForever bool
+	// connectionsCursorFrozen makes the list endpoint return the same non-null
+	// cursor every time, driving the non-advancing-cursor guard.
+	connectionsCursorFrozen bool
+	// connectionsCursorEmpty makes the list endpoint return a present-but-empty
+	// cursor — distinct from a null cursor, so it must NOT count as end-of-list.
+	connectionsCursorEmpty bool
+	// connectionsCursorMissing makes the list endpoint omit the pagination
+	// cursor entirely — an incomplete response that must not be mistaken for a
+	// null end-of-list cursor.
+	connectionsCursorMissing bool
+	// createdConnections records the bodies POSTed to the collection endpoint,
+	// so provisioning tests can assert the schema and workspace sent.
+	createdConnections []map[string]any
+	// nextConnID is the id assigned to the next created connection.
+	nextConnID int
+
 	server *httptest.Server
 }
 
 func newFakeDrata(t *testing.T) *fakeDrata {
 	t.Helper()
 	f := &fakeDrata{
-		t:                  t,
-		apiKey:             "test-api-key",
-		resourceIDs:        []string{testResourceID},
-		mu:                 sync.Mutex{},
-		sessions:           map[string][]map[string]any{},
-		sessionStatus:      map[string]string{},
-		ignoreStatusFilter: false,
-		failComplete:       false,
-		rejectRecordID:     "",
-		records:            nil,
-		uploadRequests:     0,
-		completed:          nil,
-		canceled:           nil,
-		deletedRecords:     nil,
-		server:             nil,
+		t:                        t,
+		apiKey:                   "test-api-key",
+		resourceIDs:              []string{testResourceID},
+		mu:                       sync.Mutex{},
+		sessions:                 map[string][]map[string]any{},
+		sessionStatus:            map[string]string{},
+		ignoreStatusFilter:       false,
+		failComplete:             false,
+		rejectRecordID:           "",
+		records:                  nil,
+		uploadRequests:           0,
+		completed:                nil,
+		canceled:                 nil,
+		deletedRecords:           nil,
+		existingConnections:      nil,
+		connectionsPageForever:   false,
+		connectionsCursorFrozen:  false,
+		connectionsCursorEmpty:   false,
+		connectionsCursorMissing: false,
+		createdConnections:       nil,
+		nextConnID:               900,
+		server:                   nil,
 	}
 
 	connBase := "/public/v2/custom-connections/" + testConnectionID
+	collection := "/public/v2/custom-connections"
 	sessionsList := connBase + "/resources/" + testResourceID + "/sessions"
 	sessionsBase := sessionsList + "/"
 
 	mux := http.NewServeMux()
+	// Collection endpoint (exact path, so it never shadows the per-connection
+	// routes below): GET lists connections for find-existing; POST creates one
+	// for provisioning.
+	mux.HandleFunc(collection, func(w http.ResponseWriter, r *http.Request) {
+		if !f.authorized(w, r) {
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			if f.connectionsPageForever {
+				offset := 0
+				if raw := r.URL.Query().Get("cursor"); raw != "" {
+					offset, _ = strconv.Atoi(raw)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"data": [], "pagination": {"cursor": %q}}`, strconv.Itoa(offset+1))
+				return
+			}
+			if f.connectionsCursorFrozen {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"data": [], "pagination": {"cursor": "frozen"}}`)
+				return
+			}
+			if f.connectionsCursorEmpty {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"data": [], "pagination": {"cursor": ""}}`)
+				return
+			}
+			if f.connectionsCursorMissing {
+				// No pagination cursor at all — an incomplete response.
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"data": []}`)
+				return
+			}
+			// Paginate by the requested limit so find-existing's cursor-following
+			// is exercised: a connection past the first page must still be found.
+			limit := 200
+			if raw := r.URL.Query().Get("limit"); raw != "" {
+				if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+					limit = parsed
+				}
+			}
+			offset := 0
+			if raw := r.URL.Query().Get("cursor"); raw != "" {
+				parsed, err := strconv.Atoi(raw)
+				assert.NoError(f.t, err, "cursor is the opaque token the fake handed back")
+				offset = parsed
+			}
+			f.mu.Lock()
+			all := f.existingConnections
+			end := min(offset+limit, len(all))
+			page := []map[string]any{}
+			if offset < len(all) {
+				page = all[offset:end]
+			}
+			f.mu.Unlock()
+			items, _ := json.Marshal(page)
+			cursor := "null"
+			if end < len(all) {
+				cursor = strconv.Quote(strconv.Itoa(end))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"data": %s, "pagination": {"cursor": %s}}`, items, cursor)
+		case http.MethodPost:
+			var body map[string]any
+			assert.NoError(f.t, json.NewDecoder(r.Body).Decode(&body))
+			f.mu.Lock()
+			f.createdConnections = append(f.createdConnections, body)
+			f.nextConnID++
+			id := f.nextConnID
+			name, _ := body["name"].(string)
+			f.existingConnections = append(f.existingConnections, map[string]any{"id": id, "clientAlias": name})
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"id": %d, "clientAlias": %q}`, id, name)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
 	// Registered without the trailing slash so the list read does not fall
 	// into ServeMux's subtree redirect onto the upload handler.
 	mux.HandleFunc(sessionsList, func(w http.ResponseWriter, r *http.Request) {
@@ -707,4 +818,191 @@ func TestPushCoverageEmitsAttestationPerRecord(t *testing.T) {
 		require.NotContains(t, r, "assignedUserAgentActive")
 		require.NotContains(t, r, "assignedUserAgentLastSeenAt")
 	}
+}
+
+func TestProvisionCreatesConnection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	require.NotEmpty(t, out[fieldConnectionID], "provision fills in the created connection id")
+
+	require.Len(t, fake.createdConnections, 1)
+	body := fake.createdConnections[0]
+	require.Equal(t, connectionNameForOrg(testOrgID), body["name"], "the connection is named per Gram org")
+	require.Contains(t, body["name"], provisionConnectionName, "the org-scoped name keeps the readable stem")
+	require.Equal(t, []any{"CUSTOM"}, body["providerTypes"])
+	require.Equal(t, displayNameKey, body["displayNameKey"])
+	require.Equal(t, []any{float64(defaultWorkspaceID)}, body["workspaceIds"], "blank workspace defaults to 1")
+
+	schema, ok := body["schema"].(map[string]any)
+	require.True(t, ok, "create carries the record schema")
+	required, ok := schema["required"].([]any)
+	require.True(t, ok)
+	// The whole point of provisioning: encode the required list correctly so a
+	// never-seen-agent record (no agentLastSeenAt) is never rejected at sync.
+	require.NotContains(t, required, "agentLastSeenAt")
+	require.Contains(t, required, "agentActive")
+	props, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, props, "agentLastSeenAt", "the property still exists — just not required")
+}
+
+func TestProvisionReusesExistingConnection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	fake.existingConnections = []map[string]any{
+		{"id": 42, "clientAlias": "Some Other Connection"},
+		// The bare-stemmed name from before org-scoping was added must NOT
+		// match — only this org's fully-scoped connection is reused.
+		{"id": 43, "clientAlias": provisionConnectionName},
+		{"id": 777, "clientAlias": connectionNameForOrg(testOrgID)},
+	}
+	s := fake.newSink(t)
+
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	require.Equal(t, "777", out[fieldConnectionID], "reuses this org's existing Gram connection by name")
+	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
+}
+
+func TestProvisionSeparatesConnectionsPerOrg(t *testing.T) {
+	t.Parallel()
+
+	// Two Gram orgs sharing one Drata tenant: the second must not resolve to
+	// (and clobber) the first's connection — it provisions its own.
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	firstOrg := "org_first"
+	secondOrg := "org_second"
+	require.NotEqual(t, connectionNameForOrg(firstOrg), connectionNameForOrg(secondOrg))
+
+	first, err := s.Provision(t.Context(), firstOrg, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	second, err := s.Provision(t.Context(), secondOrg, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+
+	require.NotEqual(t, first[fieldConnectionID], second[fieldConnectionID], "each org owns a distinct connection")
+	require.Len(t, fake.createdConnections, 2, "the shared tenant gets one connection per Gram org")
+}
+
+func TestProvisionFindsConnectionOnLaterPage(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	// A tenant with more connections than one page fits, with the Gram
+	// connection last: a single-page lookup would miss it and duplicate on
+	// every save. The lookup must follow the cursor to find it.
+	for i := range connectionListLimit + 5 {
+		fake.existingConnections = append(fake.existingConnections, map[string]any{
+			"id":          1000 + i,
+			"clientAlias": fmt.Sprintf("Other Connection %d", i),
+		})
+	}
+	fake.existingConnections = append(fake.existingConnections, map[string]any{
+		"id":          9999,
+		"clientAlias": connectionNameForOrg(testOrgID),
+	})
+	s := fake.newSink(t)
+
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.NoError(t, err)
+	require.Equal(t, "9999", out[fieldConnectionID], "cursor-following finds the connection past the first page")
+	require.Empty(t, fake.createdConnections, "a matching connection must never be duplicated")
+}
+
+func TestProvisionFailsWhenScanExceedsPageCap(t *testing.T) {
+	t.Parallel()
+
+	// The list never ends and never matches: reaching the page cap must fail
+	// the provision, not fall through to create a duplicate on every connect.
+	fake := newFakeDrata(t)
+	fake.connectionsPageForever = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "exceeded")
+	require.Empty(t, fake.createdConnections, "hitting the cap must not create a connection")
+}
+
+func TestProvisionFailsWhenCursorStuck(t *testing.T) {
+	t.Parallel()
+
+	// A cursor that never advances can't prove absence: fail rather than
+	// duplicate.
+	fake := newFakeDrata(t)
+	fake.connectionsCursorFrozen = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "did not advance")
+	require.Empty(t, fake.createdConnections, "a stuck cursor must not create a connection")
+}
+
+func TestProvisionFailsWhenCursorEmptyNotNull(t *testing.T) {
+	t.Parallel()
+
+	// A present-but-empty cursor is not Drata's null end-of-list signal, so it
+	// must not be mistaken for "no more pages" and permit a duplicate create.
+	fake := newFakeDrata(t)
+	fake.connectionsCursorEmpty = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "did not advance")
+	require.Empty(t, fake.createdConnections, "an empty non-null cursor must not create a connection")
+}
+
+func TestProvisionFailsWhenCursorMissing(t *testing.T) {
+	t.Parallel()
+
+	// A response that omits the cursor is incomplete, not end-of-list: it must
+	// not be mistaken for a null cursor and permit a duplicate create.
+	fake := newFakeDrata(t)
+	fake.connectionsCursorMissing = true
+	s := fake.newSink(t)
+
+	_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us"})
+	require.ErrorContains(t, err, "missing pagination cursor")
+	require.Empty(t, fake.createdConnections, "a missing cursor must not create a connection")
+}
+
+func TestProvisionNoOpWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDrata(t)
+	s := fake.newSink(t)
+
+	in := providers.Settings{fieldRegion: "us", fieldConnectionID: "existing-123"}
+	out, err := s.Provision(t.Context(), testOrgID, fake.creds(), in)
+	require.NoError(t, err)
+	require.Equal(t, "existing-123", out[fieldConnectionID])
+	require.Empty(t, fake.createdConnections, "a configured connection is never re-provisioned")
+}
+
+func TestProvisionWorkspaceID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("explicit workspace is used", func(t *testing.T) {
+		t.Parallel()
+		fake := newFakeDrata(t)
+		s := fake.newSink(t)
+		_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "3"})
+		require.NoError(t, err)
+		require.Equal(t, []any{float64(3)}, fake.createdConnections[0]["workspaceIds"])
+	})
+
+	t.Run("invalid workspace fails loudly and creates nothing", func(t *testing.T) {
+		t.Parallel()
+		fake := newFakeDrata(t)
+		s := fake.newSink(t)
+		_, err := s.Provision(t.Context(), testOrgID, fake.creds(), providers.Settings{fieldRegion: "us", fieldWorkspaceID: "not-a-number"})
+		require.ErrorContains(t, err, "workspace_id")
+		require.Empty(t, fake.createdConnections)
+	})
 }

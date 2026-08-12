@@ -1,6 +1,7 @@
 package triggers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,7 +50,7 @@ type Definition struct {
 	EnvRequirements      []EnvRequirement
 	EventType            reflect.Type
 	DecodeConfig         func(raw map[string]any) (Config, error)
-	AuthenticateWebhook  func(body []byte, headers http.Header, env map[string]string, config Config) error
+	AuthenticateWebhook  func(ctx context.Context, body []byte, headers http.Header, env map[string]string, config Config) error
 	HandleWebhook        func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error)
 	BuildScheduledEvent  func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error)
 	BuildDirectEvent     func(instance triggerrepo.TriggerInstance, config Config, payload []byte, receivedAt time.Time) (*EventEnvelope, error)
@@ -144,10 +145,12 @@ type dashboardTriggerConfig struct{}
 func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
 type dashboardTriggerEvent struct {
-	Text           string `json:"text" cel:"text"`
-	UserID         string `json:"user_id,omitempty" cel:"user_id"`
-	CorrelationID  string `json:"correlation_id,omitempty" cel:"correlation_id"`
-	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
+	Text           string          `json:"text" cel:"text"`
+	UserID         string          `json:"user_id,omitempty" cel:"user_id"`
+	CorrelationID  string          `json:"correlation_id,omitempty" cel:"correlation_id"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty" cel:"idempotency_key"`
+	SkillContext   json.RawMessage `json:"skill_context,omitempty"`
+	Attachments    json.RawMessage `json:"attachments,omitempty"`
 }
 
 type cronTriggerEvent struct {
@@ -166,6 +169,7 @@ type wakeTriggerEvent struct {
 
 var registry = map[string]Definition{
 	DefinitionSlugSlack:     newSlackDefinition(),
+	DefinitionSlugMSTeams:   newMSTeamsDefinition(),
 	DefinitionSlugLinear:    newLinearDefinition(),
 	DefinitionSlugGithub:    newGitHubDefinition(),
 	DefinitionSlugCron:      newCronDefinition(),
@@ -351,6 +355,19 @@ func newWakeDefinition() Definition {
 	}
 }
 
+// countRawJSONArray reports how many elements an undecoded JSON array holds,
+// treating anything that is not an array (absent, null, malformed) as empty.
+func countRawJSONArray(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var elements []json.RawMessage
+	if err := json.Unmarshal(raw, &elements); err != nil {
+		return 0
+	}
+	return len(elements)
+}
+
 func newDashboardDefinition() Definition {
 	schema := buildInputSchema[dashboardTriggerConfig]()
 	compiled := mustCompileSchema(schema)
@@ -374,7 +391,10 @@ func newDashboardDefinition() Definition {
 			if err := json.Unmarshal(payload, &event); err != nil {
 				return nil, fmt.Errorf("decode dashboard message: %w", err)
 			}
-			if event.Text == "" {
+			// `Attachments` is raw JSON, so its length is a byte count: `[]`
+			// and `null` would both pass a `len != 0` check and let a turn
+			// through with neither text nor files.
+			if event.Text == "" && countRawJSONArray(event.Attachments) == 0 {
 				return nil, fmt.Errorf("dashboard message text is required")
 			}
 			if event.UserID == "" {

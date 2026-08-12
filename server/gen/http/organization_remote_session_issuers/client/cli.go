@@ -204,6 +204,36 @@ func BuildGetIssuerDeletePreflightPayload(organizationRemoteSessionIssuersGetIss
 	return v, nil
 }
 
+// BuildGetIssuerDuplicatePreflightPayload builds the payload for the
+// organizationRemoteSessionIssuers getIssuerDuplicatePreflight endpoint from
+// CLI flags.
+func BuildGetIssuerDuplicatePreflightPayload(organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuer string, organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionToken string, organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyToken string) (*organizationremotesessionissuers.GetIssuerDuplicatePreflightPayload, error) {
+	var issuer *string
+	{
+		if organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuer != "" {
+			issuer = &organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuer
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.GetIssuerDuplicatePreflightPayload{}
+	v.Issuer = issuer
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildUpdateIssuerPayload builds the payload for the
 // organizationRemoteSessionIssuers updateIssuer endpoint from CLI flags.
 func BuildUpdateIssuerPayload(organizationRemoteSessionIssuersUpdateIssuerBody string, organizationRemoteSessionIssuersUpdateIssuerSessionToken string, organizationRemoteSessionIssuersUpdateIssuerApikeyToken string) (*organizationremotesessionissuers.UpdateIssuerPayload, error) {

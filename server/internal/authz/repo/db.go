@@ -1,9 +1,7 @@
 // Package repo writes authz challenge rows to ClickHouse.
 //
-// Inserts use server-side async insert (async_insert=1,
-// wait_for_async_insert=0) so ClickHouse buffers rows and responds
-// immediately without waiting for a disk flush. The Exec call itself
-// still blocks on the network roundtrip to CH.
+// Inserts use server-side async insert so ClickHouse batches concurrent
+// Pub/Sub deliveries, while waiting for the flush before the handler acks.
 package repo
 
 import (

@@ -1,20 +1,20 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
@@ -31,7 +31,8 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -53,6 +54,11 @@ import {
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
+import {
+  useIssuerDuplicatePreflight,
+  type RemoteSessionIssuerDuplicateMatch,
+} from "./useIssuerDuplicatePreflight";
 
 type Mode = "select" | "new";
 
@@ -101,6 +107,19 @@ export function AttachRemoteIdentityProviderSheet({
   // fall back to the issuer URL.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+
+  // The Issuer URL as it stood when the operator last left the field. Held
+  // separately from the live input so the duplicate preflight runs on a settled
+  // value rather than once per keystroke.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState("");
+  // Project scope: this project's own issuers plus the ones it inherits from
+  // the organization and the platform catalog. Only the "new" arm can create a
+  // duplicate — "select" mode is already reuse — so the lookup is off there.
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "project",
+    enabled: open && mode === "new",
+  });
 
   const [slug, setSlug] = useState("");
   // When the operator hasn't manually edited Slug, we keep it in lockstep
@@ -225,7 +244,7 @@ export function AttachRemoteIdentityProviderSheet({
     }> => {
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
       // one with the conservative interactive challenge mode and a 2-week
-      // session lifetime — these match the wire-user-session-issuer defaults.
+      // session lifetime.
       let issuerId = userSessionIssuer?.id;
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({
@@ -436,6 +455,12 @@ export function AttachRemoteIdentityProviderSheet({
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
     clearDiscoverError();
+    // Seeded, not cleared: "Start With Discovered Configuration" opens this
+    // sheet in "new" mode with the URL already filled in and runs discovery
+    // automatically. That is the path most likely to duplicate a platform or
+    // organization record, so it has to preflight without waiting for a blur on
+    // a field the operator has no reason to touch.
+    setSettledIssuerUrl(initialIssuerUrl ?? "");
     setClientId("");
     setClientSecret("");
     setTokenEndpointAuthMethod("");
@@ -496,6 +521,30 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedClientId("");
   }, [selectedIssuerId, mode]);
 
+  // One-click reuse switches this sheet from creating an issuer to selecting
+  // the one that already describes the URL. It is offered only when the match
+  // is in selectableIssuers, which is narrower than "the preflight found it"
+  // in two ways worth being explicit about: that list excludes issuers already
+  // attached to this target, and it is itself bounded. Offering the action for
+  // a match outside it would flip the sheet into select mode with an id the
+  // dropdown cannot resolve, leaving the client section incoherent. When the
+  // match is already attached here, the warning text alone is the right
+  // outcome — there is nothing left to reuse.
+  const selectableIssuerIds = useMemo(
+    () => new Set(selectableIssuers.map((issuer) => issuer.id)),
+    [selectableIssuers],
+  );
+  const primaryDuplicate = duplicateMatches[0];
+  const canReuseDuplicate =
+    primaryDuplicate !== undefined &&
+    selectableIssuerIds.has(primaryDuplicate.id);
+  const handleUseExistingIssuer = (
+    match: RemoteSessionIssuerDuplicateMatch,
+  ) => {
+    setSelectedIssuerId(match.id);
+    setMode("select");
+  };
+
   const submittable = useMemo(() => {
     // Issuer must be resolvable: an existing pick, or a complete new-issuer
     // form.
@@ -533,9 +582,9 @@ export function AttachRemoteIdentityProviderSheet({
   let clientSectionBody: JSX.Element;
   if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
     clientSectionBody = (
-      <Type muted small>
+      <Text muted small>
         Loading clients…
-      </Type>
+      </Text>
     );
   } else if (effectiveClientMode === "select") {
     clientSectionBody = (
@@ -604,8 +653,22 @@ export function AttachRemoteIdentityProviderSheet({
               <Stack gap={4}>
                 <IssuerUrlField
                   issuerUrl={issuerUrl}
+                  onIssuerUrlSettled={setSettledIssuerUrl}
+                  duplicateWarning={
+                    <IssuerDuplicateWarning
+                      viewerScope="project"
+                      matches={duplicateMatches}
+                      onUseExisting={
+                        canReuseDuplicate ? handleUseExistingIssuer : undefined
+                      }
+                    />
+                  }
                   onIssuerUrlChange={(value) => {
                     setIssuerUrl(value);
+                    // Any edit invalidates the last blur, so the warning cannot
+                    // outlive the URL it describes and "Use existing" cannot
+                    // adopt a record for a URL no longer in the field.
+                    setSettledIssuerUrl("");
                     // A stale error from a previous URL would be misleading once
                     // the operator starts typing a new target; clear it so the
                     // next Discover click starts fresh.
@@ -653,10 +716,10 @@ export function AttachRemoteIdentityProviderSheet({
                     }}
                     placeholder="my-identity-provider"
                   />
-                  <Type muted small>
+                  <Text muted small>
                     Project-unique identifier for this identity provider.
                     Auto-derived from the Issuer URL until you edit it.
-                  </Type>
+                  </Text>
                 </Stack>
 
                 <Stack gap={2}>
@@ -671,11 +734,11 @@ export function AttachRemoteIdentityProviderSheet({
                     }}
                     placeholder="My Identity Provider"
                   />
-                  <Type muted small>
+                  <Text muted small>
                     Friendly label shown in the dashboard. Auto-derived from the
                     Issuer URL until you edit it; falls back to the Issuer URL
                     when left blank.
-                  </Type>
+                  </Text>
                 </Stack>
 
                 <EndpointsFields
@@ -750,9 +813,9 @@ function SectionHeading({
   return (
     <Stack gap={1}>
       <Label className="text-sm font-medium">{title}</Label>
-      <Type muted small>
+      <Text muted small>
         {description}
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -806,10 +869,10 @@ function SelectExistingFields({
           ))}
         </SelectContent>
       </Select>
-      <Type muted small>
+      <Text muted small>
         Pick an organization-level or project identity provider already
         configured on this project.
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -841,10 +904,10 @@ function SelectExistingClientFields({
             ))}
           </SelectContent>
         </Select>
-        <Type muted small>
+        <Text muted small>
           Bind an existing client of this provider to this MCP server. The
           client's stored configuration is reused as-is.
-        </Type>
+        </Text>
       </Stack>
 
       {selectedClient && <SelectedClientDetails client={selectedClient} />}
@@ -881,9 +944,9 @@ function SelectedClientDetails({
       {rows.map((row) => (
         <Stack key={row.label} gap={1}>
           <Label className="text-muted-foreground text-xs">{row.label}</Label>
-          <Type small mono={row.mono} className="break-all">
+          <Text small mono={row.mono} className="break-all">
             {row.value}
-          </Type>
+          </Text>
         </Stack>
       ))}
     </Stack>

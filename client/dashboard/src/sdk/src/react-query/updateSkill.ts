@@ -54,7 +54,7 @@ export type UpdateSkillMutationError =
  * update skills
  *
  * @remarks
- * Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+ * Rename an active skill or update its display name, summary, and tags. The implementation requires the skills product feature and skill write scope.
  */
 export function useUpdateSkillMutation(
   options?: MutationHookOptions<

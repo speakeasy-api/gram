@@ -28,9 +28,17 @@ type GetUserSessionClientResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning user_session_issuer id.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
@@ -39,6 +47,10 @@ type GetUserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -618,9 +630,17 @@ type UserSessionClientResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning user_session_issuer id.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// DCR-issued client_id.
+	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
+	// is the metadata document URL and equals client_id_metadata_uri.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Display name from the registration request.
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
@@ -629,6 +649,10 @@ type UserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
 }
 
 // NewListUserSessionClientsResultOK builds a "userSessionClients" service
@@ -806,11 +830,13 @@ func NewGetUserSessionClientUserSessionClientOK(body *GetUserSessionClientRespon
 		ID:                    *body.ID,
 		UserSessionIssuerID:   *body.UserSessionIssuerID,
 		ClientID:              *body.ClientID,
+		ClientIDMetadataURI:   body.ClientIDMetadataURI,
 		ClientName:            *body.ClientName,
 		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+		ActiveSessionCount:    *body.ActiveSessionCount,
 	}
 	v.RedirectUris = make([]string, len(body.RedirectUris))
 	for i, val := range body.RedirectUris {
@@ -1162,6 +1188,9 @@ func ValidateGetUserSessionClientResponseBody(body *GetUserSessionClientResponse
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -1933,6 +1962,9 @@ func ValidateUserSessionClientResponseBody(body *UserSessionClientResponseBody) 
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

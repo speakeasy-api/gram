@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * deleteAwsKmsKey externalKeys
  *
  * @remarks
- * Soft-delete an AWS KMS external key by ID. Requires org:admin.
+ * Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
  */
 export function externalKeysDeleteAwsKms(
   client: GramCore,

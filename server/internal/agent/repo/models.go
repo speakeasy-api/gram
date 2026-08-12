@@ -3,3 +3,15 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type DeviceAgentConfiguration struct {
+	OrganizationID string
+	SchemaVersion  int32
+	Config         []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}

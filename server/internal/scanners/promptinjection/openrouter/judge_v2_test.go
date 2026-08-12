@@ -131,7 +131,7 @@ func TestClassifyBoundsTheEventDeadline(t *testing.T) {
 	require.NoError(t, err)
 	require.Less(t, time.Since(start), 140*time.Millisecond, "the call is bounded by the event deadline")
 	require.Equal(t, int64(1), client.calls.Load())
-	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 }
 
 func TestTypedPathIsDefaultAndMakesOnePhysicalCall(t *testing.T) {

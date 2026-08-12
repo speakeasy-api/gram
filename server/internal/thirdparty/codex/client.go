@@ -22,13 +22,34 @@ const (
 	maxHTTPErrorMessage = 1000
 )
 
-var externalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+var (
+	externalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+	workspaceIDPattern            = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+)
+
+// Compliance resources are served under two path scopes: API organizations
+// (organizations/org-…, e.g. Codex COSTS files) and ChatGPT workspaces
+// (workspaces/<uuid>, e.g. CONVERSATION_MESSAGE files). A client is bound to
+// one scope at construction.
+type scope struct {
+	prefix  string
+	id      string
+	pattern *regexp.Regexp
+	// name and label compose the invalid-id error:
+	// "<errPrefix> <name> must be <label>".
+	name  string
+	label string
+	// errPrefix names the integration in every error this client surfaces,
+	// so workspace-scoped (ChatGPT) failures are not misattributed to Codex
+	// in logs and Temporal failure details.
+	errPrefix string
+}
 
 type Client struct {
-	httpClient             *guardian.HTTPClient
-	baseURL                string
-	apiKey                 string
-	externalOrganizationID string
+	httpClient *guardian.HTTPClient
+	baseURL    string
+	apiKey     string
+	scope      scope
 }
 
 type Option func(*Client)
@@ -55,15 +76,41 @@ func WithAPIKey(apiKey string) Option {
 	}
 }
 
+// New returns a client scoped to an OpenAI API organization (org-… id),
+// the scope Codex COSTS files are served under.
 func New(guardianPolicy *guardian.Policy, externalOrganizationID string, opts ...Option) *Client {
+	return newScoped(guardianPolicy, scope{
+		prefix:    "organizations",
+		id:        strings.TrimSpace(externalOrganizationID),
+		pattern:   externalOrganizationIDPattern,
+		name:      "external organization id",
+		label:     "an OpenAI organization ID starting with org-",
+		errPrefix: "codex compliance",
+	}, opts...)
+}
+
+// NewWorkspaceClient returns a client scoped to a ChatGPT workspace (UUID),
+// the scope conversation/audit/auth log files are served under.
+func NewWorkspaceClient(guardianPolicy *guardian.Policy, workspaceID string, opts ...Option) *Client {
+	return newScoped(guardianPolicy, scope{
+		prefix:    "workspaces",
+		id:        strings.TrimSpace(workspaceID),
+		pattern:   workspaceIDPattern,
+		name:      "workspace id",
+		label:     "a ChatGPT workspace UUID",
+		errPrefix: "chatgpt compliance",
+	}, opts...)
+}
+
+func newScoped(guardianPolicy *guardian.Policy, s scope, opts ...Option) *Client {
 	if guardianPolicy == nil {
 		panic("codex compliance client requires guardian policy")
 	}
 	c := &Client{
-		httpClient:             guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
-		baseURL:                defaultBaseURL,
-		apiKey:                 "",
-		externalOrganizationID: strings.TrimSpace(externalOrganizationID),
+		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
+		baseURL:    defaultBaseURL,
+		apiKey:     "",
+		scope:      s,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -117,7 +164,7 @@ func (c *Client) ListLogs(ctx context.Context, params ListLogsParams) (*LogsPage
 }
 
 func (c *Client) DownloadLog(ctx context.Context, logID string) ([]byte, error) {
-	logID, err := validateCodexPathID("codex compliance log id", logID)
+	logID, err := validateCodexPathID(c.scope.errPrefix+" log id", logID)
 	if err != nil {
 		return nil, err
 	}
@@ -127,25 +174,25 @@ func (c *Client) DownloadLog(ctx context.Context, logID string) ([]byte, error) 
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("create codex compliance download request: %w", err)
+		return nil, fmt.Errorf("create %s download request: %w", c.scope.errPrefix, err)
 	}
 	c.setHeaders(req)
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("codex compliance download request failed: %w", err)
+		return nil, fmt.Errorf("%s download request failed: %w", c.scope.errPrefix, err)
 	}
 	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return nil, newHTTPError(res)
+		return nil, newHTTPError(res, c.scope.errPrefix)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(res.Body, maxLogFileSize+1))
 	if err != nil {
-		return nil, fmt.Errorf("read codex compliance log: %w", err)
+		return nil, fmt.Errorf("read %s log: %w", c.scope.errPrefix, err)
 	}
 	if len(body) > maxLogFileSize {
-		return nil, fmt.Errorf("codex compliance log %s exceeds %d byte limit", logID, maxLogFileSize)
+		return nil, fmt.Errorf("%s log %s exceeds %d byte limit", c.scope.errPrefix, logID, maxLogFileSize)
 	}
 	return body, nil
 }
@@ -153,35 +200,35 @@ func (c *Client) DownloadLog(ctx context.Context, logID string) ([]byte, error) 
 func (c *Client) doJSON(ctx context.Context, endpoint *url.URL, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return fmt.Errorf("create codex compliance request: %w", err)
+		return fmt.Errorf("create %s request: %w", c.scope.errPrefix, err)
 	}
 	c.setHeaders(req)
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("codex compliance request failed: %w", err)
+		return fmt.Errorf("%s request failed: %w", c.scope.errPrefix, err)
 	}
 	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return newHTTPError(res)
+		return newHTTPError(res, c.scope.errPrefix)
 	}
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode codex compliance response: %w", err)
+		return fmt.Errorf("decode %s response: %w", c.scope.errPrefix, err)
 	}
 	return nil
 }
 
 func (c *Client) endpoint(parts ...string) (*url.URL, error) {
-	if !externalOrganizationIDPattern.MatchString(c.externalOrganizationID) {
-		return nil, fmt.Errorf("codex compliance external organization id must be an OpenAI organization ID starting with org-")
+	if !c.scope.pattern.MatchString(c.scope.id) {
+		return nil, fmt.Errorf("%s %s must be %s", c.scope.errPrefix, c.scope.name, c.scope.label)
 	}
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse codex compliance base url: %w", err)
+		return nil, fmt.Errorf("parse %s base url: %w", c.scope.errPrefix, err)
 	}
-	path := []string{"organizations", c.externalOrganizationID}
+	path := []string{c.scope.prefix, c.scope.id}
 	for _, part := range parts {
-		part, err := validateCodexPathID("codex compliance path id", part)
+		part, err := validateCodexPathID(c.scope.errPrefix+" path id", part)
 		if err != nil {
 			return nil, err
 		}
@@ -214,16 +261,23 @@ type HTTPError struct {
 	StatusCode int
 	Status     string
 	Body       string
+	// prefix names the integration ("codex compliance" / "chatgpt
+	// compliance") so error text attributes failures to the right feed.
+	prefix string
 }
 
 func (e *HTTPError) Error() string {
-	if e.Body != "" {
-		return fmt.Sprintf("codex compliance API returned %s: %s", e.Status, e.Body)
+	prefix := e.prefix
+	if prefix == "" {
+		prefix = "codex compliance"
 	}
-	return fmt.Sprintf("codex compliance API returned %s", e.Status)
+	if e.Body != "" {
+		return fmt.Sprintf("%s API returned %s: %s", prefix, e.Status, e.Body)
+	}
+	return fmt.Sprintf("%s API returned %s", prefix, e.Status)
 }
 
-func newHTTPError(res *http.Response) *HTTPError {
+func newHTTPError(res *http.Response, prefix string) *HTTPError {
 	body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorMessage+1))
 	message := strings.TrimSpace(string(body))
 	if len(message) > maxHTTPErrorMessage {
@@ -233,5 +287,6 @@ func newHTTPError(res *http.Response) *HTTPError {
 		StatusCode: res.StatusCode,
 		Status:     res.Status,
 		Body:       message,
+		prefix:     prefix,
 	}
 }

@@ -62,16 +62,6 @@ func RemoveOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.removeOAuthServer"
 }
 
-// AddOAuthProxyServerToolsetsPath returns the URL path to the toolsets service addOAuthProxyServer HTTP endpoint.
-func AddOAuthProxyServerToolsetsPath() string {
-	return "/rpc/toolsets.addOAuthProxyServer"
-}
-
-// UpdateOAuthProxyServerToolsetsPath returns the URL path to the toolsets service updateOAuthProxyServer HTTP endpoint.
-func UpdateOAuthProxyServerToolsetsPath() string {
-	return "/rpc/toolsets.updateOAuthProxyServer"
-}
-
 // SetUserSessionIssuerToolsetsPath returns the URL path to the toolsets service setUserSessionIssuer HTTP endpoint.
 func SetUserSessionIssuerToolsetsPath() string {
 	return "/rpc/toolsets.setUserSessionIssuer"

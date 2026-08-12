@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -76,4 +78,47 @@ func TestLogSafeURL(t *testing.T) {
 			require.Equal(t, tt.want, logSafeURL(u))
 		})
 	}
+}
+
+// A late error-path WriteHeader after the response has committed is ignored
+// by net/http; the wrapper's recorded status must not change either, or
+// access logs relabel an already-sent response (e.g. a relayed SSE stream
+// that dies mid-flight gets logged as a 500 despite a 200 on the wire).
+func TestResponseWriterIgnoresWriteHeaderAfterWriteHeader(t *testing.T) {
+	t.Parallel()
+
+	inner := httptest.NewRecorder()
+	rw := newResponseWriter(inner)
+
+	rw.WriteHeader(http.StatusOK)
+	rw.WriteHeader(http.StatusInternalServerError)
+
+	require.Equal(t, http.StatusOK, rw.statusCode)
+	require.Equal(t, http.StatusOK, inner.Code)
+}
+
+func TestResponseWriterIgnoresWriteHeaderAfterWrite(t *testing.T) {
+	t.Parallel()
+
+	inner := httptest.NewRecorder()
+	rw := newResponseWriter(inner)
+
+	_, err := rw.Write([]byte("body"))
+	require.NoError(t, err)
+	rw.WriteHeader(http.StatusInternalServerError)
+
+	require.Equal(t, http.StatusOK, rw.statusCode)
+	require.Equal(t, http.StatusOK, inner.Code)
+}
+
+func TestResponseWriterIgnoresWriteHeaderAfterFlush(t *testing.T) {
+	t.Parallel()
+
+	inner := httptest.NewRecorder()
+	rw := newResponseWriter(inner)
+
+	rw.Flush()
+	rw.WriteHeader(http.StatusInternalServerError)
+
+	require.Equal(t, http.StatusOK, rw.statusCode)
 }

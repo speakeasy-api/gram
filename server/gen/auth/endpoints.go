@@ -19,6 +19,7 @@ type Endpoints struct {
 	Callback     goa.Endpoint
 	Login        goa.Endpoint
 	SwitchScopes goa.Endpoint
+	EnterDemo    goa.Endpoint
 	Logout       goa.Endpoint
 	Register     goa.Endpoint
 	Info         goa.Endpoint
@@ -32,6 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Callback:     NewCallbackEndpoint(s),
 		Login:        NewLoginEndpoint(s),
 		SwitchScopes: NewSwitchScopesEndpoint(s, a.APIKeyAuth),
+		EnterDemo:    NewEnterDemoEndpoint(s, a.APIKeyAuth),
 		Logout:       NewLogoutEndpoint(s, a.APIKeyAuth),
 		Register:     NewRegisterEndpoint(s, a.APIKeyAuth),
 		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Callback = m(e.Callback)
 	e.Login = m(e.Login)
 	e.SwitchScopes = m(e.SwitchScopes)
+	e.EnterDemo = m(e.EnterDemo)
 	e.Logout = m(e.Logout)
 	e.Register = m(e.Register)
 	e.Info = m(e.Info)
@@ -86,6 +89,29 @@ func NewSwitchScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.SwitchScopes(ctx, p)
+	}
+}
+
+// NewEnterDemoEndpoint returns an endpoint function that calls the method
+// "enterDemo" of service "auth".
+func NewEnterDemoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnterDemoPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnterDemo(ctx, p)
 	}
 }
 

@@ -124,12 +124,13 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	accessEnc, err := enc.Encrypt([]byte("upstream-access-token"))
 	require.NoError(t, err)
 
-	session, err := repo.New(ti.conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientUUID,
 		AccessTokenEncrypted:  accessEnc,
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
 	})
 	require.NoError(t, err)
 

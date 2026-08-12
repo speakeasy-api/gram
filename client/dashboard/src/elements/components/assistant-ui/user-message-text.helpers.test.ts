@@ -24,6 +24,20 @@ describe("splitContextBlocks", () => {
     expect(rest).toBe("hi");
   });
 
+  it("identifies a skill envelope without exposing its content as the label", () => {
+    const text =
+      "<skill-context>\nName: incident-analysis\nDescription: Analyze incidents\n<skill-content>\nsecret instructions\n</skill-content>\n</skill-context>\n\nReview this incident";
+    const { blocks, rest } = splitContextBlocks(text);
+    expect(blocks).toEqual([
+      {
+        tag: "skill-context",
+        body: "Name: incident-analysis\nDescription: Analyze incidents\n<skill-content>\nsecret instructions\n</skill-content>",
+        skillName: "incident-analysis",
+      },
+    ]);
+    expect(rest).toBe("Review this incident");
+  });
+
   it("leaves a plain message untouched", () => {
     const { blocks, rest } = splitContextBlocks("just a question");
     expect(blocks).toEqual([]);

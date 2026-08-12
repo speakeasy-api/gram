@@ -67,3 +67,14 @@ export function initialShadowMCPPolicyURLs(
       .map((server) => server.canonicalServerUrl),
   );
 }
+
+export function initialShadowMCPBlockedPolicyURLs(
+  servers: readonly ShadowMCPInventoryServer[],
+  policyID: string,
+): Set<string> {
+  return new Set(
+    servers
+      .filter((server) => server.blockedPolicyIds.includes(policyID))
+      .map((server) => server.canonicalServerUrl),
+  );
+}

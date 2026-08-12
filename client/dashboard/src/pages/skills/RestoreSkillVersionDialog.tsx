@@ -1,6 +1,6 @@
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { useRestoreSkillVersionMutation } from "@gram/client/react-query/restoreSkillVersion.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -92,7 +92,7 @@ export function RestoreSkillVersionDialog({
         )}
         <Dialog.Footer>
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={reconciling}
             onClick={closeDialog}
           >

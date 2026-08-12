@@ -1,6 +1,6 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
+import { Button } from "@/components/ui/Button";
 import { CheckCircle2 } from "lucide-react";
 
 export function ResultStep({
@@ -14,12 +14,12 @@ export function ResultStep({
     <>
       <div className="flex flex-col items-center justify-center gap-4 py-8">
         <CheckCircle2 className="h-12 w-12 text-emerald-500" />
-        <Type className="text-center text-lg font-medium">
+        <Text className="text-center text-lg font-medium">
           OAuth Configured
-        </Type>
-        <Type muted small className="max-w-md text-center">
+        </Text>
+        <Text muted small className="max-w-md text-center">
           {message}
-        </Type>
+        </Text>
       </div>
 
       <Dialog.Footer className="flex justify-end">

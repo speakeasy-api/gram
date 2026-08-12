@@ -7,6 +7,7 @@ import { organizationRemoteSessionIssuersDelete } from "../funcs/organizationRem
 import { organizationRemoteSessionIssuersFetchMetadata } from "../funcs/organizationRemoteSessionIssuersFetchMetadata.js";
 import { organizationRemoteSessionIssuersGet } from "../funcs/organizationRemoteSessionIssuersGet.js";
 import { organizationRemoteSessionIssuersGetDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetDeletePreflight.js";
+import { organizationRemoteSessionIssuersGetDuplicatePreflight } from "../funcs/organizationRemoteSessionIssuersGetDuplicatePreflight.js";
 import { organizationRemoteSessionIssuersGetMigratePreflight } from "../funcs/organizationRemoteSessionIssuersGetMigratePreflight.js";
 import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemoteSessionIssuersList.js";
 import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
@@ -19,6 +20,7 @@ import { OrganizationIssuerDeletePreflight } from "../models/components/organiza
 import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateOrganizationRemoteSessionIssuerRequest,
@@ -40,6 +42,10 @@ import {
   GetOrganizationRemoteSessionIssuerDeletePreflightRequest,
   GetOrganizationRemoteSessionIssuerDeletePreflightSecurity,
 } from "../models/operations/getorganizationremotesessionissuerdeletepreflight.js";
+import {
+  GetOrganizationRemoteSessionIssuerDuplicatePreflightRequest,
+  GetOrganizationRemoteSessionIssuerDuplicatePreflightSecurity,
+} from "../models/operations/getorganizationremotesessionissuerduplicatepreflight.js";
 import {
   GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
   GetOrganizationRemoteSessionIssuerMigratePreflightSecurity,
@@ -167,6 +173,33 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
   }
 
   /**
+   * getIssuerDuplicatePreflight organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+   *
+   * Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+   *
+   * Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.
+   */
+  async getDuplicatePreflight(
+    request?:
+      | GetOrganizationRemoteSessionIssuerDuplicatePreflightRequest
+      | undefined,
+    security?:
+      | GetOrganizationRemoteSessionIssuerDuplicatePreflightSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDuplicatePreflight> {
+    return unwrapAsync(organizationRemoteSessionIssuersGetDuplicatePreflight(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getIssuerMigratePreflight organizationRemoteSessionIssuers
    *
    * @remarks
@@ -215,7 +248,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * migrateIssuer organizationRemoteSessionIssuers
    *
    * @remarks
-   * Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.
+   * Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.
    */
   async migrate(
     request: MigrateOrganizationRemoteSessionIssuerRequest,

@@ -88,6 +88,16 @@ func (r *streamReader) IdleTimedOut() bool {
 	return r.idleFired.Load()
 }
 
+// streamIdledOut reports whether a relayed upstream body was terminated by
+// the per-event idle watchdog rather than a genuine failure. Centralizes the
+// coupling to the concrete *streamReader wrapper: if the body is ever
+// wrapped again between forwardRequest and the relay callers, this returns
+// false and idle terminations fall back to being reported as errors.
+func streamIdledOut(body io.ReadCloser) bool {
+	sr, ok := body.(*streamReader)
+	return ok && sr.IdleTimedOut()
+}
+
 // Read forwards to the underlying body verbatim — including io.EOF, which
 // the SSE parser relies on as the clean end-of-stream signal. Any
 // byte-level activity (n>0) resets the idle timer for another timeout

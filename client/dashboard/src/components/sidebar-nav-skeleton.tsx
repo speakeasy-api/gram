@@ -1,5 +1,5 @@
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 
 // Deterministic label widths so the placeholder reads like a real nav list
@@ -31,8 +31,8 @@ export function SidebarNavSkeleton({
     >
       {Array.from({ length: rows }).map((_, i) => (
         <SidebarMenuItem key={i}>
-          <div className="flex items-center gap-2 rounded-lg px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <Skeleton className="size-4 shrink-0 rounded" />
+          <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <Skeleton className="size-4 shrink-0" />
             <Skeleton
               className={cn(
                 "h-3.5 group-data-[collapsible=icon]:hidden",

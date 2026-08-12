@@ -74,6 +74,10 @@ export type ListSkillsRequest = {
    */
   classifications?: Array<Classifications> | undefined;
   /**
+   * Only return skills that have any of these tags.
+   */
+  tags?: Array<string> | undefined;
+  /**
    * How to order skills.
    */
   sort?: Sort | undefined;
@@ -207,6 +211,7 @@ export type ListSkillsRequest$Outbound = {
   search?: string | undefined;
   source_kinds?: Array<string> | undefined;
   classifications?: Array<string> | undefined;
+  tags?: Array<string> | undefined;
   sort: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
@@ -224,6 +229,7 @@ export const ListSkillsRequest$outboundSchema: z.ZodMiniType<
     search: z.optional(z.string()),
     sourceKinds: z.optional(z.array(SourceKinds$outboundSchema)),
     classifications: z.optional(z.array(Classifications$outboundSchema)),
+    tags: z.optional(z.array(z.string())),
     sort: z._default(Sort$outboundSchema, "name"),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),

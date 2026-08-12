@@ -95,6 +95,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		ChatSessionsToken: nil,
 		Search:            input.Search,
 		ExternalUserID:    input.ExternalUserID,
+		UserID:            nil,
 		Source:            input.Source,
 		AssistantID:       input.AssistantID,
 		SourceKind:        nil,

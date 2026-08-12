@@ -17,7 +17,7 @@ describe("toolsetAuthSurface", () => {
       toolsetAuthSurface({
         flagEnabled: false,
         userSessionIssuerWired: true,
-        oauthParadigm: "proxy",
+        oauthParadigm: "external",
       }),
     ).toBe("legacy-only");
     expect(
@@ -40,15 +40,8 @@ describe("toolsetAuthSurface", () => {
   });
 
   it("prefers the manage surface over leftover legacy config", () => {
-    // Wire-migrated toolsets keep their inert oauth_proxy_server rows; the
-    // wired issuer is what gates the serve path, so it wins the tiebreak.
-    expect(
-      toolsetAuthSurface({
-        flagEnabled: true,
-        userSessionIssuerWired: true,
-        oauthParadigm: "proxy",
-      }),
-    ).toBe("manage");
+    // Wired toolsets keep their inert external OAuth config; the wired issuer
+    // is what gates the serve path, so it wins the tiebreak.
     expect(
       toolsetAuthSurface({
         flagEnabled: true,
@@ -59,7 +52,7 @@ describe("toolsetAuthSurface", () => {
   });
 
   it("keeps the legacy surface while a legacy paradigm is configured unwired", () => {
-    for (const oauthParadigm of ["external", "gram", "proxy"] as const) {
+    for (const oauthParadigm of ["external"] as const) {
       expect(
         toolsetAuthSurface({
           flagEnabled: true,
@@ -82,11 +75,6 @@ describe("toolsetAuthSurface", () => {
 });
 
 describe("toolsetConvertAction", () => {
-  it("routes proxy paradigms through the wire modal", () => {
-    expect(toolsetConvertAction("proxy")).toBe("wire-modal");
-    expect(toolsetConvertAction("gram")).toBe("wire-modal");
-  });
-
   it("routes external OAuth through the attach sheet", () => {
     expect(toolsetConvertAction("external")).toBe("attach-sheet");
   });
@@ -146,7 +134,7 @@ describe("canConfigureExternalOAuth", () => {
 
 describe("mustConvertOAuthBeforePrivate", () => {
   it("blocks going private while legacy OAuth is configured unwired", () => {
-    for (const oauthParadigm of ["external", "gram", "proxy"] as const) {
+    for (const oauthParadigm of ["external"] as const) {
       expect(
         mustConvertOAuthBeforePrivate({
           flagEnabled: true,
@@ -194,7 +182,7 @@ describe("mustConvertOAuthBeforePrivate", () => {
         flagEnabled: true,
         mcpIsPublic: false,
         userSessionIssuerWired: false,
-        oauthParadigm: "proxy",
+        oauthParadigm: "external",
       }),
     ).toBe(false);
   });
@@ -226,23 +214,11 @@ describe("isUserSessionIssuerWired", () => {
 });
 
 describe("getOAuthParadigm", () => {
-  it("prefers external OAuth over a proxy server", () => {
+  it("reports external OAuth when an external server is configured", () => {
     const toolset = {
       externalOauthServer: { id: "ext" },
-      oauthProxyServer: { oauthProxyProviders: [{ providerType: "custom" }] },
     } as unknown as Toolset;
     expect(getOAuthParadigm(toolset)).toBe("external");
-  });
-
-  it("distinguishes gram-managed from custom proxy providers", () => {
-    const gram = {
-      oauthProxyServer: { oauthProxyProviders: [{ providerType: "gram" }] },
-    } as unknown as Toolset;
-    const custom = {
-      oauthProxyServer: { oauthProxyProviders: [{ providerType: "custom" }] },
-    } as unknown as Toolset;
-    expect(getOAuthParadigm(gram)).toBe("gram");
-    expect(getOAuthParadigm(custom)).toBe("proxy");
   });
 
   it("returns null when no legacy OAuth is configured", () => {

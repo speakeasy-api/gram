@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -117,10 +115,6 @@ func (t *telemetryRuntimeBackend) ImageRef() string {
 	return t.inner.ImageRef()
 }
 
-func (t *telemetryRuntimeBackend) ReusesIdleRuntimes() bool {
-	return t.inner.ReusesIdleRuntimes()
-}
-
 func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	result, err := t.inner.RecycleImage(ctx, runtime)
 	if err != nil {
@@ -135,17 +129,9 @@ func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assi
 	return result, nil
 }
 
-func (t *telemetryRuntimeBackend) RunTurn(
-	ctx context.Context,
-	runtime assistantRuntimeRecord,
-	threadID uuid.UUID,
-	idempotencyKey string,
-	authToken string,
-	prompt string,
-	mcpServers []runtimeMCPServer,
-) error {
+func (t *telemetryRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn dispatched", "INFO", nil)
-	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, mcpServers); err != nil {
+	if err := t.inner.RunTurn(ctx, runtime, turn); err != nil {
 		t.emit(ctx, runtime, "runtime_turn", "runtime turn errored", "ERROR", err)
 		return fmt.Errorf("runtime run turn: %w", err)
 	}

@@ -1,0 +1,31 @@
+edition = "2024";
+
+package gram.webhooks.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1";
+
+// SvixRelay delivers webhook events to Svix. Retry and dead-lettering live here
+// rather than in application code: a transient Svix failure nacks the message
+// and the retry policy backs it off, and a message that fails
+// max_delivery_attempts times lands in the DLQ topic.
+//
+// ack_deadline must stay comfortably above p99 Svix latency plus the org gate
+// lookup, otherwise messages redeliver while the first attempt is still in
+// flight.
+message SvixRelay {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.webhooks.v1.Event"
+    ack_deadline: {seconds: 60}
+    retention: {
+      seconds: 604800 /* 7 days */
+    }
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 600}
+    }
+    dead_letter: {max_delivery_attempts: 10}
+  };
+}

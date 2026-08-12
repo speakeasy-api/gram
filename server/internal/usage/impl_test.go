@@ -135,8 +135,6 @@ var _ billing.Repository = (*mockBillingRepo)(nil)
 
 // --- test helpers ---
 
-func rbacDisabled(_ context.Context, _ string) (bool, error) { return false, nil }
-
 func mustParseURL(t *testing.T, s string) *url.URL {
 	t.Helper()
 	u, err := url.Parse(s)
@@ -152,9 +150,7 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	require.NoError(t, err)
 	seedEnabledToolsets(t, db, orgID, serverCount)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return &Service{
 		tracer:      tp.Tracer("test"),

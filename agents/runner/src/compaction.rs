@@ -41,7 +41,9 @@ use agentkit_compaction::{
     DropFailedToolResultsStrategy, DropReasoningStrategy, StrategyCompactor,
     SummarizeOlderStrategy, TriggerFn,
 };
-use agentkit_core::{Item, ItemKind, Part, SessionId, ToolOutput, TurnCancellation};
+use agentkit_core::{
+    DataRef, Item, ItemKind, MediaPart, Modality, Part, SessionId, ToolOutput, TurnCancellation,
+};
 use agentkit_loop::{Agent, MutationPoint};
 use agentkit_provider_openrouter::OpenRouterProvider;
 use agentkit_tools_core::{CompositePermissionChecker, PermissionDecision};
@@ -51,7 +53,7 @@ use serde::{Deserialize, Deserializer};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::TokenRegistry;
-use crate::wire::{RunnerMessage, RunnerToolCall};
+use crate::wire::{RunnerContent, RunnerMessage, RunnerToolCall};
 
 const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the transcript that follows into a durable context note for an assistant that has lost the original messages. Preserve every named person, every year and date, every place, every decision the assistant committed to, every tool the assistant invoked, and every actionable fact in the tool results. Drop chatter, narration, and chain-of-thought. Return only the compacted note as plain text.";
 
@@ -609,9 +611,11 @@ pub fn build_compactor(
 ///   tool_calls from `Part::ToolCall` parts.
 /// * `Tool` items → one row per `Part::ToolResult` with its `call_id`.
 ///
-/// Non-text content (media, file, structured, reasoning, custom) is
-/// dropped — the strategy pipeline already strips reasoning, and the
-/// other kinds don't round-trip through the runner today.
+/// Media parts project to visible `[image: …]` placeholders (the persisted
+/// rows store plain text, so the payload cannot round-trip); other non-text
+/// content (file, structured, reasoning, custom) is dropped — the strategy
+/// pipeline already strips reasoning, and those kinds don't round-trip
+/// through the runner today.
 pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
@@ -619,7 +623,7 @@ pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
             ItemKind::System | ItemKind::Developer => {
                 out.push(RunnerMessage {
                     role: "system".to_string(),
-                    content: concat_text(&item.parts),
+                    content: RunnerContent::Text(concat_text(&item.parts)),
                     tool_calls: Vec::new(),
                     tool_call_id: None,
                 });
@@ -627,13 +631,13 @@ pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
             ItemKind::Context | ItemKind::User | ItemKind::Notification => {
                 out.push(RunnerMessage {
                     role: "user".to_string(),
-                    content: concat_text(&item.parts),
+                    content: RunnerContent::Text(concat_text(&item.parts)),
                     tool_calls: Vec::new(),
                     tool_call_id: None,
                 });
             }
             ItemKind::Assistant => {
-                let content = concat_text(&item.parts);
+                let content = RunnerContent::Text(concat_text(&item.parts));
                 let tool_calls: Vec<RunnerToolCall> = item
                     .parts
                     .iter()
@@ -658,7 +662,7 @@ pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
                     if let Part::ToolResult(result) = part {
                         out.push(RunnerMessage {
                             role: "tool".to_string(),
-                            content: tool_output_text(&result.output),
+                            content: RunnerContent::Text(tool_output_text(&result.output)),
                             tool_calls: Vec::new(),
                             tool_call_id: Some(result.call_id.to_string()),
                         });
@@ -673,14 +677,32 @@ pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
 fn concat_text(parts: &[Part]) -> String {
     let mut buf = String::new();
     for part in parts {
-        if let Part::Text(t) = part {
-            if !buf.is_empty() {
-                buf.push('\n');
-            }
-            buf.push_str(&t.text);
+        let piece = match part {
+            Part::Text(t) => t.text.clone(),
+            Part::Media(m) => media_placeholder(m),
+            _ => continue,
+        };
+        if !buf.is_empty() {
+            buf.push('\n');
         }
+        buf.push_str(&piece);
     }
     buf
+}
+
+/// Mirrors runtime.rs `text_with_image_placeholders`: media inside the
+/// preserved-verbatim turns cannot round-trip through the persisted
+/// compaction generation (rows store plain text), so it must leave a visible
+/// marker rather than vanish without a trace.
+fn media_placeholder(media: &MediaPart) -> String {
+    let label = match media.modality {
+        Modality::Image => "image",
+        _ => "media",
+    };
+    match &media.data {
+        DataRef::Uri(uri) if !uri.starts_with("data:") => format!("[{label}: {uri}]"),
+        _ => format!("[{label}: inline data]"),
+    }
 }
 
 // Mirrors `agentkit_adapter_completions::request::tool_output_to_string` so
@@ -975,19 +997,22 @@ mod tests {
         // Context maps to "user" so loadChatHistory preserves the
         // AgentCompactor summary across cold bootstraps.
         assert_eq!(out[2].role, "user");
-        assert_eq!(out[2].content, "ambient");
+        assert_eq!(out[2].content, RunnerContent::Text("ambient".to_string()));
         assert_eq!(out[3].role, "user");
-        assert_eq!(out[3].content, "hello");
+        assert_eq!(out[3].content, RunnerContent::Text("hello".to_string()));
         assert_eq!(out[4].role, "user");
-        assert_eq!(out[4].content, "background done");
+        assert_eq!(
+            out[4].content,
+            RunnerContent::Text("background done".to_string())
+        );
         assert_eq!(out[5].role, "assistant");
-        assert_eq!(out[5].content, "calling");
+        assert_eq!(out[5].content, RunnerContent::Text("calling".to_string()));
         assert_eq!(out[5].tool_calls.len(), 1);
         assert_eq!(out[5].tool_calls[0].id, "call-1");
         assert_eq!(out[5].tool_calls[0].name, "fs_read");
         assert_eq!(out[6].role, "tool");
         assert_eq!(out[6].tool_call_id.as_deref(), Some("call-1"));
-        assert_eq!(out[6].content, "ok");
+        assert_eq!(out[6].content, RunnerContent::Text("ok".to_string()));
     }
 
     #[test]
@@ -1000,6 +1025,40 @@ mod tests {
         );
         let out = denormalize_transcript(&[item]);
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].content, "line one\nline two");
+        assert_eq!(
+            out[0].content,
+            RunnerContent::Text("line one\nline two".to_string())
+        );
+    }
+
+    #[test]
+    fn denormalize_user_media_leaves_placeholder() {
+        use agentkit_core::{DataRef, MediaPart, Modality, Part};
+
+        let item = Item::new(
+            ItemKind::User,
+            vec![
+                Part::text("see attached"),
+                Part::Media(MediaPart::new(
+                    Modality::Image,
+                    "image/png",
+                    DataRef::Uri("https://files.example.com/a.png".to_string()),
+                )),
+                Part::Media(MediaPart::new(
+                    Modality::Image,
+                    "image/png",
+                    DataRef::Uri("data:image/png;base64,AAAA".to_string()),
+                )),
+            ],
+        );
+        let out = denormalize_transcript(&[item]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            out[0].content,
+            RunnerContent::Text(
+                "see attached\n[image: https://files.example.com/a.png]\n[image: inline data]"
+                    .to_string()
+            )
+        );
     }
 }

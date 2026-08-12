@@ -1,4 +1,5 @@
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Loader2, Plug } from "lucide-react";
 import type { VerifyRemoteMcpUrlState } from "./useVerifyRemoteMcpUrl";
 

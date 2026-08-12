@@ -29,6 +29,7 @@ const (
 type (
 	apiClient             = slackapi.Client
 	slackResponseEnvelope = slackapi.ResponseEnvelope
+	slackAPIError         = slackapi.Error
 )
 
 const (

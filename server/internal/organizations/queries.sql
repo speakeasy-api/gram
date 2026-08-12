@@ -339,6 +339,14 @@ WHERE workos_membership_id = @workos_membership_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
+-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
 -- name: UpsertWorkOSMembership :exec
 -- Upsert a membership row from a WorkOS organization_membership event. Caller
 -- must have already passed the row through ShouldProcessEvent.

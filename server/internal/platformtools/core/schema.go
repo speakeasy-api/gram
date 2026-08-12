@@ -77,6 +77,15 @@ func WithPropertyNumberRange(propertyName string, minValue float64, maxValue flo
 	})
 }
 
+func WithPropertyItemsRange(propertyName string, minItems int, maxItems int) InputSchemaOption {
+	return WithPropertyMutator(propertyName, func(prop *jsonschema.Schema) {
+		minimum := minItems
+		maximum := maxItems
+		prop.MinItems = &minimum
+		prop.MaxItems = &maximum
+	})
+}
+
 func PermissiveObjectSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Type:                 "object",

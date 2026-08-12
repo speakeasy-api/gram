@@ -6,7 +6,6 @@ import { defineFrontendTool, type FrontendTool } from "@/elements";
 import { Gram } from "@gram/client";
 import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
 import type { Skill } from "@gram/client/models/components/skill.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
 import { z } from "zod";
@@ -2303,20 +2302,11 @@ export function useOnboardingTools(): {
   const session = useSession();
   const project = useProject();
   const { hasScope } = useRBAC();
-  const { data: productFeatures } = useProductFeatures();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
 
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });
-    if (productFeatures?.skillsEnabled !== true) {
-      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
-        tools;
-      void list_skills;
-      void attach_skill;
-      void detach_skill;
-      return enabledTools;
-    }
     if (!hasScope("skill:read", project.id)) {
       const { list_skills, attach_skill, detach_skill, ...enabledTools } =
         tools;
@@ -2332,14 +2322,7 @@ export function useOnboardingTools(): {
       return readableTools;
     }
     return tools;
-  }, [
-    sdk,
-    organizationId,
-    draft,
-    productFeatures?.skillsEnabled,
-    hasScope,
-    project.id,
-  ]);
+  }, [sdk, organizationId, draft, hasScope, project.id]);
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(
     () => ({

@@ -7,6 +7,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -48,11 +51,17 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	payload, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
+	envelope, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: orgID,
 		EventType:      string(events.AssetV1.EventType()),
 	})
 	require.NoError(t, err)
+
+	// The outbox stores the marshaled transport envelope; the customer-facing
+	// JSON payload is inside it.
+	var event webhooksv1.Event
+	require.NoError(t, proto.Unmarshal(envelope, &event))
+	payload := event.GetPayload()
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(payload, &decoded))

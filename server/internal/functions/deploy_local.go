@@ -124,6 +124,7 @@ func (l *LocalRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (
 		ToolName:    req.ToolName,
 		Input:       req.Input,
 		Environment: req.Environment,
+		Meta:        req.Meta,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function tool payload").LogError(ctx, logger)

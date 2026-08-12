@@ -10,8 +10,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcr "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
-
-	"github.com/speakeasy-api/gram/server/internal/testinfra"
 )
 
 type RedisClientFunc func(t *testing.T, db int) (*redis.Client, error)
@@ -22,10 +20,10 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("* Ready to accept connections"),
-			testinfra.PortWait("6379/tcp"),
 			wait.ForExec([]string{"redis-cli", "ping"}),
 		),
-		testinfra.WithoutPublishedPorts(),
+		WithPublishedPortWait("6379/tcp"),
+		WithoutPublishedPorts(),
 	)
 
 	if err != nil {
@@ -41,7 +39,7 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 
 		ctx := t.Context()
 
-		addr, err := testinfra.ContainerAddr(ctx, container, "6379/tcp")
+		addr, err := ContainerAddr(ctx, container, "6379/tcp")
 		if err != nil {
 			return nil, fmt.Errorf("resolve redis address: %w", err)
 		}

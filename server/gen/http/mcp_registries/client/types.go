@@ -61,6 +61,14 @@ type GetServerDetailsResponseBody struct {
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
 
+// GetSetupDocsResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body.
+type GetSetupDocsResponseBody struct {
+	// Matching setup guides, most specific match first. Empty when no guide has
+	// been published for the server.
+	Guides []*MCPSetupGuideResponseBody `form:"guides,omitempty" json:"guides,omitempty" xml:"guides,omitempty"`
+}
+
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "clearCache" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -808,6 +816,192 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetSetupDocsUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetSetupDocsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsForbiddenResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "forbidden" error.
+type GetSetupDocsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsBadRequestResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "bad_request"
+// error.
+type GetSetupDocsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsNotFoundResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "not_found" error.
+type GetSetupDocsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsConflictResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "conflict" error.
+type GetSetupDocsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSetupDocsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsInvalidResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "invalid" error.
+type GetSetupDocsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsInvariantViolationResponseBody is the type of the
+// "mcpRegistries" service "getSetupDocs" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSetupDocsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsUnexpectedResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "unexpected"
+// error.
+type GetSetupDocsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSetupDocsGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetSetupDocsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // MCPRegistryResponseBody is used to define fields on response body types.
 type MCPRegistryResponseBody struct {
 	// Registry ID
@@ -910,6 +1104,49 @@ type ExternalMCPToolResponseBody struct {
 	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
 	// Annotations for the tool
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// MCPSetupGuideResponseBody is used to define fields on response body types.
+type MCPSetupGuideResponseBody struct {
+	// Stable identifier of the guide
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Display title of the guide
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// One-line summary of what the guide covers
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// How the server is meant to be added in Gram, when the guide states one
+	// (e.g., 'catalog', 'custom-remote')
+	AddServerFlow *string `form:"add_server_flow,omitempty" json:"add_server_flow,omitempty" xml:"add_server_flow,omitempty"`
+	// Registry identifiers the guide is also published under
+	Aliases []string `form:"aliases,omitempty" json:"aliases,omitempty" xml:"aliases,omitempty"`
+	// Endpoints documented by the guide
+	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
+	// ID of the documented endpoint the lookup matched. Absent when the lookup
+	// identified the guide and not a specific endpoint, which is always the case
+	// for an 'alias' match.
+	MatchedRemoteID *string `form:"matched_remote_id,omitempty" json:"matched_remote_id,omitempty" xml:"matched_remote_id,omitempty"`
+	// How the lookup matched this guide. The most specific kind, when both lookup
+	// keys matched it.
+	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
+	// Markdown instructions for the setup work that happens in the upstream
+	// provider
+	ExternalMarkdown *string `form:"external_markdown,omitempty" json:"external_markdown,omitempty" xml:"external_markdown,omitempty"`
+	// Markdown instructions for the setup work that happens in Gram
+	SpeakeasyMarkdown *string `form:"speakeasy_markdown,omitempty" json:"speakeasy_markdown,omitempty" xml:"speakeasy_markdown,omitempty"`
+}
+
+// MCPSetupGuideRemoteResponseBody is used to define fields on response body
+// types.
+type MCPSetupGuideRemoteResponseBody struct {
+	// Stable identifier of the endpoint within the guide
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// URL of the endpoint
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Transport type as published by the guide (e.g., 'streamable-http', 'sse')
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// Whether the endpoint URL is customer-specific and has to be filled in per
+	// tenant
+	Tenanted *bool `form:"tenanted,omitempty" json:"tenanted,omitempty" xml:"tenanted,omitempty"`
 }
 
 // NewClearCacheUnauthorized builds a mcpRegistries service clearCache endpoint
@@ -1585,6 +1822,172 @@ func NewGetServerDetailsGatewayError(body *GetServerDetailsGatewayErrorResponseB
 	return v
 }
 
+// NewGetSetupDocsResultOK builds a "mcpRegistries" service "getSetupDocs"
+// endpoint result from a HTTP "OK" response.
+func NewGetSetupDocsResultOK(body *GetSetupDocsResponseBody) *mcpregistries.GetSetupDocsResult {
+	v := &mcpregistries.GetSetupDocsResult{}
+	v.Guides = make([]*types.MCPSetupGuide, len(body.Guides))
+	for i, val := range body.Guides {
+		if val == nil {
+			v.Guides[i] = nil
+			continue
+		}
+		v.Guides[i] = unmarshalMCPSetupGuideResponseBodyToTypesMCPSetupGuide(val)
+	}
+
+	return v
+}
+
+// NewGetSetupDocsUnauthorized builds a mcpRegistries service getSetupDocs
+// endpoint unauthorized error.
+func NewGetSetupDocsUnauthorized(body *GetSetupDocsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsForbidden builds a mcpRegistries service getSetupDocs
+// endpoint forbidden error.
+func NewGetSetupDocsForbidden(body *GetSetupDocsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsBadRequest builds a mcpRegistries service getSetupDocs
+// endpoint bad_request error.
+func NewGetSetupDocsBadRequest(body *GetSetupDocsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsNotFound builds a mcpRegistries service getSetupDocs endpoint
+// not_found error.
+func NewGetSetupDocsNotFound(body *GetSetupDocsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsConflict builds a mcpRegistries service getSetupDocs endpoint
+// conflict error.
+func NewGetSetupDocsConflict(body *GetSetupDocsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsUnsupportedMedia builds a mcpRegistries service getSetupDocs
+// endpoint unsupported_media error.
+func NewGetSetupDocsUnsupportedMedia(body *GetSetupDocsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsInvalid builds a mcpRegistries service getSetupDocs endpoint
+// invalid error.
+func NewGetSetupDocsInvalid(body *GetSetupDocsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsInvariantViolation builds a mcpRegistries service
+// getSetupDocs endpoint invariant_violation error.
+func NewGetSetupDocsInvariantViolation(body *GetSetupDocsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsUnexpected builds a mcpRegistries service getSetupDocs
+// endpoint unexpected error.
+func NewGetSetupDocsUnexpected(body *GetSetupDocsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSetupDocsGatewayError builds a mcpRegistries service getSetupDocs
+// endpoint gateway_error error.
+func NewGetSetupDocsGatewayError(body *GetSetupDocsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListRegistriesResponseBody runs the validations defined on
 // ListRegistriesResponseBody
 func ValidateListRegistriesResponseBody(body *ListRegistriesResponseBody) (err error) {
@@ -1647,6 +2050,22 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	for _, e := range body.Remotes {
 		if e != nil {
 			if err2 := ValidateExternalMCPRemoteResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetSetupDocsResponseBody runs the validations defined on
+// GetSetupDocsResponseBody
+func ValidateGetSetupDocsResponseBody(body *GetSetupDocsResponseBody) (err error) {
+	if body.Guides == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("guides", "body"))
+	}
+	for _, e := range body.Guides {
+		if e != nil {
+			if err2 := ValidateMCPSetupGuideResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -2614,6 +3033,246 @@ func ValidateGetServerDetailsGatewayErrorResponseBody(body *GetServerDetailsGate
 	return
 }
 
+// ValidateGetSetupDocsUnauthorizedResponseBody runs the validations defined on
+// getSetupDocs_unauthorized_response_body
+func ValidateGetSetupDocsUnauthorizedResponseBody(body *GetSetupDocsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsForbiddenResponseBody runs the validations defined on
+// getSetupDocs_forbidden_response_body
+func ValidateGetSetupDocsForbiddenResponseBody(body *GetSetupDocsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsBadRequestResponseBody runs the validations defined on
+// getSetupDocs_bad_request_response_body
+func ValidateGetSetupDocsBadRequestResponseBody(body *GetSetupDocsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsNotFoundResponseBody runs the validations defined on
+// getSetupDocs_not_found_response_body
+func ValidateGetSetupDocsNotFoundResponseBody(body *GetSetupDocsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsConflictResponseBody runs the validations defined on
+// getSetupDocs_conflict_response_body
+func ValidateGetSetupDocsConflictResponseBody(body *GetSetupDocsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsUnsupportedMediaResponseBody runs the validations
+// defined on getSetupDocs_unsupported_media_response_body
+func ValidateGetSetupDocsUnsupportedMediaResponseBody(body *GetSetupDocsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsInvalidResponseBody runs the validations defined on
+// getSetupDocs_invalid_response_body
+func ValidateGetSetupDocsInvalidResponseBody(body *GetSetupDocsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsInvariantViolationResponseBody runs the validations
+// defined on getSetupDocs_invariant_violation_response_body
+func ValidateGetSetupDocsInvariantViolationResponseBody(body *GetSetupDocsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsUnexpectedResponseBody runs the validations defined on
+// getSetupDocs_unexpected_response_body
+func ValidateGetSetupDocsUnexpectedResponseBody(body *GetSetupDocsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSetupDocsGatewayErrorResponseBody runs the validations defined on
+// getSetupDocs_gateway_error_response_body
+func ValidateGetSetupDocsGatewayErrorResponseBody(body *GetSetupDocsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateMCPRegistryResponseBody runs the validations defined on
 // MCPRegistryResponseBody
 func ValidateMCPRegistryResponseBody(body *MCPRegistryResponseBody) (err error) {
@@ -2710,6 +3369,69 @@ func ValidateExternalMCPRemoteResponseBody(body *ExternalMCPRemoteResponseBody) 
 func ValidateExternalMCPRemoteHeaderResponseBody(body *ExternalMCPRemoteHeaderResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateMCPSetupGuideResponseBody runs the validations defined on
+// MCPSetupGuideResponseBody
+func ValidateMCPSetupGuideResponseBody(body *MCPSetupGuideResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if body.Aliases == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("aliases", "body"))
+	}
+	if body.Remotes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remotes", "body"))
+	}
+	if body.MatchKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_kind", "body"))
+	}
+	if body.ExternalMarkdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_markdown", "body"))
+	}
+	if body.SpeakeasyMarkdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("speakeasy_markdown", "body"))
+	}
+	for _, e := range body.Remotes {
+		if e != nil {
+			if err2 := ValidateMCPSetupGuideRemoteResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.MatchKind != nil {
+		if !(*body.MatchKind == "endpoint" || *body.MatchKind == "alias") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"endpoint", "alias"}))
+		}
+	}
+	return
+}
+
+// ValidateMCPSetupGuideRemoteResponseBody runs the validations defined on
+// MCPSetupGuideRemoteResponseBody
+func ValidateMCPSetupGuideRemoteResponseBody(body *MCPSetupGuideRemoteResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.TransportType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("transport_type", "body"))
+	}
+	if body.Tenanted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tenanted", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
 	}
 	return
 }

@@ -945,3 +945,51 @@ test("extend() merges resources from another Gram instance", () => {
     },
   ]);
 });
+
+// The Gram-hosted path reaches handleToolCall directly from the function
+// runner's entrypoint, not through fromGram, so caller identity has to survive
+// this call signature.
+describe("caller identity on ToolContext", () => {
+  const echoCaller = new Gram().tool({
+    name: "whoami",
+    description: "Echoes the caller identity",
+    inputSchema: {},
+    async execute(ctx) {
+      return ctx.json({
+        clientInfo: ctx.clientInfo ?? null,
+        oauthClientId: ctx.oauthClientId ?? null,
+        meta: ctx.meta ?? null,
+      });
+    },
+  });
+
+  test("exposes the identity the caller was invoked with", async () => {
+    const response = await echoCaller.handleToolCall(
+      { name: "whoami", input: {} },
+      {
+        clientInfo: { name: "claude-code", version: "2.1" },
+        oauthClientId: "client-abc",
+        meta: { "example.com/experiment": "b" },
+      },
+    );
+
+    expect(await response.json()).toEqual({
+      clientInfo: { name: "claude-code", version: "2.1" },
+      oauthClientId: "client-abc",
+      meta: { "example.com/experiment": "b" },
+    });
+  });
+
+  test("leaves every field undefined for a direct invocation", async () => {
+    const response = await echoCaller.handleToolCall({
+      name: "whoami",
+      input: {},
+    });
+
+    expect(await response.json()).toEqual({
+      clientInfo: null,
+      oauthClientId: null,
+      meta: null,
+    });
+  });
+});

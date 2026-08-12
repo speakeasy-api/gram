@@ -1,13 +1,13 @@
 // Package chatanalysis implements the adminChatAnalysis service: the
 // platform-admin surface over chat_analysis_settings, the per-(organization,
 // judge) switches and daily budgets the chat analysis pipeline spends against
-// (server/internal/chat/analysis). Only the work_units judge is registered
-// today, so the API models exactly that judge's row.
+// (server/internal/chat/analysis).
 package chatanalysis
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -109,27 +110,28 @@ func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*
 		return nil, err
 	}
 
-	row, err := repo.New(s.db).GetChatAnalysisSettingForOrganizationJudge(ctx, repo.GetChatAnalysisSettingForOrganizationJudgeParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Judge:          analysis.WorkUnitsJudgeName,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return defaultView(authCtx.ActiveOrganizationID), nil
-	case err != nil:
+	view, err := loadSettingsView(ctx, repo.New(s.db), authCtx.ActiveOrganizationID)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get chat analysis settings").LogError(ctx, logger)
-	default:
-		return buildView(row, false), nil
 	}
+	return view, nil
 }
 
 func (s *Service) UpsertWorkUnitsSettings(ctx context.Context, payload *gen.UpsertWorkUnitsSettingsPayload) (*gen.ChatAnalysisSettings, error) {
+	return s.upsertJudgeSettings(ctx, analysis.WorkUnitsJudgeName, payload.WorkUnitsEnabled, payload.WorkUnitsDailyCap)
+}
+
+func (s *Service) UpsertBusinessMemorySettings(ctx context.Context, payload *gen.UpsertBusinessMemorySettingsPayload) (*gen.ChatAnalysisSettings, error) {
+	return s.upsertJudgeSettings(ctx, businessmemory.JudgeName, payload.BusinessMemoryEnabled, payload.BusinessMemoryDailyCap)
+}
+
+func (s *Service) upsertJudgeSettings(ctx context.Context, judge string, enabled bool, dailyCap int) (*gen.ChatAnalysisSettings, error) {
 	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if payload.WorkUnitsDailyCap < 0 || payload.WorkUnitsDailyCap > maxDailyCap {
-		return nil, oops.E(oops.CodeInvalid, nil, "work_units_daily_cap must be between 0 and %d", maxDailyCap)
+	if dailyCap < 0 || dailyCap > maxDailyCap {
+		return nil, oops.E(oops.CodeInvalid, nil, "daily cap must be between 0 and %d", maxDailyCap)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -148,7 +150,7 @@ func (s *Service) UpsertWorkUnitsSettings(ctx context.Context, payload *gen.Upse
 	var beforeSnapshot *audit.ChatAnalysisSettingsSnapshot
 	before, err := queries.GetChatAnalysisSettingForOrganizationJudge(ctx, repo.GetChatAnalysisSettingForOrganizationJudgeParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		Judge:          analysis.WorkUnitsJudgeName,
+		Judge:          judge,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -161,9 +163,9 @@ func (s *Service) UpsertWorkUnitsSettings(ctx context.Context, payload *gen.Upse
 
 	row, err := queries.UpsertChatAnalysisSettingForOrganizationJudge(ctx, repo.UpsertChatAnalysisSettingForOrganizationJudgeParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		Judge:          analysis.WorkUnitsJudgeName,
-		Enabled:        payload.WorkUnitsEnabled,
-		DailyCap:       conv.SafeInt32(payload.WorkUnitsDailyCap),
+		Judge:          judge,
+		Enabled:        enabled,
+		DailyCap:       conv.SafeInt32(dailyCap),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert chat analysis settings").LogError(ctx, logger)
@@ -186,7 +188,11 @@ func (s *Service) UpsertWorkUnitsSettings(ctx context.Context, payload *gen.Upse
 		return nil, oops.E(oops.CodeUnexpected, err, "commit chat analysis settings upsert").LogError(ctx, logger)
 	}
 
-	return buildView(row, false), nil
+	view, err := loadSettingsView(ctx, repo.New(s.db), authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reload chat analysis settings").LogError(ctx, logger)
+	}
+	return view, nil
 }
 
 // TriggerAnalysis wakes the chat analysis coordinator of every live project in
@@ -230,20 +236,52 @@ func (s *Service) TriggerAnalysis(ctx context.Context, _ *gen.TriggerAnalysisPay
 // nothing — so the defaults mirror that rather than suggesting a budget.
 func defaultView(organizationID string) *gen.ChatAnalysisSettings {
 	return &gen.ChatAnalysisSettings{
-		OrganizationID:    organizationID,
-		WorkUnitsEnabled:  false,
-		WorkUnitsDailyCap: 0,
-		IsDefault:         true,
+		OrganizationID:         organizationID,
+		WorkUnitsEnabled:       false,
+		WorkUnitsDailyCap:      0,
+		BusinessMemoryEnabled:  false,
+		BusinessMemoryDailyCap: 0,
+		IsDefault:              true,
 	}
 }
 
-func buildView(row repo.ChatAnalysisSetting, isDefault bool) *gen.ChatAnalysisSettings {
-	return &gen.ChatAnalysisSettings{
-		OrganizationID:    row.OrganizationID,
-		WorkUnitsEnabled:  row.Enabled,
-		WorkUnitsDailyCap: int(row.DailyCap),
-		IsDefault:         isDefault,
+func loadSettingsView(ctx context.Context, queries *repo.Queries, organizationID string) (*gen.ChatAnalysisSettings, error) {
+	view := defaultView(organizationID)
+	settings := []struct {
+		judge string
+		apply func(repo.ChatAnalysisSetting)
+	}{
+		{
+			judge: analysis.WorkUnitsJudgeName,
+			apply: func(row repo.ChatAnalysisSetting) {
+				view.WorkUnitsEnabled = row.Enabled
+				view.WorkUnitsDailyCap = int(row.DailyCap)
+			},
+		},
+		{
+			judge: businessmemory.JudgeName,
+			apply: func(row repo.ChatAnalysisSetting) {
+				view.BusinessMemoryEnabled = row.Enabled
+				view.BusinessMemoryDailyCap = int(row.DailyCap)
+			},
+		},
 	}
+	for _, setting := range settings {
+		row, err := queries.GetChatAnalysisSettingForOrganizationJudge(ctx, repo.GetChatAnalysisSettingForOrganizationJudgeParams{
+			OrganizationID: organizationID,
+			Judge:          setting.judge,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, fmt.Errorf("get %s chat analysis setting: %w", setting.judge, err)
+		default:
+			view.IsDefault = false
+			setting.apply(row)
+		}
+	}
+	return view, nil
 }
 
 func buildSnapshot(row repo.ChatAnalysisSetting) audit.ChatAnalysisSettingsSnapshot {

@@ -114,6 +114,60 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	if p == nil || p.disabled || p.client == nil {
+		return feature.EvaluationIndeterminate, nil
+	}
+
+	if p.localEvaluation {
+		return p.evaluateLocalFlag(flag, distinctID, groups)
+	}
+
+	result, err := p.client.GetFeatureFlagResult(posthog.FeatureFlagPayload{
+		Key:        string(flag),
+		DistinctId: distinctID,
+		Groups:     posthogGroups(groups),
+	})
+	if errors.Is(err, posthog.ErrFlagNotFound) {
+		return feature.EvaluationIndeterminate, nil
+	}
+	if err != nil {
+		return feature.EvaluationIndeterminate, fmt.Errorf("evaluate feature flag: %w", err)
+	}
+	if result == nil || result.Variant != nil {
+		return feature.EvaluationIndeterminate, nil
+	}
+	if result.Enabled {
+		return feature.EvaluationEnabled, nil
+	}
+	return feature.EvaluationDisabled, nil
+}
+
+func (p *Posthog) evaluateLocalFlag(flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	sendFeatureFlagEvents := false
+	flags, err := p.client.GetAllFlags(posthog.FeatureFlagPayloadNoKey{
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		OnlyEvaluateLocally:   false,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
+	})
+	if err != nil {
+		return feature.EvaluationIndeterminate, fmt.Errorf("evaluate local feature flags: %w", err)
+	}
+
+	value, ok := flags[string(flag)]
+	if !ok {
+		return feature.EvaluationIndeterminate, nil
+	}
+	if enabled, ok := value.(bool); ok {
+		if enabled {
+			return feature.EvaluationEnabled, nil
+		}
+		return feature.EvaluationDisabled, nil
+	}
+	return feature.EvaluationIndeterminate, nil
+}
+
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, returning false")

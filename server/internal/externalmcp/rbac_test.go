@@ -32,6 +32,25 @@ func TestExternalMCP_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestExternalMCP_RBAC_GetSetupDocs_DeniedWithNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestExternalMCPService(t)
+	ctx = authztest.WithExactGrants(t, ctx)
+
+	specifier := "com.pulsemcp.mirror/box"
+	_, err := ti.service.GetSetupDocs(ctx, &gen.GetSetupDocsPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ServerURL:         nil,
+		RegistrySpecifier: &specifier,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	t.Parallel()
 

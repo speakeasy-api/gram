@@ -934,28 +934,28 @@ func TestServiceCoreLoadChatHistoryReplaysToolTurns(t *testing.T) {
 	require.Len(t, history, 5, "system row should be dropped; user/assistant/tool rows replayed in order")
 
 	require.Equal(t, "user", history[0].Role)
-	require.Equal(t, "what's the weather in oslo?", history[0].Content)
+	require.Equal(t, "what's the weather in oslo?", history[0].Content.Text())
 	require.Empty(t, history[0].ToolCalls)
 	require.Empty(t, history[0].ToolCallID)
 
 	require.Equal(t, "assistant", history[1].Role)
-	require.Empty(t, history[1].Content)
+	require.True(t, history[1].Content.IsZero())
 	require.Len(t, history[1].ToolCalls, 1)
 	require.Equal(t, "call_abc", history[1].ToolCalls[0].ID)
 	require.Equal(t, "get_weather", history[1].ToolCalls[0].Name)
 	require.JSONEq(t, `{"city":"oslo"}`, history[1].ToolCalls[0].Arguments)
 
 	require.Equal(t, "tool", history[2].Role)
-	require.JSONEq(t, `{"temp":"cold"}`, history[2].Content)
+	require.JSONEq(t, `{"temp":"cold"}`, history[2].Content.Text())
 	require.Equal(t, "call_abc", history[2].ToolCallID)
 	require.Empty(t, history[2].ToolCalls)
 
 	require.Equal(t, "assistant", history[3].Role)
-	require.Equal(t, "It's cold.", history[3].Content)
+	require.Equal(t, "It's cold.", history[3].Content.Text())
 	require.Empty(t, history[3].ToolCalls)
 
 	require.Equal(t, "user", history[4].Role)
-	require.Equal(t, "thanks", history[4].Content)
+	require.Equal(t, "thanks", history[4].Content.Text())
 }
 
 func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
@@ -1014,9 +1014,9 @@ func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, history, 3, "only gen 2 rows make it into the replay")
-	require.Equal(t, "gen-2-user-a", history[0].Content)
-	require.Equal(t, "gen-2-asst", history[1].Content)
-	require.Equal(t, "gen-2-user-b", history[2].Content)
+	require.Equal(t, "gen-2-user-a", history[0].Content.Text())
+	require.Equal(t, "gen-2-asst", history[1].Content.Text())
+	require.Equal(t, "gen-2-user-b", history[2].Content.Text())
 }
 
 func TestServiceCoreLoadChatHistoryFailsWhenToolRowMissingCallID(t *testing.T) {
@@ -1896,39 +1896,42 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	require.JSONEq(t, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`, string(runtime.BackendMetadataJson))
 }
 
-// A non-reuse backend (GKE) has no in-place image swap: it rolls onto a new
-// image by terminating idle runtimes (warm-TTL expiry), so the in-place recycle
-// sweep is a no-op for it — it touches no rows and tears nothing down.
-func TestServiceCoreRecycleActiveRuntimeImagesNoOpsForNonReuseBackend(t *testing.T) {
+// The deploy sweep covers GKE rows like any other backend: RecycleImage rolls
+// the claim onto the configured image and the returned pod identity is
+// persisted on the runtime row.
+func TestServiceCoreRecycleActiveRuntimeImagesSweepsGKERows(t *testing.T) {
 	t.Parallel()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke_noop")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke")
 	require.NoError(t, err)
 
-	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke-noop")
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke")
 	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-idle"}`)
 
+	recycledMetadata := []byte(`{"claim_name":"gram-asst-idle","pod_ip":"10.52.0.9","image":"registry.example.com/gram-assistant-runtime:new"}`)
 	stopCalls := &atomic.Int64{}
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:      runtimeBackendGKE,
-		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
-		stopCalls:    stopCalls,
-		recycleCalls: recycleCalls,
+		backend:       runtimeBackendGKE,
+		statusResult:  RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:     stopCalls,
+		recycleCalls:  recycleCalls,
+		recycleResult: RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: recycledMetadata},
 	}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger())
 
 	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 1, result.Recycled)
 	require.Equal(t, 0, result.Skipped)
 	require.Equal(t, 0, result.Errors)
-	require.EqualValues(t, 0, stopCalls.Load(), "the in-place sweep must not tear down GKE runtimes")
-	require.EqualValues(t, 0, recycleCalls.Load(), "GKE has no in-place recycle")
+	require.EqualValues(t, 1, recycleCalls.Load(), "the deploy sweep rolls GKE rows via RecycleImage")
+	require.EqualValues(t, 0, stopCalls.Load(), "recycling must not tear the runtime row down")
 
 	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, runtime.State, "GKE rows roll via terminate-on-idle, not the sweep")
+	require.Equal(t, runtimeStateActive, runtime.State)
+	require.JSONEq(t, string(recycledMetadata), string(runtime.BackendMetadataJson), "post-recycle pod identity is persisted")
 }
 
 func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing.T) {
@@ -2366,12 +2369,6 @@ func (t testRuntimeBackend) ImageRef() string {
 	return t.imageRef
 }
 
-func (t testRuntimeBackend) ReusesIdleRuntimes() bool {
-	// Mirror production: GKE tears idle runtimes down (no warm reuse), every
-	// other backend preserves them for warm restart.
-	return t.backend != runtimeBackendGKE
-}
-
 func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	if t.recycleCalls != nil {
 		t.recycleCalls.Add(1)
@@ -2385,12 +2382,13 @@ func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRu
 	return t.recycleResult, nil
 }
 
-func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, prompt string, mcpServers []runtimeMCPServer) error {
+func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, turn runTurnRequest) error {
 	if t.runTurnMCPServers != nil {
-		captured := append([]runtimeMCPServer(nil), mcpServers...)
+		captured := append([]runtimeMCPServer(nil), turn.MCPServers...)
 		t.runTurnMCPServers.Store(&captured)
 	}
 	if t.runTurnPrompt != nil {
+		prompt := turn.Prompt
 		t.runTurnPrompt.Store(&prompt)
 	}
 	return t.runTurnErr
@@ -2454,4 +2452,65 @@ func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.ShouldSignal)
 	require.Equal(t, uuid.Nil, result.AssistantID)
+}
+
+// A chat nobody owns is a chat nobody can read, continue, rename or delete
+// without an explicit chat:read/chat:write grant, so externally-triggered turns
+// fall back to the assistant's creator rather than leaving the row owner-less.
+func TestAssistantChatOwnerID(t *testing.T) {
+	t.Parallel()
+
+	dashboardPayload, err := json.Marshal(dashboardEventPayload{UserID: "user-sender"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		sourceKind string
+		payload    []byte
+		creator    string
+		want       string
+	}{
+		{
+			name:       "dashboard turn is owned by its sender, not the creator",
+			sourceKind: sourceKindDashboard,
+			payload:    dashboardPayload,
+			creator:    "user-creator",
+			want:       "user-sender",
+		},
+		{
+			name:       "cron turn falls back to the assistant creator",
+			sourceKind: "cron",
+			payload:    []byte("{}"),
+			creator:    "user-creator",
+			want:       "user-creator",
+		},
+		{
+			name:       "creatorless assistant stays owner-less, as before",
+			sourceKind: "cron",
+			payload:    []byte("{}"),
+			creator:    "",
+			want:       "",
+		},
+		{
+			name:       "dashboard turn without a user id falls back to the creator",
+			sourceKind: sourceKindDashboard,
+			payload:    []byte("{}"),
+			creator:    "user-creator",
+			want:       "user-creator",
+		},
+		{
+			name:       "unparseable dashboard payload falls back rather than dropping ownership",
+			sourceKind: sourceKindDashboard,
+			payload:    []byte("not json"),
+			creator:    "user-creator",
+			want:       "user-creator",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, assistantChatOwnerID(tt.sourceKind, tt.payload, tt.creator))
+		})
+	}
 }

@@ -59,7 +59,6 @@ describe("InlineEditableText", () => {
     expect(editor?.classList).toContain("bg-card");
     expect(editor?.classList).toContain("border-border");
     expect(editor?.classList).toContain("h-10");
-    expect(editor?.classList).toContain("rounded-md");
     expect(editor?.classList).toContain("shadow-none");
     expect(editor?.classList).toContain(
       "has-[[data-slot=input-group-control]:focus-visible]:ring-1",

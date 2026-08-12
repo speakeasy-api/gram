@@ -7,12 +7,17 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ShadowMCPInventoryUserSource,
+  ShadowMCPInventoryUserSource$inboundSchema,
+} from "./shadowmcpinventoryusersource.js";
 
 export type ShadowMCPInventoryUser = {
   email?: string | undefined;
   lastCalled: Date;
   name?: string | undefined;
   observedUseCount: number;
+  sources?: Array<ShadowMCPInventoryUserSource> | undefined;
   userKey: string;
 };
 
@@ -29,6 +34,7 @@ export const ShadowMCPInventoryUser$inboundSchema: z.ZodMiniType<
     ),
     name: z.optional(z.string()),
     observed_use_count: z.int(),
+    sources: z.optional(z.array(ShadowMCPInventoryUserSource$inboundSchema)),
     user_key: z.string(),
   }),
   z.transform((v) => {

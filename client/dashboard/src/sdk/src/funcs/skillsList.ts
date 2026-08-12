@@ -123,6 +123,7 @@ async function $do(
     "search": payload?.search,
     "sort": payload?.sort,
     "source_kinds": payload?.source_kinds,
+    "tags": payload?.tags,
   });
 
   const headers = new Headers(compactMap({

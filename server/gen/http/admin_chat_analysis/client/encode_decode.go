@@ -484,6 +484,242 @@ func DecodeUpsertWorkUnitsSettingsResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildUpsertBusinessMemorySettingsRequest instantiates a HTTP request object
+// with method and path set to call the "adminChatAnalysis" service
+// "upsertBusinessMemorySettings" endpoint
+func (c *Client) BuildUpsertBusinessMemorySettingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertBusinessMemorySettingsAdminChatAnalysisPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminChatAnalysis", "upsertBusinessMemorySettings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpsertBusinessMemorySettingsRequest returns an encoder for requests
+// sent to the adminChatAnalysis upsertBusinessMemorySettings server.
+func EncodeUpsertBusinessMemorySettingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminchatanalysis.UpsertBusinessMemorySettingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminChatAnalysis", "upsertBusinessMemorySettings", "*adminchatanalysis.UpsertBusinessMemorySettingsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpsertBusinessMemorySettingsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpsertBusinessMemorySettingsResponse returns a decoder for responses
+// returned by the adminChatAnalysis upsertBusinessMemorySettings endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeUpsertBusinessMemorySettingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpsertBusinessMemorySettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpsertBusinessMemorySettingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			res := NewUpsertBusinessMemorySettingsChatAnalysisSettingsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpsertBusinessMemorySettingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpsertBusinessMemorySettingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpsertBusinessMemorySettingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpsertBusinessMemorySettingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpsertBusinessMemorySettingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpsertBusinessMemorySettingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpsertBusinessMemorySettingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpsertBusinessMemorySettingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+				}
+				err = ValidateUpsertBusinessMemorySettingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+				}
+				return nil, NewUpsertBusinessMemorySettingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpsertBusinessMemorySettingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+				}
+				err = ValidateUpsertBusinessMemorySettingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+				}
+				return nil, NewUpsertBusinessMemorySettingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminChatAnalysis", "upsertBusinessMemorySettings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpsertBusinessMemorySettingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			err = ValidateUpsertBusinessMemorySettingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminChatAnalysis", "upsertBusinessMemorySettings", err)
+			}
+			return nil, NewUpsertBusinessMemorySettingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminChatAnalysis", "upsertBusinessMemorySettings", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildTriggerAnalysisRequest instantiates a HTTP request object with method
 // and path set to call the "adminChatAnalysis" service "triggerAnalysis"
 // endpoint

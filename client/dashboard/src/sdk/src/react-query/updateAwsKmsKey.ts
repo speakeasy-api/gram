@@ -54,7 +54,7 @@ export type UpdateAwsKmsKeyMutationError =
  * updateAwsKmsKey externalKeys
  *
  * @remarks
- * Replace an AWS KMS external key's configuration. Requires org:admin.
+ * Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.
  */
 export function useUpdateAwsKmsKeyMutation(
   options?: MutationHookOptions<

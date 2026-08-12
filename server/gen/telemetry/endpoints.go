@@ -16,34 +16,38 @@ import (
 
 // Endpoints wraps the "telemetry" service endpoints.
 type Endpoints struct {
-	SearchLogs                      goa.Endpoint
-	SearchToolCalls                 goa.Endpoint
-	SearchChats                     goa.Endpoint
-	SearchUsers                     goa.Endpoint
-	CaptureEvent                    goa.Endpoint
-	GetProjectMetricsSummary        goa.Endpoint
-	GetUserMetricsSummary           goa.Endpoint
-	GetEmployeeDataFlowGraph        goa.Endpoint
-	GetObservabilityOverview        goa.Endpoint
-	GetProjectOverview              goa.Endpoint
-	Query                           goa.Endpoint
-	QueryTumDetails                 goa.Endpoint
-	ListSessions                    goa.Endpoint
-	ListFilterOptions               goa.Endpoint
-	ListAttributeKeys               goa.Endpoint
-	GetHooksSummary                 goa.Endpoint
-	GetToolUsageSummary             goa.Endpoint
-	GetToolUsageTotals              goa.Endpoint
-	GetToolUsageTargets             goa.Endpoint
-	GetToolUsageUsers               goa.Endpoint
-	GetToolUsageTargetTimeSeries    goa.Endpoint
-	GetToolUsageUserTimeSeries      goa.Endpoint
-	GetToolUsageUsersByTarget       goa.Endpoint
-	GetToolUsageTargetToolBreakdown goa.Endpoint
-	ListToolUsageTraces             goa.Endpoint
-	GetToolUsageFilterOptions       goa.Endpoint
-	GetMcpServerActivity            goa.Endpoint
-	ListHooksTraces                 goa.Endpoint
+	SearchLogs                       goa.Endpoint
+	SearchToolCalls                  goa.Endpoint
+	SearchChats                      goa.Endpoint
+	SearchUsers                      goa.Endpoint
+	CaptureEvent                     goa.Endpoint
+	GetProjectMetricsSummary         goa.Endpoint
+	GetUserMetricsSummary            goa.Endpoint
+	GetEmployeeDataFlowGraph         goa.Endpoint
+	GetObservabilityOverview         goa.Endpoint
+	GetProjectOverview               goa.Endpoint
+	GetUnproxiedMcpServerUsage       goa.Endpoint
+	GetUnproxiedMcpServerToolUsage   goa.Endpoint
+	GetUnproxiedMcpServerUserUsage   goa.Endpoint
+	GetUnproxiedMcpServerClientUsage goa.Endpoint
+	Query                            goa.Endpoint
+	QueryTumDetails                  goa.Endpoint
+	ListSessions                     goa.Endpoint
+	ListFilterOptions                goa.Endpoint
+	ListAttributeKeys                goa.Endpoint
+	GetHooksSummary                  goa.Endpoint
+	GetToolUsageSummary              goa.Endpoint
+	GetToolUsageTotals               goa.Endpoint
+	GetToolUsageTargets              goa.Endpoint
+	GetToolUsageUsers                goa.Endpoint
+	GetToolUsageTargetTimeSeries     goa.Endpoint
+	GetToolUsageUserTimeSeries       goa.Endpoint
+	GetToolUsageUsersByTarget        goa.Endpoint
+	GetToolUsageTargetToolBreakdown  goa.Endpoint
+	ListToolUsageTraces              goa.Endpoint
+	GetToolUsageFilterOptions        goa.Endpoint
+	GetMcpServerActivity             goa.Endpoint
+	ListHooksTraces                  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "telemetry" service with endpoints.
@@ -51,34 +55,38 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SearchLogs:                      NewSearchLogsEndpoint(s, a.APIKeyAuth),
-		SearchToolCalls:                 NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
-		SearchChats:                     NewSearchChatsEndpoint(s, a.APIKeyAuth),
-		SearchUsers:                     NewSearchUsersEndpoint(s, a.APIKeyAuth),
-		CaptureEvent:                    NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GetProjectMetricsSummary:        NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
-		GetUserMetricsSummary:           NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
-		GetEmployeeDataFlowGraph:        NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
-		GetObservabilityOverview:        NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
-		GetProjectOverview:              NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
-		Query:                           NewQueryEndpoint(s, a.APIKeyAuth),
-		QueryTumDetails:                 NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
-		ListSessions:                    NewListSessionsEndpoint(s, a.APIKeyAuth),
-		ListFilterOptions:               NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
-		ListAttributeKeys:               NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
-		GetHooksSummary:                 NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
-		GetToolUsageSummary:             NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
-		GetToolUsageTotals:              NewGetToolUsageTotalsEndpoint(s, a.APIKeyAuth),
-		GetToolUsageTargets:             NewGetToolUsageTargetsEndpoint(s, a.APIKeyAuth),
-		GetToolUsageUsers:               NewGetToolUsageUsersEndpoint(s, a.APIKeyAuth),
-		GetToolUsageTargetTimeSeries:    NewGetToolUsageTargetTimeSeriesEndpoint(s, a.APIKeyAuth),
-		GetToolUsageUserTimeSeries:      NewGetToolUsageUserTimeSeriesEndpoint(s, a.APIKeyAuth),
-		GetToolUsageUsersByTarget:       NewGetToolUsageUsersByTargetEndpoint(s, a.APIKeyAuth),
-		GetToolUsageTargetToolBreakdown: NewGetToolUsageTargetToolBreakdownEndpoint(s, a.APIKeyAuth),
-		ListToolUsageTraces:             NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
-		GetToolUsageFilterOptions:       NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
-		GetMcpServerActivity:            NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
-		ListHooksTraces:                 NewListHooksTracesEndpoint(s, a.APIKeyAuth),
+		SearchLogs:                       NewSearchLogsEndpoint(s, a.APIKeyAuth),
+		SearchToolCalls:                  NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
+		SearchChats:                      NewSearchChatsEndpoint(s, a.APIKeyAuth),
+		SearchUsers:                      NewSearchUsersEndpoint(s, a.APIKeyAuth),
+		CaptureEvent:                     NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetProjectMetricsSummary:         NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
+		GetUserMetricsSummary:            NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
+		GetEmployeeDataFlowGraph:         NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
+		GetObservabilityOverview:         NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
+		GetProjectOverview:               NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
+		GetUnproxiedMcpServerUsage:       NewGetUnproxiedMcpServerUsageEndpoint(s, a.APIKeyAuth),
+		GetUnproxiedMcpServerToolUsage:   NewGetUnproxiedMcpServerToolUsageEndpoint(s, a.APIKeyAuth),
+		GetUnproxiedMcpServerUserUsage:   NewGetUnproxiedMcpServerUserUsageEndpoint(s, a.APIKeyAuth),
+		GetUnproxiedMcpServerClientUsage: NewGetUnproxiedMcpServerClientUsageEndpoint(s, a.APIKeyAuth),
+		Query:                            NewQueryEndpoint(s, a.APIKeyAuth),
+		QueryTumDetails:                  NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
+		ListSessions:                     NewListSessionsEndpoint(s, a.APIKeyAuth),
+		ListFilterOptions:                NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
+		ListAttributeKeys:                NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
+		GetHooksSummary:                  NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
+		GetToolUsageSummary:              NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTotals:               NewGetToolUsageTotalsEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTargets:              NewGetToolUsageTargetsEndpoint(s, a.APIKeyAuth),
+		GetToolUsageUsers:                NewGetToolUsageUsersEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTargetTimeSeries:     NewGetToolUsageTargetTimeSeriesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageUserTimeSeries:       NewGetToolUsageUserTimeSeriesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageUsersByTarget:        NewGetToolUsageUsersByTargetEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTargetToolBreakdown:  NewGetToolUsageTargetToolBreakdownEndpoint(s, a.APIKeyAuth),
+		ListToolUsageTraces:              NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageFilterOptions:        NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
+		GetMcpServerActivity:             NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
+		ListHooksTraces:                  NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -94,6 +102,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetEmployeeDataFlowGraph = m(e.GetEmployeeDataFlowGraph)
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
 	e.GetProjectOverview = m(e.GetProjectOverview)
+	e.GetUnproxiedMcpServerUsage = m(e.GetUnproxiedMcpServerUsage)
+	e.GetUnproxiedMcpServerToolUsage = m(e.GetUnproxiedMcpServerToolUsage)
+	e.GetUnproxiedMcpServerUserUsage = m(e.GetUnproxiedMcpServerUserUsage)
+	e.GetUnproxiedMcpServerClientUsage = m(e.GetUnproxiedMcpServerClientUsage)
 	e.Query = m(e.Query)
 	e.QueryTumDetails = m(e.QueryTumDetails)
 	e.ListSessions = m(e.ListSessions)
@@ -713,6 +725,243 @@ func NewGetProjectOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.GetProjectOverview(ctx, p)
+	}
+}
+
+// NewGetUnproxiedMcpServerUsageEndpoint returns an endpoint function that
+// calls the method "getUnproxiedMcpServerUsage" of service "telemetry".
+func NewGetUnproxiedMcpServerUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUnproxiedMcpServerUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUnproxiedMcpServerUsage(ctx, p)
+	}
+}
+
+// NewGetUnproxiedMcpServerToolUsageEndpoint returns an endpoint function that
+// calls the method "getUnproxiedMcpServerToolUsage" of service "telemetry".
+func NewGetUnproxiedMcpServerToolUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUnproxiedMcpServerToolUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUnproxiedMcpServerToolUsage(ctx, p)
+	}
+}
+
+// NewGetUnproxiedMcpServerUserUsageEndpoint returns an endpoint function that
+// calls the method "getUnproxiedMcpServerUserUsage" of service "telemetry".
+func NewGetUnproxiedMcpServerUserUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUnproxiedMcpServerUserUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUnproxiedMcpServerUserUsage(ctx, p)
+	}
+}
+
+// NewGetUnproxiedMcpServerClientUsageEndpoint returns an endpoint function
+// that calls the method "getUnproxiedMcpServerClientUsage" of service
+// "telemetry".
+func NewGetUnproxiedMcpServerClientUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUnproxiedMcpServerClientUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUnproxiedMcpServerClientUsage(ctx, p)
 	}
 }
 

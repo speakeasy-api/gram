@@ -1,6 +1,10 @@
 package remotesessions
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"net/http"
+)
 
 // TokenRefreshError is an operator-actionable failure of a token refresh: a
 // condition the caller can understand and act on (revoke and re-link the
@@ -12,9 +16,10 @@ import "fmt"
 // shown; the lazy MCP path treats them like any other "no valid token" outcome
 // and re-challenges, ignoring the Reason.
 type TokenRefreshError struct {
-	Reason string
-	cause  error
-	code   string
+	Reason     string
+	cause      error
+	code       string
+	statusCode int
 }
 
 // Error returns the full detail (the public-safe Reason plus the private cause)
@@ -31,22 +36,31 @@ func (e *TokenRefreshError) Error() string {
 func (e *TokenRefreshError) Unwrap() error { return e.cause }
 
 func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause, code: ""}
+	return &TokenRefreshError{Reason: reason, cause: cause, code: "", statusCode: 0}
 }
 
 func (e *TokenRefreshError) invalidGrant() bool {
 	return e.code == oauthErrInvalidGrant
 }
 
+// IsTokenRefreshRateLimited reports whether an upstream token endpoint
+// explicitly returned HTTP 429. Callers use it to stop contacting that
+// provider for the remainder of a best-effort refresh sweep.
+func IsTokenRefreshRateLimited(err error) bool {
+	var refreshErr *TokenRefreshError
+	return errors.As(err, &refreshErr) && refreshErr.statusCode == http.StatusTooManyRequests
+}
+
 // newTokenRefreshErrorFromHTTP builds a TokenRefreshError from a non-2xx response
 // from the upstream token endpoint. The public Reason summarizes the RFC 6749
 // error body (falling back to the HTTP status); the raw status and body are kept
 // only as the private cause and never surfaced.
-func newTokenRefreshErrorFromHTTP(status string, body []byte) *TokenRefreshError {
+func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *TokenRefreshError {
 	response := parseTokenErrorResponse(body)
 	return &TokenRefreshError{
-		Reason: response.summary(status),
-		cause:  fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
-		code:   response.Error,
+		Reason:     response.summary(status),
+		cause:      fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
+		code:       response.Error,
+		statusCode: statusCode,
 	}
 }

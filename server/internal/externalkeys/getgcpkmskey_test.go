@@ -10,6 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestGetGcpKmsKey_Success(t *testing.T) {
@@ -55,4 +57,19 @@ func TestGetGcpKmsKey_WrongProvider(t *testing.T) {
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestGetGcpKmsKey_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credentialID := createGcpIamCredential(t, ctx, ti, "gcp-cred-entitlement-get")
+	key := createGcpKmsKey(t, ctx, ti, "gcp-key-entitlement-get", credentialID)
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.GetGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.GetGcpKmsKeyPayload{
+		ID:           key.ID,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

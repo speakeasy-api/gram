@@ -26,9 +26,19 @@ const (
 	ProviderCursor              = "cursor"
 	ProviderAnthropicCompliance = "anthropic_compliance"
 	ProviderCodexCompliance     = "codex_compliance"
+	// ProviderChatGPTCompliance imports ChatGPT conversation content from the
+	// OpenAI Compliance Logs Platform. It is a separate provider from
+	// codex_compliance because the two address different API scopes: COSTS
+	// files are served per API organization (org-…) while conversation logs
+	// are served per ChatGPT workspace (UUID), so each config carries the id
+	// its scope needs in external_organization_id.
+	ProviderChatGPTCompliance = "chatgpt_compliance"
 )
 
-var codexExternalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+var (
+	codexExternalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+	chatgptWorkspaceIDPattern          = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+)
 
 // Sync schedules name the independent polling pipelines a config can run,
 // each with its own ai_integration_syncs row (cadence, checkpoint, failure
@@ -43,6 +53,11 @@ const (
 	ScheduleAnthropicAnalyticsUsage = "anthropic_analytics_usage"
 	ScheduleAnthropicAnalyticsCost  = "anthropic_analytics_cost"
 	ScheduleCodexCompliance         = ProviderCodexCompliance
+	ScheduleChatGPTCompliance       = ProviderChatGPTCompliance
+	// ScheduleCodexCloudSessions imports Codex cloud task transcripts
+	// (CODEX_LOG files) — a second schedule on the chatgpt_compliance config,
+	// which owns the workspace scope both feeds are served under.
+	ScheduleCodexCloudSessions = "codex_cloud_sessions"
 )
 
 // Sync kinds record how a schedule checkpoints progress.
@@ -77,6 +92,14 @@ const (
 	StreamClaudeChatUsageTokens = "claude.chat.usage.tokens"
 	StreamClaudeChatCostUSD     = "claude.chat.cost.usd"
 	StreamCodexCostUSD          = "codex.cost.usd"
+	// chatgpt.chat.message carries ChatGPT (web/desktop) conversation
+	// messages from the Compliance Logs Platform CONVERSATION_MESSAGE feed —
+	// discrete activity events like claude.chat.message, not metrics.
+	StreamChatGPTChatMessage = "chatgpt.chat.message"
+	// codex.cloud.chat.message carries Codex cloud task transcripts (web
+	// tasks; GitHub code review has no CODEX_LOG presence) from the
+	// Compliance Logs Platform CODEX_LOG feed — discrete activity events.
+	StreamCodexCloudChatMessage = "codex.cloud.chat.message"
 )
 
 // streamInfo names the product-level stream a schedule writes.
@@ -103,6 +126,10 @@ func streamForSchedule(schedule string) streamInfo {
 		return streamInfo{name: StreamClaudeChatCostUSD, kind: StreamKindMetrics}
 	case ScheduleCodexCompliance:
 		return streamInfo{name: StreamCodexCostUSD, kind: StreamKindMetrics}
+	case ScheduleChatGPTCompliance:
+		return streamInfo{name: StreamChatGPTChatMessage, kind: StreamKindEvents}
+	case ScheduleCodexCloudSessions:
+		return streamInfo{name: StreamCodexCloudChatMessage, kind: StreamKindEvents}
 	default:
 		return streamInfo{name: "", kind: ""}
 	}
@@ -123,6 +150,8 @@ func providerSyncSchedule(provider string) syncSchedule {
 		return syncSchedule{schedule: ScheduleAnthropicCompliance, kind: SyncKindCursor}
 	case ProviderCodexCompliance:
 		return syncSchedule{schedule: ScheduleCodexCompliance, kind: SyncKindTime}
+	case ProviderChatGPTCompliance:
+		return syncSchedule{schedule: ScheduleChatGPTCompliance, kind: SyncKindTime}
 	default:
 		return syncSchedule{schedule: ScheduleCursor, kind: SyncKindTime}
 	}
@@ -141,6 +170,11 @@ func syncSchedulesFor(provider string) []syncSchedule {
 		}
 	case ProviderCodexCompliance:
 		return []syncSchedule{providerSyncSchedule(provider)}
+	case ProviderChatGPTCompliance:
+		return []syncSchedule{
+			providerSyncSchedule(provider),
+			{schedule: ScheduleCodexCloudSessions, kind: SyncKindTime},
+		}
 	default:
 		return []syncSchedule{providerSyncSchedule(provider)}
 	}
@@ -159,6 +193,12 @@ const (
 	// and real Codex activity typically predates the key being configured, so
 	// a 24h window would miss most of an org's history.
 	codexComplianceInitialLookback = 30 * 24 * time.Hour
+
+	// chatgptCompliance mirrors codexCompliance: conversation-message files
+	// are small and cheap to backfill, and an org's ChatGPT history predates
+	// the key being configured, so the first ingest reaches back 30 days.
+	chatgptCompliancePollInterval    = 5 * time.Minute
+	chatgptComplianceInitialLookback = 30 * 24 * time.Hour
 
 	// anthropicAnalyticsPollInterval is the delay between Admin Analytics API
 	// polls. The analytics export is refreshed roughly every 4 hours, so
@@ -183,6 +223,9 @@ func initialPollLookbackForProvider(provider string) time.Duration {
 	if provider == ProviderCodexCompliance {
 		return codexComplianceInitialLookback
 	}
+	if provider == ProviderChatGPTCompliance {
+		return chatgptComplianceInitialLookback
+	}
 	return initialUsagePollLookback
 }
 
@@ -196,6 +239,8 @@ func pollIntervalForSchedule(schedule string) time.Duration {
 		return anthropicAnalyticsPollInterval
 	case ScheduleCodexCompliance:
 		return codexComplianceUsagePollInterval
+	case ScheduleChatGPTCompliance, ScheduleCodexCloudSessions:
+		return chatgptCompliancePollInterval
 	default:
 		return cursorUsagePollInterval
 	}
@@ -273,7 +318,7 @@ func normalizeProvider(provider string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
 	}
 	switch provider {
-	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance:
+	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance:
 	default:
 		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider: %s", provider)
 	}
@@ -319,6 +364,15 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be an OpenAI organization ID starting with org- for %s", provider)
 		}
 		externalOrganizationID = &trimmedExternalOrganizationID
+	}
+	// The chatgpt_compliance scope id is a ChatGPT workspace UUID, not an
+	// org-… id — conversation logs are served per workspace.
+	if provider == ProviderChatGPTCompliance && externalOrganizationID != nil {
+		trimmedWorkspaceID := strings.TrimSpace(*externalOrganizationID)
+		if !chatgptWorkspaceIDPattern.MatchString(trimmedWorkspaceID) {
+			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be a ChatGPT workspace UUID for %s", provider)
+		}
+		externalOrganizationID = &trimmedWorkspaceID
 	}
 
 	q := repo.New(dbtx)
@@ -376,6 +430,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	// poller begin with its initial lookback; cursor-kind schedules
 	// checkpoint through last_cursor_id, so their watermark starts at now.
 	var syncRow repo.EnsureSyncRow
+	syncRows := map[string]repo.EnsureSyncRow{}
 	for _, sched := range syncSchedulesFor(provider) {
 		initialAt := time.Now().UTC()
 		if sched.kind == SyncKindTime {
@@ -391,6 +446,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 		}
+		syncRows[sched.schedule] = r
 		if sched.schedule == providerSched.schedule {
 			syncRow = r
 		}
@@ -410,13 +466,32 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		syncRow.ConsecutiveFailures = 0
 		syncRow.PollCheckpoint = pgtype.Text{String: "", Valid: false}
 		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
-		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
-			AiIntegrationConfigID: row.ID,
-			Schedule:              provider,
-			PollWatermarkAt:       syncRow.PollWatermarkAt,
-			NextPollAfter:         syncRow.NextPollAfter,
-		}); err != nil {
-			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
+		// Reset every schedule on the config that has actually synced, not just
+		// the provider-named one: all of a provider's feeds key on the same
+		// credentials and external scope, so a key or org/workspace change
+		// invalidates every sibling watermark too. A sibling left on the old
+		// scope's watermark would silently skip the new scope's history —
+		// e.g. changing the ChatGPT workspace id would re-backfill
+		// conversations but resume the Codex cloud transcript feed from the
+		// old workspace's position. Never-synced siblings (epoch watermark)
+		// are left untouched: the epoch sentinel drives their first-sync
+		// behavior (initial lookback, finality probing) and overwriting it
+		// would erase that state.
+		for _, sched := range syncSchedulesFor(provider) {
+			if sched.schedule != providerSched.schedule {
+				existing, ok := syncRows[sched.schedule]
+				if !ok || !existing.PollWatermarkAt.Time.After(epochTime()) {
+					continue
+				}
+			}
+			if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
+				AiIntegrationConfigID: row.ID,
+				Schedule:              sched.schedule,
+				PollWatermarkAt:       syncRow.PollWatermarkAt,
+				NextPollAfter:         conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(sched.schedule))),
+			}); err != nil {
+				return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
+			}
 		}
 	}
 
@@ -432,7 +507,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 }
 
 func providerRequiresExternalOrganizationID(provider string) bool {
-	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance
+	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance || provider == ProviderChatGPTCompliance
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -516,7 +591,7 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
-		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance} {
+		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance} {
 			for _, sched := range syncSchedulesFor(provider) {
 				// Same initial watermark policy as upsertWithTx: epoch for
 				// time-kind schedules, now for cursor-kind ones.

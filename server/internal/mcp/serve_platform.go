@@ -19,8 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -131,7 +133,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 // project is rejected as if the toolset did not exist, rather than relying on
 // downstream tools to refuse the call.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
-	if slug != platformtools.ManagedAssistantPlatformToolsetSlug {
+	switch slug {
+	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	default:
 		return nil
 	}
 
@@ -150,6 +154,26 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 
 	if managed.ID != principal.AssistantID {
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
+	// The Platform MCP read toolset is rollout-gated per organization. The
+	// attachment decision in the assistants service uses the same flag, but
+	// the assistant token lives inside the runner VM, so the serve path
+	// re-checks rather than trusting attachment. Fail closed on evaluation
+	// errors.
+	if slug == platformtools.PlatformMCPReadToolsetSlug {
+		if s.features == nil {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP,
+			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+		if err != nil {
+			s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		if !enabled {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
 	}
 
 	return nil
@@ -173,7 +197,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, req)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -185,11 +209,26 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *metrics, req *rawRequest) (json.RawMessage, error) {
+	// This path answers ServedPlatformToolset unconditionally and does not
+	// otherwise read the request params. Parsing them purely for telemetry is
+	// the point: without it the platform surface is the one inbound path where
+	// the client's requested revision is invisible, which reads as a hole in
+	// the data rather than as "platform clients don't negotiate". Malformed
+	// params must not fail the handshake, so a parse error is logged and the
+	// requested version is simply left unrecorded.
+	params, _, err := parseInitializeParams(req.Params)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to parse platform mcp initialize params", attr.SlogError(err))
+	}
+
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: "2025-03-26",
+			ProtocolVersion: mcpversions.ServedPlatformToolset,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
@@ -317,6 +356,8 @@ func (s *Service) callPlatformToolsetTool(
 		OAuthToken: "",
 		GramEmail:  gramEmail,
 		GramChatID: chatIDHeader,
+		// Platform toolsets serve Gram's own tools, never customer functions.
+		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 	}
 
 	var mcpURL string
@@ -410,11 +451,9 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
-		var shareableErr *oops.ShareableError
-		if errors.As(err, &shareableErr) {
-			return nil, fmt.Errorf("execute platform tool: %w", err)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 	outputBytes = int64(rw.body.Len())
 
@@ -435,6 +474,19 @@ func (s *Service) callPlatformToolsetTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	return bs, nil
+}
+
+func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) error {
+	if rejected, ok := toolCallRejection(ctx, logger, err, args...); ok {
+		return rejected
+	}
+
+	var shareableErr *oops.ShareableError
+	if errors.As(err, &shareableErr) {
+		return fmt.Errorf("execute platform tool: %w", err)
+	}
+
+	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

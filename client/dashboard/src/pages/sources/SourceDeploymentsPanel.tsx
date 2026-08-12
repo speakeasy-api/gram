@@ -1,12 +1,12 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import type { DeploymentSummary } from "@gram/client/models/components/deploymentsummary.js";
 import { useRoutes } from "@/routes";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ExternalLink } from "lucide-react";
 import { Suspense, useState } from "react";
 import { DeploymentsEmptyState } from "../deployments/DeploymentsEmptyState";
@@ -128,7 +128,7 @@ function DeploymentDetailPanel({
   return (
     <div className="flex-1 space-y-6 overflow-y-auto p-6">
       {/* Info section */}
-      <div className="border-border rounded-lg border p-4">
+      <div className="border-border border p-4">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <div>
             <dt className="text-muted-foreground mb-0.5 text-xs">
@@ -136,7 +136,7 @@ function DeploymentDetailPanel({
             </dt>
             <dd className="flex items-center gap-1">
               <span className="font-mono">{deployment.id.slice(0, 8)}</span>
-              <CopyButton text={deployment.id} size="inline" />
+              <CopyButton text={deployment.id} size="xs" />
             </dd>
           </div>
 
@@ -218,10 +218,10 @@ export function SourceDeploymentsPanel({
     <div className="mx-auto flex h-full min-h-0 w-full max-w-[1270px] flex-col px-8 py-8">
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <div>
-          <Heading variant="h4">Deployments</Heading>
-          <Type muted small>
-            {deployments.length} total
-          </Type>
+          <Heading variant="h2" className="text-display-xs font-thin">
+            Deployments
+          </Heading>
+          <span className="text-eyebrow">{deployments.length} total</span>
         </div>
         <routes.deployments.Link className="hover:no-underline">
           <Button variant="tertiary" size="sm">
@@ -233,7 +233,7 @@ export function SourceDeploymentsPanel({
         </routes.deployments.Link>
       </div>
 
-      <div className="border-border grid min-h-0 flex-1 grid-cols-[280px_1fr] overflow-hidden rounded-lg border">
+      <div className="border-border grid min-h-0 flex-1 grid-cols-[280px_1fr] overflow-hidden border">
         {/* ── Left sidebar ── */}
         <div className="border-border bg-muted/30 overflow-y-auto border-r">
           {deployments.map((d) => (

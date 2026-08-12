@@ -1,0 +1,22 @@
+name: "Close stale PRs"
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write # needed for delete-branch option
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          stale-pr-message: "This pull request is stale because it has been open 30 days with no activity. Remove stale label or comment or this will be closed in 5 days."
+          delete-branch: true
+          exempt-draft-pr: true
+          days-before-stale: 30
+          days-before-close: 5

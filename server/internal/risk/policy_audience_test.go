@@ -106,7 +106,6 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     created.ID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{scopedPrincipal},
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
@@ -120,7 +119,6 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     created.ID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{bypassPrincipal},
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
@@ -139,14 +137,14 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 	require.NoError(t, err)
 	require.Equal(t, []string{"user:" + authCtx.UserID}, updated.AudiencePrincipalUrns)
 
-	evaluateGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+	audienceGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Scope:          authz.ScopeRiskPolicyEvaluate,
 		ResourceID:     created.ID,
 	})
 	require.NoError(t, err)
-	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectAllow, "user:"+authCtx.UserID))
-	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectAllow, scopedPrincipal.String()))
+	require.Contains(t, grantPrincipals(audienceGrants), "user:"+authCtx.UserID)
+	require.Contains(t, grantPrincipals(audienceGrants), scopedPrincipal.String())
 
 	bypassGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -154,8 +152,8 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 		ResourceID:     created.ID,
 	})
 	require.NoError(t, err)
-	require.Contains(t, grantKeys(bypassGrants), grantKey(authz.PolicyEffectAllow, "user:"+authCtx.UserID))
-	require.NotContains(t, grantKeys(bypassGrants), grantKey(authz.PolicyEffectAllow, bypassPrincipal.String()))
+	require.Contains(t, grantPrincipals(bypassGrants), "user:"+authCtx.UserID)
+	require.NotContains(t, grantPrincipals(bypassGrants), bypassPrincipal.String())
 }
 
 func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
@@ -298,14 +296,10 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 	require.Equal(t, "Everyone Shadow MCP", unknownUserPolicy.Name)
 }
 
-func grantKey(effect authz.PolicyEffect, principalURN string) string {
-	return string(effect) + ":" + principalURN
-}
-
-func grantKeys(grants []authz.Grant) []string {
+func grantPrincipals(grants []authz.Grant) []string {
 	keys := make([]string, 0, len(grants))
 	for _, grant := range grants {
-		keys = append(keys, grantKey(grant.Effect, grant.PrincipalUrn))
+		keys = append(keys, grant.PrincipalUrn)
 	}
 	return keys
 }

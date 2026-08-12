@@ -4,6 +4,16 @@ import {
   smoothData,
   unixNanoToDate,
 } from "@/components/chart/chartUtils";
+import {
+  ACCENT_RED,
+  AXIS,
+  TOOLTIP,
+  withAlpha,
+} from "@/components/chart/palette";
+import {
+  useIsDarkTheme,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { formatCompact } from "@/lib/format";
 import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
@@ -61,6 +71,7 @@ export function ToolCallsTimeSeriesChart({
   const height = isExpanded ? 420 : 260;
   const hasData = timeSeries.some((b) => b.totalToolCalls > 0);
 
+  const seriesColors = useSeriesColors();
   const chartData = useMemo<{
     labels: string[];
     datasets: Array<
@@ -76,18 +87,21 @@ export function ToolCallsTimeSeriesChart({
     );
     const failedData = timeSeries.map((b) => b.failedToolCalls);
 
+    // Editorial split: success is the quiet norm (light neutral); failure is
+    // the one thing that earns the red accent.
     const barDatasets: Array<ChartDataset<"bar", number[]>> = [
       {
         label: "Successful",
         data: successData,
-        backgroundColor: "rgba(52, 211, 153, 0.35)",
+        // The ramp's neutral tail — quiet on both canvases.
+        backgroundColor: withAlpha(seriesColors[8]!, 0.6),
         stack: "stack",
         order: 2,
       },
       {
         label: "Failed",
         data: failedData,
-        backgroundColor: "rgba(248, 113, 113, 0.45)",
+        backgroundColor: ACCENT_RED,
         stack: "stack",
         order: 2,
       },
@@ -97,7 +111,7 @@ export function ToolCallsTimeSeriesChart({
       label: "Total Trend",
       data: smoothData(timeSeries.map((b) => b.totalToolCalls)),
       type: "line",
-      borderColor: "#3b82f6",
+      borderColor: seriesColors[0]!, // ink
       backgroundColor: "transparent",
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -108,10 +122,15 @@ export function ToolCallsTimeSeriesChart({
     };
 
     return { labels, datasets: [...barDatasets, trendDataset] };
-  }, [timeSeries, timeRangeMs]);
+  }, [timeSeries, timeRangeMs, seriesColors]);
 
-  const options = useMemo<ChartOptions<"bar">>(
-    () => ({
+  // Chart.js paints the canvas with static defaults that ignore the CSS
+  // theme, so gridlines and tick labels need explicit dark-mode colors.
+  const isDark = useIsDarkTheme();
+
+  const options = useMemo<ChartOptions<"bar">>(() => {
+    const textColor = isDark ? AXIS.faded : AXIS.label;
+    return {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
@@ -129,13 +148,8 @@ export function ToolCallsTimeSeriesChart({
           },
         },
         tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
+          ...TOOLTIP,
           padding: 12,
-          boxPadding: 4,
           usePointStyle: true,
           callbacks: {
             label: (item) =>
@@ -146,21 +160,24 @@ export function ToolCallsTimeSeriesChart({
       scales: {
         x: {
           stacked: true,
-          grid: { display: true, color: "rgba(128, 128, 128, 0.08)" },
-          ticks: { maxTicksLimit: 8 },
+          grid: {
+            display: true,
+            color: isDark ? AXIS.gridDark : AXIS.grid,
+          },
+          ticks: { maxTicksLimit: 8, color: textColor },
         },
         y: {
           stacked: true,
           beginAtZero: true,
-          grid: { color: "rgba(128, 128, 128, 0.15)" },
+          grid: { color: isDark ? AXIS.gridDark : AXIS.grid },
           ticks: {
+            color: textColor,
             callback: (value) => formatCompact(Number(value)),
           },
         },
       },
-    }),
-    [],
-  );
+    };
+  }, [isDark]);
 
   return (
     <ChartCard

@@ -1,0 +1,30 @@
+services:
+  litellm-fixture-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: fixture
+      POSTGRES_PASSWORD: fixture
+      POSTGRES_DB: fixture
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixture"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  litellm:
+    restart: "no"
+    depends_on:
+      litellm-fixture-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://fixture:fixture@litellm-fixture-db:5432/fixture
+      FIXTURE_PROVIDER_BASE: ${FIXTURE_PROVIDER_BASE}
+      FIXTURE_TEXT_TARGET: ${FIXTURE_TEXT_TARGET}
+      FIXTURE_GUARDRAIL_BASE: ${FIXTURE_GUARDRAIL_BASE}
+      OPENROUTER_API_KEY: ""
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./local/litellm/contract-fixtures/config.yaml:/app/config.yaml:ro

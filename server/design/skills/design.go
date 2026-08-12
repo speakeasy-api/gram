@@ -102,14 +102,17 @@ var _ = Service("skills", func() {
 	})
 
 	Method("update", func() {
-		Description("Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.")
+		Description("Rename an active skill or update its display name, summary, and tags. The implementation requires the skills product feature and skill write scope.")
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 			Attribute("name", String, "The canonical skill name.", func() { MaxLength(64) })
 			Attribute("display_name", String, "The user-facing skill name.", func() { MaxLength(256) })
 			Attribute("summary", String, "The optional skill summary.", func() { MaxLength(1024) })
-			Required("id", "name", "display_name")
+			Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Registry tags for categorizing the skill. At most 40 tags.", func() {
+				MaxLength(40)
+			})
+			Required("id", "name", "display_name", "tags")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -144,6 +147,7 @@ var _ = Service("skills", func() {
 			Attribute("search", String, "Search skill names, display names, and summaries.", func() { MaxLength(256) })
 			Attribute("source_kinds", ArrayOf(String, func() { Enum("manual", "captured") }), "Only return skills from these sources.")
 			Attribute("classifications", ArrayOf(String, func() { Enum("custom", "built_in") }), "Only return skills with these classifications.")
+			Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Only return skills that have any of these tags.")
 			Attribute("sort", String, "How to order skills.", func() {
 				Enum("name", "updated")
 				Default("name")
@@ -162,6 +166,7 @@ var _ = Service("skills", func() {
 			Param("search")
 			Param("source_kinds")
 			Param("classifications")
+			Param("tags")
 			Param("sort")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -173,6 +178,30 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "listSkills")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Skills"}`)
+	})
+
+	Method("listTags", func() {
+		Description("List distinct tags used by active skills in the project. The implementation requires the skills product feature and skill read scope.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillTagsResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listTags")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSkillTags")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTags")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillTags"}`)
 	})
 
 	Method("listSuggestions", func() {
@@ -757,7 +786,15 @@ var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {
 	Attribute("name", String, "The canonical skill name.", func() { MaxLength(64) })
 	Attribute("display_name", String, "The user-facing skill name.", func() { MaxLength(256) })
 	Attribute("summary", String, "The optional skill summary.", func() { MaxLength(1024) })
-	Required("id", "name", "display_name")
+	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Registry tags for categorizing the skill. At most 40 tags.", func() {
+		MaxLength(40)
+	})
+	Required("id", "name", "display_name", "tags")
+})
+
+var ListSkillTagsResult = Type("ListSkillTagsResult", func() {
+	Attribute("tags", ArrayOf(String), "Distinct tags used by active skills in the project, sorted lexicographically.")
+	Required("tags")
 })
 
 var ArchiveSkillRequestBody = Type("ArchiveSkillRequestBody", func() {
@@ -862,6 +899,7 @@ var Skill = Type("Skill", func() {
 	Attribute("summary", String, "The optional registry summary.")
 	Attribute("source_kind", String, "How the skill entered the registry.")
 	Attribute("classification", String, "The skill classification.")
+	Attribute("tags", ArrayOf(String), "Registry tags for categorizing the skill.")
 	Attribute("latest_version_id", String, "The current version ID, selected by effective promotion time.", func() {
 		Format(FormatUUID)
 	})
@@ -878,7 +916,7 @@ var Skill = Type("Skill", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "name", "display_name", "source_kind", "classification", "version_count", "has_valid_version", "seen_count", "created_at", "updated_at")
+	Required("id", "project_id", "name", "display_name", "source_kind", "classification", "tags", "version_count", "has_valid_version", "seen_count", "created_at", "updated_at")
 })
 
 var SkillVersion = Type("SkillVersion", func() {
@@ -1163,6 +1201,18 @@ var RecordSkillResult = Type("RecordSkillResult", func() {
 	Required("skill", "version", "created_skill", "created_version")
 })
 
+var SkillPromptInjectionFinding = Type("SkillPromptInjectionFinding", func() {
+	Description("A prompt-injection finding for the current skill version. Raw matched content is intentionally omitted.")
+
+	Attribute("rule_id", String, "The rule that produced the finding.")
+	Attribute("description", String, "Why the current skill version was flagged.")
+	Attribute("confidence", Float64, "The classifier confidence from 0 to 1.", func() {
+		Minimum(0)
+		Maximum(1)
+	})
+	Required("rule_id", "description", "confidence")
+})
+
 var GetSkillResult = Type("GetSkillResult", func() {
 	Description("An active skill and its current version.")
 
@@ -1172,7 +1222,8 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations by attributed version in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
 	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
-	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")
+	Attribute("prompt_injection_findings", ArrayOf(SkillPromptInjectionFinding), "Open prompt-injection findings for the current skill version.")
+	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count", "prompt_injection_findings")
 })
 
 var ListSkillsResult = Type("ListSkillsResult", func() {

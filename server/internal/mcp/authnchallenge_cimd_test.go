@@ -1,0 +1,632 @@
+// Integration tests for inbound CIMD (Client ID Metadata Documents) on the
+// user-session OAuth surface: a URL-shaped client_id presented to
+// /mcp/{slug}/authorize is resolved by fetching the metadata document from
+// an httptest TLS server, gated by the gram-user-session-cimd flag.
+
+package mcp_test
+
+import (
+	"context"
+	"crypto/x509"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+// cimdDocServer hosts a Client ID Metadata Document at
+// <TLS server>/oauth/client.json. Tests mutate doc before issuing requests.
+type cimdDocServer struct {
+	srv      *httptest.Server
+	clientID string
+	doc      map[string]any
+	// requests counts document fetches. Admission control's whole value is
+	// that a denial costs no outbound request, which is only observable by
+	// asserting this stays at zero.
+	requests atomic.Int64
+}
+
+func startCIMDDocServer(t *testing.T) *cimdDocServer {
+	t.Helper()
+
+	ds := &cimdDocServer{srv: nil, clientID: "", doc: nil, requests: atomic.Int64{}}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/client.json", func(w http.ResponseWriter, r *http.Request) {
+		ds.requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(ds.doc); err != nil {
+			t.Errorf("encode cimd document: %v", err)
+		}
+	})
+	ds.srv = httptest.NewTLSServer(mux)
+	t.Cleanup(ds.srv.Close)
+
+	ds.clientID = ds.srv.URL + "/oauth/client.json"
+	ds.doc = map[string]any{
+		"client_id":                  ds.clientID,
+		"client_name":                "CIMD Integration Client",
+		"redirect_uris":              []any{"http://127.0.0.1:33418/callback"},
+		"token_endpoint_auth_method": "none",
+	}
+	return ds
+}
+
+func (ds *cimdDocServer) certPool() *x509.CertPool {
+	pool := x509.NewCertPool()
+	pool.AddCert(ds.srv.Certificate())
+	return pool
+}
+
+// newTestCIMDService builds a doc server plus an mcp service whose guardian
+// policy trusts the doc server's TLS certificate, seeds a public
+// issuer-gated toolset, and returns the org id used as the flag distinctID.
+// The flag is NOT enabled here — tests opt in via ti.features.SetFlag.
+//
+// The seeded issuer is put in "open" admission mode. These tests exercise
+// DOCUMENT validation, and the doc server's URL is (necessarily) not a
+// catalog preset, so the default "presets" mode would deny every one of them
+// before a document was ever fetched. Admission itself is covered by
+// authnchallenge_cimd_admission_test.go, which seeds modes explicitly.
+func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset, string) {
+	t.Helper()
+
+	ds := startCIMDDocServer(t)
+	ctx, ti := newTestMCPServiceWithGuardianOptions(t, guardian.WithTLSRootCAs(ds.certPool()))
+
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
+	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	return ctx, ti, ds, toolset, authCtx.ActiveOrganizationID
+}
+
+func doCIMDAuthorize(t *testing.T, ti *testInstance, mcpSlug, clientID, redirectURI, codeChallenge string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {clientID},
+		"redirect_uri":          {redirectURI},
+		"code_challenge":        {codeChallenge},
+		"code_challenge_method": {"S256"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/authorize?"+q.Encode(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+	return w
+}
+
+func requireAuthorizeOAuthError(t *testing.T, w *httptest.ResponseRecorder, status int, code string) {
+	t.Helper()
+
+	require.Equal(t, status, w.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, code, body["error"])
+}
+
+// TestOAuthCIMD_FullFlow drives the complete authorize → consent → token
+// flow with a URL-shaped client_id. The request's loopback redirect_uri
+// deliberately uses a different port (51423) than the document registers
+// (33418) — the Claude Code shape, where RFC 8252 §7.3 requires the AS to
+// accept variable loopback ports.
+func TestOAuthCIMD_FullFlow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	mcpSlug := toolset.McpSlug.String
+	redirectURI := "http://127.0.0.1:51423/callback"
+	verifier := pkceVerifier(t)
+
+	// Authorize: resolves the document, upserts the client row, redirects
+	// to consent.
+	w := doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code)
+	consentLoc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Contains(t, consentLoc.Path, "/connect")
+	stateID := consentLoc.Query().Get("state")
+	require.NotEmpty(t, stateID)
+
+	// The lazily-upserted row is a CIMD row carrying the fetch stamp.
+	clientRow, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ClientID:            ds.clientID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ds.clientID, clientRow.ClientIDMetadataUri.String)
+	require.True(t, clientRow.ClientIDMetadataFetchedAt.Valid)
+	require.Equal(t, "CIMD Integration Client", clientRow.ClientName)
+	require.False(t, clientRow.ClientSecretHash.Valid)
+
+	// Consent GET: shows the document host as the verifiable trust anchor
+	// plus the loopback-redirect caution.
+	consentReq := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/connect?state="+stateID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	consentReq = consentReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	cw := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(cw, consentReq))
+	require.Equal(t, http.StatusOK, cw.Code)
+	docHost := strings.TrimPrefix(ds.srv.URL, "https://")
+	require.Contains(t, cw.Body.String(), "Client verified from")
+	require.Contains(t, cw.Body.String(), docHost)
+	require.Contains(t, cw.Body.String(), "local address on your")
+	require.Contains(t, cw.Body.String(), "CIMD Integration Client")
+
+	// Consent POST (approve): mints the authorization code.
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", stored.CSRFToken)
+	form.Set("action", "approve")
+	approveReq := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug+"/connect", strings.NewReader(form.Encode()))
+	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	approveReq = approveReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	aw := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(aw, approveReq))
+	require.Equal(t, http.StatusSeeOther, aw.Code)
+	codeLoc, err := url.Parse(aw.Header().Get("Location"))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(aw.Header().Get("Location"), redirectURI), "code must be delivered to the variable-port loopback redirect")
+	code := codeLoc.Query().Get("code")
+	require.NotEmpty(t, code)
+
+	// Token: public-client exchange with form client_id and PKCE only.
+	tokenForm := url.Values{}
+	tokenForm.Set("grant_type", "authorization_code")
+	tokenForm.Set("code", code)
+	tokenForm.Set("redirect_uri", redirectURI)
+	tokenForm.Set("client_id", ds.clientID)
+	tokenForm.Set("code_verifier", verifier)
+	tokenReq := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug+"/token", strings.NewReader(tokenForm.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	tokenReq = tokenReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	tw := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleToken(tw, tokenReq))
+	require.Equal(t, http.StatusOK, tw.Code, "token response: %s", tw.Body.String())
+	var tokenBody map[string]any
+	require.NoError(t, json.Unmarshal(tw.Body.Bytes(), &tokenBody))
+	require.NotEmpty(t, tokenBody["access_token"])
+}
+
+func TestOAuthCIMD_FlagOff_RejectsURLClientID(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, _ := newTestCIMDService(t)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+}
+
+// TestOAuthCIMD_FlagOffAfterResolution_RejectsAtAuthorize pins the
+// off-switch semantics: once the flag is disabled, even a
+// previously-resolved CIMD client is rejected on new authorize flows.
+func TestOAuthCIMD_FlagOffAfterResolution_RejectsAtAuthorize(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	redirectURI := "http://127.0.0.1:33418/callback"
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, false)
+	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+}
+
+func TestOAuthCIMD_ConfidentialAuthMethodRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["token_endpoint_auth_method"] = "client_secret_basic"
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+}
+
+func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json"
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+}
+
+func TestOAuthCIMD_CrossOriginRedirectURIRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["redirect_uris"] = []any{"https://elsewhere.example.com/callback"}
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "https://elsewhere.example.com/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_redirect_uri")
+}
+
+func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/other-path", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthCIMD_NonLoopbackPortVarianceRejected: the loopback variable-port
+// exception must not leak to non-loopback hosts — a same-origin https
+// redirect registered in the document does not match a request that only
+// differs by port.
+func TestOAuthCIMD_NonLoopbackPortVarianceRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["redirect_uris"] = []any{ds.srv.URL + "/callback"}
+
+	docURL, err := url.Parse(ds.srv.URL)
+	require.NoError(t, err)
+	variedPort := "https://" + docURL.Hostname() + ":1/callback"
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, variedPort, pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+func TestOAuthCIMD_UnknownExtensionFieldsAccepted(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["software_statement"] = "eyJhbGciOiJub25lIn0.e30."
+	ds.doc["client_id_expires_at"] = 4102444800
+	ds.doc["x_vendor_extension"] = map[string]any{"nested": true}
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code, "documents with unrecognized extension fields must be accepted: %s", w.Body.String())
+}
+
+// TestOAuthCIMD_TokenRejectsSecretForCIMDClient: a CIMD row is public by
+// construction; presenting any client secret at /token is rejected even
+// though the row exists and the secret column is NULL.
+func TestOAuthCIMD_TokenRejectsSecretForCIMDClient(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	mcpSlug := toolset.McpSlug.String
+	w := doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	tokenForm := url.Values{}
+	tokenForm.Set("grant_type", "authorization_code")
+	tokenForm.Set("code", "any-code")
+	tokenForm.Set("redirect_uri", "http://127.0.0.1:33418/callback")
+	tokenForm.Set("client_id", ds.clientID)
+	tokenForm.Set("client_secret", "not-a-real-secret")
+	tokenForm.Set("code_verifier", pkceVerifier(t))
+	tokenReq := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug+"/token", strings.NewReader(tokenForm.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	tokenReq = tokenReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	tw := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleToken(tw, tokenReq))
+	require.Equal(t, http.StatusUnauthorized, tw.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(tw.Body.Bytes(), &body))
+	require.Equal(t, "invalid_client", body["error"])
+}
+
+func TestOAuthCIMD_ASMetadataAdvertisesSupportWhenFlagOn(t *testing.T) {
+	t.Parallel()
+
+	_, ti, _, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	mcpSlug := toolset.McpSlug.String
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleGetAuthorizationServer(w, req))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	require.Equal(t, true, meta["client_id_metadata_document_supported"])
+	require.Equal(t, []any{"authorization"}, meta["refresh_token_expiration_types_supported"])
+}
+
+func TestOAuthCIMD_ASMetadataOmitsSupportWhenFlagOff(t *testing.T) {
+	t.Parallel()
+
+	_, ti, _, toolset, _ := newTestCIMDService(t)
+
+	mcpSlug := toolset.McpSlug.String
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleGetAuthorizationServer(w, req))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	require.NotContains(t, meta, "client_id_metadata_document_supported")
+}
+
+func doCIMDConsentGet(t *testing.T, ti *testInstance, mcpSlug, stateID string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/connect?state="+stateID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(w, req))
+	return w
+}
+
+// TestOAuthCIMD_RepeatAuthorizeRefreshesClient exercises the ON CONFLICT DO
+// UPDATE branch of the lazy upsert — the path every returning user hits: the
+// second authorize must reuse the same row (stable id for consent/session
+// FKs) while replacing the mutable metadata from the refetched document.
+func TestOAuthCIMD_RepeatAuthorizeRefreshesClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	mcpSlug := toolset.McpSlug.String
+	redirectURI := "http://127.0.0.1:33418/callback"
+
+	w := doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	first, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ClientID:            ds.clientID,
+	})
+	require.NoError(t, err)
+
+	ds.doc["client_name"] = "Renamed CIMD Client"
+	ds.doc["redirect_uris"] = []any{redirectURI, "http://localhost:3000/other"}
+
+	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	second, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ClientID:            ds.clientID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID, "repeat authorize must update the existing row, not create a new one")
+	require.Equal(t, "Renamed CIMD Client", second.ClientName)
+	require.Equal(t, []string{redirectURI, "http://localhost:3000/other"}, second.RedirectUris)
+	require.True(t, second.ClientIDMetadataFetchedAt.Time.After(first.ClientIDMetadataFetchedAt.Time), "fetch stamp must be refreshed")
+}
+
+// TestOAuthCIMD_SecretBearingCollisionRejected pins the upsert guard: a
+// pre-existing row sharing the client_id but carrying a secret hash must
+// surface as invalid_client, not as a CHECK-constraint 500 and not as a
+// silent rewrite of a confidential client into a CIMD one.
+func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	_, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
+		ClientID:              ds.clientID,
+		ClientSecretHash:      conv.ToPGText("bcrypt-hash-placeholder"),
+		ClientName:            "Confidential DCR Client",
+		RedirectUris:          []string{"http://127.0.0.1:33418/callback"},
+		ClientSecretExpiresAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+
+	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ClientID:            ds.clientID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Confidential DCR Client", row.ClientName, "the secret-bearing row must be left untouched")
+	require.False(t, row.ClientIDMetadataUri.Valid)
+}
+
+// TestOAuthCIMD_LoopbackQueryInjectionRejected: the loopback carve-out may
+// vary ONLY the port — extra query parameters on the requested redirect_uri
+// must not match a registered URI without them.
+func TestOAuthCIMD_LoopbackQueryInjectionRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback?injected=1", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthCIMD_LoopbackUserinfoRejected: userinfo in the requested
+// redirect_uri must never match — it would make the victim's browser send
+// attacker-chosen Basic credentials to the local listener.
+func TestOAuthCIMD_LoopbackUserinfoRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://user:pass@127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthDCR_LoopbackPortVarianceRejected: the loopback variable-port
+// carve-out is CIMD-only; DCR-registered rows keep byte-exact matching.
+func TestOAuthDCR_LoopbackPortVarianceRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	// The seeded DCR client registers http://localhost:3000/callback.
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, client.ClientID, "http://localhost:9999/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthCIMD_FetchFailureReturns503 pins the fetch-failure wire contract:
+// retryable status + code (a document host blip must not read as a permanent
+// invalid_client) and a generic description with no internal error detail.
+func TestOAuthCIMD_FetchFailureReturns503(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	missingDocURL := ds.srv.URL + "/missing.json"
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, missingDocURL, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, "temporarily_unavailable", body["error"])
+	require.Equal(t, "failed to fetch client metadata document", body["error_description"])
+}
+
+// TestOAuthCIMD_ConsentEscapesHostileClientName: client_name is
+// attacker-chosen for any accepted document; the consent page must render it
+// inert.
+func TestOAuthCIMD_ConsentEscapesHostileClientName(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["client_name"] = `<img src=x onerror=alert(1)> Client`
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code)
+	consentLoc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+
+	cw := doCIMDConsentGet(t, ti, toolset.McpSlug.String, consentLoc.Query().Get("state"))
+	require.Equal(t, http.StatusOK, cw.Code)
+	require.NotContains(t, cw.Body.String(), "<img src=x")
+	require.Contains(t, cw.Body.String(), "&lt;img src=x onerror=alert(1)&gt; Client")
+}
+
+// TestOAuthCIMD_ConsentNoLoopbackWarningForSameOriginRedirect: the loopback
+// caution is scoped to loopback redirects; a same-origin https redirect
+// shows the trust anchor without the warning.
+func TestOAuthCIMD_ConsentNoLoopbackWarningForSameOriginRedirect(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	redirectURI := ds.srv.URL + "/callback"
+	ds.doc["redirect_uris"] = []any{redirectURI}
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
+	require.Equal(t, http.StatusFound, w.Code)
+	consentLoc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+
+	cw := doCIMDConsentGet(t, ti, toolset.McpSlug.String, consentLoc.Query().Get("state"))
+	require.Equal(t, http.StatusOK, cw.Code)
+	require.Contains(t, cw.Body.String(), "Client verified from")
+	require.NotContains(t, cw.Body.String(), "local address on your")
+}
+
+// TestOAuthCIMD_LoopbackEncodedPathRejected: the variable-port exception
+// compares escaped components, so a percent-encoding variant of a registered
+// path must not match.
+func TestOAuthCIMD_LoopbackEncodedPathRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	// The document registers /callback; /%63allback decodes to the same
+	// path but is a different URI byte-for-byte.
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/%63allback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthCIMD_LoopbackFragmentRejected: a fragment on the requested
+// redirect_uri (prohibited by RFC 6749 section 3.1.2) must not match a
+// registered URI without one.
+func TestOAuthCIMD_LoopbackFragmentRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback#frag", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}
+
+// TestOAuthCIMD_LoopbackEmptyFragmentRegistrationRejected: a registered URI
+// carrying an explicit empty fragment ("...#") must not satisfy the
+// variable-port exception for a fragment-less request. URL.String() drops a
+// bare "#", so without the raw-string fragment guard the two would compare
+// equal despite differing by more than the port.
+func TestOAuthCIMD_LoopbackEmptyFragmentRegistrationRejected(t *testing.T) {
+	t.Parallel()
+
+	_, ti, ds, toolset, orgID := newTestCIMDService(t)
+	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ds.doc["redirect_uris"] = []any{"http://127.0.0.1:33418/callback#"}
+
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+}

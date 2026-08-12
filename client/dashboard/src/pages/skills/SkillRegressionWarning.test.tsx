@@ -5,7 +5,18 @@ import { RegressionWarning } from "./SkillInsightsSection";
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    skills: { detail: { href: (id: string) => `/skills/${id}` } },
+    skills: {
+      detail: {
+        href: (id: string) => `/skills/${id}`,
+        versions: {
+          href: (id: string) => `/skills/${id}/versions`,
+          version: {
+            href: (id: string, versionId: string) =>
+              `/skills/${id}/versions/${versionId}`,
+          },
+        },
+      },
+    },
   }),
 }));
 vi.mock("react-router", () => ({
@@ -17,7 +28,7 @@ vi.mock("react-router", () => ({
 afterEach(cleanup);
 
 describe("RegressionWarning", () => {
-  it("shows server score context and deep-links the predecessor restore action", () => {
+  it("shows server score context and links to version history", () => {
     render(
       <RegressionWarning
         skillId="skill_a"
@@ -43,6 +54,6 @@ describe("RegressionWarning", () => {
       screen
         .getByRole("link", { name: "Review version to restore" })
         .getAttribute("href"),
-    ).toBe("/skills/skill_a#version-version_previous");
+    ).toBe("/skills/skill_a/versions/version_previous");
   });
 });

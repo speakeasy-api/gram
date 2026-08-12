@@ -86,7 +86,7 @@ func BuildCreateGcpIamCredentialPayload(externalCredentialsCreateGcpIamCredentia
 	{
 		err = json.Unmarshal([]byte(externalCredentialsCreateGcpIamCredentialBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -98,9 +98,6 @@ func BuildCreateGcpIamCredentialPayload(externalCredentialsCreateGcpIamCredentia
 	v := &externalcredentials.CreateGcpIamCredentialPayload{
 		Name:                      body.Name,
 		ImpersonateServiceAccount: body.ImpersonateServiceAccount,
-		WifPoolID:                 body.WifPoolID,
-		WifProviderID:             body.WifProviderID,
-		WifProjectNumber:          body.WifProjectNumber,
 	}
 	v.SessionToken = sessionToken
 
@@ -115,7 +112,7 @@ func BuildUpdateGcpIamCredentialPayload(externalCredentialsUpdateGcpIamCredentia
 	{
 		err = json.Unmarshal([]byte(externalCredentialsUpdateGcpIamCredentialBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -132,9 +129,6 @@ func BuildUpdateGcpIamCredentialPayload(externalCredentialsUpdateGcpIamCredentia
 		ID:                        body.ID,
 		Name:                      body.Name,
 		ImpersonateServiceAccount: body.ImpersonateServiceAccount,
-		WifPoolID:                 body.WifPoolID,
-		WifProviderID:             body.WifProviderID,
-		WifProjectNumber:          body.WifProjectNumber,
 	}
 	v.SessionToken = sessionToken
 
@@ -245,6 +239,46 @@ func BuildGetGcpIamCredentialPayload(externalCredentialsGetGcpIamCredentialID st
 	}
 	v := &externalcredentials.GetGcpIamCredentialPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildVerifyGcpIamCredentialPayload builds the payload for the
+// externalCredentials verifyGcpIamCredential endpoint from CLI flags.
+func BuildVerifyGcpIamCredentialPayload(externalCredentialsVerifyGcpIamCredentialID string, externalCredentialsVerifyGcpIamCredentialSessionToken string) (*externalcredentials.VerifyGcpIamCredentialPayload, error) {
+	var err error
+	var id string
+	{
+		id = externalCredentialsVerifyGcpIamCredentialID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if externalCredentialsVerifyGcpIamCredentialSessionToken != "" {
+			sessionToken = &externalCredentialsVerifyGcpIamCredentialSessionToken
+		}
+	}
+	v := &externalcredentials.VerifyGcpIamCredentialPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetGcpSetupInfoPayload builds the payload for the externalCredentials
+// getGcpSetupInfo endpoint from CLI flags.
+func BuildGetGcpSetupInfoPayload(externalCredentialsGetGcpSetupInfoSessionToken string) (*externalcredentials.GetGcpSetupInfoPayload, error) {
+	var sessionToken *string
+	{
+		if externalCredentialsGetGcpSetupInfoSessionToken != "" {
+			sessionToken = &externalCredentialsGetGcpSetupInfoSessionToken
+		}
+	}
+	v := &externalcredentials.GetGcpSetupInfoPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

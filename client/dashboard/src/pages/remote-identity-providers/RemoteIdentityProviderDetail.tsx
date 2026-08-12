@@ -1,14 +1,14 @@
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+  PageTabsList,
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -66,10 +66,11 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
       </Page.Header>
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
+          <Page.Eyebrow />
           <div className="flex items-center gap-3">
-            <Type small muted>
+            <Text small muted>
               Remote Identity Provider
-            </Type>
+            </Text>
             {issuer && (
               <ScopeBadge
                 projectId={issuer.projectId}
@@ -86,7 +87,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
           <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
             <div className="shrink-0 border-b">
               <div className="mx-auto max-w-[1270px] px-8">
-                <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                   <PageTabsTrigger value="overview" asChild>
                     <Link to={tabHref("overview")}>Overview</Link>
                   </PageTabsTrigger>
@@ -98,7 +99,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
                       <Link to={tabHref("settings")}>Settings</Link>
                     </PageTabsTrigger>
                   )}
-                </TabsList>
+                </PageTabsList>
               </div>
             </div>
 
@@ -108,12 +109,12 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
               </TabsContent>
               <TabsContent value="clients" className="mt-0">
                 {issuer && <ClientsTab issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
+                {isLoading && <Text muted>Loading…</Text>}
               </TabsContent>
               {!isPlatform && (
                 <TabsContent value="settings" className="mt-0">
                   {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
-                  {isLoading && <Type muted>Loading…</Type>}
+                  {isLoading && <Text muted>Loading…</Text>}
                 </TabsContent>
               )}
             </div>

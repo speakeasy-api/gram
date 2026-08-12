@@ -1,9 +1,9 @@
-import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
-import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -15,13 +15,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
-import { skillShareUrl } from "./share-link";
+import { skillShareDomain, skillShareUrl } from "./share-link";
 
 type SharingStatus = "private" | "public";
 
@@ -99,7 +100,12 @@ export function SkillSharingCardBlocks({
   );
 
   const pending = share.isPending || unshare.isPending;
-  const shareUrl = skill.shareToken ? skillShareUrl(skill.shareToken) : null;
+  // Public pages are served on the org's custom domain when one is live, so
+  // the copied link carries the customer's own branding.
+  const { domain: customDomain } = useCustomDomain(!!skill.shareToken);
+  const shareUrl = skill.shareToken
+    ? skillShareUrl(skill.shareToken, skillShareDomain(customDomain))
+    : null;
   const currentStatus: SharingStatus = shareUrl ? "public" : "private";
   const currentOption = STATUS_OPTIONS.find(
     (option) => option.value === currentStatus,
@@ -181,13 +187,13 @@ export function SkillSharingCardBlocks({
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <McpSidebarInfoLabel>Visibility</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
           <DropdownMenuTrigger asChild disabled={!canWrite || pending}>
             <button
               type="button"
               disabled={!canWrite || pending}
-              className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span
                 className={cn(
@@ -204,7 +210,7 @@ export function SkillSharingCardBlocks({
               <DropdownMenuItem
                 key={option.value}
                 onSelect={() => handleSelect(option.value)}
-                className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+                className="group flex cursor-pointer items-start gap-2.5 p-2"
               >
                 {option.value === currentStatus ? (
                   <span
@@ -243,18 +249,18 @@ export function SkillSharingCardBlocks({
 
       {shareUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>Public link</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Public link</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {shareUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={shareUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy public link"
               className="mt-[-2px] shrink-0"
               onCopy={() => {
@@ -264,8 +270,8 @@ export function SkillSharingCardBlocks({
             {canWrite && (
               <SimpleTooltip tooltip="Reset link">
                 <Button
-                  size="icon-sm"
-                  variant="ghost"
+                  size="sm"
+                  variant="tertiary"
                   disabled={pending}
                   aria-label="Reset public link"
                   className="mt-[-4px] shrink-0"
@@ -291,11 +297,11 @@ export function SkillSharingCardBlocks({
             <Dialog.Description>{confirmCopy?.description}</Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
-            <Button variant="outline" onClick={() => setConfirmAction(null)}>
+            <Button variant="secondary" onClick={() => setConfirmAction(null)}>
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="destructive-primary"
               disabled={pending || confirmAction === null}
               onClick={runConfirmedAction}
             >

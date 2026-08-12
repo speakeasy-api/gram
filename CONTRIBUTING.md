@@ -93,7 +93,7 @@ Because `post-start` is backgrounded, `wt switch` returns before the stack is re
 + old-experiment  ○ down https://localhost:62875
 ```
 
-`wt remove` runs `mise run nuke` inside the worktree first, so the right Compose stack is torn down before the directory disappears. Removing a worktree by hand (`git worktree remove`) skips that and leaves its containers and volumes running.
+`wt remove` runs `mise run nuke --keep-shared` inside the worktree first, so the right Compose stack is torn down before the directory disappears (the shared Presidio stack stays up for other worktrees). Removing a worktree by hand (`git worktree remove`) skips that and leaves its containers and volumes running.
 
 #### Recommended shell setup
 

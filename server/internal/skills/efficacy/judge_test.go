@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -364,4 +365,8 @@ func TestVerdictSchemaIsStrictOverEveryVerdictField(t *testing.T) {
 		require.Contains(t, properties, name)
 	}
 	require.Len(t, properties, len(fields))
+}
+
+func (m *mockCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey(), nil
 }

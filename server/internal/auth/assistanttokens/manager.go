@@ -49,36 +49,41 @@ type Claims struct {
 const mcpAuthFlowIssuer = "gram-assistants-mcp-auth-flow"
 
 type MCPAuthFlowInput struct {
-	OrgID         string
-	ProjectID     uuid.UUID
-	UserID        string
-	AssistantID   uuid.UUID
-	ThreadID      uuid.UUID
-	FlowID        string
-	ServerID      string
-	McpURL        string
-	ClientID      string
-	ClientSecret  string
-	RedirectURI   string
-	CodeVerifier  string
-	TokenEndpoint string
-	TTL           time.Duration
+	OrgID       string
+	ProjectID   uuid.UUID
+	UserID      string
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	// AttemptID uniquely identifies one authorization attempt.
+	AttemptID string
+	// FlowID binds the token to the stable callback path.
+	FlowID            string
+	ServerID          string
+	McpURL            string
+	ClientID          string
+	ClientSecret      string
+	RedirectURI       string
+	CodeVerifier      string
+	TokenEndpoint     string
+	OAuthServerIssuer string
+	TTL               time.Duration
 }
 
 type MCPAuthFlowClaims struct {
-	OrgID         string `json:"org_id"`
-	ProjectID     string `json:"project_id"`
-	UserID        string `json:"user_id"`
-	AssistantID   string `json:"assistant_id"`
-	ThreadID      string `json:"thread_id"`
-	FlowID        string `json:"flow_id"`
-	ServerID      string `json:"server_id"`
-	McpURL        string `json:"mcp_url"`
-	ClientID      string `json:"client_id"`
-	ClientSecret  string `json:"client_secret,omitempty"`
-	RedirectURI   string `json:"redirect_uri"`
-	CodeVerifier  string `json:"code_verifier"`
-	TokenEndpoint string `json:"token_endpoint"`
+	OrgID             string `json:"org_id"`
+	ProjectID         string `json:"project_id"`
+	UserID            string `json:"user_id"`
+	AssistantID       string `json:"assistant_id"`
+	ThreadID          string `json:"thread_id"`
+	FlowID            string `json:"flow_id"`
+	ServerID          string `json:"server_id"`
+	McpURL            string `json:"mcp_url"`
+	ClientID          string `json:"client_id"`
+	ClientSecret      string `json:"client_secret,omitempty"`
+	RedirectURI       string `json:"redirect_uri"`
+	CodeVerifier      string `json:"code_verifier"`
+	TokenEndpoint     string `json:"token_endpoint"`
+	OAuthServerIssuer string `json:"oauth_server_issuer,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -157,20 +162,25 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 		ttl = 15 * time.Minute
 	}
 
+	attemptID := input.AttemptID
+	if attemptID == "" {
+		attemptID = input.FlowID
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, MCPAuthFlowClaims{
-		OrgID:         input.OrgID,
-		ProjectID:     input.ProjectID.String(),
-		UserID:        input.UserID,
-		AssistantID:   input.AssistantID.String(),
-		ThreadID:      input.ThreadID.String(),
-		FlowID:        input.FlowID,
-		ServerID:      input.ServerID,
-		McpURL:        input.McpURL,
-		ClientID:      input.ClientID,
-		ClientSecret:  input.ClientSecret,
-		RedirectURI:   input.RedirectURI,
-		CodeVerifier:  input.CodeVerifier,
-		TokenEndpoint: input.TokenEndpoint,
+		OrgID:             input.OrgID,
+		ProjectID:         input.ProjectID.String(),
+		UserID:            input.UserID,
+		AssistantID:       input.AssistantID.String(),
+		ThreadID:          input.ThreadID.String(),
+		FlowID:            input.FlowID,
+		ServerID:          input.ServerID,
+		McpURL:            input.McpURL,
+		ClientID:          input.ClientID,
+		ClientSecret:      input.ClientSecret,
+		RedirectURI:       input.RedirectURI,
+		CodeVerifier:      input.CodeVerifier,
+		TokenEndpoint:     input.TokenEndpoint,
+		OAuthServerIssuer: input.OAuthServerIssuer,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    mcpAuthFlowIssuer,
 			Subject:   input.AssistantID.String(),
@@ -178,7 +188,7 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			NotBefore: nil,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        input.FlowID,
+			ID:        attemptID,
 		},
 	})
 
@@ -196,19 +206,20 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 	}
 
 	token, err := jwt.ParseWithClaims(tokenString, &MCPAuthFlowClaims{
-		OrgID:         "",
-		ProjectID:     "",
-		UserID:        "",
-		AssistantID:   "",
-		ThreadID:      "",
-		FlowID:        "",
-		ServerID:      "",
-		McpURL:        "",
-		ClientID:      "",
-		ClientSecret:  "",
-		RedirectURI:   "",
-		CodeVerifier:  "",
-		TokenEndpoint: "",
+		OrgID:             "",
+		ProjectID:         "",
+		UserID:            "",
+		AssistantID:       "",
+		ThreadID:          "",
+		FlowID:            "",
+		ServerID:          "",
+		McpURL:            "",
+		ClientID:          "",
+		ClientSecret:      "",
+		RedirectURI:       "",
+		CodeVerifier:      "",
+		TokenEndpoint:     "",
+		OAuthServerIssuer: "",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "",
 			Subject:   "",

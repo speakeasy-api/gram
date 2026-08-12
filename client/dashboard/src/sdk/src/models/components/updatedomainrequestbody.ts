@@ -9,12 +9,17 @@ export type UpdateDomainRequestBody = {
   /**
    * Replacement IP allowlist. Pass an empty list to remove all restrictions.
    */
-  ipAllowlist: Array<string>;
+  ipAllowlist?: Array<string> | undefined;
+  /**
+   * Replacement OpenAI app-submission verification token. Pass an empty string to clear it.
+   */
+  openaiAppsChallengeToken?: string | undefined;
 };
 
 /** @internal */
 export type UpdateDomainRequestBody$Outbound = {
-  ip_allowlist: Array<string>;
+  ip_allowlist?: Array<string> | undefined;
+  openai_apps_challenge_token?: string | undefined;
 };
 
 /** @internal */
@@ -23,11 +28,13 @@ export const UpdateDomainRequestBody$outboundSchema: z.ZodMiniType<
   UpdateDomainRequestBody
 > = z.pipe(
   z.object({
-    ipAllowlist: z.array(z.string()),
+    ipAllowlist: z.optional(z.array(z.string())),
+    openaiAppsChallengeToken: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       ipAllowlist: "ip_allowlist",
+      openaiAppsChallengeToken: "openai_apps_challenge_token",
     });
   }),
 );

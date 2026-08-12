@@ -1,21 +1,19 @@
 import { Page } from "@/components/page-layout";
-import { getGradientColors } from "@/components/gradient-colors";
+import { TabbedPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
-import { CardContextMenu } from "@/components/card-context-menu";
-import { Badge } from "@/components/ui/badge";
-import { DotCard } from "@/components/ui/dot-card";
-import { Action, MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
 import {
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
+import { CardContextMenu } from "@/components/card-context-menu";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Text } from "@/components/ui/Text";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
@@ -24,7 +22,9 @@ import {
   invalidateAllAssistantsList,
   useAssistantsList,
 } from "@gram/client/react-query/assistantsList.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -35,13 +35,6 @@ import { AssistantsAuditLog } from "./AssistantAuditLog";
 import { TriggersPanel } from "../triggers/Triggers";
 
 const TOP_LEVEL_TABS = ["assistants", "triggers", "audit"] as const;
-type TopLevelTab = (typeof TOP_LEVEL_TABS)[number];
-
-function toTopLevelTab(value: string): TopLevelTab {
-  return (TOP_LEVEL_TABS as readonly string[]).includes(value)
-    ? (value as TopLevelTab)
-    : "assistants";
-}
 
 function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
   e.preventDefault();
@@ -54,16 +47,16 @@ export function AssistantsRoot(): JSX.Element {
 
 function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center">
         <Icon name="bot" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No assistants yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         Create an assistant to wire a model up to your MCP servers.
-      </Type>
+      </Text>
       <RequireScope
         scope={["project:write", "mcp:write"]}
         all
@@ -83,7 +76,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
 
 export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
-  const [activeTab, setActiveTab] = useQueryState(
+  const [activeTab] = useQueryState(
     "tab",
     parseAsStringLiteral(TOP_LEVEL_TABS).withDefault("assistants"),
   );
@@ -120,9 +113,9 @@ export default function AssistantsIndex(): JSX.Element {
       <Page.Section>
         <Page.Section.Title stage="beta">Assistants</Page.Section.Title>
         <Page.Section.Description className="max-w-xl">
-          Openclaw-inspired secure Assistants. Every assistant connects through
-          the MCPs and Skills your org already uses, with identity, guardrails,
-          and audit built in. Deployed to Slack.
+          Secure assistants that connect through the MCPs and Skills your org
+          already uses, with identity, guardrails, and audit built in. Deployed
+          to Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
@@ -159,40 +152,26 @@ export default function AssistantsIndex(): JSX.Element {
     );
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => void setActiveTab(toTopLevelTab(value))}
-          className="flex w-full flex-col"
-        >
-          <div className="border-b">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
-              <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
-              <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
-              <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent
-            value="assistants"
-            className="mt-6 flex w-full flex-col gap-4"
-          >
-            {content}
-          </TabsContent>
-          <TabsContent value="triggers" className="mt-6 w-full">
-            <TriggersPanel />
-          </TabsContent>
-          <TabsContent value="audit" className="mt-6 w-full">
-            <RequireScope scope="org:read" level="section">
-              <AssistantsAuditLog />
-            </RequireScope>
-          </TabsContent>
-        </Tabs>
-      </Page.Body>
-    </Page>
+    <TabbedPage
+      activeTab={activeTab}
+      tabs={[
+        { value: "assistants", label: "Assistants", href: "?tab=assistants" },
+        { value: "triggers", label: "Triggers", href: "?tab=triggers" },
+        { value: "audit", label: "Activity", href: "?tab=audit" },
+      ]}
+    >
+      {activeTab === "assistants" && content}
+      {activeTab === "triggers" && (
+        <RequireScope scope="project:write" level="section">
+          <TriggersPanel />
+        </RequireScope>
+      )}
+      {activeTab === "audit" && (
+        <RequireScope scope="org:read" level="section">
+          <AssistantsAuditLog />
+        </RequireScope>
+      )}
+    </TabbedPage>
   );
 }
 
@@ -220,9 +199,9 @@ function AssistantsBody({
 
   if (showNoMatches) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         No assistants matching &ldquo;{search}&rdquo;
-      </Type>
+      </Text>
     );
   }
 
@@ -235,18 +214,10 @@ function AssistantsBody({
   );
 }
 
-// Each assistant gets a deterministic gradient tile behind its Bot icon,
-// derived from its id via the same hash that powers project avatar colors.
-function AssistantIcon({ assistant }: { assistant: Pick<Assistant, "id"> }) {
-  const colors = getGradientColors(assistant.id);
+function AssistantIcon() {
   return (
-    <div
-      className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br"
-      style={{
-        backgroundImage: `linear-gradient(${colors.angle}deg, ${colors.from}, ${colors.to})`,
-      }}
-    >
-      <Bot className="h-7 w-7 text-white" />
+    <div className="border-border bg-surface-secondary-default flex h-12 w-12 items-center justify-center border">
+      <Bot className="text-muted-foreground h-7 w-7" />
     </div>
   );
 }
@@ -258,9 +229,9 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
     return (
       <div className="flex items-center gap-1.5">
         <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
-        <Type muted small>
+        <Text muted small>
           No MCP servers
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -275,14 +246,14 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
         {visible.map((toolset) => (
           <Badge
             key={toolset.toolsetSlug}
-            variant="outline"
+            variant="neutral"
             className="max-w-[10rem]"
             title={toolset.toolsetSlug}
           >
             <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
           </Badge>
         ))}
-        {overflow > 0 && <Badge variant="outline">+{overflow}</Badge>}
+        {overflow > 0 && <Badge variant="neutral">+{overflow}</Badge>}
       </div>
     </div>
   );
@@ -315,19 +286,23 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     <CardContextMenu actions={actions}>
       <routes.assistants.detail.Link
         params={[assistant.id]}
-        className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
-        <DotCard icon={<AssistantIcon assistant={assistant} />}>
+        <Card.Entity
+          icon={<AssistantIcon />}
+          iconRailClassName={BRAND_MESH_SURFACE_CLASS}
+          overlay={<BrandMeshLayers seed={assistant.id} />}
+        >
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
               title={assistant.name}
             >
               {assistant.name}
-            </Type>
+            </Text>
             <div onClick={stopLinkNavigation}>
               <MoreActions actions={actions} />
             </div>
@@ -337,9 +312,9 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
           <div className="mb-3 flex flex-col gap-2">
             <div className="flex items-center gap-1.5">
               <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-              <Type muted small className="truncate" title={assistant.model}>
+              <Text muted small className="truncate" title={assistant.model}>
                 {assistant.model}
-              </Type>
+              </Text>
             </div>
             <AssistantToolsets assistant={assistant} />
             <AssistantOwner
@@ -356,7 +331,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
               <UpdatedAt date={new Date(assistant.updatedAt)} />
             </div>
           </div>
-        </DotCard>
+        </Card.Entity>
       </routes.assistants.detail.Link>
     </CardContextMenu>
   );

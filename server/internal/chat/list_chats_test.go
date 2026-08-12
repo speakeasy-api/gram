@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -142,9 +143,12 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = &ti.projectID
+	// chat:write satisfies chat:read by expansion, so this is a fully-privileged
+	// session for chat purposes. Tests that need to distinguish the two use
+	// grantOrgAdminWithChatRead / grantOrgAdminWithChatWrite / memberSessionCtx.
 	return authztest.WithAdminGrants(
 		contextvalues.SetAuthContext(ctx, authCtx),
-		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+		authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource),
 	)
 }
 
@@ -160,6 +164,19 @@ func grantOrgAdminWithChatRead(t *testing.T, ctx context.Context) context.Contex
 	return authztest.WithExactGrants(t, ctx,
 		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+}
+
+// grantOrgAdminWithChatWrite mirrors grantOrgAdminWithChatRead but grants
+// chat:write, which satisfies chat:read by expansion — the role shape for
+// someone who may both review and manage other members' sessions.
+func grantOrgAdminWithChatWrite(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource),
 	)
 }
 
@@ -342,29 +359,6 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
-// TestListChats_RBACDisabled_SeesOnlyOwnChats is the regression guard for the
-// RBAC-disabled org: enforcement is off, so even a would-be admin must fall back
-// to own-sessions-only rather than seeing every chat (Require short-circuits to
-// allow when enforcement is off — the handler must not treat that as admin).
-func TestListChats_RBACDisabled_SeesOnlyOwnChats(t *testing.T) {
-	t.Parallel()
-	ti := newTestChatServiceRBACDisabled(t)
-	// Grant org:admin; with the org's RBAC feature flag off, ShouldEnforce still
-	// returns false and the grant is moot.
-	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
-	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
-
-	result, err := ti.service.ListChats(ctx, defaultPayload())
-	require.NoError(t, err)
-	require.Equal(t, 1, result.Total)
-	require.Len(t, result.Chats, 1)
-	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
-}
-
 // TestListChats_ManagedAssistant_SeesAllChats verifies that the managed
 // assistant runtime (no session, non-admin owner, assistant principal
 // installed) gets project-wide chat results — the sidebar contract.
@@ -419,6 +413,52 @@ func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 	require.Equal(t, "ext-123", conv.PtrValOr(result.Chats[0].ExternalUserID, ""))
 }
 
+// TestListChats_OrgAdmin_FilterByUserID verifies that an org admin can narrow
+// results to a specific Gram user via the payload filter.
+func TestListChats_OrgAdmin_FilterByUserID(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChat(t, ctx, ti, "user-aaa", "", "chat for user-aaa")
+	seedChat(t, ctx, ti, "user-bbb", "", "chat for user-bbb")
+	seedChat(t, ctx, ti, "", "ext-ccc", "chat for ext-ccc")
+
+	userID := "user-aaa"
+	payload := defaultPayload()
+	payload.UserID = &userID
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, "user-aaa", conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// TestListChats_RegularUser_PayloadUserIDIsIgnored verifies that a caller
+// without project-wide visibility stays scoped to their own chats even when
+// naming another user in the payload filter.
+func TestListChats_RegularUser_PayloadUserIDIsIgnored(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	otherUser := "other-user-id"
+	payload := defaultPayload()
+	payload.UserID = &otherUser
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
 // TestListChats_Filter_Search verifies that the search filter matches chats by title substring.
 func TestListChats_Filter_Search(t *testing.T) {
 	t.Parallel()
@@ -437,6 +477,110 @@ func TestListChats_Filter_Search(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Contains(t, result.Chats[0].Title, "needle")
+}
+
+func TestListChats_Filter_SearchUnresolvedExternalUserID(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	chatID := seedChat(t, ctx, ti, "", "opaque-provider-user-id", "unresolved chat")
+
+	search := "provider-user"
+	payload := defaultPayload()
+	payload.Search = &search
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+
+	search = "missing@example.com"
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Zero(t, result.Total)
+	require.Empty(t, result.Chats)
+}
+
+func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+
+	now := time.Now().UTC()
+	chatID, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
+		ID:             uuid.New(),
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGTextEmpty(authCtx.UserID),
+		ExternalUserID: conv.ToPGTextEmpty("opaque-provider-user-id"),
+		ExternalChatID: conv.ToPGText("external-chat-" + uuid.NewString()),
+		Title:          conv.ToPGText("compliance imported chat"),
+		CreatedAt:      conv.ToPGTimestamptz(now),
+		UpdatedAt:      conv.ToPGTimestamptz(now),
+	})
+	require.NoError(t, err)
+
+	payload := defaultPayload()
+	payload.Search = authCtx.Email
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+
+	payload.Offset = 1
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Empty(t, result.Chats)
+}
+
+func TestListChats_Filter_SearchUserAccountEmail(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	accountEmail := "account-" + uuid.NewString() + "@example.com"
+
+	hooksQueries := hooksrepo.New(ti.conn)
+	account, err := hooksQueries.UpsertUserAccount(ctx, hooksrepo.UpsertUserAccountParams{
+		OrganizationID:      ti.orgID,
+		Provider:            "anthropic",
+		ExternalAccountUuid: uuid.NewString(),
+		UserID:              pgtype.Text{},
+		ExternalOrgID:       pgtype.Text{},
+		ExternalAccountID:   pgtype.Text{},
+		Email:               conv.ToPGText(accountEmail),
+		AccountType:         conv.ToPGText("personal"),
+	})
+	require.NoError(t, err)
+
+	chatID, err := hooksQueries.UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
+		ID:             uuid.New(),
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: conv.ToPGText("opaque-account-user-id"),
+		UserAccountID:  uuid.NullUUID{UUID: account.ID, Valid: true},
+		Title:          conv.ToPGText("account-linked chat"),
+	})
+	require.NoError(t, err)
+
+	payload := defaultPayload()
+	payload.Search = &accountEmail
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+
+	payload.Offset = 1
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Empty(t, result.Chats)
 }
 
 // TestListChats_Filter_HasRisk_True verifies that has_risk=true returns only chats that have at

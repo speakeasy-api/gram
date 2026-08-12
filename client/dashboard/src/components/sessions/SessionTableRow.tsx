@@ -1,21 +1,22 @@
 import { useState } from "react";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { DotRow } from "@/components/ui/dot-row";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/ContextMenu";
+import { DotRow } from "@/components/ui/DotRow";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import {
   sessionStatus,
   sessionTimeLabel,
   subjectLabel,
 } from "@/lib/user-session-status";
+import { ClientSourceBadge } from "./ClientSourceBadge";
 import { SessionStatusBadge } from "./SessionStatusBadge";
 import { RevokeSessionDialog } from "./RevokeSessionDialog";
 
@@ -63,28 +64,35 @@ export function SessionTableRow({
 
       {/* Subject */}
       <td className="px-3 py-3">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="truncate text-sm"
           title={subjectLabel(session)}
         >
           {subjectLabel(session)}
-        </Type>
+        </Text>
       </td>
 
-      {/* Client */}
+      {/* Client. The source badge sits inline rather than in its own column so
+          the table keeps its existing header set. */}
       <td className="px-3 py-3">
-        <Type small muted>
-          {session.clientName ?? "—"}
-        </Type>
+        <div className="flex items-center gap-2">
+          {/* min-w-0: a flex item defaults to min-width:auto, which stops
+              `truncate` engaging. client_name is client-supplied and up to
+              256 bytes, so without this it widens the whole table. */}
+          <Text small muted className="min-w-0 truncate">
+            {session.clientName ?? "—"}
+          </Text>
+          {session.clientName && <ClientSourceBadge client={session} />}
+        </div>
       </td>
 
       {/* MCP server */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           {session.issuerSlug}
-        </Type>
+        </Text>
       </td>
 
       {/* Status */}
@@ -94,9 +102,9 @@ export function SessionTableRow({
 
       {/* Expires / Revoked */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           {sessionTimeLabel(session)}
-        </Type>
+        </Text>
       </td>
 
       {/* Actions */}

@@ -1,15 +1,16 @@
 import { Page } from "@/components/page-layout";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
-import { Button, cn } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -142,7 +143,7 @@ export function SkillPickerDialog({
     pickerContent = <Skeleton className="h-24 w-full" />;
   } else if (visibleSkills.length > 0) {
     pickerContent = (
-      <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto rounded-md border p-1">
+      <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto border p-1">
         {visibleSkills.map((skill) => (
           <SkillOption
             key={skill.id}
@@ -156,15 +157,15 @@ export function SkillPickerDialog({
     );
   } else if (availableSkills.length > 0) {
     pickerContent = (
-      <Type muted small>
+      <Text muted small>
         No skills match your search.
-      </Type>
+      </Text>
     );
   } else {
     pickerContent = (
-      <Type muted small>
+      <Text muted small>
         {emptyMessage}
-      </Type>
+      </Text>
     );
   }
 
@@ -185,9 +186,9 @@ export function SkillPickerDialog({
             className="w-full"
           />
           {!isLoading && listSummary && (
-            <Type muted small>
+            <Text muted small>
               {listSummary}
-            </Type>
+            </Text>
           )}
           {pickerContent}
           {renderSelectionNotice?.(selectedSkillIds.length)}
@@ -235,7 +236,7 @@ function SkillOption({
   return (
     <label
       className={cn(
-        "flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
+        "flex items-center gap-2 px-2 py-1.5 text-sm",
         isDistributable ? "hover:bg-accent cursor-pointer" : "opacity-70",
       )}
     >

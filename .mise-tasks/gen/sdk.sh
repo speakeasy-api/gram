@@ -6,6 +6,12 @@
 
 set -e
 
+# The Speakeasy CLI version is baked into every generated artifact (gen.lock,
+# workflow.lock, the SDK_METADATA userAgent), so generating with anything other
+# than the pinned version produces churn CI rejects. `speakeasy run` re-execs
+# into the version named by speakeasyVersion in .speakeasy/workflow.yaml, so a
+# system-wide install (Homebrew, `go install`) ahead of the mise shim on PATH
+# still generates with the pinned version.
 generate() {
   # Speakeasy's TypeScript target compiles the generated SDK by invoking pnpm
   # directly in client/dashboard/src/sdk. Without CI=true, pnpm prompts to purge

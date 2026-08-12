@@ -37,6 +37,7 @@ type SkillSnapshot struct {
 	DisplayName     string
 	SourceKind      string
 	Classification  string
+	Tags            []string
 	LatestVersionID string
 	VersionCount    int64
 	CreatedAt       string

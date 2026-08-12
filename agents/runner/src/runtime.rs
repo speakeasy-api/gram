@@ -1,52 +1,48 @@
-use std::collections::BTreeSet;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
-use agentkit_core::{Item, ItemKind, Part, TextPart, ToolCallPart, ToolOutput, ToolResultPart};
+use agentkit_core::{
+    DataRef, Item, ItemKind, MediaPart, Modality, Part, TextPart, ToolCallPart, ToolOutput,
+    ToolResultPart,
+};
 use agentkit_loop::{
     Agent, LoopDriver, LoopInterrupt, LoopStep, ModelSession, PromptCacheRequest,
     PromptCacheRetention, SessionConfig,
-};
-use agentkit_mcp::{
-    McpError, McpServerConfig, McpServerId, McpServerManager, McpServerOptions,
-    McpTransportBinding, StreamableHttpTransportConfig,
 };
 use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
 use agentkit_reporting::TracingReporter;
 use agentkit_tool_fs::{FileSystemToolPolicy, FileSystemToolResources};
 use agentkit_tools_core::{
-    CatalogReader, CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
+    CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
 };
 use dashmap::DashMap;
 use futures::FutureExt;
 use serde_json::Value;
+use tokio::sync::OnceCell;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::{OnceCell, oneshot};
 use tracing::Instrument;
 
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
+use crate::catalog::{HiddenCatalogSource, UnknownToolSource};
 use crate::clip::ClippedToolSource;
 use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, build_compactor};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
-use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
+use crate::http_layer::{TokenRegistry, build_bootstrap_client, build_http};
+use crate::mcp_actor::{McpCmd, spawn_mcp_actor};
 use crate::telemetry::SpanIdentity;
 use crate::tools;
-use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
+use crate::wire::{McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
 
 const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
-const MCP_CMD_CAPACITY: usize = 32;
 
 /// TCP/TLS connect bound for runner-originated HTTP requests.
 const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
-
-/// Per-server bound on the MCP discovery handshake at connect time.
-const MCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a thread's per-task state can sit idle before the host evicts
 /// it. The VM stays alive across all per-thread events; only individual
@@ -74,7 +70,7 @@ pub struct RuntimeHost {
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
-    pub http_client: reqwest::Client,
+    pub mcp_http_client: reqwest::Client,
     pub spill_root: PathBuf,
     /// Fallback bearer used only when `/threads/turn` arrives with no
     /// `auth_token` so the bootstrap fetch still has a credential.
@@ -88,22 +84,10 @@ pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
-    pub inbox_tx: UnboundedSender<String>,
+    pub inbox_tx: UnboundedSender<RunnerContent>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub tokens: TokenRegistry,
     pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
-}
-
-pub enum McpCmd {
-    ForceReconnect {
-        server_id: McpServerId,
-        reply: oneshot::Sender<Result<(), String>>,
-    },
-    /// Sent by `/threads/{id}/turn` when the server-side toolset has
-    /// drifted from the snapshot the runner bootstrapped with. The actor
-    /// diffs `desired` against currently-registered servers, connects
-    /// any new ones, and disconnects ones that no longer apply.
-    Reconcile { desired: Vec<McpServer> },
 }
 
 impl ConfiguredThread {
@@ -118,7 +102,7 @@ impl ConfiguredThread {
         }
     }
 
-    pub fn enqueue(&self, input: String) -> Result<(), RunnerError> {
+    pub fn enqueue(&self, input: RunnerContent) -> Result<(), RunnerError> {
         self.inbox_tx
             .send(input)
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
@@ -140,8 +124,16 @@ pub async fn build_host(
     );
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(default_headers.clone())
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .build()?;
+    // MCP servers are externally configured endpoints. Never follow redirects so
+    // per-server headers and bearer tokens only ever go to the configured origin.
+    let mcp_http_client = reqwest::Client::builder()
+        .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(default_headers)
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
     let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
@@ -155,7 +147,7 @@ pub async fn build_host(
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
-        http_client,
+        mcp_http_client,
         spill_root,
         initial_token,
     });
@@ -295,16 +287,26 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
+    let (mcp_inbox_tx, mut mcp_inbox_rx) = mpsc::unbounded_channel::<String>();
 
-    let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) = build_thread_mcp(
-        host,
+    let notice_inbox_tx = inbox_tx.clone();
+    tokio::spawn(async move {
+        while let Some(notice) = mcp_inbox_rx.recv().await {
+            if notice_inbox_tx.send(RunnerContent::Text(notice)).is_err() {
+                break;
+            }
+        }
+    });
+
+    let (mcp_cmd_tx, mcp_catalog) = spawn_mcp_actor(
+        host.gram_client.clone(),
+        host.mcp_http_client.clone(),
         &thread_id,
         &bootstrap.mcp_servers,
         &tokens,
-        inbox_tx.clone(),
-    )
-    .await?;
+        mcp_inbox_tx,
+    )?;
 
     let chat_id = bootstrap.chat_id.clone();
 
@@ -374,10 +376,13 @@ async fn spawn_thread(
     if !bootstrap.instructions.is_empty() {
         transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
-    transcript.extend(normalize_history(&bootstrap.history)?);
-    for notice in mcp_auth_notices {
-        transcript.push(Item::text(ItemKind::User, &notice));
+    if !bootstrap.mcp_servers.is_empty() {
+        transcript.push(Item::text(
+            ItemKind::System,
+            mcp_disclosure_item(&bootstrap.mcp_servers),
+        ));
     }
+    transcript.extend(normalize_history(&bootstrap.history)?);
 
     let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
         PathPolicy::new()
@@ -389,12 +394,27 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
-    );
+    let native_tools = ToolRegistry::new()
+        .with(tools::bun_run::bun_run)
+        .with(tools::tool_search::ToolSearchTool::new(
+            mcp_catalog.clone(),
+            mcp_cmd_tx.clone(),
+        ))
+        .with(tools::inspect_asset::InspectAssetTool::new(
+            inbox_tx.clone(),
+        ));
 
-    let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
-        .with_source(native_tools.merge(agentkit_tool_fs::registry()));
+    // MCP tools resolve by name but are never advertised: the declared tool
+    // set stays frozen for the thread's lifetime so the provider prompt
+    // cache survives catalog churn. UnknownToolSource sits last so a call
+    // to an undiscovered or hallucinated name returns a recovery hint
+    // instead of a bare not-found.
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
+        mcp_catalog,
+        mcp_cmd_tx.clone(),
+    ))
+    .with_source(native_tools.merge(agentkit_tool_fs::registry()))
+    .with_source(UnknownToolSource);
     let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
 
     let mut builder = Agent::builder()
@@ -491,323 +511,22 @@ async fn spawn_thread(
     Ok(configured)
 }
 
-async fn build_thread_mcp(
-    host: &Arc<RuntimeHost>,
-    thread_id: &str,
-    servers: &[McpServer],
-    tokens: &TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
-) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, Vec<String>), RunnerError> {
-    let mut manager = McpServerManager::new();
-    let catalog = manager.source();
-    let mut auth_notices = Vec::new();
-    let mut known = BTreeSet::new();
-    let configured: BTreeSet<String> = servers.iter().map(|s| s.id.clone()).collect();
-
-    for server in servers {
-        let config = build_mcp_server_config(server, &host.http_client, tokens)?;
-        manager.register_server_with_options(
-            config,
-            McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
-        );
-    }
-
-    let settled = manager.connect_all_settled().await;
-    for handle in settled.connected() {
-        tracing::info!(
-            server_id = %handle.server_id(),
-            tools = handle.snapshot().tools.len(),
-            action = "register",
-            "mcp connect ok"
-        );
-        known.insert(handle.server_id().0.clone());
-    }
-    for failure in settled.failed() {
-        let server_id = &failure.server_id;
-        tracing::warn!(
-            server_id = %server_id,
-            error = %failure.error,
-            action = "register",
-            "mcp connect failed"
-        );
-        // Non-auth failures are transient transport errors: leave them out of
-        // `known` so the next /turn reconcile retries instead of silently
-        // dropping the integration for the rest of the thread.
-        if !matches!(failure.error, McpError::AuthRequired(_)) {
-            continue;
-        }
-        let Some(server) = servers.iter().find(|s| s.id == server_id.0) else {
-            continue;
-        };
-        // Mark auth-pending as known only once the prompt is created, so a
-        // transient auth-flow failure leaves the server out of `known` and the
-        // next /turn reconcile retries the prompt instead of stranding the
-        // integration unprompted for the thread's lifetime.
-        if let Some(notice) =
-            create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
-        {
-            known.insert(server_id.0.clone());
-            auth_notices.push(notice);
-        } else {
-            tracing::warn!(
-                server_id = %server_id,
-                "auth prompt creation failed; will retry on next reconcile"
-            );
-        }
-    }
-
-    let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    let actor_ctx = McpActorContext {
-        host: Arc::clone(host),
-        thread_id: thread_id.to_string(),
-        tokens: tokens.clone(),
-        inbox_tx,
-        known,
-        configured,
-    };
-    tokio::spawn(run_mcp_actor(manager, cmd_rx, actor_ctx));
-    Ok((cmd_tx, catalog, auth_notices))
-}
-
-struct McpActorContext {
-    host: Arc<RuntimeHost>,
-    thread_id: String,
-    tokens: TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
-    // Servers currently connected or auth-pending. Drives reconcile's
-    // add/remove diff and is mutated as connections come and go.
-    known: BTreeSet<String>,
-    // Server ids in the assistant's current configuration (the latest
-    // reconcile's desired set). Gates ForceReconnect so a configured but
-    // not-yet-connected server can still be retried, while a server detached
-    // from the configuration cannot be resurrected.
-    configured: BTreeSet<String>,
-}
-
-async fn create_auth_notice(
-    host: &Arc<RuntimeHost>,
-    thread_id: &str,
-    server_id: &str,
-    server_url: &str,
-    tokens: &TokenRegistry,
-) -> Option<String> {
-    match host
-        .gram_client
-        .create_mcp_auth_flow(thread_id, server_id, server_url, tokens)
-        .await
-    {
-        Ok(flow) => Some(format!(
-            "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
-            server_id = flow.server_id,
-            mcp_slug = flow.mcp_slug,
-            auth_url = flow.auth_url,
-        )),
-        Err(flow_err) => {
-            tracing::warn!(
-                server_id,
-                error = %flow_err,
-                "failed to create assistant mcp auth flow"
-            );
-            None
-        }
-    }
-}
-
-async fn reconcile_servers(
-    manager: &mut McpServerManager,
-    ctx: &mut McpActorContext,
-    desired: Vec<McpServer>,
-) {
-    let desired_ids: BTreeSet<String> = desired.iter().map(|s| s.id.clone()).collect();
-    ctx.configured = desired_ids.clone();
-
-    for server in &desired {
-        if ctx.known.contains(&server.id) {
-            continue;
-        }
-        let config = match build_mcp_server_config(server, &ctx.host.http_client, &ctx.tokens) {
-            Ok(cfg) => cfg,
-            Err(err) => {
-                tracing::warn!(
-                    server_id = %server.id,
-                    error = %err,
-                    "skip reconcile-added mcp server: config build failed"
-                );
-                continue;
-            }
-        };
-        manager.register_server_with_options(
-            config,
-            McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
-        );
-        let server_uid = McpServerId::new(server.id.clone());
-        match connect_and_log(manager, &server_uid, "reconcile_add").await {
-            Ok(()) => {
-                ctx.known.insert(server.id.clone());
-            }
-            Err(err) if err.auth_required => {
-                // Mark known only once the auth prompt is created, so a
-                // transient auth-flow failure leaves the server out of `known`
-                // and the next reconcile retries the prompt instead of
-                // stranding the integration unprompted for the thread.
-                match create_auth_notice(
-                    &ctx.host,
-                    &ctx.thread_id,
-                    &server.id,
-                    &server.url,
-                    &ctx.tokens,
-                )
-                .await
-                {
-                    Some(notice) => {
-                        ctx.known.insert(server.id.clone());
-                        if ctx.inbox_tx.send(notice).is_err() {
-                            tracing::warn!(
-                                server_id = %server.id,
-                                "drop reconcile auth notice: thread inbox closed"
-                            );
-                        }
-                    }
-                    None => {
-                        tracing::warn!(
-                            server_id = %server.id,
-                            "reconcile auth prompt failed; will retry on next reconcile"
-                        );
-                    }
-                }
-            }
-            Err(_) => {
-                // Transient transport failure on connect: leave out of `known`
-                // so a later reconcile re-attempts the connect. The server
-                // stays in `configured`, so a manual mcp_force_reconnect is
-                // still allowed to retry it immediately.
-            }
-        }
-    }
-
-    let removed: Vec<String> = ctx
-        .known
-        .iter()
-        .filter(|id| !desired_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in removed {
-        let server_uid = McpServerId::new(id.clone());
-        if let Err(err) = manager.disconnect_server(&server_uid).await {
-            // Keep the id in `known` so the next reconcile retries the detach;
-            // dropping it now would remove it from the `removed` diff forever,
-            // leaving the server connected for the thread's lifetime.
-            tracing::warn!(server_id = %id, error = %err, "reconcile disconnect failed; will retry");
-            continue;
-        }
-        ctx.known.remove(&id);
-    }
-}
-
-struct McpConnectFailure {
-    message: String,
-    auth_required: bool,
-}
-
-async fn connect_and_log(
-    manager: &mut McpServerManager,
-    server_id: &McpServerId,
-    action: &'static str,
-) -> Result<(), McpConnectFailure> {
-    match manager.connect_server(server_id).await {
-        Ok(handle) => {
-            tracing::info!(
-                server_id = %server_id,
-                tools = handle.snapshot().tools.len(),
-                action,
-                "mcp connect ok"
-            );
-            Ok(())
-        }
-        Err(e) => {
-            let auth_required = matches!(e, McpError::AuthRequired(_));
-            tracing::warn!(server_id = %server_id, error = %e, action, "mcp connect failed");
-            Err(McpConnectFailure {
-                message: e.to_string(),
-                auth_required,
-            })
-        }
-    }
-}
-
-fn build_mcp_server_config(
-    server: &McpServer,
-    http_client: &reqwest::Client,
-    tokens: &TokenRegistry,
-) -> Result<McpServerConfig, RunnerError> {
-    let mut server_headers = http::HeaderMap::new();
-    for (k, v) in &server.headers {
-        let name = http::HeaderName::from_bytes(k.as_bytes()).map_err(|source| {
-            RunnerError::McpHeaderName {
-                server: server.id.clone(),
-                name: k.clone(),
-                source,
-            }
-        })?;
-        let value =
-            http::HeaderValue::from_str(v).map_err(|source| RunnerError::McpHeaderValue {
-                server: server.id.clone(),
-                name: k.clone(),
-                source,
-            })?;
-        server_headers.insert(name, value);
-    }
-    let mcp_http = Arc::new(McpRotatingClient::new(
-        http_client.clone(),
-        tokens.clone(),
-        server_headers,
-    ));
-    let transport = StreamableHttpTransportConfig::new(&server.url).with_http_client(mcp_http);
-    Ok(McpServerConfig::new(
-        &server.id,
-        McpTransportBinding::StreamableHttp(transport),
-    ))
-}
-
-async fn run_mcp_actor(
-    mut manager: McpServerManager,
-    mut cmd_rx: mpsc::Receiver<McpCmd>,
-    mut ctx: McpActorContext,
-) {
-    while let Some(cmd) = cmd_rx.recv().await {
-        match cmd {
-            McpCmd::ForceReconnect { server_id, reply } => {
-                // Reject ids that aren't part of the assistant's current
-                // configuration. `disconnect_server` only clears `connections`;
-                // the underlying config lingers in the manager for the thread's
-                // lifetime (agentkit-mcp exposes no unregister path). Gating on
-                // `configured` (not `known`) lets a user retry a configured
-                // server that is not yet connected, while still refusing to
-                // resurrect one that has been detached from the configuration.
-                if !ctx.configured.contains(server_id.0.as_str()) {
-                    let _ = reply.send(Err(format!(
-                        "mcp server {server_id} is not part of this assistant's current configuration"
-                    )));
-                    continue;
-                }
-                if let Err(e) = manager.disconnect_server(&server_id).await {
-                    tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
-                }
-                let result = connect_and_log(&mut manager, &server_id, "force_reconnect")
-                    .await
-                    .map_err(|err| err.message);
-                let _ = reply.send(result);
-            }
-            McpCmd::Reconcile { desired } => {
-                reconcile_servers(&mut manager, &mut ctx, desired).await;
-            }
-        }
-    }
+fn mcp_disclosure_item(servers: &[McpServer]) -> String {
+    let ids: Vec<&str> = servers.iter().map(|s| s.id.as_str()).collect();
+    format!(
+        "<mcp-servers>\nAttached MCP servers: {ids}.\nTheir tools are not present in the \
+         declared tool schema. Use the tool_search tool to discover tool schemas and \
+         per-server connection status, including authorization links for servers that \
+         require auth. Call a discovered tool by its exact name — directly, or from a \
+         compose script via tool(name, input). Servers connect on first search, so an \
+         empty result before any search only means discovery has not run yet.\n</mcp-servers>",
+        ids = ids.join(", "),
+    )
 }
 
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
-    mut inbox: UnboundedReceiver<String>,
+    mut inbox: UnboundedReceiver<RunnerContent>,
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
     thread_id: String,
@@ -834,7 +553,7 @@ where
                     drained_into_items(drained)
                 } else {
                     match inbox.recv().await {
-                        Some(msg) => vec![Item::text(ItemKind::User, &msg)],
+                        Some(msg) => vec![user_content_item(&msg)],
                         None => return Ok("inbox closed"),
                     }
                 };
@@ -878,14 +597,11 @@ async fn compact_at_turn_end<S: ModelSession>(
     }
 }
 
-fn drained_into_items(drained: Vec<String>) -> Vec<Item> {
-    drained
-        .into_iter()
-        .map(|s| Item::text(ItemKind::User, &s))
-        .collect()
+fn drained_into_items(drained: Vec<RunnerContent>) -> Vec<Item> {
+    drained.iter().map(user_content_item).collect()
 }
 
-fn drain(inbox: &mut UnboundedReceiver<String>) -> Vec<String> {
+fn drain(inbox: &mut UnboundedReceiver<RunnerContent>) -> Vec<RunnerContent> {
     let mut out = Vec::new();
     while let Ok(msg) = inbox.try_recv() {
         out.push(msg);
@@ -905,17 +621,81 @@ fn mark_idle(idle_since: &Arc<Mutex<Option<Instant>>>) {
     }
 }
 
+/// Builds a user item from a content union. Text maps to `TextPart`s and
+/// image parts map to agentkit `MediaPart`s, which the completions adapter
+/// sends upstream as `image_url` content. The wire `detail` hint has no
+/// agentkit slot and is dropped at this boundary.
+fn user_content_item(content: &RunnerContent) -> Item {
+    let parts = match content {
+        RunnerContent::Text(text) => vec![Part::Text(TextPart::new(text.clone()))],
+        RunnerContent::Parts(parts) => parts
+            .iter()
+            .map(|part| match part {
+                RunnerContentPart::Text { text } => Part::Text(TextPart::new(text.clone())),
+                RunnerContentPart::ImageUrl { image_url } => Part::Media(MediaPart::new(
+                    Modality::Image,
+                    image_mime_type(&image_url.url),
+                    DataRef::Uri(image_url.url.clone()),
+                )),
+            })
+            .collect(),
+    };
+    Item::new(ItemKind::User, parts)
+}
+
+/// Best-effort mime type for an image `MediaPart`. The completions adapter
+/// passes URI data refs through untouched, so this is informational only.
+fn image_mime_type(url: &str) -> String {
+    url.strip_prefix("data:")
+        .and_then(|rest| rest.split([';', ',']).next())
+        .filter(|mime| !mime.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| "image/*".to_string())
+}
+
+/// Plain-text projection for roles whose outbound messages cannot carry
+/// media (the completions adapter rejects `Media` parts outside user
+/// items): text parts join with newlines and image parts leave a visible
+/// placeholder instead of being silently dropped.
+fn text_with_image_placeholders(content: &RunnerContent) -> String {
+    match content {
+        RunnerContent::Text(text) => text.clone(),
+        RunnerContent::Parts(parts) => {
+            let mut buf = String::new();
+            for part in parts {
+                let piece = match part {
+                    RunnerContentPart::Text { text } => text.clone(),
+                    RunnerContentPart::ImageUrl { image_url }
+                        if image_url.url.starts_with("data:") =>
+                    {
+                        "[image: inline data]".to_string()
+                    }
+                    RunnerContentPart::ImageUrl { image_url } => {
+                        format!("[image: {}]", image_url.url)
+                    }
+                };
+                if !buf.is_empty() {
+                    buf.push('\n');
+                }
+                buf.push_str(&piece);
+            }
+            buf
+        }
+    }
+}
+
 fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError> {
     let mut items = Vec::with_capacity(history.len());
     for message in history {
         match message.role.as_str() {
             "user" => {
-                items.push(Item::text(ItemKind::User, &message.content));
+                items.push(user_content_item(&message.content));
             }
             "assistant" => {
                 let mut parts: Vec<Part> = Vec::new();
-                if !message.content.is_empty() {
-                    parts.push(Part::Text(TextPart::new(message.content.clone())));
+                let text = text_with_image_placeholders(&message.content);
+                if !text.is_empty() {
+                    parts.push(Part::Text(TextPart::new(text)));
                 }
                 for call in &message.tool_calls {
                     let input: Value = if call.arguments.is_empty() {
@@ -946,12 +726,15 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
                     ItemKind::Tool,
                     vec![Part::ToolResult(ToolResultPart::success(
                         call_id,
-                        ToolOutput::text(message.content.clone()),
+                        ToolOutput::text(text_with_image_placeholders(&message.content)),
                     ))],
                 ));
             }
             "system" => {
-                items.push(Item::text(ItemKind::System, &message.content));
+                items.push(Item::text(
+                    ItemKind::System,
+                    text_with_image_placeholders(&message.content),
+                ));
             }
             other => {
                 return Err(RunnerError::UnsupportedHistoryRole(other.to_string()));
@@ -962,7 +745,7 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::http_layer::{TokenRegistry, build_bootstrap_client};
@@ -982,14 +765,17 @@ mod tests {
             threads: DashMap::new(),
             gram_client,
             thread_idle_ttl: Duration::from_secs(60 * 30),
-            http_client,
+            mcp_http_client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("MCP HTTP client should build"),
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
             initial_token: String::new(),
         })
     }
 
     fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
-        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<String>();
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
         let (mcp_cmd_tx, _mcp_cmd_rx) = mpsc::channel::<McpCmd>(1);
         let handle = tokio::spawn(async {});
         let configured = Arc::new(ConfiguredThread {
@@ -1072,5 +858,89 @@ mod tests {
             host.seen.get("other:evt-1").is_some(),
             "unrelated idempotency keys must survive eviction"
         );
+    }
+
+    fn image_part(url: &str) -> RunnerContentPart {
+        RunnerContentPart::ImageUrl {
+            image_url: crate::wire::RunnerImageUrl {
+                url: url.to_string(),
+                detail: None,
+            },
+        }
+    }
+
+    #[test]
+    fn normalize_history_text_content_matches_legacy_shape() {
+        let history = vec![RunnerMessage {
+            role: "user".to_string(),
+            content: RunnerContent::Text("hello".to_string()),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }];
+        let items = normalize_history(&history).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, ItemKind::User);
+        assert_eq!(
+            items[0].parts,
+            vec![Part::Text(TextPart::new("hello"))],
+            "text-only content must normalize exactly as the plain-string wire did"
+        );
+    }
+
+    #[test]
+    fn normalize_history_user_image_parts_become_media() {
+        let history = vec![RunnerMessage {
+            role: "user".to_string(),
+            content: RunnerContent::Parts(vec![
+                RunnerContentPart::Text {
+                    text: "look at this".to_string(),
+                },
+                image_part("https://example.com/cat.png"),
+            ]),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }];
+        let items = normalize_history(&history).unwrap();
+        assert_eq!(items[0].parts.len(), 2);
+        assert_eq!(items[0].parts[0], Part::Text(TextPart::new("look at this")));
+        let Part::Media(media) = &items[0].parts[1] else {
+            panic!("expected media part, got {:?}", items[0].parts[1]);
+        };
+        assert_eq!(media.modality, Modality::Image);
+        assert_eq!(
+            media.data,
+            DataRef::Uri("https://example.com/cat.png".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_history_assistant_image_parts_become_placeholder_text() {
+        // The completions adapter rejects Media parts on assistant items, so
+        // image parts surface as visible text placeholders instead.
+        let history = vec![RunnerMessage {
+            role: "assistant".to_string(),
+            content: RunnerContent::Parts(vec![
+                RunnerContentPart::Text {
+                    text: "here you go".to_string(),
+                },
+                image_part("https://example.com/out.png"),
+            ]),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }];
+        let items = normalize_history(&history).unwrap();
+        assert_eq!(
+            items[0].parts,
+            vec![Part::Text(TextPart::new(
+                "here you go\n[image: https://example.com/out.png]"
+            ))]
+        );
+    }
+
+    #[test]
+    fn image_mime_type_reads_data_uri_header() {
+        assert_eq!(image_mime_type("data:image/png;base64,AAAA"), "image/png");
+        assert_eq!(image_mime_type("data:image/jpeg,raw"), "image/jpeg");
+        assert_eq!(image_mime_type("https://example.com/a.png"), "image/*");
     }
 }

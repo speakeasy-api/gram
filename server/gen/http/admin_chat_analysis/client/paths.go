@@ -17,6 +17,11 @@ func UpsertWorkUnitsSettingsAdminChatAnalysisPath() string {
 	return "/rpc/adminChatAnalysis.upsertWorkUnitsSettings"
 }
 
+// UpsertBusinessMemorySettingsAdminChatAnalysisPath returns the URL path to the adminChatAnalysis service upsertBusinessMemorySettings HTTP endpoint.
+func UpsertBusinessMemorySettingsAdminChatAnalysisPath() string {
+	return "/rpc/adminChatAnalysis.upsertBusinessMemorySettings"
+}
+
 // TriggerAnalysisAdminChatAnalysisPath returns the URL path to the adminChatAnalysis service triggerAnalysis HTTP endpoint.
 func TriggerAnalysisAdminChatAnalysisPath() string {
 	return "/rpc/adminChatAnalysis.triggerAnalysis"

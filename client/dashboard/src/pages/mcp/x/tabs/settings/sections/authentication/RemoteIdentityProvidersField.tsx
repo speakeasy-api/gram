@@ -1,14 +1,14 @@
 import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Type } from "@/components/ui/type";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
+import { Text } from "@/components/ui/Text";
 import {
   formatRemoteSessionIssuerDisplay,
   remoteSessionScopeTier,
 } from "@/lib/sources";
 import { ScopeBadge } from "@/pages/remote-identity-providers/ScopeBadge";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
@@ -29,9 +29,9 @@ export function RemoteIdentityProvidersField({
   let providerControls: ReactNode;
   if (isLoading) {
     providerControls = (
-      <Type muted small>
+      <Text muted small>
         Loading...
-      </Type>
+      </Text>
     );
   } else if (associatedIssuers.length === 0) {
     providerControls = (
@@ -94,27 +94,27 @@ function RemoteIdentityProviderRow({
   const canEdit = remoteSessionScopeTier(issuer) === "project";
 
   return (
-    <div className="rounded-md border p-3">
+    <div className="border p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {issuer.logoAssetId ? (
           <AssetImage
             assetId={issuer.logoAssetId}
-            className="size-8 shrink-0 rounded"
+            className="size-8 shrink-0"
           />
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Type small className="truncate font-medium">
+            <Text small className="truncate font-medium">
               {formatRemoteSessionIssuerDisplay(issuer)}
-            </Type>
+            </Text>
             <ScopeBadge
               projectId={issuer.projectId}
               organizationId={issuer.organizationId}
             />
           </div>
-          <Type muted mono variant="small" className="break-all">
+          <Text muted mono variant="small" className="break-all">
             {issuer.issuer}
-          </Type>
+          </Text>
         </div>
         <RequireScope scope="mcp:write" level="component">
           <div className="flex shrink-0 items-center gap-2">

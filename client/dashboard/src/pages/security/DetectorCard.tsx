@@ -1,8 +1,9 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Switch } from "@/components/ui/switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import type { IconName } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,
@@ -49,7 +50,7 @@ export function DetectorCard({
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
+        "flex gap-3 border p-3 transition-colors",
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >

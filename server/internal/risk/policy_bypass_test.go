@@ -1,11 +1,13 @@
 package risk_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -14,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	oops "github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -208,7 +211,6 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     allUsersPolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   selector,
 	}))
@@ -254,7 +256,6 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     rolePolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{rolePrincipal},
 		Selector:   roleSelector,
 	}))
@@ -299,7 +300,6 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
 		Selector:   selector,
 	}))
@@ -336,7 +336,6 @@ func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *te
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     scopedPolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
 		Selector:   scopedSelector,
 	}))
@@ -348,7 +347,6 @@ func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *te
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     wholePolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, wholePolicyID),
 	}))
@@ -829,4 +827,229 @@ func principalsHaveRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organiz
 		return true
 	}
 	return false
+}
+
+func TestApproveAndRevokePolicyBypassRequest_AllowAllEditsBlockedList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	blockedURL := "https://sketchy.example.com/mcp"
+	otherBlockedURL := "https://bad.example.com/mcp"
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Allow All Bypass"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("allow_all"),
+		ShadowMcpBlockedUrls: []string{blockedURL, otherBlockedURL},
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, blockedURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "approved", approved.Status)
+	// Approval is project-wide under allow_all: the URL leaves the blocked
+	// list and no principal-scoped grant is minted.
+	assert.Empty(t, approved.GrantedPrincipalUrns)
+	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, blockedURL))
+
+	require.Equal(t, []string{otherBlockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
+
+	revoked, err := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "revoked", revoked.Status)
+
+	require.Equal(t, []string{otherBlockedURL, blockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
+}
+
+func TestDenyPolicyBypassRequest_AllowAllLeavesBlockedListUntouched(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	blockedURL := "https://sketchy.example.com/mcp"
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Allow All Deny"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("allow_all"),
+		ShadowMcpBlockedUrls: []string{blockedURL},
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, blockedURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	denied, err := ti.service.DenyRiskPolicyBypassRequest(ctx, &gen.DenyRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "denied", denied.Status)
+
+	require.Equal(t, []string{blockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
+}
+
+// withAgentKeyAuth rewrites the auth context to look like an API-key-
+// authenticated device agent: no session, the given key scopes, and the key
+// owner as the caller. Mirrors what internal/auth/key.go builds for a
+// Gram-Key request.
+func withAgentKeyAuth(t *testing.T, ctx context.Context, scopes []string, ownerUserID string) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.APIKeyScopes = scopes
+	clone.SessionID = nil
+	clone.UserID = ownerUserID
+	return contextvalues.SetAuthContext(ctx, &clone)
+}
+
+// The device agent files the request with the per-user `agent_user` key. Its
+// owner is the enrolled user, so the token's requester binding passes and the
+// request is attributed to the key owner.
+func TestCreateRiskPolicyBypassRequest_AgentUserKeyCreatesForKeyOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Key Bypass Request"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/agent-key"
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL)
+
+	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+
+	keyCtx := withAgentKeyAuth(t, ctx, []string{"agent_user"}, authCtx.UserID)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(keyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	assert.Equal(t, "requested", request.Status)
+	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
+	require.NotNil(t, request.TargetKey)
+	assert.Equal(t, fullURL, *request.TargetKey)
+
+	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAuditCount+1, afterAuditCount, "key-auth create must audit like the session path")
+}
+
+// A key owned by anyone other than the token's requester must not redeem it —
+// the same binding that stops a leaked link stops a leaked or wrong key.
+func TestCreateRiskPolicyBypassRequest_OtherUsersKeyForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Key Bypass Wrong Owner"),
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/wrong-owner")
+
+	keyCtx := withAgentKeyAuth(t, ctx, []string{"agent_user"}, "user_someone_else")
+	_, err = ti.service.CreateRiskPolicyBypassRequest(keyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The shared org install key (`agent` scope) is owned by the provisioning
+// admin, not the developer named in an attributed token — it must not be able
+// to file requests on that developer's behalf. The daemon only ever uses the
+// per-user key for this call; this pins the server-side backstop.
+func TestCreateRiskPolicyBypassRequest_OrgKeyAttributedTokenForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Org Key Bypass Request"),
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/org-key")
+
+	orgKeyCtx := withAgentKeyAuth(t, ctx, []string{"agent", "agent_user"}, "user_provisioning_admin")
+	_, err = ti.service.CreateRiskPolicyBypassRequest(orgKeyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The `agent_user` scope gate lives in the generated security wiring — the
+// design's Security(ByKey, Scope("agent_user")) becomes the key scheme's
+// RequiredScopes in gen/risk — not in the handler, so the direct-call tests
+// above cannot see it. Drive the generated endpoint with a recording
+// authorizer to pin that boundary: key auth must demand agent_user, and an
+// authorization failure must short-circuit before the service method runs.
+func TestCreateRiskPolicyBypassRequest_EndpointKeyAuthDemandsAgentUserScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	var schemes []*security.APIKeyScheme
+	forbidden := oops.C(oops.CodeForbidden)
+	endpoint := gen.NewCreateRiskPolicyBypassRequestEndpoint(ti.service,
+		func(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+			schemes = append(schemes, scheme)
+			return ctx, forbidden
+		})
+
+	_, err := endpoint(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		SessionToken: nil,
+		ApikeyToken:  new("gram_test_key"),
+		RequestToken: "rpbr2.never-redeemed",
+	})
+	require.Equal(t, forbidden, err, "the authorizer's rejection must surface, not a handler error")
+
+	require.Len(t, schemes, 2, "session scheme tried first, then the key scheme")
+	require.Equal(t, "session", schemes[0].Name)
+	require.Empty(t, schemes[0].RequiredScopes)
+	require.Equal(t, "apikey", schemes[1].Name)
+	require.Equal(t, []string{"agent_user"}, schemes[1].RequiredScopes,
+		"key auth must demand agent_user; removing the design's Scope() regenerates this away and fails here")
 }

@@ -67,10 +67,7 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 
 	svc := variations.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)

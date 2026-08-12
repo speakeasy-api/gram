@@ -136,3 +136,50 @@ SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
 WHERE organization_id = @organization_id
 ORDER BY last_seen_at DESC;
+
+-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id;
+
+-- AcquireDeviceAgentConfigurationLock serializes configuration updates for an
+-- organization even when no row exists yet — FOR UPDATE cannot lock an absent
+-- row, so two concurrent first-time saves would otherwise both audit a nil
+-- before-snapshot. Transaction-scoped: released automatically at
+-- commit/rollback.
+
+-- name: AcquireDeviceAgentConfigurationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || @organization_id::text, 0));
+
+-- GetDeviceAgentConfigurationForUpdate locks the row for the update
+-- transaction so the unknown-key merge and audit before-snapshot cannot read
+-- a config replaced beneath them.
+
+-- name: GetDeviceAgentConfigurationForUpdate :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
+-- UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+-- @config is the already-merged result computed by UpdateConfiguration under
+-- the org advisory lock, where stored keys outside the caller's replaceable
+-- set (unknown keys, platform-admin-only keys for org admins) were carried
+-- over. Do not call this with a raw client payload.
+
+-- name: UpsertDeviceAgentConfiguration :one
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  @organization_id,
+  @schema_version,
+  @config::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at;

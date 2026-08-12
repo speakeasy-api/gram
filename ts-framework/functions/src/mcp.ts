@@ -336,11 +336,23 @@ export function fromGram(
           req.params._meta?.["io.modelcontextprotocol/clientInfo"],
         ) ?? normalizeClientInfo(server.getClientVersion());
 
+      // The OAuth client id rides the same untrusted `_meta` block. Nothing
+      // here verifies it — this server is reachable directly, so the value is
+      // whatever the caller sent. It is carried for attribution only, and
+      // `ctx.oauthClientId` documents that it must never gate access.
+      const rawOAuthClientId = req.params._meta?.["gram.ai/oauth-client-id"];
+      const oauthClientId =
+        typeof rawOAuthClientId === "string" && rawOAuthClientId !== ""
+          ? rawOAuthClientId
+          : undefined;
+
       let resp: Response;
       try {
         resp = (await g.handleToolCall({ name, input: args } as any, {
           signal: extra.signal,
           clientInfo,
+          oauthClientId,
+          meta: req.params._meta,
         })) as Response;
       } catch (err) {
         // `ctx.fail()` and input validation failures reject with a `Response`

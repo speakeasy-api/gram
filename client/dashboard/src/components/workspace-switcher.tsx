@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
-import { Button } from "./ui/button";
+import { Button } from "./ui/Button";
 import {
   Command,
   CommandEmpty,
@@ -15,8 +15,12 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "./ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+} from "@/components/ui/Command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 
 export function WorkspaceSwitcher(): JSX.Element {
   const organization = useOrganization();
@@ -56,20 +60,20 @@ export function WorkspaceSwitcher(): JSX.Element {
     const orgColors = getGradientColors(organization.id);
     const orgInitial = orgLabel.charAt(0).toUpperCase();
     const rowClass =
-      "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0";
+      "flex w-full items-center gap-2 border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0";
     const content = (
       <>
         <div
           className={cn(
             "flex shrink-0 items-center justify-center transition-shadow",
-            "group-data-[collapsible=icon]:ring-border/50 group-data-[collapsible=icon]:bg-card group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:ring-1",
+            "group-data-[collapsible=icon]:ring-border/50 group-data-[collapsible=icon]:bg-card group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:ring-1",
             isMultiOrg &&
               "group-data-[collapsible=icon]:hover:ring-foreground/15 group-data-[collapsible=icon]:hover:ring-2",
           )}
         >
           <div
             aria-label={orgLabel}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:text-[14px]"
+            className="flex size-6 shrink-0 items-center justify-center bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:text-[14px]"
             style={{
               backgroundImage: `linear-gradient(${orgColors.angle}deg, ${orgColors.from}, ${orgColors.to})`,
             }}
@@ -109,12 +113,14 @@ export function WorkspaceSwitcher(): JSX.Element {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            variant="ghost"
-            className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
+            variant="tertiary"
+            className="h-auto w-full justify-start gap-2 border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
+            {/* rounded-none: keep the square tile idiom over ProjectAvatar's
+                rounded-full default. */}
             <ProjectAvatar
               project={project}
-              className="h-5 w-5 shrink-0 rounded"
+              className="h-5 w-5 shrink-0 rounded-none"
             />
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
               {project?.name || project?.slug || projectSlug}
@@ -134,14 +140,23 @@ export function WorkspaceSwitcher(): JSX.Element {
                     <CommandItem
                       key={p.id}
                       value={p.slug}
+                      // Let search match the display name as well as the slug.
+                      keywords={p.name ? [p.name] : undefined}
                       onSelect={() => handleProjectSelect(p.slug)}
                       className="flex cursor-pointer items-center gap-2"
                     >
                       <ProjectAvatar
                         project={p}
-                        className="h-5 w-5 shrink-0 rounded"
+                        className="h-5 w-5 shrink-0 rounded-none"
                       />
-                      <span className="flex-1 truncate">{p.slug}</span>
+                      <span className="flex-1 truncate">
+                        {p.name || p.slug}
+                      </span>
+                      {p.name && p.name !== p.slug && (
+                        <span className="text-muted-foreground max-w-[80px] truncate font-mono text-xs">
+                          {p.slug}
+                        </span>
+                      )}
                       {p.id === project.id && (
                         <CheckIcon className="h-4 w-4 shrink-0" />
                       )}

@@ -128,6 +128,7 @@ func TestMockServer_CreateMessage_Success(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	eventID := "evt_1"
+	appID := "app_123"
 	wantOut := &models.MessageOut{
 		Id:        "msg_123",
 		EventId:   &eventID,
@@ -136,7 +137,10 @@ func TestMockServer_CreateMessage_Success(t *testing.T) {
 		Timestamp: time.Now().UTC().Truncate(time.Second),
 	}
 
-	srv.On("CreateMessage", mock.Anything, mock.MatchedBy(func(in *models.MessageIn) bool {
+	// Matching on the concrete app id pins down that the id in the request path
+	// reaches CreateMessage: it is the only signal that says which Svix
+	// application a message was addressed to.
+	srv.On("CreateMessage", mock.Anything, appID, mock.MatchedBy(func(in *models.MessageIn) bool {
 		return in != nil && in.EventType == "user.created" &&
 			in.EventId != nil && *in.EventId == eventID &&
 			in.Payload["hello"] == "world"
@@ -144,7 +148,7 @@ func TestMockServer_CreateMessage_Success(t *testing.T) {
 
 	client := newSDKClient(t, srv.URL())
 
-	got, err := client.Message.Create(context.Background(), "app_123", models.MessageIn{
+	got, err := client.Message.Create(context.Background(), appID, models.MessageIn{
 		EventId:   &eventID,
 		EventType: "user.created",
 		Payload:   map[string]any{"hello": "world"},
@@ -164,7 +168,7 @@ func TestMockServer_CreateMessage_Error(t *testing.T) {
 	srv := svixtest.NewMockServer(logger)
 	t.Cleanup(srv.Close)
 
-	srv.On("CreateMessage", mock.Anything, mock.AnythingOfType("*models.MessageIn")).
+	srv.On("CreateMessage", mock.Anything, mock.Anything, mock.AnythingOfType("*models.MessageIn")).
 		Return((*models.MessageOut)(nil), errors.New("publish failed")).Once()
 
 	client := newSDKClient(t, srv.URL())

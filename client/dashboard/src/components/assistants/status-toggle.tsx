@@ -1,5 +1,5 @@
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   Assistant,
@@ -7,7 +7,7 @@ import {
 } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MouseEvent } from "react";
 import { toast } from "sonner";
@@ -66,9 +66,9 @@ export function AssistantStatusToggle({
           aria-label={`${isActive ? "Pause" : "Activate"} assistant ${assistant.name}`}
         />
       </div>
-      <Type small muted>
+      <Text small muted>
         {isActive ? "Active" : "Paused"}
-      </Type>
+      </Text>
     </Stack>
   );
 }

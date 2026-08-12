@@ -1,4 +1,4 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { chatOwnerDisplay, unresolvedChatOwnerTooltip } from "@/lib/chat-owner";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { JSX } from "react";

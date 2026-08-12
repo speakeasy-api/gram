@@ -21,9 +21,7 @@ vi.mock("@/routes", () => ({
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
-vi.mock("@speakeasy-api/moonshine", async (orig) => ({
-  ...(await orig<typeof import("@speakeasy-api/moonshine")>()),
-  ThemeSwitcher: () => <div data-testid="theme-switcher" />,
+vi.mock("@/components/ui/Dropdown", () => ({
   // Radix DropdownMenu requires pointerDown+click to open in happy-dom.
   // Stub the full primitive family so content is always rendered and
   // fireEvent.click on the trigger is sufficient.
@@ -59,6 +57,10 @@ vi.mock("@speakeasy-api/moonshine", async (orig) => ({
         {children}
       </button>
     ),
+}));
+
+vi.mock("@/components/ui/ThemeSwitcher", () => ({
+  ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
 import { SidebarUserMenu } from "./sidebar-user-menu";

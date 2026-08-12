@@ -32,5 +32,9 @@ go fmt ./infra/gen/descriptors.go
 
 go run ./infra/main.go gen-cc
 
+# Regenerate the statically typed topic registry. This must follow buf generate:
+# the emitted switch imports the generated Go package for every topic message.
+go run ./infra/main.go gen-topics
+
 # Regenerate the Pub/Sub topology diagram from the freshly built descriptors.
 mise run gen:infra-diagrams

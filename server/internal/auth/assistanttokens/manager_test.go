@@ -179,6 +179,70 @@ func TestCheckRevocation_assistantScoped(t *testing.T) {
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil))
 }
 
+func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
+	t.Parallel()
+
+	manager := New("test-secret", nil, nil)
+	assistantID := uuid.New()
+	attemptID := uuid.NewString()
+	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
+		OrgID:             "org-test",
+		ProjectID:         uuid.New(),
+		UserID:            "user-test",
+		AssistantID:       assistantID,
+		ThreadID:          uuid.New(),
+		AttemptID:         attemptID,
+		FlowID:            assistantID.String(),
+		ServerID:          "server-test",
+		McpURL:            "https://mcp.example.com/mcp/test",
+		ClientID:          "client-test",
+		ClientSecret:      "encrypted-secret",
+		RedirectURI:       "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback",
+		CodeVerifier:      "encrypted-verifier",
+		TokenEndpoint:     "https://auth.example.com/token",
+		OAuthServerIssuer: "https://auth.example.com",
+		TTL:               time.Minute,
+	})
+	require.NoError(t, err)
+
+	claims, err := manager.ValidateMCPAuthFlow(token)
+	require.NoError(t, err)
+	require.Equal(t, assistantID.String(), claims.FlowID)
+	require.Equal(t, attemptID, claims.ID)
+	require.Equal(t, "https://auth.example.com", claims.OAuthServerIssuer)
+}
+
+func TestMCPAuthFlowDefaultsAttemptToLegacyFlowID(t *testing.T) {
+	t.Parallel()
+
+	manager := New("test-secret", nil, nil)
+	flowID := uuid.NewString()
+	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
+		OrgID:             "org-test",
+		ProjectID:         uuid.New(),
+		UserID:            "user-test",
+		AssistantID:       uuid.New(),
+		ThreadID:          uuid.New(),
+		AttemptID:         "",
+		FlowID:            flowID,
+		ServerID:          "server-test",
+		McpURL:            "https://mcp.example.com/mcp/test",
+		ClientID:          "client-test",
+		ClientSecret:      "encrypted-secret",
+		RedirectURI:       "https://gram.example.com/rpc/assistantMcpAuth/" + flowID + "/oauth/callback",
+		CodeVerifier:      "encrypted-verifier",
+		TokenEndpoint:     "https://auth.example.com/token",
+		OAuthServerIssuer: "",
+		TTL:               time.Minute,
+	})
+	require.NoError(t, err)
+
+	claims, err := manager.ValidateMCPAuthFlow(token)
+	require.NoError(t, err)
+	require.Equal(t, flowID, claims.FlowID)
+	require.Equal(t, flowID, claims.ID)
+}
+
 func TestCheckRevocation_assistantScoped_assistantPaused(t *testing.T) {
 	t.Parallel()
 

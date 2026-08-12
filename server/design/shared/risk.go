@@ -69,8 +69,8 @@ func RiskPolicyAudienceTypeEnum() {
 // immutable after create — switching posture requires deleting and recreating
 // the policy.
 //
-// Must stay in sync with the ShadowMCPDisposition* constants in
-// server/internal/risk/shadow_mcp_policy_setup.go.
+// Must stay in sync with the Disposition* constants in
+// server/internal/shadowmcp/disposition.go.
 func RiskPolicyShadowMCPDispositionEnum() {
 	Enum("block_all", "allow_all")
 }
@@ -164,7 +164,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
-	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
+	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
@@ -286,6 +286,10 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("false_positive_at", String, "When this result was manually marked as a false positive. Null when not dismissed.", func() {
+		Format(FormatDateTime)
+	})
+
 	Required("id", "policy_id", "policy_version", "source", "created_at")
 })
 

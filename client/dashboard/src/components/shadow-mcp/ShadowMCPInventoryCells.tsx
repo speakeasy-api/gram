@@ -1,6 +1,8 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
 
 function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -20,9 +22,9 @@ export function ShadowMCPInventoryServerCell({
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex items-center gap-2">
-        <Type variant="small" className="truncate font-medium">
+        <Text variant="small" className="truncate font-medium">
           {shadowMCPInventoryServerLabel(server)}
-        </Type>
+        </Text>
         {server.requestCount > 0 && (
           <Badge variant="warning" size="sm" background={false}>
             <Badge.LeftIcon>
@@ -35,14 +37,14 @@ export function ShadowMCPInventoryServerCell({
           </Badge>
         )}
       </div>
-      <Type
+      <Text
         muted
         small
         className="truncate text-xs"
         title={server.canonicalServerUrl}
       >
         {server.canonicalServerUrl}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -52,14 +54,22 @@ export function ShadowMCPInventoryUsageCell({
 }: {
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
+  // No per-row trend series is available on ShadowMCPInventoryServer (only
+  // aggregate counts), so there is no sparkline here. The 2px destructive left
+  // edge flags servers with pending access requests (signal-row idiom).
   return (
-    <div className="space-y-1">
-      <Type variant="small">
+    <div
+      className={cn(
+        "space-y-1",
+        server.requestCount > 0 && "border-destructive-default border-l-2 pl-2",
+      )}
+    >
+      <Text variant="small">
         {countLabel(server.observedUseCount, "call", "calls")}
-      </Type>
-      <Type muted small className="text-xs">
+      </Text>
+      <Text muted small className="text-xs">
         {countLabel(server.userCount, "user", "users")}
-      </Type>
+      </Text>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
@@ -12,7 +12,7 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
@@ -81,14 +81,14 @@ export function SkillDistributionsSection({
   return (
     <div className="space-y-3">
       {distributions.length === 0 ? (
-        <div className="border-border rounded-xl border border-dashed p-6">
-          <Type small muted>
+        <div className="border-border border border-dashed p-6">
+          <Text small muted>
             Not distributed to any plugins yet. Use the banner above to
             distribute this skill.
-          </Type>
+          </Text>
         </div>
       ) : (
-        <ul className="border-border bg-card divide-y overflow-hidden rounded-xl border">
+        <ul className="border-border bg-card divide-y overflow-hidden border">
           {distributions.map((distribution) => (
             <li
               key={distribution.id}
@@ -101,14 +101,14 @@ export function SkillDistributionsSection({
                 >
                   {distribution.pluginName}
                 </Link>
-                <Type
+                <Text
                   small
                   muted
                   className="block text-xs"
                   title={dateTimeFormatters.full.format(distribution.createdAt)}
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
-                </Type>
+                </Text>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <VersionTrackingBadge distribution={distribution} />
@@ -119,8 +119,8 @@ export function SkillDistributionsSection({
                 >
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="tertiary"
+                    size="sm"
                     tooltip="Remove from plugin"
                     aria-label={`Remove from ${distribution.pluginName}`}
                     className="hover:text-destructive"
@@ -138,7 +138,7 @@ export function SkillDistributionsSection({
 
       {distributionsQuery.hasNextPage && (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={distributionsQuery.isFetchingNextPage}
           onClick={() => void distributionsQuery.fetchNextPage()}

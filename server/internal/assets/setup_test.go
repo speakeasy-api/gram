@@ -82,9 +82,6 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := assets.NewService(logger,
@@ -97,11 +94,10 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 		"test-jwt-secret",
 		authz.NewEngine(logger,
 			conn,
-			chConn,
-			authztest.RBACAlwaysEnabled,
+
 			authztest.ChallengeLoggingAlwaysDisabled,
-			workos.NewStubClient(),
-		),
+			workos.NewStubClient()),
+
 		auditLogger,
 	)
 	repository := repo.New(conn)

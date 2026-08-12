@@ -1,10 +1,12 @@
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -125,9 +127,9 @@ function DeleteRemoteIdentityProviderDialogBody({
       </Dialog.Header>
 
       <div className="grid gap-2">
-        <Type small>
+        <Text small>
           To confirm, type the issuer URL: <strong>{issuer.issuer}</strong>
-        </Type>
+        </Text>
         <Input
           value={confirmation}
           onChange={setConfirmation}

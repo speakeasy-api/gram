@@ -6,7 +6,7 @@ import type {
   ThemeTypes,
 } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import type { ReactNode } from "react";
 
 export type SkillTextDiffProps<Annotation> = {
@@ -50,7 +50,7 @@ export default function SkillTextDiff<Annotation = undefined>({
     <HighlightProvider langs={["markdown"]}>
       {/* The diff paints its own square-cornered surface, so it is clipped to
           the rounded border rather than allowed to cut through it. */}
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden border">
         <MultiFileDiff
           oldFile={{ name: oldLabel, contents: oldContent, lang: "markdown" }}
           newFile={{ name: newLabel, contents: newContent, lang: "markdown" }}

@@ -63,14 +63,11 @@ func newTestServiceWithInsights(t *testing.T, insights skillefficacy.InsightsRea
 	require.NoError(t, err)
 	redisClient, err := infra.NewRedisClient(t, 11)
 	require.NoError(t, err)
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return ctx, &testInstance{
 		service:  skillefficacy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), insights),

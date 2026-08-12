@@ -1,4 +1,4 @@
-import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandGroup, CommandItem } from "@/components/ui/Command";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
@@ -12,7 +12,8 @@ import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-quer
 import { useRiskListPolicyBypassRequestsSuspense } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
-import { Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { type IconName } from "@/components/ui/Icon/names";
 import { Suspense, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";

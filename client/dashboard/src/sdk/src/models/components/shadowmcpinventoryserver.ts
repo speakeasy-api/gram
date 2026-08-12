@@ -23,6 +23,10 @@ export type Access = ClosedEnum<typeof Access>;
 export type ShadowMCPInventoryServer = {
   access: Access;
   allowedPolicyIds: Array<string>;
+  /**
+   * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
+   */
+  blockedPolicyIds: Array<string>;
   canonicalServerUrl: string;
   firstSeen: Date;
   lastCalled?: Date | undefined;
@@ -50,6 +54,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.object({
     access: Access$inboundSchema,
     allowed_policy_ids: z.array(z.string()),
+    blocked_policy_ids: z.array(z.string()),
     canonical_server_url: z.string(),
     first_seen: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -74,6 +79,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "allowed_policy_ids": "allowedPolicyIds",
+      "blocked_policy_ids": "blockedPolicyIds",
       "canonical_server_url": "canonicalServerUrl",
       "first_seen": "firstSeen",
       "last_called": "lastCalled",

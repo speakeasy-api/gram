@@ -1941,7 +1941,9 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	if v == nil {
 		return nil
 	}
-	res := &HookIngestDataRequestBody{}
+	res := &HookIngestDataRequestBody{
+		McpInventoryCollected: v.McpInventoryCollected,
+	}
 	if v.Prompt != nil {
 		res.Prompt = marshalHooksHookPromptDataToHookPromptDataRequestBody(v.Prompt)
 	}
@@ -2205,7 +2207,9 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	if v == nil {
 		return nil
 	}
-	res := &hooks.HookIngestData{}
+	res := &hooks.HookIngestData{
+		McpInventoryCollected: v.McpInventoryCollected,
+	}
 	if v.Prompt != nil {
 		res.Prompt = marshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
 	}

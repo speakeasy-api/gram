@@ -112,6 +112,7 @@ export function setListChatsData(
     parameters: {
       search?: string | undefined;
       externalUserId?: string | undefined;
+      userId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
       sourceKind?: string | undefined;
@@ -144,6 +145,7 @@ export function invalidateListChats(
     [parameters: {
       search?: string | undefined;
       externalUserId?: string | undefined;
+      userId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
       sourceKind?: string | undefined;

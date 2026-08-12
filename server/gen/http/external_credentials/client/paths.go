@@ -52,6 +52,16 @@ func GetGcpIamCredentialExternalCredentialsPath() string {
 	return "/rpc/externalCredentials.getGcpIam"
 }
 
+// VerifyGcpIamCredentialExternalCredentialsPath returns the URL path to the externalCredentials service verifyGcpIamCredential HTTP endpoint.
+func VerifyGcpIamCredentialExternalCredentialsPath() string {
+	return "/rpc/externalCredentials.verifyGcpIam"
+}
+
+// GetGcpSetupInfoExternalCredentialsPath returns the URL path to the externalCredentials service getGcpSetupInfo HTTP endpoint.
+func GetGcpSetupInfoExternalCredentialsPath() string {
+	return "/rpc/externalCredentials.getGcpSetupInfo"
+}
+
 // DeleteAwsIamCredentialExternalCredentialsPath returns the URL path to the externalCredentials service deleteAwsIamCredential HTTP endpoint.
 func DeleteAwsIamCredentialExternalCredentialsPath() string {
 	return "/rpc/externalCredentials.deleteAwsIam"

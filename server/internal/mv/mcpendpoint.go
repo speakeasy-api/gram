@@ -17,6 +17,7 @@ func BuildMcpEndpointView(endpoint repo.McpEndpoint) *types.McpEndpoint {
 		CustomDomainID: conv.FromNullableUUID(endpoint.CustomDomainID),
 		McpServerID:    endpoint.McpServerID.String(),
 		Slug:           types.McpEndpointSlug(endpoint.Slug),
+		IsDomainRoot:   endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool,
 		CreatedAt:      endpoint.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      endpoint.UpdatedAt.Time.Format(time.RFC3339),
 	}

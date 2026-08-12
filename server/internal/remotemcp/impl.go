@@ -109,7 +109,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
 	}
 
-	slug, err := computeServerSlug(payload.URL, serverID)
+	slug, err := conv.URLBackedSlug(payload.URL, serverID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
@@ -292,7 +292,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// Always recompute slug from the post-update URL so it tracks the URL
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
-	slug, err := computeServerSlug(finalURL, existingServer.ID)
+	slug, err := conv.URLBackedSlug(finalURL, existingServer.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}

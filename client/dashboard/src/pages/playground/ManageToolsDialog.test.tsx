@@ -1,5 +1,5 @@
 import { CommandPaletteProvider } from "@/contexts/CommandPaletteProvider";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { Tool, Toolset } from "@/lib/toolTypes";
 import { PromptTemplateKind } from "@gram/client/models/components/prompttemplate.js";
 import {

@@ -27,9 +27,7 @@ func TestUpdateAwsKmsKey_Success(t *testing.T) {
 	updated, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
 		ID:                     key.ID,
 		SessionToken:           nil,
-		KeyArn:                 "arn:aws:kms:eu-west-1:123456789012:key/rotated",
 		ExternalCredentialID:   credID,
-		Algorithm:              "ES256",
 		Name:                   "after",
 		CustomerGrantReference: new("arn:aws:iam::210987654321:role/gram-signer"),
 	})
@@ -37,8 +35,6 @@ func TestUpdateAwsKmsKey_Success(t *testing.T) {
 
 	require.Equal(t, key.ID, updated.ID)
 	require.Equal(t, "after", updated.Name)
-	require.Equal(t, "ES256", updated.Algorithm)
-	require.Equal(t, "arn:aws:kms:eu-west-1:123456789012:key/rotated", updated.KeyArn)
 	require.NotNil(t, updated.CustomerGrantReference)
 	require.Equal(t, "arn:aws:iam::210987654321:role/gram-signer", *updated.CustomerGrantReference)
 
@@ -47,8 +43,84 @@ func TestUpdateAwsKmsKey_Success(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
+// TestUpdateAwsKmsKey_IdentityIsImmutable verifies an update cannot re-point the
+// row at different key material: the ARN and algorithm are set at creation and
+// are not part of the update payload, so they survive an update untouched. A
+// published JWK pins its kid to this row, so re-pointing it would silently sign
+// with the wrong key.
+func TestUpdateAwsKmsKey_IdentityIsImmutable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credID := createAwsIamCredential(t, ctx, ti, "backing-cred")
+	key := createAwsKmsKey(t, ctx, ti, "before", credID)
+
+	updated, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
+		ID:                     key.ID,
+		SessionToken:           nil,
+		ExternalCredentialID:   credID,
+		Name:                   "after",
+		CustomerGrantReference: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, key.KeyArn, updated.KeyArn)
+	require.Equal(t, key.Algorithm, updated.Algorithm)
+
+	// Re-read so the assertion covers what was persisted, not just the view the
+	// update handler assembled.
+	got, err := ti.service.GetAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.GetAwsKmsKeyPayload{
+		ID:           key.ID,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, key.KeyArn, got.KeyArn)
+	require.Equal(t, key.Algorithm, got.Algorithm)
+	require.Equal(t, "after", got.Name)
+}
+
+// TestUpdateAwsKmsKey_ClearsOmittedGrantReference pins the replace-not-patch
+// semantics of the mutable subset: omitting the optional customer_grant_reference
+// clears it. Keeping omission meaningful is what makes clearing possible at all,
+// since an absent field and an explicit null are indistinguishable once decoded.
+func TestUpdateAwsKmsKey_ClearsOmittedGrantReference(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credID := createAwsIamCredential(t, ctx, ti, "backing-cred")
+
+	key, err := ti.service.CreateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateAwsKmsKeyPayload{
+		SessionToken:           nil,
+		KeyArn:                 "arn:aws:kms:us-east-1:123456789012:key/" + uuid.NewString(),
+		ExternalCredentialID:   credID,
+		Algorithm:              "RS256",
+		Name:                   "granted",
+		CustomerGrantReference: new("arn:aws:iam::210987654321:role/gram-signer"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, key.CustomerGrantReference)
+
+	updated, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
+		ID:                     key.ID,
+		SessionToken:           nil,
+		ExternalCredentialID:   credID,
+		Name:                   "granted",
+		CustomerGrantReference: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.CustomerGrantReference)
+
+	got, err := ti.service.GetAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.GetAwsKmsKeyPayload{
+		ID:           key.ID,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, got.CustomerGrantReference)
+}
+
 // TestUpdateAwsKmsKey_SwapCredential verifies the backing credential can be
-// replaced with another same-family credential.
+// replaced with another same-family credential. The path to the key stays
+// editable even though the key material is frozen.
 func TestUpdateAwsKmsKey_SwapCredential(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -60,9 +132,7 @@ func TestUpdateAwsKmsKey_SwapCredential(t *testing.T) {
 	updated, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
 		ID:                     key.ID,
 		SessionToken:           nil,
-		KeyArn:                 key.KeyArn,
 		ExternalCredentialID:   otherCredID,
-		Algorithm:              "RS256",
 		Name:                   "key",
 		CustomerGrantReference: nil,
 	})
@@ -83,9 +153,7 @@ func TestUpdateAwsKmsKey_WrongFamilyCredential(t *testing.T) {
 	_, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
 		ID:                     key.ID,
 		SessionToken:           nil,
-		KeyArn:                 key.KeyArn,
 		ExternalCredentialID:   gcpCredID,
-		Algorithm:              "RS256",
 		Name:                   "key",
 		CustomerGrantReference: nil,
 	})
@@ -101,9 +169,7 @@ func TestUpdateAwsKmsKey_NotFound(t *testing.T) {
 	_, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
 		ID:                     uuid.NewString(),
 		SessionToken:           nil,
-		KeyArn:                 "arn:aws:kms:us-east-1:123456789012:key/abcd-1234",
 		ExternalCredentialID:   credID,
-		Algorithm:              "RS256",
 		Name:                   "missing",
 		CustomerGrantReference: nil,
 	})
@@ -123,9 +189,7 @@ func TestUpdateAwsKmsKey_WrongProvider(t *testing.T) {
 	_, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
 		ID:                     gcpKey.ID,
 		SessionToken:           nil,
-		KeyArn:                 "arn:aws:kms:us-east-1:123456789012:key/abcd-1234",
 		ExternalCredentialID:   awsCredID,
-		Algorithm:              "RS256",
 		Name:                   "hijack",
 		CustomerGrantReference: nil,
 	})
@@ -142,9 +206,7 @@ func TestUpdateAwsKmsKey_ForbiddenForReadOnly(t *testing.T) {
 	_, err := ti.service.UpdateAwsKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.UpdateAwsKmsKeyPayload{
 		ID:                     key.ID,
 		SessionToken:           nil,
-		KeyArn:                 key.KeyArn,
 		ExternalCredentialID:   credID,
-		Algorithm:              "RS256",
 		Name:                   "forbidden",
 		CustomerGrantReference: nil,
 	})

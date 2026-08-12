@@ -81,7 +81,7 @@ func TestSlackHandleWebhookChallenge(t *testing.T) {
 	body := []byte(`{"type":"url_verification","challenge":"abc123"}`)
 	headers := signedSlackHeaders(t, body, "secret")
 
-	err = definition.AuthenticateWebhook(body, headers, map[string]string{
+	err = definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config)
 	require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestSlackHandleWebhookBlockActionsRoutesToThread(t *testing.T) {
 	headers := signedSlackHeaders(t, body, "secret")
 	headers.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config))
 
@@ -362,7 +362,7 @@ func TestSlackHandleWebhookEventTopLevelMessageKeysOnEventTs(t *testing.T) {
 	body := []byte(`{"type":"event_callback","team_id":"T1","event_id":"Ev1","event":{"type":"message","channel":"C1","user":"U1","text":"hello","ts":"1700000050.000900"}}`)
 	headers := signedSlackHeaders(t, body, "secret")
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config))
 
@@ -375,6 +375,59 @@ func TestSlackHandleWebhookEventTopLevelMessageKeysOnEventTs(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, normalized.ThreadID)
 	require.Equal(t, "1700000050.000900", normalized.Timestamp)
+}
+
+func TestSlackHandleWebhookMessageCarriesFileMetadata(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// A message with the file_share subtype carries the shared files inline.
+	// The attachment metadata must survive normalization so the assistant
+	// turn can surface it without extra Slack API calls.
+	body := []byte(`{"type":"event_callback","team_id":"T1","event_id":"Ev1","event":{"type":"message","subtype":"file_share","channel":"C1","user":"U1","text":"see attached","ts":"1700000060.000100","files":[{"id":"F123","name":"report.pdf","title":"Q2 report","mimetype":"application/pdf","size":204800,"url_private_download":"https://files.slack.com/files-pri/T1-F123/download/report.pdf"}]}}`)
+	headers := signedSlackHeaders(t, body, "secret")
+
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
+		"SLACK_SIGNING_SECRET": "secret",
+	}, config))
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result.Event)
+
+	normalized, ok := result.Event.Event.(slackTriggerEvent)
+	require.True(t, ok)
+	require.Equal(t, "message", normalized.EventType)
+	require.Equal(t, "file_share", normalized.Subtype)
+	require.Len(t, normalized.Files, 1)
+	require.Equal(t, slackEventFile{
+		ID:                 "F123",
+		Name:               "report.pdf",
+		Title:              "Q2 report",
+		Mimetype:           "application/pdf",
+		Size:               204800,
+		URLPrivateDownload: "https://files.slack.com/files-pri/T1-F123/download/report.pdf",
+	}, normalized.Files[0])
+
+	// The normalized event is what gets marshaled into the assistant turn
+	// payload; the files must survive that round trip.
+	encoded, err := json.Marshal(normalized)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"files":[{"id":"F123"`)
+
+	// The attachment metadata must also be addressable from CEL filters.
+	filtered, err := definition.DecodeConfig(map[string]any{
+		"filter": `size(event.files) > 0 && event.files[0].mimetype == "application/pdf"`,
+	})
+	require.NoError(t, err)
+	match, err := filtered.Filter(normalized)
+	require.NoError(t, err)
+	require.True(t, match)
 }
 
 func TestSlackHandleWebhookIgnoresUnsupportedInteractionType(t *testing.T) {
@@ -432,7 +485,7 @@ func TestSlackSignatureRejectionOnBadSecret(t *testing.T) {
 	body := []byte(`{"type":"event_callback","event":{"type":"message","channel":"C1","user":"U1","ts":"1.0"}}`)
 	headers := signedSlackHeaders(t, body, "correct-secret")
 
-	err = definition.AuthenticateWebhook(body, headers, map[string]string{
+	err = definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "wrong-secret",
 	}, config)
 	require.Error(t, err)

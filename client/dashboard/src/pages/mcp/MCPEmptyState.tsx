@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { Network } from "lucide-react";
 
 export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {
@@ -11,16 +11,16 @@ export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {
         MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+        <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
           <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <Network className="text-muted-foreground h-6 w-6" />
           </div>
-          <Type variant="subheading" className="mb-1">
+          <Text variant="subheading" className="mb-1">
             No MCP servers yet
-          </Type>
-          <Type small muted className="mb-4 max-w-md text-center">
+          </Text>
+          <Text small muted className="mb-4 max-w-md text-center">
             Create an MCP server to expose tools generated from your sources.
-          </Type>
+          </Text>
           {cta}
         </div>
       </Page.Section.Body>

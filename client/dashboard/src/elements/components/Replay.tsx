@@ -33,10 +33,7 @@ import { DEFAULT_MODEL } from "@/elements/lib/models";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import type { ElementsConfig } from "@/elements/types";
-import {
-  AssistantRuntimeProvider,
-  useThreadRuntime,
-} from "@assistant-ui/react";
+import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode, useEffect, useMemo, useRef } from "react";
@@ -164,12 +161,13 @@ function sleep(ms: number): Promise<void> {
  * it to return to false — otherwise we resolve before the run begins.
  */
 async function waitForRunComplete(
-  runtime: NonNullable<ReturnType<typeof useThreadRuntime>>,
+  aui: ReturnType<typeof useAui>,
+  runtime: ReturnType<ReturnType<typeof useAui>["thread"]>,
 ): Promise<void> {
   // Phase 1: wait for the runtime to start running
   if (!runtime.getState().isRunning) {
     await new Promise<void>((resolve) => {
-      const unsub = runtime.subscribe(() => {
+      const unsub = aui.subscribe(() => {
         if (runtime.getState().isRunning) {
           unsub();
           resolve();
@@ -186,7 +184,7 @@ async function waitForRunComplete(
   // Phase 2: wait for the runtime to stop running
   if (runtime.getState().isRunning) {
     await new Promise<void>((resolve) => {
-      const unsub = runtime.subscribe(() => {
+      const unsub = aui.subscribe(() => {
         if (!runtime.getState().isRunning) {
           unsub();
           resolve();
@@ -207,7 +205,8 @@ interface ReplayControllerProps {
 }
 
 const ReplayController = ({ cassette, options }: ReplayControllerProps) => {
-  const runtime = useThreadRuntime();
+  const aui = useAui();
+  const runtime = aui.thread();
   const hasStarted = useRef(false);
 
   useEffect(() => {
@@ -235,7 +234,7 @@ const ReplayController = ({ cassette, options }: ReplayControllerProps) => {
           runtime.append(text);
 
           // Wait for the assistant response to finish streaming
-          await waitForRunComplete(runtime);
+          await waitForRunComplete(aui, runtime);
         }
         // Assistant messages are handled by the transport's sendMessages,
         // so we skip them here.

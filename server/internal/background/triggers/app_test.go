@@ -6,7 +6,12 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 func TestBoundAssistantKey(t *testing.T) {
@@ -101,4 +106,46 @@ func TestAppCreateRejectsDirectIngressDefinition(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrBadRequest)
 	require.ErrorContains(t, err, "system-managed")
+}
+
+func TestLogTriggerDeliveryStampsTraceContext(t *testing.T) {
+	t.Parallel()
+
+	var captured TriggerDeliveryLog
+	logger := NewTriggerDeliveryLogger(func(_ context.Context, entry TriggerDeliveryLog) {
+		captured = entry
+	})
+
+	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10},
+		SpanID:  trace.SpanID{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
+	})
+	ctx := trace.ContextWithSpanContext(t.Context(), spanCtx)
+
+	logger.LogTriggerDelivery(ctx, triggerrepo.TriggerInstance{
+		ID:             uuid.New(),
+		DefinitionSlug: DefinitionSlugSlack,
+		TargetKind:     TargetKindAssistant,
+	}, EventEnvelope{EventID: "event-123", CorrelationID: "corr-123"}, DeliveryStatusSent, "", nil)
+
+	require.Equal(t, spanCtx.TraceID().String(), captured.Attributes[attr.TraceIDKey])
+	require.Equal(t, spanCtx.SpanID().String(), captured.Attributes[attr.SpanIDKey])
+}
+
+func TestLogTriggerDeliveryOmitsTraceContextWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	var captured TriggerDeliveryLog
+	logger := NewTriggerDeliveryLogger(func(_ context.Context, entry TriggerDeliveryLog) {
+		captured = entry
+	})
+
+	logger.LogTriggerDelivery(t.Context(), triggerrepo.TriggerInstance{
+		ID:             uuid.New(),
+		DefinitionSlug: DefinitionSlugSlack,
+		TargetKind:     TargetKindAssistant,
+	}, EventEnvelope{EventID: "event-123", CorrelationID: "corr-123"}, DeliveryStatusSent, "", nil)
+
+	require.NotContains(t, captured.Attributes, attr.TraceIDKey)
+	require.NotContains(t, captured.Attributes, attr.SpanIDKey)
 }

@@ -7,9 +7,9 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
-  ListRemoteSessionIssuersResult,
-  ListRemoteSessionIssuersResult$inboundSchema,
-} from "../components/listremotesessionissuersresult.js";
+  ListGlobalRemoteSessionIssuersResult,
+  ListGlobalRemoteSessionIssuersResult$inboundSchema,
+} from "../components/listglobalremotesessionissuersresult.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListGlobalRemoteSessionIssuersSecurity = {
@@ -32,7 +32,7 @@ export type ListGlobalRemoteSessionIssuersRequest = {
 };
 
 export type ListGlobalRemoteSessionIssuersResponse = {
-  result: ListRemoteSessionIssuersResult;
+  result: ListGlobalRemoteSessionIssuersResult;
 };
 
 /** @internal */
@@ -106,7 +106,7 @@ export function listGlobalRemoteSessionIssuersRequestToJSON(
 export const ListGlobalRemoteSessionIssuersResponse$inboundSchema:
   z.ZodMiniType<ListGlobalRemoteSessionIssuersResponse, unknown> = z.pipe(
     z.object({
-      Result: ListRemoteSessionIssuersResult$inboundSchema,
+      Result: ListGlobalRemoteSessionIssuersResult$inboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

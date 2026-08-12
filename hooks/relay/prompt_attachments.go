@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -398,12 +399,7 @@ func claudeTranscriptProjectsRoot() (string, error) {
 }
 
 func pathHasTraversal(path string) bool {
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		if part == ".." {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "..")
 }
 
 func promptAttachmentHighWaterPath(transcriptPath string) string {

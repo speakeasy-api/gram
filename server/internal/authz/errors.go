@@ -13,8 +13,6 @@ var ErrInvalidCheck = errors.New("invalid authz check")
 
 var ErrDenied = errors.New("authz denied")
 
-var ErrUnsupportedMixedGrantSemantics = errors.New("unsupported mixed grant semantics")
-
 func InvalidCheck(scope Scope, resourceID string) error {
 	return &InvalidCheckError{
 		Scope:      scope,

@@ -13,8 +13,8 @@ import {
 } from "@/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
@@ -122,11 +122,8 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const project = useProject();
   const draft = useAssistantDraft();
   const createSessionMutation = useChatSessionsCreateMutation();
-  const { data: productFeatures } = useProductFeatures();
   const { hasScope } = useRBAC();
-  const skillsEnabled =
-    productFeatures?.skillsEnabled === true &&
-    hasScope("skill:read", project.id);
+  const skillsEnabled = hasScope("skill:read", project.id);
   const skillMutationsEnabled =
     skillsEnabled && hasScope("project:write", project.id);
   const { theme: resolvedTheme } = useMoonshineConfig();
@@ -174,8 +171,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
+      const url = internalMcpUrl({ slug: project.slug }, toolset);
+      if (!url) continue;
       entries.push({
-        url: internalMcpUrl({ slug: project.slug }, toolset),
+        url,
         name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
       });

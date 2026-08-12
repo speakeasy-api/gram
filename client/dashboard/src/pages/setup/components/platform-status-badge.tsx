@@ -1,4 +1,4 @@
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import type { PlatformSetupStatus } from "../types";
 
 export function platformStatusBadge(

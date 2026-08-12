@@ -16,6 +16,7 @@ const (
 	TypeSessionStarted       Type = "session.started"
 	TypeSessionUpdated       Type = "session.updated"
 	TypeSessionEnded         Type = "session.ended"
+	TypeMcpInventory         Type = "mcp.inventory"
 	TypePromptSubmitted      Type = "prompt.submitted"
 	TypeToolRequested        Type = "tool.requested"
 	TypeToolCompleted        Type = "tool.completed"
@@ -41,6 +42,8 @@ func (e *Type) UnmarshalJSON(data []byte) error {
 	case "session.updated":
 		fallthrough
 	case "session.ended":
+		fallthrough
+	case "mcp.inventory":
 		fallthrough
 	case "prompt.submitted":
 		fallthrough

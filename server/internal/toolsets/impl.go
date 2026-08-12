@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -39,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -49,14 +47,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
-
-// validOAuthProxyAuthMethods is the allowlist of token_endpoint_auth_methods_supported
-// values accepted by AddOAuthProxyServer and UpdateOAuthProxyServer.
-var validOAuthProxyAuthMethods = map[string]bool{
-	"client_secret_basic": true,
-	"client_secret_post":  true,
-	"none":                true,
-}
 
 type Service struct {
 	tracer               trace.Tracer
@@ -554,28 +544,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	if clearedOAuth && existingToolset.OauthProxyServerID.Valid {
-		var oauthProxySlug *string
-		if existingView.OauthProxyServer != nil {
-			oauthProxySlug = new(string(existingView.OauthProxyServer.Slug))
-		}
-		if err := s.audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
-			OrganizationID:       authCtx.ActiveOrganizationID,
-			ProjectID:            *authCtx.ProjectID,
-			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:     authCtx.Email,
-			ActorSlug:            nil,
-			ToolsetURN:           urn.NewToolset(updatedToolset.ID),
-			ToolsetName:          updatedToolset.Name,
-			ToolsetSlug:          updatedToolset.Slug,
-			ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
-			OAuthProxyServerID:   new(existingToolset.OauthProxyServerID.UUID.String()),
-			OAuthProxyServerSlug: oauthProxySlug,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach OAuth proxy server audit event").LogError(ctx, logger)
-		}
-	}
-
 	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
@@ -942,7 +910,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").LogError(ctx, s.logger)
 	}
 
-	if existingToolset.ExternalOauthServer != nil || existingToolset.OauthProxyServer != nil {
+	if existingToolset.ExternalOauthServer != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").LogError(ctx, s.logger)
 	}
 
@@ -1059,25 +1027,6 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		}
 	}
 
-	var oauthProxyID *string
-	var oauthProxySlug *string
-	if existingToolset.OauthProxyServerID.Valid {
-		oauthProxyID = new(existingToolset.OauthProxyServerID.UUID.String())
-
-		row, err := s.oauthRepo.WithTx(dbtx).GetOAuthProxyServer(ctx, oauthRepo.GetOAuthProxyServerParams{
-			ProjectID: *authCtx.ProjectID,
-			ID:        existingToolset.OauthProxyServerID.UUID,
-		})
-
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get OAuth proxy server metadata").LogError(ctx, logger)
-		}
-
-		if row.Slug != "" {
-			oauthProxySlug = &row.Slug
-		}
-	}
-
 	// Clear OAuth server associations from toolset
 	_, err = tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
 		Slug:      conv.ToLower(payload.Slug),
@@ -1113,208 +1062,8 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		}
 	}
 
-	if oauthProxyID != nil {
-		if err := s.audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
-			OrganizationID:       authCtx.ActiveOrganizationID,
-			ProjectID:            *authCtx.ProjectID,
-			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:     authCtx.Email,
-			ActorSlug:            nil,
-			ToolsetURN:           urn.NewToolset(existingToolset.ID),
-			ToolsetName:          existingToolset.Name,
-			ToolsetSlug:          existingToolset.Slug,
-			ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
-			OAuthProxyServerID:   oauthProxyID,
-			OAuthProxyServerSlug: oauthProxySlug,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset detach OAuth proxy server audit event").LogError(ctx, logger)
-		}
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error removing OAuth server").LogError(ctx, logger)
-	}
-
-	return toolsetDetails, nil
-}
-
-func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuthProxyServerPayload) (*types.Toolset, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OAuth proxy servers").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: toolsetDetails.ID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	toolsetID, err := uuid.Parse(toolsetDetails.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, s.logger)
-	}
-
-	if toolsetDetails.OauthProxyServer != nil || toolsetDetails.ExternalOauthServer != nil {
-		return nil, oops.E(oops.CodeConflict, nil, "OAuth server already exists").LogError(ctx, s.logger)
-	}
-
-	oauth2AuthCodeSecurityCount := 0
-	for _, securityVariable := range toolsetDetails.SecurityVariables {
-		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
-		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
-		if isAuthorizationCode || isOpenIdConnect {
-			oauth2AuthCodeSecurityCount++
-		}
-	}
-
-	if oauth2AuthCodeSecurityCount > 1 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").LogError(ctx, s.logger)
-	}
-
-	// Validate token_endpoint_auth_methods_supported
-	for _, method := range payload.OauthProxyServer.TokenEndpointAuthMethodsSupported {
-		if !validOAuthProxyAuthMethods[method] {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic or client_secret_post)", method).LogError(ctx, s.logger)
-		}
-	}
-
-	providerType := oauth.OAuthProxyProviderType(payload.OauthProxyServer.ProviderType)
-
-	if !providerType.IsValid() {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid provider_type value: %s (must be 'custom' or 'gram')", payload.OauthProxyServer.ProviderType).LogError(ctx, s.logger)
-	}
-
-	// Validate provider_type against public/private status
-	isPublic := toolsetDetails.McpIsPublic != nil && *toolsetDetails.McpIsPublic
-	if providerType == oauth.OAuthProxyProviderTypeGram && isPublic {
-		return nil, oops.E(oops.CodeBadRequest, nil, "gram provider type can only be used with private MCP servers").LogError(ctx, s.logger)
-	}
-	if providerType == oauth.OAuthProxyProviderTypeCustom && !isPublic {
-		return nil, oops.E(oops.CodeBadRequest, nil, "custom provider type can only be used with public MCP servers").LogError(ctx, s.logger)
-	}
-
-	// Validate required fields for custom provider type
-	if providerType == oauth.OAuthProxyProviderTypeCustom {
-		if payload.OauthProxyServer.EnvironmentSlug == nil || string(*payload.OauthProxyServer.EnvironmentSlug) == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug is required for custom provider type").LogError(ctx, s.logger)
-		}
-		if payload.OauthProxyServer.AuthorizationEndpoint == nil || *payload.OauthProxyServer.AuthorizationEndpoint == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint is required for custom provider type").LogError(ctx, s.logger)
-		}
-		if payload.OauthProxyServer.TokenEndpoint == nil || *payload.OauthProxyServer.TokenEndpoint == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint is required for custom provider type").LogError(ctx, s.logger)
-		}
-		if len(payload.OauthProxyServer.TokenEndpointAuthMethodsSupported) == 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported is required for custom provider type").LogError(ctx, s.logger)
-		}
-	}
-
-	// Create the OAuth proxy server
-	// Only validate environment for custom provider type (not gram)
-	if providerType == oauth.OAuthProxyProviderTypeCustom {
-		// Validate that the environment exists for this project
-		_, err = s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      string(*payload.OauthProxyServer.EnvironmentSlug),
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").LogError(ctx, s.logger)
-		}
-	}
-
-	oauthProxyServer, err := s.oauthRepo.WithTx(dbtx).UpsertOAuthProxyServer(ctx, oauthRepo.UpsertOAuthProxyServerParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      conv.ToLower(payload.OauthProxyServer.Slug),
-		Audience:  conv.PtrToPGText(payload.OauthProxyServer.Audience),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy server").LogError(ctx, s.logger)
-	}
-
-	// Create the OAuth proxy provider with the secrets
-	// Only store environment_slug in secrets for custom provider type
-	var secretsJSON []byte
-	if providerType == oauth.OAuthProxyProviderTypeCustom {
-		secretsJSON, err = json.Marshal(map[string]string{
-			"environment_slug": string(*payload.OauthProxyServer.EnvironmentSlug),
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal secrets").LogError(ctx, s.logger)
-		}
-	} else {
-		// Empty JSON object for gram provider (doesn't need environment)
-		secretsJSON = []byte("{}")
-	}
-
-	_, err = s.oauthRepo.WithTx(dbtx).UpsertOAuthProxyProvider(ctx, oauthRepo.UpsertOAuthProxyProviderParams{
-		ProjectID:                         *authCtx.ProjectID,
-		OauthProxyServerID:                oauthProxyServer.ID,
-		Slug:                              conv.ToLower(payload.OauthProxyServer.Slug),
-		ProviderType:                      payload.OauthProxyServer.ProviderType,
-		AuthorizationEndpoint:             conv.PtrToPGTextEmpty(payload.OauthProxyServer.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGTextEmpty(payload.OauthProxyServer.TokenEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(nil),
-		ScopesSupported:                   payload.OauthProxyServer.ScopesSupported,
-		ResponseTypesSupported:            []string{"code"},
-		ResponseModesSupported:            []string{},
-		GrantTypesSupported:               []string{"authorization_code"},
-		TokenEndpointAuthMethodsSupported: payload.OauthProxyServer.TokenEndpointAuthMethodsSupported,
-		SecurityKeyNames:                  []string{},
-		Secrets:                           secretsJSON,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create OAuth proxy provider").LogError(ctx, s.logger)
-	}
-
-	// Associate the OAuth proxy server with the toolset
-	_, err = s.repo.WithTx(dbtx).UpdateToolsetOAuthProxyServer(ctx, repo.UpdateToolsetOAuthProxyServerParams{
-		Slug:               conv.ToLower(payload.Slug),
-		ProjectID:          *authCtx.ProjectID,
-		OauthProxyServerID: uuid.NullUUID{UUID: oauthProxyServer.ID, Valid: true},
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate OAuth proxy server with toolset").LogError(ctx, s.logger)
-	}
-
-	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.audit.LogToolsetAttachOAuthProxy(ctx, dbtx, audit.LogToolsetAttachOAuthProxyEvent{
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            *authCtx.ProjectID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:     authCtx.Email,
-		ActorSlug:            nil,
-		ToolsetURN:           urn.NewToolset(toolsetID),
-		ToolsetName:          toolsetDetails.Name,
-		ToolsetSlug:          string(toolsetDetails.Slug),
-		ToolsetVersionAfter:  toolsetDetails.ToolsetVersion,
-		OAuthProxyServerID:   oauthProxyServer.ID.String(),
-		OAuthProxyServerSlug: oauthProxyServer.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding OAuth proxy server").LogError(ctx, s.logger)
 	}
 
 	return toolsetDetails, nil

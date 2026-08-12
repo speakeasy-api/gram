@@ -698,7 +698,6 @@ func DescribeToolset(
 	}
 
 	var externalOAuthServer *types.ExternalOAuthServer
-	var oauthProxyServer *types.OAuthProxyServer
 
 	if toolset.ExternalOauthServerID.Valid {
 		externalOauthMetadata, err := oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth.GetExternalOAuthServerMetadataParams{
@@ -721,64 +720,6 @@ func DescribeToolset(
 				Metadata:  metadata,
 				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
-	}
-
-	if toolset.OauthProxyServerID.Valid {
-		oauthProxyServerData, err := oauthRepo.GetOAuthProxyServer(ctx, oauth.GetOAuthProxyServerParams{
-			ProjectID: pid,
-			ID:        toolset.OauthProxyServerID.UUID,
-		})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").LogError(ctx, logger)
-		}
-		if err == nil {
-			oauthProxyProviders, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauth.ListOAuthProxyProvidersByServerParams{
-				ProjectID:          pid,
-				OauthProxyServerID: oauthProxyServerData.ID,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").LogError(ctx, logger)
-			}
-
-			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
-			for _, provider := range oauthProxyProviders {
-				// Parse environment_slug from secrets JSON
-				var environmentSlug *types.Slug
-				if provider.Secrets != nil {
-					var secrets map[string]string
-					if err := json.Unmarshal(provider.Secrets, &secrets); err == nil {
-						if envSlug, ok := secrets["environment_slug"]; ok && envSlug != "" {
-							slug := types.Slug(envSlug)
-							environmentSlug = &slug
-						}
-					}
-				}
-
-				providers = append(providers, &types.OAuthProxyProvider{
-					ID:                                provider.ID.String(),
-					Slug:                              types.Slug(provider.Slug),
-					ProviderType:                      provider.ProviderType,
-					AuthorizationEndpoint:             provider.AuthorizationEndpoint.String,
-					TokenEndpoint:                     provider.TokenEndpoint.String,
-					ScopesSupported:                   provider.ScopesSupported,
-					GrantTypesSupported:               provider.GrantTypesSupported,
-					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
-					EnvironmentSlug:                   environmentSlug,
-					CreatedAt:                         provider.CreatedAt.Time.Format(time.RFC3339),
-					UpdatedAt:                         provider.UpdatedAt.Time.Format(time.RFC3339),
-				})
-			}
-
-			oauthProxyServer = &types.OAuthProxyServer{
-				ID:                  oauthProxyServerData.ID.String(),
-				ProjectID:           oauthProxyServerData.ProjectID.String(),
-				Slug:                types.Slug(oauthProxyServerData.Slug),
-				Audience:            conv.FromPGText[string](oauthProxyServerData.Audience),
-				OauthProxyProviders: providers,
-				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),
 			}
 		}
 	}
@@ -864,7 +805,6 @@ func DescribeToolset(
 		ToolUrns:                     toolUrns,
 		ResourceUrns:                 resourceUrns,
 		ExternalOauthServer:          externalOAuthServer,
-		OauthProxyServer:             oauthProxyServer,
 		UserSessionIssuerID:          userSessionIssuerID,
 		UserSessionIssuerSlug:        userSessionIssuerSlug,
 		ToolVariationsGroupID:        conv.FromNullableUUID(toolset.ToolVariationsGroupID),

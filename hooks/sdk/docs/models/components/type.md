@@ -20,6 +20,7 @@ value := components.TypeSessionStarted
 | `TypeSessionStarted`       | session.started            |
 | `TypeSessionUpdated`       | session.updated            |
 | `TypeSessionEnded`         | session.ended              |
+| `TypeMcpInventory`         | mcp.inventory              |
 | `TypePromptSubmitted`      | prompt.submitted           |
 | `TypeToolRequested`        | tool.requested             |
 | `TypeToolCompleted`        | tool.completed             |

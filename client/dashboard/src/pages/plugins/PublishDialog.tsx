@@ -1,7 +1,8 @@
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
-import { Dialog } from "@/components/ui/dialog";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
@@ -264,8 +265,8 @@ export const PublishDialog = memo(function PublishDialog({
               </Dialog.Description>
               <Dialog.Description>
                 At least one user in your organization will need to be given
-                access to connect the generated repository with Claude, Cursor,
-                or Codex.
+                access to connect the generated repository with their coding
+                agents.
               </Dialog.Description>
             </>
           )}
@@ -274,11 +275,11 @@ export const PublishDialog = memo(function PublishDialog({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="githubUsernames">GitHub Usernames</Label>
             <div ref={containerRef} className="relative">
-              <div className="border-input focus-within:border-ring focus-within:ring-ring/50 flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border bg-transparent px-2 py-1 focus-within:ring-[3px]">
+              <div className="border-input focus-within:border-ring focus-within:ring-ring/50 flex min-h-9 flex-wrap items-center gap-1.5 border bg-transparent px-2 py-1 focus-within:ring-[3px]">
                 {usernames.map((u, idx) => (
                   <span
                     key={u}
-                    className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs"
+                    className="bg-primary/10 text-primary inline-flex items-center gap-1 px-2 py-0.5 text-xs"
                   >
                     {u}
                     <button
@@ -324,7 +325,7 @@ export const PublishDialog = memo(function PublishDialog({
                 <div
                   id="github-user-results"
                   role="listbox"
-                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border p-1 shadow-lg"
+                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto border p-1 shadow-lg"
                 >
                   {searchLoading && (
                     <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">
@@ -349,7 +350,7 @@ export const PublishDialog = memo(function PublishDialog({
                       aria-selected={idx === activeIndex}
                       onClick={() => selectResult(user)}
                       onMouseEnter={() => setActiveIndex(idx)}
-                      className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left ${
+                      className={`flex w-full items-center gap-2 px-2 py-1 text-left ${
                         idx === activeIndex
                           ? "bg-accent text-accent-foreground"
                           : ""

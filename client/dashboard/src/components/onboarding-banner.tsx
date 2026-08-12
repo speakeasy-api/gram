@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import {
   ONBOARDING_CTA_CONTENT_VT_CLASS,
   ONBOARDING_CTA_VT_CLASS,
@@ -33,26 +33,26 @@ export function OnboardingBanner(): JSX.Element | null {
           ONBOARDING_CTA_CONTENT_VT_CLASS,
         )}
       >
-        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center rounded-lg border shadow-sm">
+        <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center border">
           <Wrench className="text-foreground size-5" strokeWidth={1.75} />
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <Type
+          <Text
             variant="subheading"
             as="span"
             className="text-foreground text-sm leading-tight font-semibold"
           >
             Finish setup
-          </Type>
-          <Type
+          </Text>
+          <Text
             small
             muted
             className="hidden max-w-10/12 text-sm sm:line-clamp-2"
           >
             Set up Single Sign-On, Directory Sync, Plugin Marketplace, Agent
             Platforms, and Policies for your organization.
-          </Type>
+          </Text>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -63,7 +63,7 @@ export function OnboardingBanner(): JSX.Element | null {
             </Button>
           </orgRoutes.setup.Link>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={dismiss}
             aria-label="Dismiss setup banner"

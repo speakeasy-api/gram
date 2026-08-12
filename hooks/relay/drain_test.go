@@ -90,12 +90,10 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
-func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
+func TestDrainReplaysSkillContent(t *testing.T) {
 	drainEnv(t)
 	content := []byte("# Offline skill\n")
 	rawSHA256 := sha256Hex(content)
-	root := filepath.Join(t.TempDir(), ".claude", "skills")
-	path := filepath.Join(root, "offline", "SKILL.md")
 	originalUpload := executeSkillUpload
 	t.Cleanup(func() { executeSkillUpload = originalUpload })
 	var capturedTasks []skillUploadTask
@@ -117,10 +115,8 @@ func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	entry, err := decodeSpoolEntry(data)
 	require.NoError(t, err)
 	entry.Envelope.Data = activatedSkillPayload("offline").Data
-	entry.Envelope.Data.Skill.SourceLevel = new("project")
-	entry.Envelope.Data.Skill.SourcePath = new(path)
 	entry.Envelope.Data.Skill.RawSha256 = new(rawSHA256)
-	entry.SkillSourceRoot = root
+	entry.Envelope.Data.ToolCall = &components.HookToolCallData{Output: json.RawMessage(strconv.Quote(string(content)))}
 	data, err = json.Marshal(entry)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(spoolPath, data, 0o600))
@@ -137,15 +133,15 @@ func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	require.Empty(t, spoolFiles(t), "a successful upload must remove the replayed entry")
 	require.Equal(t, []skillUploadTask{{
 		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
-		SourcePath: path, SourceRoot: root,
+		Content: string(content),
 	}, {
 		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
-		SourcePath: path, SourceRoot: root,
+		Content: string(content),
 	}}, capturedTasks)
 	replayed := fs.last().Data.Skill
 	require.Equal(t, "offline", replayed.Name)
-	require.Equal(t, "project", *replayed.SourceLevel)
-	require.Equal(t, path, *replayed.SourcePath)
+	require.Nil(t, replayed.SourceLevel)
+	require.Nil(t, replayed.SourcePath)
 	require.Equal(t, rawSHA256, *replayed.RawSha256)
 }
 
@@ -450,4 +446,75 @@ func TestDecodeSpoolEntryPreservesLargeIntegers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, bytes.Count(remarshaled, []byte(bigID)),
 		"raw, input, output, and error must all round-trip the integer exactly; a float64 detour rounds it")
+}
+
+// TestDrainReplaysLegacySkillSourcePath pins the upgrade path for v1 entries
+// spooled by a binary that recorded the manifest's source path instead of its
+// content: the drain re-reads the path and uploads only content that still
+// hashes to the value recorded at capture time.
+func TestDrainReplaysLegacySkillSourcePath(t *testing.T) {
+	drainEnv(t)
+	content := []byte("# Offline skill\n")
+	rawSHA256 := sha256Hex(content)
+	manifest := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(manifest, content, 0o600))
+	originalUpload := executeSkillUpload
+	t.Cleanup(func() { executeSkillUpload = originalUpload })
+	var capturedTasks []skillUploadTask
+	executeSkillUpload = func(_ context.Context, task skillUploadTask) error {
+		capturedTasks = append(capturedTasks, task)
+		return nil
+	}
+	fs := newFakeServer(t, nil)
+	fs.effects = requestedSkillCaptureEffects(true)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-legacy")
+
+	spoolPath := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool", spoolFiles(t)[0])
+	data, err := os.ReadFile(spoolPath)
+	require.NoError(t, err)
+	entry, err := decodeSpoolEntry(data)
+	require.NoError(t, err)
+	entry.Envelope.Data = activatedSkillPayload("legacy").Data
+	entry.Envelope.Data.Skill.RawSha256 = new(rawSHA256)
+	entry.Envelope.Data.Skill.SourcePath = new(manifest)
+	entry.Envelope.Data.ToolCall = nil
+	data, err = json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(spoolPath, data, 0o600))
+
+	summary := Drain(t.Context())
+
+	require.Equal(t, 1, summary.Replayed)
+	require.Empty(t, spoolFiles(t))
+	require.Equal(t, []skillUploadTask{{
+		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
+		Content: string(content),
+	}}, capturedTasks)
+}
+
+func TestReplayedSkillRejectsMismatchedLegacySource(t *testing.T) {
+	manifest := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(manifest, []byte("edited since capture\n"), 0o600))
+	rawSHA256 := sha256Hex([]byte("# original\n"))
+	entry := spoolEntry{}
+	entry.Envelope.Data = &components.HookIngestData{Skill: &components.HookSkillData{
+		Name: "legacy", RawSha256: new(rawSHA256), SourcePath: new(manifest),
+	}}
+
+	require.Nil(t, replayedSkill(entry), "content that no longer matches the recorded hash must not upload")
+}
+
+func TestReplayedSkillRejectsNonRegularLegacySource(t *testing.T) {
+	content := []byte("# original\n")
+	target := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(target, content, 0o600))
+	link := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.Symlink(target, link))
+	rawSHA256 := sha256Hex(content)
+	entry := spoolEntry{}
+	entry.Envelope.Data = &components.HookIngestData{Skill: &components.HookSkillData{
+		Name: "legacy", RawSha256: new(rawSHA256), SourcePath: new(link),
+	}}
+
+	require.Nil(t, replayedSkill(entry), "a source path that is not a regular file must drain content-less")
 }

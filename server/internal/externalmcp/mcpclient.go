@@ -33,6 +33,14 @@ type ClientOptions struct {
 	// Headers contains additional HTTP headers to send with each request.
 	// Keys are header names, values are header values.
 	Headers map[string]string
+	// DisableRetries skips both the HTTP-transport retry layer and the MCP
+	// transport's own connection retries. The two compound (up to 4 HTTP
+	// attempts per MCP-level retry, each with its own backoff), which is
+	// fine for the resilient gateway proxy path but defeats a caller-imposed
+	// context deadline meant to bound a one-shot interactive probe — without
+	// this, an unreachable server can take minutes to report as such instead
+	// of the ~10s the probe intends.
+	DisableRetries bool
 }
 
 // Client represents an active connection to an external MCP server.
@@ -49,14 +57,20 @@ type Client struct {
 func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
 		opts = &ClientOptions{
-			Authorization: "",
-			Headers:       nil,
+			Authorization:  "",
+			Headers:        nil,
+			DisableRetries: false,
 		}
 	}
 
 	logger.InfoContext(ctx, "connecting to external MCP server", attr.SlogURL(remoteURL))
 
-	httpClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	var httpClient *guardian.HTTPClient
+	if opts.DisableRetries {
+		httpClient = guardianPolicy.PooledClient()
+	} else {
+		httpClient = guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	}
 	trasnport := httpClient.Transport
 	authRT := &authRoundTripper{
 		base:            trasnport,
@@ -76,13 +90,21 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 		Icons:      nil,
 	}, nil)
 
+	// mcp.StreamableClientTransport treats MaxRetries == 0 as "use the SDK's
+	// own default of 5" — a negative value is required to actually disable
+	// its reconnect-retry loop.
+	maxRetries := 3
+	if opts.DisableRetries {
+		maxRetries = -1
+	}
+
 	var transport mcp.Transport
 	switch transportType {
 	case types.TransportTypeStreamableHTTP:
 		transport = &mcp.StreamableClientTransport{
 			Endpoint:             remoteURL,
 			HTTPClient:           httpClient,
-			MaxRetries:           3,
+			MaxRetries:           maxRetries,
 			DisableStandaloneSSE: true,
 			OAuthHandler:         nil,
 		}

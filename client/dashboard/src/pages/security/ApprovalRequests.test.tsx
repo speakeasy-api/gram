@@ -47,7 +47,7 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
@@ -63,6 +63,12 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: mocks.useRBAC,
+}));
+
+// The RequireScope fallback wires up the request-access mutation, which needs
+// the Gram SDK provider — stub it out since these tests never submit.
+vi.mock("@gram/client/react-query/requestAccess.js", () => ({
+  useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 describe("ApprovalRequests", () => {
@@ -100,6 +106,7 @@ describe("ApprovalRequests", () => {
           (scope) => scope === "project:read" || scope === "project:write",
         ),
       hasAllScopes: () => true,
+      hasScope: () => false,
       isLoading: false,
     });
 

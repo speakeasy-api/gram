@@ -138,6 +138,42 @@ var _ = Service("mcpRegistries", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getServerDetails")
 	})
 
+	Method("getSetupDocs", func() {
+		Description("Get the published setup documentation for an upstream MCP server, located by endpoint URL and/or registry identifier")
+
+		Payload(func() {
+			Attribute("server_url", String, "URL of the upstream MCP server endpoint", func() {
+				Example("https://mcp.box.com")
+			})
+			Attribute("registry_specifier", String, "Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')", func() {
+				Example("com.pulsemcp.mirror/box")
+			})
+
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("guides", ArrayOf(MCPSetupGuide), "Matching setup guides, most specific match first. Empty when no guide has been published for the server.")
+			Required("guides")
+		})
+
+		HTTP(func() {
+			GET("/rpc/mcpRegistries.getSetupDocs")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Param("server_url")
+			Param("registry_specifier")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMCPSetupDocs")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSetupDocs")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMCPSetupDocs"}`)
+	})
+
 })
 
 var ExternalMCPServer = Type("ExternalMCPServer", func() {
@@ -231,6 +267,55 @@ var MCPRegistry = Type("MCPRegistry", func() {
 	Attribute("url", String, "URL of the registry")
 
 	Required("id", "name", "url")
+})
+
+var MCPSetupGuide = Type("MCPSetupGuide", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Published setup documentation for an upstream MCP server")
+
+	Attribute("slug", String, "Stable identifier of the guide", func() {
+		Example("box")
+	})
+	Attribute("title", String, "Display title of the guide", func() {
+		Example("Box")
+	})
+	Attribute("summary", String, "One-line summary of what the guide covers")
+	Attribute("add_server_flow", String, "How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')")
+	Attribute("aliases", ArrayOf(String), "Registry identifiers the guide is also published under")
+	Attribute("remotes", ArrayOf(MCPSetupGuideRemote), "Endpoints documented by the guide")
+	Attribute("matched_remote_id", String, "ID of the documented endpoint the lookup matched. Absent when the lookup identified the guide and not a specific endpoint, which is always the case for an 'alias' match.", func() {
+		Example("hosted")
+	})
+	Attribute("match_kind", String, "How the lookup matched this guide. The most specific kind, when both lookup keys matched it.", func() {
+		Enum("endpoint", "alias")
+	})
+	Attribute("external_markdown", String, "Markdown instructions for the setup work that happens in the upstream provider")
+	Attribute("speakeasy_markdown", String, "Markdown instructions for the setup work that happens in Gram")
+
+	Required("slug", "title", "summary", "aliases", "remotes", "match_kind", "external_markdown", "speakeasy_markdown")
+})
+
+var MCPSetupGuideRemote = Type("MCPSetupGuideRemote", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An MCP server endpoint documented by a setup guide")
+
+	Attribute("id", String, "Stable identifier of the endpoint within the guide", func() {
+		Example("hosted")
+	})
+	Attribute("url", String, "URL of the endpoint", func() {
+		Format(FormatURI)
+	})
+	// Left an open string rather than an enum: the value is passthrough data from
+	// the guides SDK that Gram does not control, so a closed enum would turn an
+	// upstream publish into a decode failure in every generated client.
+	Attribute("transport_type", String, "Transport type as published by the guide (e.g., 'streamable-http', 'sse')", func() {
+		Example("streamable-http")
+	})
+	Attribute("tenanted", Boolean, "Whether the endpoint URL is customer-specific and has to be filled in per tenant")
+
+	Required("id", "url", "transport_type", "tenanted")
 })
 
 var ExternalMCPTool = Type("ExternalMCPTool", func() {

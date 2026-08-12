@@ -97,9 +97,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("https://gram.test.local")
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	app := bgtriggers.NewApp(
@@ -119,7 +116,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		app,
 		auditLogger,
 	)

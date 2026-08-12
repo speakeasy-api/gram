@@ -1,22 +1,11 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
-import { Type } from "@/components/ui/type";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
+import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
-import {
-  SKILL_ADOPTION_SECTION_ID,
-  SKILL_TIMELINE_SECTION_ID,
-} from "@/pages/skills/SkillActivitySections";
-import {
-  SKILL_DISTRIBUTIONS_SECTION_ID,
-  SKILL_FRONTMATTER_SECTION_ID,
-  SKILL_MANIFEST_SECTION_ID,
-  SKILL_VERSIONS_SECTION_ID,
-} from "@/pages/skills/SkillDetail";
-import { SKILL_INSIGHTS_SECTION_ID } from "@/pages/skills/SkillInsightsSection";
 import {
   SkillClassificationBadge,
   SkillSourceBadge,
@@ -25,22 +14,21 @@ import { SkillSharingCardBlocks } from "@/pages/skills/SkillSharingControl";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillDistributionsInfinite } from "@gram/client/react-query/skillDistributions.js";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import {
   Activity,
-  Braces,
-  ChartNoAxesColumn,
-  ChartSpline,
   FileText,
   History,
-  Puzzle,
+  LayoutDashboard,
+  ListChecks,
+  MessageSquareText,
+  Settings,
 } from "lucide-react";
 import * as React from "react";
-import { useLocation, useParams } from "react-router";
+import { useParams } from "react-router";
 
 export function SkillDetailSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const location = useLocation();
   const { skillId } = useParams<{ skillId: string }>();
 
   const skillQuery = useSkill({ id: skillId ?? "" }, undefined, {
@@ -62,59 +50,66 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
   const distributionCount =
     distributionsQuery.data?.pages.flatMap((page) => page.result.distributions)
       .length ?? 0;
-  const hasFrontmatter =
-    Object.keys(latestVersion?.frontmatter ?? {}).filter(
-      (key) => key !== "name" && key !== "description",
-    ).length > 0;
 
-  const detailHref = routes.skills.detail.href(skillId);
-  const activeSectionId = location.hash.replace("#", "");
-  const sectionItem = (
-    sectionId: string,
-    title: string,
-    Icon: React.ComponentType<{ className?: string }>,
-    isDefault = false,
-  ): McpSidebarNavItem => ({
-    key: sectionId,
-    title,
-    Icon,
-    href: `${detailHref}#${sectionId}`,
-    active:
-      activeSectionId === sectionId || (isDefault && activeSectionId === ""),
-  });
-
-  const items: McpSidebarNavItem[] = [
-    sectionItem(
-      SKILL_ADOPTION_SECTION_ID,
-      "Adoption and drift",
-      ChartNoAxesColumn,
-      true,
-    ),
-    sectionItem(SKILL_TIMELINE_SECTION_ID, "Activation timeline", Activity),
-    sectionItem(SKILL_INSIGHTS_SECTION_ID, "Insights", ChartSpline),
-    sectionItem(SKILL_MANIFEST_SECTION_ID, "SKILL.md", FileText),
-    ...(hasFrontmatter
-      ? [sectionItem(SKILL_FRONTMATTER_SECTION_ID, "Frontmatter", Braces)]
-      : []),
-    ...(latestVersion
-      ? [
-          sectionItem(
-            SKILL_DISTRIBUTIONS_SECTION_ID,
-            "Plugin distributions",
-            Puzzle,
-          ),
-          sectionItem(SKILL_VERSIONS_SECTION_ID, "Version history", History),
-        ]
-      : []),
+  const items: DetailSidebarNavItem[] = [
+    {
+      key: "overview",
+      title: "Overview",
+      Icon: LayoutDashboard,
+      href: routes.skills.detail.overview.href(skillId),
+      active: routes.skills.detail.overview.active,
+    },
+    {
+      key: "content",
+      title: "Skill Content",
+      Icon: FileText,
+      href: routes.skills.detail.content.href(skillId),
+      active: routes.skills.detail.content.active,
+    },
+    {
+      key: "usage",
+      title: "Usage",
+      Icon: Activity,
+      href: routes.skills.detail.usage.href(skillId),
+      active: routes.skills.detail.usage.active,
+    },
+    {
+      key: "scored-sessions",
+      title: "Scored Sessions",
+      Icon: ListChecks,
+      href: routes.skills.detail.scoredSessions.href(skillId),
+      active: routes.skills.detail.scoredSessions.active,
+    },
+    {
+      key: "feedback",
+      title: "Agent Feedback",
+      Icon: MessageSquareText,
+      href: routes.skills.detail.feedback.href(skillId),
+      active: routes.skills.detail.feedback.active,
+    },
+    {
+      key: "versions",
+      title: "Version History",
+      Icon: History,
+      href: routes.skills.detail.versions.href(skillId),
+      active: routes.skills.detail.versions.active,
+    },
+    {
+      key: "settings",
+      title: "Settings",
+      Icon: Settings,
+      href: routes.skills.detail.settings.href(skillId),
+      active: routes.skills.detail.settings.active,
+    },
   ];
 
   const cardContent = skill && (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">{skill.displayName}</Type>
-        <Type variant="small" muted className="truncate font-mono text-xs">
+        <Text className="truncate font-semibold">{skill.displayName}</Text>
+        <Text variant="small" muted className="truncate font-mono text-xs">
           {skill.name}
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -128,27 +123,27 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       <SkillSharingCardBlocks skill={skill} />
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Distributions</McpSidebarInfoLabel>
-        <Type variant="small" muted className="text-xs">
+        <DetailSidebarInfoLabel>Distributions</DetailSidebarInfoLabel>
+        <Text variant="small" muted className="text-xs">
           {distributionCount === 1
             ? "1 plugin"
             : `${distributionCount}${
                 distributionsQuery.hasNextPage ? "+" : ""
               } plugins`}
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Versions</McpSidebarInfoLabel>
-        <Type variant="small" muted className="text-xs">
+        <DetailSidebarInfoLabel>Versions</DetailSidebarInfoLabel>
+        <Text variant="small" muted className="text-xs">
           {skill.versionCount} · updated{" "}
           <HumanizeDateTime date={skill.updatedAt} />
-        </Type>
+        </Text>
       </div>
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Activations</McpSidebarInfoLabel>
-        <Type variant="small" muted className="text-xs">
+        <DetailSidebarInfoLabel>Activations</DetailSidebarInfoLabel>
+        <Text variant="small" muted className="text-xs">
           {skill.seenCount}
           {skill.lastSeenAt && (
             <>
@@ -156,18 +151,18 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
               · last <HumanizeDateTime date={skill.lastSeenAt} />
             </>
           )}
-        </Type>
+        </Text>
       </div>
     </>
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.skills.href()}
       backLabel="Back to all skills"
       cardContent={cardContent}
       items={items}
-      itemsTitle="Sections"
+      itemsTitle="Configuration"
     />
   );
 }

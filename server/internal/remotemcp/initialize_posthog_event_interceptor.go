@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -79,9 +80,20 @@ func (i *InitializePostHogEventInterceptor) InterceptInitializeRequest(ctx conte
 		sessionID = uuid.NewString()
 	}
 
+	// protocolVersion mirrors the property the hosted /mcp handler records on
+	// this same event. Without it the two runtimes emit the same event name
+	// with different schemas, and the proxy — the path with real version
+	// negotiation, since Gram is only passing through — is the one with no
+	// unsampled record of what clients ask for.
+	var protocolVersion string
+	if init.Params != nil {
+		protocolVersion = mcpversions.Sanitize(init.Params.ProtocolVersion)
+	}
+
 	if err := i.posthog.CaptureEvent(ctx, eventMCPInitialized, sessionID, map[string]any{
 		"project_id":             projectID,
 		"authenticated":          authenticated,
+		"protocol_version":       protocolVersion,
 		"remote_mcp_server_id":   i.identity.RemoteMCPServerID,
 		"tunneled_mcp_server_id": i.identity.TunneledMCPServerID,
 		"mcp_server_id":          i.identity.McpServerID,

@@ -1,8 +1,10 @@
+mod catalog;
 mod clip;
 mod compaction;
 mod errors;
 mod gram_client;
 mod http_layer;
+mod mcp_actor;
 mod runtime;
 mod server;
 mod telemetry;

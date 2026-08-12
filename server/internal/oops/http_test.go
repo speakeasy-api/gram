@@ -158,6 +158,18 @@ func TestErrHandle_WrappedShareableError(t *testing.T) {
 	require.Empty(t, logBuf.String(), "ShareableError should not log even when wrapped")
 }
 
+func TestErrHandle_FailedPrecondition(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+	handler := ErrHandle(logger, func(http.ResponseWriter, *http.Request) error {
+		return E(CodeFailedPrecondition, nil, "operation cannot be completed")
+	})
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusPreconditionFailed, rec.Code)
+}
+
 type contextKey string
 
 func TestErrHandle_ContextPropagation(t *testing.T) {

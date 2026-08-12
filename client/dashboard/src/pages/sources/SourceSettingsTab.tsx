@@ -1,6 +1,6 @@
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ViewSourceDialogContent } from "@/components/sources/ViewSourceDialogContent";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -10,7 +10,9 @@ import type { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/op
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { RequireScope } from "@/components/require-scope";
-import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { Download, Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
@@ -95,9 +97,9 @@ export function SourceSettingsTab({
     <>
       <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
         <div>
-          <Type variant="subheading" className="mb-4">
+          <Text variant="subheading" className="mb-4">
             Source Actions
-          </Type>
+          </Text>
           <Stack direction="horizontal" gap={3}>
             {!isOpenAPI && (
               <Button
@@ -120,14 +122,14 @@ export function SourceSettingsTab({
           </Stack>
         </div>
 
-        <div className="border-destructive/30 rounded-lg border p-6">
-          <Type variant="subheading" className="text-destructive mb-1">
+        <div className="border-destructive/30 border p-6">
+          <Text variant="subheading" className="text-destructive mb-1">
             Danger Zone
-          </Type>
-          <Type muted small className="mb-4">
+          </Text>
+          <Text muted small className="mb-4">
             Removing this source will remove it from the current deployment.
             This action cannot be undone.
-          </Type>
+          </Text>
           <RequireScope scope="project:write" level="component">
             <Button
               variant="destructive-primary"

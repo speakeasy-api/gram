@@ -1,10 +1,10 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -29,7 +29,7 @@ export function BuiltInMcpSidebarNav(): React.JSX.Element | null {
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const mcpUrl = `${getServerURL()}/mcp/${orgSlug}-mcp-logs`;
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     {
       key: "overview",
       title: "Overview",
@@ -49,23 +49,23 @@ export function BuiltInMcpSidebarNav(): React.JSX.Element | null {
   const cardContent = (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">MCP Logs</Type>
-        <McpSidebarInfoLabel>Built-in</McpSidebarInfoLabel>
+        <Text className="truncate font-semibold">MCP Logs</Text>
+        <DetailSidebarInfoLabel>Built-in</DetailSidebarInfoLabel>
       </div>
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
         <div className="flex items-start gap-1">
-          <Type
+          <Text
             variant="small"
             muted
             className="line-clamp-2 font-mono text-xs break-all"
           >
             {mcpUrl.replace(/^https?:\/\//, "")}
-          </Type>
+          </Text>
           <CopyButton
             text={mcpUrl}
-            size="inline"
+            size="xs"
             tooltip="Copy URL"
             className="mt-[-2px] shrink-0"
           />
@@ -73,14 +73,14 @@ export function BuiltInMcpSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
-        <Type variant="small">{BUILT_IN_TOOLS.length}</Type>
+        <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
+        <Text variant="small">{BUILT_IN_TOOLS.length}</Text>
       </div>
     </>
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.mcp.href()}
       cardContent={cardContent}
       items={items}

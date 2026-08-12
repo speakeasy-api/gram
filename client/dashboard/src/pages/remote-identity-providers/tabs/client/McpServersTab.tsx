@@ -1,9 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import type { Action } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import type { Action } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -14,14 +14,14 @@ import {
   useOrganizationRemoteSessionClientMcpServers,
 } from "@gram/client/react-query/organizationRemoteSessionClientMcpServers.js";
 import { useRemoveOrganizationRemoteSessionClientFromMcpServerMutation } from "@gram/client/react-query/removeOrganizationRemoteSessionClientFromMcpServer.js";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -70,17 +70,17 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
 
   if (isError) {
     return (
-      <Type className="text-destructive py-8 text-center">
+      <Text className="text-destructive py-8 text-center">
         Failed to load attached MCP servers.
-      </Type>
+      </Text>
     );
   }
 
   if (!isLoading && items.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         This client is not attached to any MCP servers.
-      </Type>
+      </Text>
     );
   }
 
@@ -124,7 +124,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
               ariaLabel={href ? `View MCP server ${label}` : undefined}
             >
               <td className="px-3 py-3">
-                <Type
+                <Text
                   variant="subheading"
                   as="div"
                   className={cn(
@@ -134,7 +134,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
                   )}
                 >
                   {label}
-                </Type>
+                </Text>
               </td>
               <td className="px-3 py-3 text-right">
                 <RequireScope scope="org:admin" level="section">

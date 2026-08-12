@@ -1,0 +1,1 @@
+{"input_type":"request","litellm_call_id":"fixture-passthrough-text-call","litellm_trace_id":"fixture-passthrough-text-trace","structured_messages":null,"images":null,"tools":null,"texts":["pass-through prompt"],"request_data":{},"request_headers":null,"litellm_version":"1.94.0","additional_provider_specific_params":{},"tool_calls":null,"model":null}

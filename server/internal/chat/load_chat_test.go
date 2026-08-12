@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -140,8 +142,8 @@ func containsSeq(msgs []*gen.ChatMessage, seq int64) bool {
 
 func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T) {
 	t.Parallel()
-	ti := newTestChatServiceRBACDisabled(t)
-	ctx := initSessionCtx(t, ti)
+	ti := newTestChatService(t)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "content parts")
@@ -212,9 +214,10 @@ func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T
 // proximity and has no id to match on.
 func TestLoadChat_ContentPartsScopedToPage(t *testing.T) {
 	t.Parallel()
-	ti := newTestChatServiceRBACDisabled(t)
-	ctx := initSessionCtx(t, ti)
+	ti := newTestChatService(t)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
 	chatID := seedChat(t, ctx, ti, "u", "", "paged content parts")
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, chatID.String()))
 
 	olderMsgID := seedMessageContent(t, ctx, ti, chatID, "older prompt")
 	newerMsgID := seedMessageContent(t, ctx, ti, chatID, "newer prompt")

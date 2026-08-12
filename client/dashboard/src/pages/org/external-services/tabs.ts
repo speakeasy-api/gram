@@ -1,6 +1,7 @@
 // URL-driven tab state for the external credential detail page: the active tab
 // is the last path segment when it is a known tab, mirroring the Remote Identity
-// Provider detail pages. A GCP credential later gains a "kms-keys" tab (AGE-2870).
+// Provider detail pages. A credential may later gain a "kms-keys" tab alongside
+// the organization Encryption Keys UI (AGE-3067).
 
 export const EXTERNAL_CREDENTIAL_TABS = ["overview", "settings"] as const;
 export type ExternalCredentialTab = (typeof EXTERNAL_CREDENTIAL_TABS)[number];

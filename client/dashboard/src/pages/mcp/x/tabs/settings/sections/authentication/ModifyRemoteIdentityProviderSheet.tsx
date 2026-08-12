@@ -1,13 +1,13 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -16,7 +16,9 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -29,6 +31,8 @@ import {
 import { parseScopes } from "./issuerFormUtils";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "./useIssuerDuplicatePreflight";
 
 export function ModifyRemoteIdentityProviderSheet({
   open,
@@ -172,6 +176,22 @@ function ModifyRemoteIdentityProviderSheetBody({
   // backend.
   const [name, setName] = useState(issuer.name ?? "");
 
+  // Repointing a provider can duplicate an existing one just as creating it
+  // can, so the same preflight runs here. Gated on the URL having diverged from
+  // what is saved: while they match, the only record it could report is this
+  // one. excludeId covers the remaining case, a normalization-equivalent edit
+  // (a trailing slash on your own URL) that the shared candidate set still
+  // matches.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState(issuer.issuer);
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "project",
+    // No `open` gate: this body only mounts while the sheet is open, so closing
+    // it unmounts the query rather than leaving it live.
+    enabled: settledIssuerUrl.trim() !== issuer.issuer,
+    excludeId: issuer.id,
+  });
+
   // Client-side form state. clientId is informational only — the API has no
   // rotate path, so it stays read-only. clientSecret starts blank; a typed
   // value rotates the secret, blank means "leave unchanged".
@@ -292,31 +312,41 @@ function ModifyRemoteIdentityProviderSheetBody({
         {affectedMcpServers.length > 0 && (
           <Alert variant="warning" dismissible={false}>
             <Stack gap={2}>
-              <Type className="font-medium">
+              <Text className="font-medium">
                 Heads up — this identity provider is shared with{" "}
                 {affectedMcpServers.length === 1
                   ? "1 other MCP server"
                   : `${affectedMcpServers.length} other MCP servers`}{" "}
                 in this project.
-              </Type>
-              <Type small>
+              </Text>
+              <Text small>
                 Issuer URL and endpoint edits apply to every server that uses
                 this provider. Client credentials, scope, and audience changes
                 only affect this server.
-              </Type>
-              <Type small mono>
+              </Text>
+              <Text small mono>
                 {affectedMcpServers
                   .map((server) => server.name?.trim() || server.id.slice(0, 8))
                   .join(", ")}
-              </Type>
+              </Text>
             </Stack>
           </Alert>
         )}
 
         <IssuerUrlField
           issuerUrl={issuerUrl}
+          onIssuerUrlSettled={setSettledIssuerUrl}
+          duplicateWarning={
+            <IssuerDuplicateWarning
+              matches={duplicateMatches}
+              viewerScope="project"
+            />
+          }
           onIssuerUrlChange={(value) => {
             setIssuerUrl(value);
+            // Any edit invalidates the last blur, so a warning cannot outlive
+            // the URL it describes.
+            setSettledIssuerUrl("");
             clearDiscoverError();
             // Same reset semantics as Attach: when the URL diverges from the
             // settled state, every downstream field was tied to that prior
@@ -336,13 +366,13 @@ function ModifyRemoteIdentityProviderSheetBody({
 
         <Stack gap={2}>
           <Label className="text-muted-foreground text-xs">Slug</Label>
-          <Type small mono>
+          <Text small mono>
             {issuer.slug}
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Slug is the stable identifier for this identity provider and can't
             be renamed here.
-          </Type>
+          </Text>
         </Stack>
 
         <Stack gap={2}>
@@ -354,10 +384,10 @@ function ModifyRemoteIdentityProviderSheetBody({
             onChange={setName}
             placeholder="My Identity Provider"
           />
-          <Type muted small>
+          <Text muted small>
             Friendly label shown in the dashboard. Clear it to fall back to the
             Issuer URL.
-          </Type>
+          </Text>
         </Stack>
 
         <EndpointsFields
@@ -382,9 +412,9 @@ function ModifyRemoteIdentityProviderSheetBody({
         />
 
         {isLoadingClient ? (
-          <Type muted small>
+          <Text muted small>
             Loading client credentials…
-          </Type>
+          </Text>
         ) : (
           <ClientCredentialsFields
             clientId={primaryClient?.clientId ?? ""}

@@ -58,6 +58,28 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	return i, err
 }
 
+const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = $2
+  AND deleted IS FALSE
+`
+
+type DisableOpenRouterAPIKeyParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Locks the key down without deleting it, so a reinstated organization keeps
+// the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
+// refuses to hand the key to a completion.
+func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
 SELECT organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
@@ -107,9 +129,10 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = $1, key_hash = $2, key = $3
-WHERE organization_id = $4
-  AND key_type = $5
+SET monthly_credits = $1, key_hash = $2, key = $3,
+    disabled = disabled AND NOT $4::boolean
+WHERE organization_id = $5
+  AND key_type = $6
   AND deleted IS FALSE
 RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
@@ -118,6 +141,7 @@ type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
 	Key            string
+	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
@@ -127,6 +151,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		arg.MonthlyCredits,
 		arg.KeyHash,
 		arg.Key,
+		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)

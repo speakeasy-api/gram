@@ -202,6 +202,7 @@ export function setSkillsData(
       search?: string | undefined;
       sourceKinds?: Array<SourceKinds> | undefined;
       classifications?: Array<Classifications> | undefined;
+      tags?: Array<string> | undefined;
       sort?: Sort | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
@@ -224,6 +225,7 @@ export function invalidateSkills(
       search?: string | undefined;
       sourceKinds?: Array<SourceKinds> | undefined;
       classifications?: Array<Classifications> | undefined;
+      tags?: Array<string> | undefined;
       sort?: Sort | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;

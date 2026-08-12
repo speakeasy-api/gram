@@ -28,6 +28,8 @@ type Server struct {
 	ListGcpIamCredentials   http.Handler
 	GetAwsIamCredential     http.Handler
 	GetGcpIamCredential     http.Handler
+	VerifyGcpIamCredential  http.Handler
+	GetGcpSetupInfo         http.Handler
 	DeleteAwsIamCredential  http.Handler
 	DeleteGcpIamCredential  http.Handler
 }
@@ -68,6 +70,8 @@ func New(
 			{"ListGcpIamCredentials", "GET", "/rpc/externalCredentials.listGcpIam"},
 			{"GetAwsIamCredential", "GET", "/rpc/externalCredentials.getAwsIam"},
 			{"GetGcpIamCredential", "GET", "/rpc/externalCredentials.getGcpIam"},
+			{"VerifyGcpIamCredential", "POST", "/rpc/externalCredentials.verifyGcpIam"},
+			{"GetGcpSetupInfo", "GET", "/rpc/externalCredentials.getGcpSetupInfo"},
 			{"DeleteAwsIamCredential", "DELETE", "/rpc/externalCredentials.deleteAwsIam"},
 			{"DeleteGcpIamCredential", "DELETE", "/rpc/externalCredentials.deleteGcpIam"},
 		},
@@ -80,6 +84,8 @@ func New(
 		ListGcpIamCredentials:   NewListGcpIamCredentialsHandler(e.ListGcpIamCredentials, mux, decoder, encoder, errhandler, formatter),
 		GetAwsIamCredential:     NewGetAwsIamCredentialHandler(e.GetAwsIamCredential, mux, decoder, encoder, errhandler, formatter),
 		GetGcpIamCredential:     NewGetGcpIamCredentialHandler(e.GetGcpIamCredential, mux, decoder, encoder, errhandler, formatter),
+		VerifyGcpIamCredential:  NewVerifyGcpIamCredentialHandler(e.VerifyGcpIamCredential, mux, decoder, encoder, errhandler, formatter),
+		GetGcpSetupInfo:         NewGetGcpSetupInfoHandler(e.GetGcpSetupInfo, mux, decoder, encoder, errhandler, formatter),
 		DeleteAwsIamCredential:  NewDeleteAwsIamCredentialHandler(e.DeleteAwsIamCredential, mux, decoder, encoder, errhandler, formatter),
 		DeleteGcpIamCredential:  NewDeleteGcpIamCredentialHandler(e.DeleteGcpIamCredential, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -99,6 +105,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListGcpIamCredentials = m(s.ListGcpIamCredentials)
 	s.GetAwsIamCredential = m(s.GetAwsIamCredential)
 	s.GetGcpIamCredential = m(s.GetGcpIamCredential)
+	s.VerifyGcpIamCredential = m(s.VerifyGcpIamCredential)
+	s.GetGcpSetupInfo = m(s.GetGcpSetupInfo)
 	s.DeleteAwsIamCredential = m(s.DeleteAwsIamCredential)
 	s.DeleteGcpIamCredential = m(s.DeleteGcpIamCredential)
 }
@@ -117,6 +125,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListGcpIamCredentialsHandler(mux, h.ListGcpIamCredentials)
 	MountGetAwsIamCredentialHandler(mux, h.GetAwsIamCredential)
 	MountGetGcpIamCredentialHandler(mux, h.GetGcpIamCredential)
+	MountVerifyGcpIamCredentialHandler(mux, h.VerifyGcpIamCredential)
+	MountGetGcpSetupInfoHandler(mux, h.GetGcpSetupInfo)
 	MountDeleteAwsIamCredentialHandler(mux, h.DeleteAwsIamCredential)
 	MountDeleteGcpIamCredentialHandler(mux, h.DeleteGcpIamCredential)
 }
@@ -589,6 +599,114 @@ func NewGetGcpIamCredentialHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getGcpIamCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "externalCredentials")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountVerifyGcpIamCredentialHandler configures the mux to serve the
+// "externalCredentials" service "verifyGcpIamCredential" endpoint.
+func MountVerifyGcpIamCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/externalCredentials.verifyGcpIam", f)
+}
+
+// NewVerifyGcpIamCredentialHandler creates a HTTP handler which loads the HTTP
+// request and calls the "externalCredentials" service "verifyGcpIamCredential"
+// endpoint.
+func NewVerifyGcpIamCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeVerifyGcpIamCredentialRequest(mux, decoder)
+		encodeResponse = EncodeVerifyGcpIamCredentialResponse(encoder)
+		encodeError    = EncodeVerifyGcpIamCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "verifyGcpIamCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "externalCredentials")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGcpSetupInfoHandler configures the mux to serve the
+// "externalCredentials" service "getGcpSetupInfo" endpoint.
+func MountGetGcpSetupInfoHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/externalCredentials.getGcpSetupInfo", f)
+}
+
+// NewGetGcpSetupInfoHandler creates a HTTP handler which loads the HTTP
+// request and calls the "externalCredentials" service "getGcpSetupInfo"
+// endpoint.
+func NewGetGcpSetupInfoHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGcpSetupInfoRequest(mux, decoder)
+		encodeResponse = EncodeGetGcpSetupInfoResponse(encoder)
+		encodeError    = EncodeGetGcpSetupInfoError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGcpSetupInfo")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "externalCredentials")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -1878,7 +1878,9 @@ func unmarshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRe
 	if v == nil {
 		return nil
 	}
-	res := &hooks.HookIngestData{}
+	res := &hooks.HookIngestData{
+		McpInventoryCollected: v.McpInventoryCollected,
+	}
 	if v.Prompt != nil {
 		res.Prompt = unmarshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
 	}

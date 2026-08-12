@@ -1,5 +1,5 @@
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Badge } from "@speakeasy-api/moonshine";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Badge } from "@/components/ui/Badge";
 import {
   AlertCircle,
   CheckCircle2,

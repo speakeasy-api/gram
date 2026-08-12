@@ -19,6 +19,7 @@ function inventoryServer(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl,
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,

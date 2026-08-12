@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 // TestExternalKeys_CrossOrgIsolation verifies that a fully-granted admin in a
@@ -31,6 +33,10 @@ func TestExternalKeys_CrossOrgIsolation(t *testing.T) {
 	otherOrg.ActiveOrganizationID = "org_other_" + uuid.NewString()
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &otherOrg), authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
 
+	// Entitle the other org too, so what follows tests the organization_id
+	// predicate rather than the entitlement gate short-circuiting ahead of it.
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, otherOrg.ActiveOrganizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
 	// The other org cannot read it.
 	_, err := ti.service.GetAwsKmsKey(otherCtx, &gen.GetAwsKmsKeyPayload{
 		ID:           created.ID,
@@ -42,9 +48,7 @@ func TestExternalKeys_CrossOrgIsolation(t *testing.T) {
 	_, err = ti.service.UpdateAwsKmsKey(otherCtx, &gen.UpdateAwsKmsKeyPayload{
 		ID:                     created.ID,
 		SessionToken:           nil,
-		KeyArn:                 "arn:aws:kms:us-east-1:999999999999:key/attacker",
 		ExternalCredentialID:   credID,
-		Algorithm:              "RS256",
 		Name:                   "hijacked",
 		CustomerGrantReference: nil,
 	})
@@ -90,6 +94,10 @@ func TestExternalKeys_CrossOrgCredential(t *testing.T) {
 	otherOrg := *authCtx
 	otherOrg.ActiveOrganizationID = "org_other_" + uuid.NewString()
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &otherOrg), authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
+
+	// Entitle the other org too, so what follows tests the organization_id
+	// predicate rather than the entitlement gate short-circuiting ahead of it.
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, otherOrg.ActiveOrganizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
 
 	_, err := ti.service.CreateAwsKmsKey(otherCtx, &gen.CreateAwsKmsKeyPayload{
 		SessionToken:           nil,

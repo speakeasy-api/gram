@@ -1,4 +1,5 @@
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
+import { SERIES, withAlpha } from "@/components/chart/palette";
 import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import type { ChartDataset } from "chart.js";
 
@@ -28,6 +29,9 @@ export function buildAgentTokenTimeSeriesChartData(
   timeSeries: AgentTokenTimeSeriesBucket[],
   timeRangeMs: number,
   valueMode: AgentTokenValueMode,
+  // Theme-resolved series ramp; component callers pass seriesForTheme(isDark)
+  // so dark mode lifts the near-black entries. Defaults to the light ramp.
+  colors: readonly string[] = SERIES,
 ): {
   timestamps: number[];
   chartData: AgentTokenTimeSeriesChartData;
@@ -39,13 +43,15 @@ export function buildAgentTokenTimeSeriesChartData(
     formatChartLabel(new Date(timestamp), timeRangeMs),
   );
 
+  // Bars step through the shared neutral ramp (at reduced alpha so the trend
+  // line stays legible on top) — no hue coding.
   const barDatasets =
     valueMode === "cost"
       ? [
           {
             label: "Cost",
             data: timeSeries.map((bucket) => bucket.totalCost),
-            backgroundColor: "rgba(96, 165, 250, 0.35)",
+            backgroundColor: withAlpha(colors[1]!, 0.35),
             stack: "stack",
             order: 2,
           },
@@ -54,21 +60,21 @@ export function buildAgentTokenTimeSeriesChartData(
           {
             label: "Input Tokens",
             data: timeSeries.map((bucket) => bucket.totalInputTokens),
-            backgroundColor: "rgba(96, 165, 250, 0.35)",
+            backgroundColor: withAlpha(colors[1]!, 0.35),
             stack: "stack",
             order: 2,
           },
           {
             label: "Output Tokens",
             data: timeSeries.map((bucket) => bucket.totalOutputTokens),
-            backgroundColor: "rgba(52, 211, 153, 0.35)",
+            backgroundColor: withAlpha(colors[3]!, 0.35),
             stack: "stack",
             order: 2,
           },
           {
             label: "Cache Read",
             data: timeSeries.map((bucket) => bucket.cacheReadInputTokens),
-            backgroundColor: "rgba(167, 139, 250, 0.35)",
+            backgroundColor: withAlpha(colors[5]!, 0.35),
             stack: "stack",
             order: 2,
           },
@@ -86,7 +92,8 @@ export function buildAgentTokenTimeSeriesChartData(
     label: valueMode === "cost" ? "Cost Trend" : "Token Trend",
     data: smoothData(rawTotal),
     type: "line",
-    borderColor: valueMode === "cost" ? "#818cf8" : "#3b82f6",
+    // Editorial trend line: ink for tokens, mid neutral for cost.
+    borderColor: valueMode === "cost" ? colors[3]! : colors[0]!,
     backgroundColor: "transparent",
     pointRadius: 0,
     pointHoverRadius: 4,

@@ -96,11 +96,91 @@ class FunctionsError extends Error {
 }
 
 /**
+ * Identity of the MCP client that made a tool call, as reported by the client
+ * itself.
+ *
+ * @typedef {{ name: string, version: string }} MCPClientInfo
+ */
+
+/**
+ * Per-call metadata about the caller, keyed the way MCP keys request `_meta`.
+ *
+ * @typedef {{
+ *   "io.modelcontextprotocol/clientInfo"?: MCPClientInfo,
+ *   "gram.ai/oauth-client-id"?: string,
+ * }} ToolCallMeta
+ */
+
+/**
+ * Coerce an untrusted client identity into an `MCPClientInfo`. Returns
+ * undefined unless a non-empty `name` string is present; `version` defaults to
+ * "" so a client that reports only a name is still usable. Mirrors the
+ * normalization `@gram-ai/functions` applies when a function serves MCP
+ * itself.
+ *
+ * @param {unknown} value
+ * @returns {MCPClientInfo | undefined}
+ */
+function normalizeClientInfo(value) {
+  if (value == null || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = /** @type {Record<string, unknown>} */ (value);
+  const name = record["name"];
+  if (typeof name !== "string" || name === "") {
+    return undefined;
+  }
+
+  const version =
+    typeof record["version"] === "string" ? record["version"] : "";
+
+  return { name, version };
+}
+
+/**
+ * Extract the tool-call options a `_meta` block carries. Anything malformed is
+ * dropped rather than surfaced: losing the caller's identity must never fail
+ * the call.
+ *
+ * The block is forwarded whole as `meta` as well, so a tool can read keys this
+ * runner does not model. The runner has already re-encoded it from a declared
+ * shape, so only known keys survive to here.
+ *
+ * @param {unknown} meta
+ * @returns {{ clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown> }}
+ */
+function toolCallOptionsFromMeta(meta) {
+  if (meta == null || typeof meta !== "object") {
+    return {};
+  }
+
+  const record = /** @type {Record<string, unknown>} */ (meta);
+
+  /** @type {{ clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown> }} */
+  const options = { meta: record };
+
+  const clientInfo = normalizeClientInfo(
+    record["io.modelcontextprotocol/clientInfo"],
+  );
+  if (clientInfo != null) {
+    options.clientInfo = clientInfo;
+  }
+
+  const oauthClientId = record["gram.ai/oauth-client-id"];
+  if (typeof oauthClientId === "string" && oauthClientId !== "") {
+    options.oauthClientId = oauthClientId;
+  }
+
+  return options;
+}
+
+/**
  * @param {string[]} args
  * @returns {{
  *   type: "tool",
  *   pipePath: string,
- *   request: { name: string, input: unknown }
+ *   request: { name: string, input: unknown, _meta?: ToolCallMeta }
  * } | {
  *   type: "resource",
  *   pipePath: string,
@@ -155,14 +235,17 @@ function parseArgs(args) {
 }
 
 /**
- * @param {(call: {name: string, input: unknown}) => Promise<Response>} func
+ * @param {(call: {name: string, input: unknown}, options?: {clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown>}) => Promise<Response>} func
  * @param {string} name
  * @param {unknown} input
+ * @param {{clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown>}} options
  * @returns {Promise<Response>}
  */
-async function callTool(func, name, input) {
+async function callTool(func, name, input, options) {
   try {
-    const response = await func({ name, input });
+    // Handlers that predate caller identity — and any plain `handleToolCall`
+    // export — simply ignore the second argument.
+    const response = await func({ name, input }, options);
     if (!(response instanceof Response)) {
       throw new FunctionsError(
         ERROR_CODES.INVALID_TOOL_RESULT,
@@ -266,7 +349,7 @@ async function writeHTTPResponse(pipeFile, response) {
 
 /**
  * @param {string} codePath
- * @returns {Promise<{ok: true, value: (call: {name: string, input: unknown}) => Promise<Response>} | {ok: false, error: FunctionsError}>}
+ * @returns {Promise<{ok: true, value: (call: {name: string, input: unknown}, options?: {clientInfo?: MCPClientInfo, oauthClientId?: string, meta?: Record<string, unknown>}) => Promise<Response>} | {ok: false, error: FunctionsError}>}
  */
 async function importToolCallHandler(codePath) {
   try {
@@ -375,7 +458,7 @@ const USER_CODE_PATH = path.join(process.cwd(), "functions.js");
 /**
  *
  * @param {import("node:fs/promises").FileHandle} pipeFile
- * @param {{name: string, input: unknown}} toolCall
+ * @param {{name: string, input: unknown, _meta?: ToolCallMeta}} toolCall
  * @param {string} codePath
  * @returns
  */
@@ -391,6 +474,7 @@ async function handleToolCall(pipeFile, toolCall, codePath) {
       importResult.value,
       toolCall.name,
       toolCall.input,
+      toolCallOptionsFromMeta(toolCall._meta),
     );
     await writeHTTPResponse(pipeFile, res);
   } catch (e) {
@@ -441,7 +525,9 @@ export async function main(args = process.argv, codePath = USER_CODE_PATH) {
       case "tool":
         await handleToolCall(
           pipeFile,
-          /** @type {{name: string, input: unknown}} */ (request),
+          /** @type {{name: string, input: unknown, _meta?: ToolCallMeta}} */ (
+            request
+          ),
           codePath,
         );
         break;

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
-import { Card } from "./ui/card";
-import { Heading } from "./ui/heading";
+import { Card } from "./ui/Card";
+import { Heading } from "@/components/ui/Heading";
 
 export function CreateThingCard({
   onClick,

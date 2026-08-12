@@ -4,6 +4,7 @@ import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
+  shadowMCPBlockedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
@@ -147,5 +148,76 @@ describe("shadowMCPSelectionBaselineForUpdate", () => {
 
   it("does not invent a baseline when the field was omitted", () => {
     expect(shadowMCPSelectionBaselineForUpdate({})).toBeUndefined();
+  });
+});
+
+describe("shadowMCPAllowedURLsForMutation with allow_all disposition", () => {
+  it("never sends allowed URLs for an allow_all target", () => {
+    expect(
+      shadowMCPAllowedURLsForMutation({
+        action: "block",
+        selectedCategories: new Set(["shadow_mcp"]),
+        selectedURLs: new Set(["https://github.example.com/mcp"]),
+        originalPolicy: null,
+        disposition: "allow_all",
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("shadowMCPBlockedURLsForMutation", () => {
+  it("returns sorted selected URLs for an allow_all blocking Shadow MCP target", () => {
+    expect(
+      shadowMCPBlockedURLsForMutation({
+        action: "block",
+        selectedCategories: new Set(["shadow_mcp"]),
+        selectedURLs: new Set([
+          "https://sketchy.example.com/mcp",
+          "https://bad.example.com/sse",
+        ]),
+        disposition: "allow_all",
+      }),
+    ).toEqual([
+      "https://bad.example.com/sse",
+      "https://sketchy.example.com/mcp",
+    ]);
+  });
+
+  it("omits blocked URLs under the block_all disposition", () => {
+    expect(
+      shadowMCPBlockedURLsForMutation({
+        action: "block",
+        selectedCategories: new Set(["shadow_mcp"]),
+        selectedURLs: new Set(["https://sketchy.example.com/mcp"]),
+        disposition: "block_all",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("omits blocked URLs when the target is not a blocking Shadow MCP policy", () => {
+    expect(
+      shadowMCPBlockedURLsForMutation({
+        action: "flag",
+        selectedCategories: new Set(["shadow_mcp"]),
+        selectedURLs: new Set(["https://sketchy.example.com/mcp"]),
+        disposition: "allow_all",
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("shadowMCPSelectionBaselineForUpdate with blocked URLs", () => {
+  it("returns the explicitly submitted blocked URL set", () => {
+    expect(
+      shadowMCPSelectionBaselineForUpdate({
+        shadowMcpBlockedUrls: ["https://sketchy.example.com/mcp"],
+      }),
+    ).toEqual(new Set(["https://sketchy.example.com/mcp"]));
+  });
+
+  it("returns an empty baseline for an explicit blocked-list clear", () => {
+    expect(
+      shadowMCPSelectionBaselineForUpdate({ shadowMcpBlockedUrls: [] }),
+    ).toEqual(new Set());
   });
 });

@@ -12,6 +12,7 @@ import {
 
 export type CreateRiskPolicyBypassRequestSecurity = {
   sessionHeaderGramSession?: string | undefined;
+  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type CreateRiskPolicyBypassRequestRequest = {
@@ -19,6 +20,10 @@ export type CreateRiskPolicyBypassRequestRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   createRiskPolicyBypassRequestRequestBody:
     CreateRiskPolicyBypassRequestRequestBody;
 };
@@ -26,6 +31,7 @@ export type CreateRiskPolicyBypassRequestRequest = {
 /** @internal */
 export type CreateRiskPolicyBypassRequestSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
+  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -36,10 +42,12 @@ export const CreateRiskPolicyBypassRequestSecurity$outboundSchema:
   > = z.pipe(
     z.object({
       sessionHeaderGramSession: z.optional(z.string()),
+      apikeyHeaderGramKey: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
+        apikeyHeaderGramKey: "apikey_header_Gram-Key",
       });
     }),
   );
@@ -57,6 +65,7 @@ export function createRiskPolicyBypassRequestSecurityToJSON(
 /** @internal */
 export type CreateRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
   CreateRiskPolicyBypassRequestRequestBody:
     CreateRiskPolicyBypassRequestRequestBody$Outbound;
 };
@@ -68,12 +77,14 @@ export const CreateRiskPolicyBypassRequestRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
+    gramKey: z.optional(z.string()),
     createRiskPolicyBypassRequestRequestBody:
       CreateRiskPolicyBypassRequestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
+      gramKey: "Gram-Key",
       createRiskPolicyBypassRequestRequestBody:
         "CreateRiskPolicyBypassRequestRequestBody",
     });

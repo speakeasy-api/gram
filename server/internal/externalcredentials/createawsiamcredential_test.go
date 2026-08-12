@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestCreateAwsIamCredential_AssumeRoleWithExternalID(t *testing.T) {
@@ -148,6 +150,23 @@ func TestCreateAwsIamCredential_ForbiddenForReadOnly(t *testing.T) {
 	_, err := ti.service.CreateAwsIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.CreateAwsIamCredentialPayload{
 		SessionToken:  nil,
 		Name:          "aws-forbidden",
+		AssumeRoleArn: new("arn:aws:iam::123456789012:role/gram"),
+		OidcAudience:  nil,
+		OidcSubject:   nil,
+		StsRegion:     nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateAwsIamCredential_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.CreateAwsIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateAwsIamCredentialPayload{
+		SessionToken:  nil,
+		Name:          "aws-no-entitlement",
 		AssumeRoleArn: new("arn:aws:iam::123456789012:role/gram"),
 		OidcAudience:  nil,
 		OidcSubject:   nil,

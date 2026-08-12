@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Sheet,
   SheetContent,
@@ -7,7 +7,7 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import type { Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { FilterControl } from "./FilterControl";
@@ -136,7 +136,7 @@ export function FilterSheet({
         </div>
 
         <SheetFooter>
-          <Button variant="outline" onClick={onClearAll}>
+          <Button variant="secondary" onClick={onClearAll}>
             Reset to default
           </Button>
           <Button onClick={() => onOpenChange(false)}>Done</Button>

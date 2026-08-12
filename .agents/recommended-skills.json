@@ -1,0 +1,20 @@
+{
+  "$comment": "Recommended external agent skills. Installed on opt-in by `mise run skills:recommended` (offered by ./zero); contents land in .agents/skills/<name>/ and are kept out of git via .git/info/exclude. Pin `ref` to a commit SHA.",
+  "skills": {
+    "clickhouse-architecture-advisor": {
+      "repo": "https://github.com/ClickHouse/agent-skills",
+      "ref": "5aec3114379671f33b1c502a51d420a0729c8172",
+      "path": "skills/clickhouse-architecture-advisor"
+    },
+    "clickhouse-best-practices": {
+      "repo": "https://github.com/ClickHouse/agent-skills",
+      "ref": "5aec3114379671f33b1c502a51d420a0729c8172",
+      "path": "skills/clickhouse-best-practices"
+    },
+    "worktrunk": {
+      "repo": "https://github.com/max-sixty/worktrunk",
+      "ref": "1eded279436736e432a467cb8a0bd5d4496d797a",
+      "path": "plugins/worktrunk/skills/worktrunk"
+    }
+  }
+}

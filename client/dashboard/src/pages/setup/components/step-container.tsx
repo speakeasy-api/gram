@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 interface StepContainerProps {
   icon: ReactNode;
@@ -36,9 +36,7 @@ export function StepContainer({
       {/* Header */}
       <div className="flex items-center gap-0">
         <div className="flex-shrink-0">{icon}</div>
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-          {title}
-        </h1>
+        <h1 className="text-foreground text-display-sm font-thin">{title}</h1>
       </div>
       <p className="text-muted-foreground mt-2 text-sm">{description}</p>
 
@@ -53,7 +51,7 @@ export function StepContainer({
         <div>
           {showBack && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={onBack}
               className="text-muted-foreground hover:text-foreground gap-1.5"
             >
@@ -65,7 +63,7 @@ export function StepContainer({
         <div className="flex items-center gap-3">
           {onSkip && (
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={onSkip}
               className="text-muted-foreground hover:text-foreground"
             >
@@ -75,7 +73,7 @@ export function StepContainer({
           <Button
             onClick={onContinue}
             disabled={!canContinue || isLoading}
-            className="bg-accent hover:bg-accent/90 text-accent-foreground gap-1.5"
+            className="gap-1.5"
           >
             {isLoading ? "Loading..." : continueLabel}
             {!isLoading && <ArrowRight className="h-4 w-4" />}

@@ -1,16 +1,17 @@
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { AnnotationToggle } from "./AnnotationToggle";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Action } from "@/components/ui/more-actions";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Action } from "@/components/ui/MoreActions";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool } from "@/lib/toolTypes";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { useMemo, useState } from "react";
 
 type EditMode = "name" | "description" | "annotations" | "tags";
@@ -252,12 +253,12 @@ export function useSourceToolActions({
                       size="small"
                       className="text-muted-foreground/70"
                     />
-                    <Type small muted>
+                    <Text small muted>
                       Original name:
-                    </Type>
-                    <Type small muted>
+                    </Text>
+                    <Text small muted>
                       {tool.canonical?.name}
-                    </Type>
+                    </Text>
                   </Stack>
                 )}
             </Stack>
@@ -272,18 +273,18 @@ export function useSourceToolActions({
               />
               {tool.variation?.description &&
                 tool.variation?.description !== tool.canonical?.description && (
-                  <Stack className="border-border/70 rounded-md border p-2">
-                    <Type small muted className="inline font-medium">
+                  <Stack className="border-border/70 border p-2">
+                    <Text small muted className="inline font-medium">
                       <Icon
                         name="layers-2"
                         size="small"
                         className="text-muted-foreground/70 inline align-text-bottom"
                       />{" "}
                       Original Description
-                    </Type>
-                    <Type small muted>
+                    </Text>
+                    <Text small muted>
                       {tool.canonical?.description}
-                    </Type>
+                    </Text>
                   </Stack>
                 )}
             </Stack>
@@ -292,7 +293,7 @@ export function useSourceToolActions({
         </div>
         <Dialog.Footer>
           <Button
-            variant="ghost"
+            variant="tertiary"
             onClick={() => setEditDialogOpen(false)}
             disabled={isUpdating}
           >

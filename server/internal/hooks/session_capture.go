@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -20,7 +22,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // ErrChatNotFound indicates the chat (conversation) does not exist.
@@ -86,19 +90,22 @@ func claudeSurfaceFromServiceName(name string) string {
 // claudeServiceNameSpecificity ranks how precisely a service name or adapter
 // slug identifies the product surface. "cowork" is unambiguous; the desktop
 // adapter slug narrows to CCD; "claude-code" is the OTEL name shared by the
-// CLI and CCD, so it is the least specific Claude value. Non-Claude values
-// rank zero.
+// CLI and CCD; the bare "claude" adapter slug the hooks binary sends for
+// Claude Code marks a Claude-family sender with no surface information at
+// all. Non-Claude values rank zero.
 func claudeServiceNameSpecificity(name string) int {
 	switch claudeSurfaceFromServiceName(name) {
 	case agentVariantCowork:
-		return 3
+		return 4
 	case surfaceClaudeCodeDesktop:
-		return 2
+		return 3
 	case agentVariantClaudeCode:
-		return 1
-	default:
-		return 0
+		return 2
 	}
+	if strings.ToLower(strings.TrimSpace(name)) == "claude" {
+		return 1
+	}
+	return 0
 }
 
 // preferClaudeServiceName merges a freshly reported service name (or adapter
@@ -106,18 +113,21 @@ func claudeServiceNameSpecificity(name string) int {
 // the Claude product surface more precisely. This is what lets the two signals
 // compose: the OTEL stream's "cowork" upgrades a cached desktop adapter slug,
 // while a cached "claude-code-desktop" survives OTEL batches that only report
-// the ambiguous "claude-code". Ties keep the fresh value. A non-empty incoming
-// value that identifies no Claude surface (Cursor, Codex, unknown adapters)
-// always wins: non-Claude senders keep their reported name instead of being
-// overwritten by a Claude value cached under the same session id.
+// the ambiguous "claude-code", and an OTEL-cached "claude-code" survives hook
+// events carrying only the bare "claude" adapter slug. Ties keep the fresh
+// value. A non-empty incoming value that identifies no Claude sender at all
+// (Cursor, Codex, unknown adapters) always wins: non-Claude senders keep their
+// reported name instead of being overwritten by a Claude value cached under
+// the same session id.
 func preferClaudeServiceName(incoming, cached string) string {
 	if incoming == "" {
 		return cached
 	}
-	if claudeSurfaceFromServiceName(incoming) == "" {
+	specificity := claudeServiceNameSpecificity(incoming)
+	if specificity == 0 {
 		return incoming
 	}
-	if claudeServiceNameSpecificity(cached) > claudeServiceNameSpecificity(incoming) {
+	if claudeServiceNameSpecificity(cached) > specificity {
 		return cached
 	}
 	return incoming
@@ -330,34 +340,47 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	msgParams chatRepo.CreateChatMessageParams,
 	defaultTitle string,
 ) error {
-	if s.productFeatures == nil {
-		return nil
+	_, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, chatID, projectID, msgParams, defaultTitle)
+	return err
+}
+
+func (s *Service) insertMessageWithFallbackUpsertResult(
+	ctx context.Context,
+	metadata *SessionMetadata,
+	chatID uuid.UUID,
+	projectID uuid.UUID,
+	msgParams chatRepo.CreateChatMessageParams,
+	defaultTitle string,
+) (bool, error) {
+	enabled, err := s.sessionCaptureEnabled(ctx, metadata, projectID)
+	if err != nil || !enabled {
+		return false, err
 	}
 
-	// Check if session capture is enabled for this org
-	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
-	if err != nil {
-		return fmt.Errorf("check session_capture feature flag: %w", err)
-	}
-	if !enabled {
-		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
-			attr.SlogEvent("claude_hook_session_capture_disabled"),
-			attr.SlogOrganizationID(metadata.GramOrgID),
-			attr.SlogProjectID(projectID.String()),
-			attr.SlogGenAIConversationID(metadata.SessionID),
-		)
-		return nil
+	writeMessage := func() (int64, error) {
+		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
+			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String)
+			if writeErr != nil {
+				return 0, fmt.Errorf("write correlated chat message: %w", writeErr)
+			}
+			return n, nil
+		}
+		n, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+		if writeErr != nil {
+			return 0, fmt.Errorf("write chat message: %w", writeErr)
+		}
+		return n, nil
 	}
 
-	// Try to insert the message (Write handles notification on success).
-	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+	// Try to insert the message (the writer handles notification on success).
+	n, err := writeMessage()
 	if err == nil {
-		return nil
+		return n > 0, nil
 	}
 
 	// If this is not a foreign key violation (chat doesn't exist), fail.
 	if !isForeignKeyViolation(err) {
-		return fmt.Errorf("insert chat message: %w", err)
+		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
 	// Create the chat and retry.
@@ -371,13 +394,109 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		Title:          conv.ToPGText(defaultTitle),
 	})
 	if upsertErr != nil {
-		return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
 	}
 
-	if _, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams}); err != nil {
-		return fmt.Errorf("insert chat message after creating chat: %w", err)
+	n, err = writeMessage()
+	if err != nil {
+		return false, fmt.Errorf("insert chat message after creating chat: %w", err)
 	}
-	return nil
+	return n > 0, nil
+}
+
+func (s *Service) sessionCaptureEnabled(ctx context.Context, metadata *SessionMetadata, projectID uuid.UUID) (bool, error) {
+	if s.productFeatures == nil {
+		return false, nil
+	}
+
+	// Check if session capture is enabled for this org
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
+	if err != nil {
+		return false, fmt.Errorf("check session_capture feature flag: %w", err)
+	}
+	if !enabled {
+		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
+			attr.SlogEvent("claude_hook_session_capture_disabled"),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogGenAIConversationID(metadata.SessionID),
+		)
+		return false, nil
+	}
+	return true, nil
+}
+
+func (s *Service) insertUncorrelatedAgentPrompt(
+	ctx context.Context,
+	metadata *SessionMetadata,
+	msgParams chatRepo.CreateChatMessageParams,
+	defaultTitle string,
+	native bool,
+) (bool, error) {
+	projectID := msgParams.ProjectID
+	enabled, err := s.sessionCaptureEnabled(ctx, metadata, projectID)
+	if err != nil || !enabled {
+		return false, err
+	}
+	if !native {
+		var nativeSource string
+		if cacheErr := s.cache.Get(ctx, sessionNativeHooksCacheKey(projectID.String(), metadata.SessionID), &nativeSource); cacheErr == nil && strings.TrimSpace(nativeSource) != "" {
+			return false, nil
+		}
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	queries := chatRepo.New(tx)
+	lockParams := chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: msgParams.ChatID}
+	if err := queries.AcquireChatPromptCorrelationLock(ctx, lockParams); err != nil {
+		return false, fmt.Errorf("lock prompt correlation: %w", err)
+	}
+
+	if !native {
+		latestSource, latestErr := queries.GetLatestChatUserPromptSource(ctx, chatRepo.GetLatestChatUserPromptSourceParams{
+			ChatID:    msgParams.ChatID,
+			ProjectID: projectID,
+		})
+		if latestErr != nil && !errors.Is(latestErr, pgx.ErrNoRows) {
+			return false, fmt.Errorf("get latest chat user prompt source: %w", latestErr)
+		}
+		if latestErr == nil && latestSource.Valid && usesNativeTranscriptFallback(latestSource.String) {
+			s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, latestSource.String)
+			return false, nil
+		}
+	}
+	// Claude and Cursor have no turn ID shared with LiteLLM. If LiteLLM won the
+	// lock, keep both rows rather than guessing from prompt text and losing or
+	// misattributing a legitimate repeated native turn.
+
+	_, err = repo.New(tx).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             msgParams.ChatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(metadata.UserID),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
+		Title:          conv.ToPGText(defaultTitle),
+	})
+	if err != nil {
+		return false, fmt.Errorf("upsert claude code session: %w", err)
+	}
+	params := []chatRepo.CreateChatMessageParams{msgParams}
+	n, err := s.writer.WriteInTx(ctx, tx, params)
+	if err != nil {
+		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit uncorrelated agent prompt: %w", err)
+	}
+	if n > 0 {
+		s.writer.NotifyStoredRows(ctx, projectID, params)
+	}
+	return n > 0, nil
 }
 
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
@@ -414,6 +533,11 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		)
 		return nil
 	}
+
+	// persistToolCallEvent mirrors this write into ClickHouse for tool calls;
+	// conversation events previously only landed in Postgres, so ClickHouse
+	// hook consumers (e.g. onboarding's "Confirm traffic" feed) never saw them.
+	s.logConversationTelemetry(ctx, payload, metadata, projectID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
@@ -460,6 +584,23 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
+}
+
+// logConversationTelemetry writes a UserPromptSubmit/Stop conversation event
+// to ClickHouse, using the same attribute-building and event_source="hook"
+// shape as persistToolCallEvent. projectID is the value persistConversationEvent
+// already parsed, so this never re-parses it.
+func (s *Service) logConversationTelemetry(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, projectID uuid.UUID) {
+	if s.telemetryLogger == nil {
+		return
+	}
+
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, ""),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+		Attributes: s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata),
+	})
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

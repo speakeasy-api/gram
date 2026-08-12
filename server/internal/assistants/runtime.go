@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
 
@@ -143,11 +141,12 @@ func (c runnerClient) state(ctx context.Context, baseURL string) (runnerStateRes
 
 // turn delivers a turn to /threads/{threadID}/turn, wrapping failures with
 // the classifyTurnError sentinel the service dispatches on.
-func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey, authToken, prompt string, mcpServers []runtimeMCPServer, timeout time.Duration) error {
+func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, turn runTurnRequest, timeout time.Duration) error {
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:       prompt,
-		AuthToken:   authToken,
-		MCPServers:  mcpServers,
+		Input:       turn.Prompt,
+		InputParts:  turn.InputParts,
+		AuthToken:   turn.AuthToken,
+		MCPServers:  turn.MCPServers,
 		AssistantID: runtime.AssistantID.String(),
 		ProjectID:   runtime.ProjectID.String(),
 	})
@@ -156,11 +155,11 @@ func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistan
 	}
 	req := runtimeHTTPRequest{
 		Method:         http.MethodPost,
-		Path:           "/threads/" + threadID.String() + "/turn",
+		Path:           "/threads/" + turn.ThreadID.String() + "/turn",
 		ContentType:    "application/json",
 		Body:           reqBody,
 		MaxTimeSeconds: int(timeout / time.Second),
-		IdempotencyKey: idempotencyKey,
+		IdempotencyKey: turn.IdempotencyKey,
 	}
 	if _, err := c.request(ctx, baseURL, req); err != nil {
 		return fmt.Errorf("%w: execute %s turn request: %w", classifyTurnError(err), c.backend, err)
@@ -217,9 +216,161 @@ type runtimeMCPServer struct {
 // fields in sync with that struct.
 type runtimeMessage struct {
 	Role       string            `json:"role"`
-	Content    string            `json:"content,omitempty"`
+	Content    runtimeContent    `json:"content,omitzero"`
 	ToolCalls  []runtimeToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
+}
+
+// runtimeContent is the string-or-parts union carried in a message's content
+// slot, mirroring the runner's RunnerContent and the OpenRouter content union.
+// Text-only content marshals as a bare JSON string so runners (and servers)
+// that predate structured parts keep interoperating; both encodings decode.
+type runtimeContent struct {
+	// Str is the plain-text content used when Parts is nil.
+	Str string
+	// Parts is the structured content; a non-nil slice wins over Str.
+	Parts []runtimeContentPart
+}
+
+const (
+	contentPartTypeText     = "text"
+	contentPartTypeImageURL = "image_url"
+)
+
+// runtimeContentPart is one element of a structured content array. Exactly
+// the field matching Type is set; unknown types decode with only Type
+// populated so callers can reject them.
+type runtimeContentPart struct {
+	Type     string           `json:"type"`
+	Text     string           `json:"text,omitempty"`
+	ImageURL *runtimeImageURL `json:"image_url,omitempty"`
+}
+
+type runtimeImageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"`
+}
+
+func runtimeTextContent(text string) runtimeContent {
+	return runtimeContent{Str: text, Parts: nil}
+}
+
+// IsZero reports whether the content is empty, letting `omitzero` drop the
+// content key exactly where the previous plain-string field's `omitempty` did.
+func (c runtimeContent) IsZero() bool {
+	return c.Str == "" && c.Parts == nil
+}
+
+// Text returns the plain-text projection: the bare string, or the parts
+// joined with newlines. Image parts render as visible placeholders (matching
+// the runner's text_with_image_placeholders) so projecting structured content
+// never silently erases an image.
+func (c runtimeContent) Text() string {
+	if c.Parts == nil {
+		return c.Str
+	}
+	var sb strings.Builder
+	for _, part := range c.Parts {
+		var piece string
+		switch {
+		case part.Type == contentPartTypeText:
+			piece = part.Text
+		case part.Type == contentPartTypeImageURL && part.ImageURL != nil:
+			if strings.HasPrefix(part.ImageURL.URL, "data:") {
+				piece = "[image: inline data]"
+			} else {
+				piece = fmt.Sprintf("[image: %s]", part.ImageURL.URL)
+			}
+		default:
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(piece)
+	}
+	return sb.String()
+}
+
+// supportedParts reports whether every part is a shape the runner wire
+// protocol models (text, or image_url with a URL). Content decoded from
+// persisted OpenRouter JSON may carry other part types; callers fall back to
+// the plain-text projection rather than forward parts the runner would reject.
+func (c runtimeContent) supportedParts() bool {
+	for _, part := range c.Parts {
+		switch part.Type {
+		case contentPartTypeText:
+		case contentPartTypeImageURL:
+			if part.ImageURL == nil || part.ImageURL.URL == "" {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// replayableParts reports whether Parts should replay to the runner instead
+// of the text projection. Beyond the wire-shape check, structured replay is
+// reserved for arrays a remote image actually distinguishes from the text
+// column: all-text and empty arrays replay identically through the text
+// projection (and an empty array must never reach the model as
+// `"content": []`), while data:-URI image parts only occur in rows captured
+// before the chat sanitizer enforced no-image-bytes-at-rest, so those fall
+// back rather than replay multi-megabyte payloads.
+func (c runtimeContent) replayableParts() bool {
+	if !c.supportedParts() {
+		return false
+	}
+	hasImage := false
+	for _, part := range c.Parts {
+		if part.Type != contentPartTypeImageURL {
+			continue
+		}
+		u := part.ImageURL.URL
+		if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+			return false
+		}
+		hasImage = true
+	}
+	return hasImage
+}
+
+func (c runtimeContent) MarshalJSON() ([]byte, error) {
+	if c.Parts != nil {
+		out, err := json.Marshal(c.Parts)
+		if err != nil {
+			return nil, fmt.Errorf("marshal content parts: %w", err)
+		}
+		return out, nil
+	}
+	out, err := json.Marshal(c.Str)
+	if err != nil {
+		return nil, fmt.Errorf("marshal content string: %w", err)
+	}
+	return out, nil
+}
+
+func (c *runtimeContent) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	switch {
+	case len(trimmed) > 0 && trimmed[0] == '[':
+		var parts []runtimeContentPart
+		if err := json.Unmarshal(data, &parts); err != nil {
+			return fmt.Errorf("unmarshal content parts: %w", err)
+		}
+		*c = runtimeContent{Str: "", Parts: parts}
+	case bytes.Equal(trimmed, []byte("null")):
+		*c = runtimeContent{Str: "", Parts: nil}
+	default:
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return fmt.Errorf("unmarshal content string: %w", err)
+		}
+		*c = runtimeContent{Str: s, Parts: nil}
+	}
+	return nil
 }
 
 type runtimeToolCall struct {
@@ -229,9 +380,15 @@ type runtimeToolCall struct {
 }
 
 type runtimeTurnRequest struct {
-	Input      string             `json:"input"`
-	AuthToken  string             `json:"auth_token,omitempty"`
-	MCPServers []runtimeMCPServer `json:"mcp_servers,omitempty"`
+	Input string `json:"input"`
+	// InputParts optionally carries structured content parts alongside Input.
+	// The runner appends them after the text when building the user item, so
+	// a turn can attach images without widening the string-typed Input (and
+	// the RunTurn plumbing behind it). Unused until the server produces image
+	// parts; kept optional so older runners ignore it.
+	InputParts []runtimeContentPart `json:"input_parts,omitempty"`
+	AuthToken  string               `json:"auth_token,omitempty"`
+	MCPServers []runtimeMCPServer   `json:"mcp_servers,omitempty"`
 	// AssistantID lets a runner that booted without GRAM_ASSISTANT_ID env
 	// (e.g. a generic warm-pool sandbox on GKE) learn which assistant it serves
 	// from the turn. Boot env wins when present, so it is harmless and unused

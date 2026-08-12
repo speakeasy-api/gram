@@ -4,12 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  SendMessageAttachment,
+  SendMessageAttachment$Outbound,
+  SendMessageAttachment$outboundSchema,
+} from "./sendmessageattachment.js";
 
 export type SendMessageRequestBody = {
   /**
    * The assistant to send the message to.
    */
   assistantId: string;
+  /**
+   * Files uploaded through assets.uploadChatAttachment that this turn carries.
+   */
+  attachments?: Array<SendMessageAttachment> | undefined;
   /**
    * The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.
    */
@@ -19,17 +28,23 @@ export type SendMessageRequestBody = {
    */
   idempotencyKey?: string | undefined;
   /**
-   * The user's message text.
+   * The user's message text. May be empty when the turn carries attachments.
    */
   message: string;
+  /**
+   * Project skills to make available for this turn.
+   */
+  skillIds?: Array<string> | undefined;
 };
 
 /** @internal */
 export type SendMessageRequestBody$Outbound = {
   assistant_id: string;
+  attachments?: Array<SendMessageAttachment$Outbound> | undefined;
   chat_id?: string | undefined;
   idempotency_key?: string | undefined;
   message: string;
+  skill_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -39,15 +54,18 @@ export const SendMessageRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     assistantId: z.string(),
+    attachments: z.optional(z.array(SendMessageAttachment$outboundSchema)),
     chatId: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
     message: z.string(),
+    skillIds: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
       assistantId: "assistant_id",
       chatId: "chat_id",
       idempotencyKey: "idempotency_key",
+      skillIds: "skill_ids",
     });
   }),
 );

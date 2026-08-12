@@ -2,7 +2,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { useState } from "react";

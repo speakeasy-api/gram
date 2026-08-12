@@ -1,11 +1,11 @@
 import { CodeBlock, type CodeBlockSlot } from "@/components/code";
-import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { cn, tunnelGatewayURL } from "@/lib/utils";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_MCP_URL = "https://placeholder.net/mcp";
@@ -76,13 +76,13 @@ export function TunneledMcpSetupTabs({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Type variant="subheading">Connect your MCP server</Type>
-          <Type muted small className="mt-1">
+          <Text variant="subheading">Connect your MCP server</Text>
+          <Text muted small className="mt-1">
             Start a tunnel agent next to the MCP server you already run.
-          </Type>
+          </Text>
         </div>
         {keyPrefix && (
           <Badge variant="neutral">
@@ -92,8 +92,8 @@ export function TunneledMcpSetupTabs({
       </div>
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="bg-card border-border flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
-          <Type className="font-semibold">Tunnel config</Type>
+        <div className="bg-card border-border flex flex-col gap-3 border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
+          <Text className="font-semibold">Tunnel config</Text>
           <ConfigGroup label="Tunnel endpoint">
             <Tabs value={mode} onValueChange={handleModeChange}>
               <TabsList className="w-full">
@@ -101,11 +101,11 @@ export function TunneledMcpSetupTabs({
                 <TabsTrigger value="new">New server</TabsTrigger>
               </TabsList>
             </Tabs>
-            <Type muted small>
+            <Text muted small>
               {mode === "existing"
                 ? "Point the tunnel agent at an MCP server you already run. Values are templated into the setup snippet."
                 : "Deploy a sample hello-world MCP server together with the tunnel agent to try the tunnel end to end."}
-            </Type>
+            </Text>
           </ConfigGroup>
           <ConfigGroup label="Platform">
             <Tabs value={platform} onValueChange={handlePlatformChange}>
@@ -139,9 +139,9 @@ export function TunneledMcpSetupTabs({
         </div>
 
         <div>
-          <Type muted small className="mb-3">
+          <Text muted small className="mb-3">
             {activeSnippet.hint}
-          </Type>
+          </Text>
           <CodeBlock
             language={activeSnippet.language}
             slots={activeSnippet.slots}
@@ -457,7 +457,7 @@ function FlashOnChange({ text }: { text: string }) {
   return (
     <span
       className={cn(
-        "rounded-xs transition-colors",
+        "transition-colors",
         flashing ? "bg-primary/20 duration-150" : "bg-transparent duration-700",
       )}
     >
@@ -477,7 +477,7 @@ function ConfigGroup({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <McpSidebarInfoLabel>{label}</McpSidebarInfoLabel>
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
       {children}
     </div>
   );
@@ -512,9 +512,9 @@ function SnippetField({
         onChange={onChange}
         placeholder={placeholder}
       />
-      <Type muted small>
+      <Text muted small>
         {description}
-      </Type>
+      </Text>
     </div>
   );
 }

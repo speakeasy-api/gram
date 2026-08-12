@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: Acme Internal API
+  version: 1.4.0
+  description: Internal operations API for the Acme demo organization.
+servers:
+  - url: https://api.internal.acme.example
+paths:
+  /logs/search:
+    get:
+      operationId: search_logs
+      summary: Search service logs
+      parameters:
+        - name: service
+          in: query
+          schema: { type: string }
+        - name: level
+          in: query
+          schema: { type: string, enum: [debug, info, warn, error] }
+      responses:
+        "200": { description: Matching log lines }
+  /metrics/get:
+    get:
+      operationId: get_metrics
+      summary: Fetch service metrics
+      parameters:
+        - name: service
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Metric series }
+  /db/query:
+    get:
+      operationId: query_db
+      summary: Run a read-only reporting query
+      parameters:
+        - name: report
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Query results }
+  /customers/get:
+    get:
+      operationId: get_customer
+      summary: Look up a customer profile
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Customer profile }
+  /deploys/list:
+    get:
+      operationId: list_deploys
+      summary: List recent deployments
+      responses:
+        "200": { description: Recent deployments }
+  /refunds/process:
+    post:
+      operationId: process_refund
+      summary: Process a customer refund
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId: { type: string }
+                amount: { type: number }
+                currency: { type: string }
+              required: [orderId, amount]
+      responses:
+        "200": { description: Refund confirmation }
+  /traces/fetch:
+    get:
+      operationId: fetch_traces
+      summary: Fetch distributed traces
+      parameters:
+        - name: service
+          in: query
+          schema: { type: string }
+        - name: window
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Trace summaries }
+  /health/check:
+    get:
+      operationId: check_health
+      summary: Check service health
+      responses:
+        "200": { description: Health status }

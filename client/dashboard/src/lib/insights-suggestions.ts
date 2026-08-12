@@ -633,7 +633,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "Compare clients",
       icon: "bot",
       prompt:
-        "Compare usage across different AI coding clients (Claude Code, Cursor, Codex, etc). Which is most popular?",
+        "Compare usage across different AI coding clients. Which is most popular?",
     },
   ],
 
@@ -848,6 +848,39 @@ export const INSIGHTS_SUGGESTIONS = {
       icon: "history",
       prompt:
         "Is there an analysis backlog? For each active policy, report pending vs analyzed message counts and workflow state, and flag any policy whose pending count is non-zero.",
+    },
+  ],
+
+  /** Watchdog page: exclusion setup leads (the page's primary remediation),
+   * followed by the risk questions an operator triaging signals asks next. */
+  watchdog: [
+    {
+      title: "Help me exclude some false positives",
+      label: "Set up exclusions",
+      icon: "shield",
+      prompt:
+        "Help me create a risk exclusion rule. Ask me what should stop being flagged — an exact value, a detection rule, or a whole detector — then set up the exclusion, scoped globally unless I say otherwise. Never quote redacted match content back to me.",
+    },
+    {
+      title: "What are the most risky findings?",
+      label: "Top risk signals",
+      icon: "alert",
+      prompt:
+        "What are the most risky findings right now? Rank the top signals by severity and finding volume, and tell me which ones I should deal with first. Never quote redacted match content.",
+    },
+    {
+      title: "Who is most exposed?",
+      label: "Users & teams at risk",
+      icon: "users",
+      prompt:
+        "Which users and teams are generating the most risk findings in this window, and what kinds of data are they exposing? Never quote redacted match content.",
+    },
+    {
+      title: "What changed recently?",
+      label: "New risk patterns",
+      icon: "trend",
+      prompt:
+        "How has our risk posture changed recently — new kinds of findings, rules firing more than before, or severity trending up? Never quote redacted match content.",
     },
   ],
 

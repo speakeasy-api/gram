@@ -28,12 +28,6 @@ type Service interface {
 	// authenticates with token_endpoint_auth_method=none. The owning issuer must
 	// advertise client_id_metadata_document_supported.
 	CreateCimd(context.Context, *CreateCimdPayload) (res *types.RemoteSessionClient, err error)
-	// Platform-admin-only. Clone the client_id / client_secret from an existing
-	// oauth_proxy_provider into a new remote_session_client paired with the
-	// supplied issuers. The upstream secret stays server-side: it is read from the
-	// proxy provider's stored secrets, re-encrypted, and persisted on the
-	// remote_session_client row without ever crossing the wire.
-	CloneClientFromOAuthProxyProvider(context.Context, *CloneClientFromOAuthProxyProviderPayload) (res *types.RemoteSessionClient, err error)
 	// Rotate the client_secret or change the non-issuer settings on an existing
 	// remote_session_client. Issuer attachments are managed via
 	// attachUserSessionIssuer / detachUserSessionIssuer.
@@ -74,7 +68,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"createRemoteSessionClient", "createCimd", "cloneClientFromOAuthProxyProvider", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [8]string{"createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachUserSessionIssuerPayload is the payload type of the
 // remoteSessionClients service attachUserSessionIssuer method.
@@ -86,31 +80,6 @@ type AttachUserSessionIssuerPayload struct {
 	ID string
 	// The user_session_issuer to attach.
 	UserSessionIssuerID string
-}
-
-// CloneClientFromOAuthProxyProviderPayload is the payload type of the
-// remoteSessionClients service cloneClientFromOAuthProxyProvider method.
-type CloneClientFromOAuthProxyProviderPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The oauth_proxy_provider to read client_id / client_secret from. Must live
-	// in the caller's project.
-	OauthProxyProviderID string
-	// The remote_session_issuer the new client is registered with.
-	RemoteSessionIssuerID string
-	// The user_session_issuers to attach the new client to via the join table.
-	// Omit or pass an empty array to clone a standalone client with no attachments.
-	UserSessionIssuerIds []string
-	// How the cloned client authenticates at the issuer's token endpoint. Omit to
-	// default to client_secret_basic.
-	TokenEndpointAuthMethod *string
-	// Explicit upstream OAuth scopes the dance should request for the cloned
-	// client. Omit to fall back to the issuer's scopes_supported.
-	Scope []string
-	// Optional upstream OAuth audience to send on the authorize redirect and token
-	// exchange for the cloned client.
-	Audience *string
 }
 
 // CreateCimdPayload is the payload type of the remoteSessionClients service

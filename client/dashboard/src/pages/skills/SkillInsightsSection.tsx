@@ -1,28 +1,22 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { CHART_COLORS } from "@/components/stacked-time-series";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
   ErrorAlert,
-} from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Dialog } from "@/components/ui/dialog";
-import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
-import { cn } from "@/lib/utils";
 import type { SkillEfficacyInsight } from "@gram/client/models/components/skillefficacyinsight.js";
 import type { SkillEfficacyScoredSession } from "@gram/client/models/components/skillefficacyscoredsession.js";
 import type { SkillEfficacyRegressionSignal } from "@gram/client/models/components/skillefficacyregressionsignal.js";
@@ -30,7 +24,9 @@ import type { SkillInsightPoint } from "@gram/client/models/components/skillinsi
 import type { SkillVersionInsight } from "@gram/client/models/components/skillversioninsight.js";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
-import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, Table } from "@/components/ui/Table";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -54,8 +50,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
-
-export const SKILL_INSIGHTS_SECTION_ID = "insights";
 
 const SCORED_SESSIONS_PAGE_SIZE = 20;
 type TrendMetric = "efficacy" | "activations" | "sessionCost";
@@ -116,9 +110,7 @@ export function SkillInsightsSection({
   versionsLoading: boolean;
   versionsError: Error | null;
 }): JSX.Element {
-  const project = useProject();
-  const { hasScope, isLoading: isRBACLoading } = useRBAC();
-  const canReadChats = !isRBACLoading && hasScope("chat:read", project.id);
+  const { isLoading: isRBACLoading } = useRBAC();
   const query = useSkillEfficacyInsights(
     {
       skillIds: [data.skill.id],
@@ -128,7 +120,7 @@ export function SkillInsightsSection({
     { throwOnError: false, enabled: !isRBACLoading },
   );
   return (
-    <SettingsSection id={SKILL_INSIGHTS_SECTION_ID}>
+    <SettingsSection>
       <SettingsSection.Header>
         <SettingsSection.Title>Insights</SettingsSection.Title>
         <SettingsSection.Description>
@@ -136,40 +128,30 @@ export function SkillInsightsSection({
           estimated time saved over the last 30 days.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          {query.error && !query.data && (
-            <ErrorAlert
-              title="Unable to load skill insights"
-              error={query.error}
-            />
-          )}
-          {versionsError && (
-            <ErrorAlert
-              title="Unable to load skill versions"
-              error={versionsError}
-            />
-          )}
-          {(query.isPending || (query.data && versionsLoading)) && (
-            <InsightsLoading />
-          )}
-          {query.data && !versionsLoading && !versionsError && (
-            <InsightsContent
-              insight={query.data.result.insights[0]}
-              skillId={data.skill.id}
-              canReadChats={canReadChats}
-              versionLabels={versionLabels}
-            />
-          )}
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Efficacy and estimated savings cover sampled scored sessions.
-            Session cost is attributed in full to each activated skill version,
-            so totals are not additive.
-          </SettingsSection.FooterHint>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
+      {query.error && !query.data && (
+        <ErrorAlert title="Unable to load skill insights" error={query.error} />
+      )}
+      {versionsError && (
+        <ErrorAlert
+          title="Unable to load skill versions"
+          error={versionsError}
+        />
+      )}
+      {(query.isPending || (query.data && versionsLoading)) && (
+        <InsightsLoading />
+      )}
+      {query.data && !versionsLoading && !versionsError && (
+        <InsightsContent
+          insight={query.data.result.insights[0]}
+          skillId={data.skill.id}
+          versionLabels={versionLabels}
+        />
+      )}
+      <Text small muted>
+        Efficacy and estimated savings cover sampled scored sessions. Session
+        cost is attributed in full to each activated skill version, so totals
+        are not additive.
+      </Text>
     </SettingsSection>
   );
 }
@@ -177,16 +159,14 @@ export function SkillInsightsSection({
 function InsightsContent({
   insight,
   skillId,
-  canReadChats,
   versionLabels,
 }: {
   insight: SkillEfficacyInsight | undefined;
   skillId: string;
-  canReadChats: boolean;
   versionLabels: Map<string, string>;
 }): JSX.Element {
   if (!insight) {
-    return <Type muted>No insight data is available for this skill.</Type>;
+    return <Text muted>No insight data is available for this skill.</Text>;
   }
 
   const efficacy = insight.metrics.efficacy;
@@ -198,7 +178,7 @@ function InsightsContent({
           signal={insight.regressionSignal}
         />
       )}
-      <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="grid gap-px overflow-hidden border sm:grid-cols-2 xl:grid-cols-4">
         <InsightMetric
           label="30-day activations"
           value={formatCount(insight.metrics.activations)}
@@ -254,30 +234,20 @@ function InsightsContent({
           versionLabels={versionLabels}
         />
       </div>
-
-      <ScoredSessions
-        key={skillId}
-        skillId={skillId}
-        efficacy={efficacy}
-        canReadChats={canReadChats}
-        versionLabels={versionLabels}
-      />
     </div>
   );
 }
 
-function ScoredSessions({
+export function ScoredSessions({
   skillId,
-  efficacy,
-  canReadChats,
   versionLabels,
 }: {
   skillId: string;
-  efficacy: SkillEfficacyInsight["metrics"]["efficacy"];
-  canReadChats: boolean;
   versionLabels: Map<string, string>;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
+  const project = useProject();
+  const { hasScope, isLoading: isRBACLoading } = useRBAC();
+  const canReadChats = !isRBACLoading && hasScope("chat:read", project.id);
   const [cursors, setCursors] = useState<Array<string | undefined>>([
     undefined,
   ]);
@@ -285,16 +255,18 @@ function ScoredSessions({
   const query = useSkillEfficacyInsights(
     {
       skillIds: [skillId],
+      includeVersions: true,
       includeScoredSessions: true,
       cursor: cursors[pageIndex],
       limit: SCORED_SESSIONS_PAGE_SIZE,
     },
     undefined,
     {
-      enabled: open && canReadChats,
+      enabled: canReadChats,
       throwOnError: false,
     },
   );
+  const efficacy = query.data?.result.insights[0]?.metrics.efficacy;
   const flagRates = efficacy
     ? Object.entries(efficacy.flagCounts)
         .filter(([, count]) => count > 0)
@@ -305,30 +277,15 @@ function ScoredSessions({
     : [];
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className="overflow-hidden rounded-lg border"
-    >
-      <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-4 text-left">
-        <span className="block">
-          <Type as="span" variant="subheading" className="block">
-            Scored sessions
-          </Type>
-          <Type as="span" small muted className="block">
-            Judge rationale and raw flags for recent sampled sessions.
-          </Type>
-        </span>
-        <Icon
-          name="chevron-right"
-          className={cn(
-            "text-muted-foreground h-4 w-4 transition-transform",
-            open && "rotate-90",
-          )}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="space-y-3 border-t p-4">
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Scored sessions</SettingsSection.Title>
+        <SettingsSection.Description>
+          Judge rationale and raw flags for recent sampled sessions.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
           {flagRates.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {flagRates.map(({ flag, rate }) => (
@@ -339,10 +296,10 @@ function ScoredSessions({
             </div>
           )}
           {!canReadChats && (
-            <Type small muted>
+            <Text small muted>
               The <code className="font-mono">chat:read</code> scope is required
               to view session rationale and links.
-            </Type>
+            </Text>
           )}
           {canReadChats && query.isPending && <SkeletonTable />}
           {canReadChats && query.error && (
@@ -353,7 +310,7 @@ function ScoredSessions({
               />
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => void query.refetch()}
               >
                 Retry
@@ -370,18 +327,18 @@ function ScoredSessions({
             <div className="flex items-center justify-center gap-3 border-t pt-3">
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={pageIndex === 0 || query.isFetching}
                 onClick={() => setCursors((current) => current.slice(0, -1))}
               >
                 Previous
               </Button>
-              <Type small muted className="tabular-nums">
+              <Text small muted className="tabular-nums">
                 Page {pageIndex + 1}
-              </Type>
+              </Text>
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 disabled={!query.data?.result.nextCursor || query.isFetching}
                 onClick={() => {
                   const nextCursor = query.data?.result.nextCursor;
@@ -393,9 +350,9 @@ function ScoredSessions({
               </Button>
             </div>
           )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
 
@@ -403,7 +360,7 @@ function MethodologyDialog(): JSX.Element {
   return (
     <Dialog>
       <Dialog.Trigger asChild>
-        <Button variant="link" size="inline" className="h-auto p-0">
+        <Button variant="tertiary" size="xs" className="h-auto p-0">
           View methodology
         </Button>
       </Dialog.Trigger>
@@ -439,9 +396,12 @@ export function RegressionWarning({
           {formatCount(signal.predecessorScoredSessions)} scored sessions.
         </p>
         {signal.predecessorVersionId && (
-          <Button size="sm" variant="outline" asChild>
+          <Button size="sm" variant="secondary" asChild>
             <Link
-              to={`${routes.skills.detail.href(skillId)}#version-${signal.predecessorVersionId}`}
+              to={routes.skills.detail.versions.version.href(
+                skillId,
+                signal.predecessorVersionId,
+              )}
             >
               Review version to restore
             </Link>
@@ -481,6 +441,7 @@ function TrendChart({
   versions: SkillVersionInsight[];
   versionLabels: Map<string, string>;
 }): JSX.Element {
+  const chartColors = useSeriesColors();
   const timestamps = Array.from(
     new Set(
       versions.flatMap((version) =>
@@ -499,7 +460,7 @@ function TrendChart({
     const points = new Map(
       version.trend.map((point) => [point.bucketStart.getTime(), point]),
     );
-    const color = CHART_COLORS[index % CHART_COLORS.length];
+    const color = chartColors[index % chartColors.length];
     return {
       label: `Since ${
         versionLabels.get(version.skillVersionId) ??
@@ -553,9 +514,9 @@ function TrendChart({
     >
       {timestamps.length === 0 ? (
         <div className="flex h-48 items-center justify-center">
-          <Type small muted>
+          <Text small muted>
             No trend data in this window.
-          </Type>
+          </Text>
         </div>
       ) : (
         <div className="h-56">
@@ -576,9 +537,9 @@ function ScoredSessionsTable({
   const routes = useRoutes();
   if (sessions.length === 0) {
     return (
-      <Type small muted>
+      <Text small muted>
         No scored sessions in the last 30 days.
-      </Type>
+      </Text>
     );
   }
   const columns: Column<SkillEfficacyScoredSession>[] = [
@@ -587,9 +548,9 @@ function ScoredSessionsTable({
       header: "Score",
       width: "90px",
       render: (session) => (
-        <Type className="font-medium tabular-nums">
+        <Text className="font-medium tabular-nums">
           {formatPercent(session.score)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -597,10 +558,10 @@ function ScoredSessionsTable({
       header: "Version",
       width: "150px",
       render: (session) => (
-        <Type small mono>
+        <Text small mono>
           {versionLabels.get(session.skillVersionId) ??
             session.skillVersionId.slice(0, 8)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -609,7 +570,7 @@ function ScoredSessionsTable({
       width: "2fr",
       render: (session) => (
         <div className="space-y-1">
-          <Type small>{session.rationale}</Type>
+          <Text small>{session.rationale}</Text>
           {session.flags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {session.flags.map((flag) => (
@@ -627,13 +588,13 @@ function ScoredSessionsTable({
       header: "Activated",
       width: "130px",
       render: (session) => (
-        <Type
+        <Text
           small
           muted
           title={dateTimeFormatters.full.format(session.activatedAt)}
         >
           <HumanizeDateTime date={session.activatedAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -649,9 +610,9 @@ function ScoredSessionsTable({
             Open
           </Link>
         ) : (
-          <Type small muted>
+          <Text small muted>
             Dev
-          </Type>
+          </Text>
         ),
     },
   ];
@@ -673,10 +634,10 @@ function InsightsLoading(): JSX.Element {
     <div className="space-y-4" aria-label="Loading skill insights">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-28 rounded-lg" />
+          <Skeleton key={index} className="h-28" />
         ))}
       </div>
-      <Skeleton className="h-64 rounded-lg" />
+      <Skeleton className="h-64" />
       <SkeletonTable />
     </div>
   );

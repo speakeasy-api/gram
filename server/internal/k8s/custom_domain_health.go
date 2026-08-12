@@ -31,10 +31,12 @@ type CustomDomainInfrastructureHealth struct {
 }
 
 type CustomDomainInfrastructureCheck struct {
-	Domain          string
-	ResourceName    string
-	CertSecretName  string
-	ProvisionerKind ProvisionerKind
+	Domain                    string
+	ResourceName              string
+	RootResourceName          string
+	WellKnownRootResourceName string
+	CertSecretName            string
+	ProvisionerKind           ProvisionerKind
 }
 
 // ManagedCustomDomainResource is the Kubernetes identity used for orphan reconciliation.
@@ -89,6 +91,24 @@ func (k *KubernetesClients) CheckCustomDomainInfrastructure(ctx context.Context,
 			return health, nil
 		}
 		return health, fmt.Errorf("get custom domain resource: %w", err)
+	}
+	if check.RootResourceName != "" {
+		if err := k.Provisioner(check.ProvisionerKind).Get(ctx, check.RootResourceName); err != nil {
+			if k8serrors.IsNotFound(err) {
+				health.Issue = CustomDomainInfrastructureIssueResourceMissing
+				return health, nil
+			}
+			return health, fmt.Errorf("get custom domain root resource: %w", err)
+		}
+	}
+	if check.WellKnownRootResourceName != "" {
+		if err := k.Provisioner(check.ProvisionerKind).Get(ctx, check.WellKnownRootResourceName); err != nil {
+			if k8serrors.IsNotFound(err) {
+				health.Issue = CustomDomainInfrastructureIssueResourceMissing
+				return health, nil
+			}
+			return health, fmt.Errorf("get custom domain well-known root resource: %w", err)
+		}
 	}
 	if check.CertSecretName == "" {
 		health.Issue = CustomDomainInfrastructureIssueCertificateMissing

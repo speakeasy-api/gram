@@ -4,17 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
 func projectWriteGrant(projectID uuid.UUID) authz.Grant {
@@ -23,6 +30,10 @@ func projectWriteGrant(projectID uuid.UUID) authz.Grant {
 
 func projectReadGrant(projectID uuid.UUID) authz.Grant {
 	return authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String())}
+}
+
+func skillReadGrant(projectID uuid.UUID) authz.Grant {
+	return authz.NewGrant(authz.ScopeSkillRead, projectID.String())
 }
 
 // fakeDashboardIngestor stands in for the triggers App: it records the call and
@@ -111,6 +122,97 @@ func TestSendMessageAllowedWithProjectReadOnly(t *testing.T) {
 	require.True(t, res.Accepted)
 }
 
+func TestSendMessageIncludesSelectedSkillContent(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_skills")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	skill, version := createSkillAttachmentFixture(t, conn, projectID, managed.ID, "selected-skill", "user-test")
+
+	ingestor := &fakeDashboardIngestor{core: svc.core, assistantID: managed.ID}
+	svc.core.SetDashboardIngestor(ingestor)
+	res, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "follow the selected skill",
+		SkillIds:    []string{skill.ID.String()},
+	})
+	require.NoError(t, err)
+	require.True(t, res.Accepted)
+
+	var payload dashboardIngestPayload
+	require.NoError(t, json.Unmarshal(ingestor.lastPayload, &payload))
+	require.Len(t, payload.SkillContext, 1)
+	require.Equal(t, skill.ID, payload.SkillContext[0].SkillID)
+	require.Equal(t, version.ID, payload.SkillContext[0].ResolvedVersionID)
+	require.Equal(t, version.Content, payload.SkillContext[0].Content)
+	observations, err := hooksrepo.New(conn).ListSkillObservations(ctx, projectID)
+	require.NoError(t, err)
+	require.Len(t, observations, 1)
+	require.Equal(t, version.ID, observations[0].SkillVersionID.UUID)
+}
+
+func TestSendMessageRejectsUnavailableSelectedSkill(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_missing_skill")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
+		SkillIds:    []string{uuid.NewString()},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestSendMessageRejectsOversizedSelectedSkillContext(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_large_skills")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID), skillReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	skillIDs := make([]string, 0, 5)
+	for i := range 5 {
+		name := fmt.Sprintf("large-selected-skill-%d", i)
+		skill, _ := createSkillAttachmentFixture(t, conn, projectID, managed.ID, name, "user-test")
+		content := fmt.Sprintf(
+			"---\nname: %s\ndescription: Large selected skill\n---\n\n%s",
+			name,
+			strings.Repeat("x", 60*1024),
+		)
+		_, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+			Content:          content,
+			CanonicalSha256:  uuid.NewString(),
+			RawSha256:        uuid.NewString(),
+			Description:      pgtype.Text{String: "Large selected skill", Valid: true},
+			Metadata:         []byte(`{}`),
+			SpecValid:        true,
+			ValidationErrors: []byte(`[]`),
+			CreatedByUserID:  "user-test",
+			ProjectID:        projectID,
+			SkillID:          skill.ID,
+		})
+		require.NoError(t, err)
+		skillIDs = append(skillIDs, skill.ID.String())
+	}
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
+		SkillIds:    skillIDs,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 // Each send without a chat id starts a fresh conversation with its own
 // server-minted chat + thread.
 func TestSendMessageNewConversationsGetDistinctChats(t *testing.T) {
@@ -196,4 +298,112 @@ func TestSendMessageRequiresProjectGrant(t *testing.T) {
 		Message:     "hello",
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// createChatAttachmentFixture inserts a chat attachment asset row so a send can
+// reference it the way the dashboard does after uploading a file.
+func createChatAttachmentFixture(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID, name, contentType string) uuid.UUID {
+	t.Helper()
+
+	asset, err := assetsrepo.New(conn).CreateAsset(context.Background(), assetsrepo.CreateAssetParams{
+		Name:          name,
+		Url:           "file://" + name,
+		ProjectID:     projectID,
+		Sha256:        uuid.NewString(),
+		Kind:          "chat_attachment",
+		ContentType:   contentType,
+		ContentLength: 12,
+	})
+	require.NoError(t, err)
+	return asset.ID
+}
+
+func TestSendMessageCarriesAttachments(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_attachments")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	assetID := createChatAttachmentFixture(t, conn, projectID, "diagram.png", "image/png")
+
+	ingestor := &fakeDashboardIngestor{core: svc.core, assistantID: managed.ID}
+	svc.core.SetDashboardIngestor(ingestor)
+
+	// Empty text is allowed when the turn carries files.
+	res, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "",
+		Attachments: []*gen.SendMessageAttachment{{AssetID: assetID.String(), Name: new("my-diagram.png")}},
+	})
+	require.NoError(t, err)
+	require.True(t, res.Accepted)
+
+	var payload dashboardIngestPayload
+	require.NoError(t, json.Unmarshal(ingestor.lastPayload, &payload))
+	require.Len(t, payload.Attachments, 1)
+	require.Equal(t, assetID, payload.Attachments[0].AssetID)
+	require.Equal(t, "my-diagram.png", payload.Attachments[0].Name)
+	require.Equal(t, "image/png", payload.Attachments[0].ContentType)
+}
+
+func TestSendMessageRejectsUnknownAttachment(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_missing_attachment")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "look at this",
+		Attachments: []*gen.SendMessageAttachment{{AssetID: uuid.NewString(), Name: nil}},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestSendMessageRejectsEmptyMessageWithoutAttachments(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_empty")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// Attachment resolution is project-scoped: an asset id leaked from another
+// project must not become an attachment on this project's turn.
+func TestSendMessageRejectsCrossProjectAttachment(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_cross_project")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	otherProject, err := projectsRepo.New(conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           "Other",
+		Slug:           "project-other-attachment",
+		OrganizationID: "org-test",
+	})
+	require.NoError(t, err)
+	foreignAsset := createChatAttachmentFixture(t, conn, otherProject.ID, "secret.pdf", "application/pdf")
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "read this",
+		Attachments: []*gen.SendMessageAttachment{{AssetID: foreignAsset.String(), Name: nil}},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

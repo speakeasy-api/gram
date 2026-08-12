@@ -246,6 +246,9 @@ type Plugin struct {
 	SkillCount *int64
 	// Number of role/user assignments.
 	AssignmentCount *int64
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool
 	// Servers included in this plugin.
 	Servers []*PluginServer
 	// Role/user assignments.
@@ -467,4 +470,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeFailedPrecondition builds a goa.ServiceError from an error.
+func MakeFailedPrecondition(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "failed_precondition", false, false, false)
 }

@@ -39,7 +39,7 @@ import { Result } from "../types/fp.js";
  * update skills
  *
  * @remarks
- * Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+ * Rename an active skill or update its display name, summary, and tags. The implementation requires the skills product feature and skill write scope.
  */
 export function skillsUpdate(
   client: GramCore,

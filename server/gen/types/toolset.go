@@ -62,8 +62,6 @@ type Toolset struct {
 	Origin *ToolsetOrigin
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServer
-	// The OAuth proxy server details
-	OauthProxyServer *OAuthProxyServer
 	// The id of the user_session_issuer wired to this toolset. Set via
 	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string

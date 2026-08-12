@@ -54,11 +54,17 @@ export function useObservabilityMcpConfig({
       return undefined;
     }
 
-    return toolsetsData.toolsets.map((toolset) => ({
-      url: internalMcpUrl({ slug: project.slug }, toolset),
-      name: toolset.slug,
-      environment: toolset.defaultEnvironmentSlug,
-    }));
+    return toolsetsData.toolsets.flatMap((toolset) => {
+      const url = internalMcpUrl({ slug: project.slug }, toolset);
+      if (!url) return [];
+      return [
+        {
+          url,
+          name: toolset.slug,
+          environment: toolset.defaultEnvironmentSlug,
+        },
+      ];
+    });
   }, [toolsetsData?.toolsets, project.slug, isLoadingToolsets]);
 
   return useMemo(() => {

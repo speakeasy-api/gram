@@ -28,6 +28,8 @@ package guardian
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
@@ -185,6 +187,7 @@ type Policy struct {
 	resolver          dns.Resolver
 	limiter           Limiter
 	breaker           Breaker
+	tlsRootCAs        *x509.CertPool
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -193,6 +196,16 @@ type Policy struct {
 func WithResolver(resolver dns.Resolver) func(*Policy) {
 	return func(p *Policy) {
 		p.resolver = resolver
+	}
+}
+
+// WithTLSRootCAs is a functional option that replaces the root CA pool used
+// by clients built from this Policy. This is intended for tests that fetch
+// from httptest.NewTLSServer instances (whose certificates are self-signed);
+// production code should rely on the system pool by leaving this unset.
+func WithTLSRootCAs(pool *x509.CertPool) func(*Policy) {
+	return func(p *Policy) {
+		p.tlsRootCAs = pool
 	}
 }
 
@@ -238,6 +251,7 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 		resolver:          dns.NewNetResolver(),
 		limiter:           nil,
 		breaker:           nil,
+		tlsRootCAs:        nil,
 	}
 
 	for _, option := range options {
@@ -309,6 +323,17 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
 	transport.DialContext = p.Dialer(dialOpts...).DialContext
+
+	// Merge into any existing transport TLS config rather than replacing
+	// it, so a future option that sets client certificates or pinning is
+	// not silently discarded when a root pool is also configured.
+	if p.tlsRootCAs != nil {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{RootCAs: p.tlsRootCAs, MinVersion: tls.VersionTLS12}
+		} else {
+			transport.TLSClientConfig.RootCAs = p.tlsRootCAs
+		}
+	}
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
 	otelOpts = append(otelOpts, opts.otelHTTPOptions...)

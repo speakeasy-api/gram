@@ -1,8 +1,12 @@
 import { ChartCard } from "@/components/chart/ChartCard";
+import { Page } from "@/components/page-layout";
+import { GOOD_GREEN, OTHER_SERIES, TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { smoothData } from "@/components/chart/chartUtils";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { RequireScope } from "@/components/require-scope";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
 import { formatCompact } from "@/lib/format";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 import { useRoutes } from "@/routes";
@@ -24,6 +28,7 @@ import {
 import { useMemo, useState } from "react";
 import { Chart } from "react-chartjs-2";
 import { Navigate } from "react-router";
+import { BusinessMemoryCorpus } from "./BusinessMemoryCorpus";
 
 ChartJS.register(
   CategoryScale,
@@ -64,6 +69,7 @@ function WorkDoneChart({
   onExpand: (id: string | null) => void;
 }): JSX.Element {
   const hasData = buckets.some((b) => b.scoredSessions > 0);
+  const seriesColors = useSeriesColors();
 
   const chartData = useMemo<{
     labels: string[];
@@ -75,14 +81,16 @@ function WorkDoneChart({
     const bars: ChartDataset<"bar", number[]> = {
       label: "Work delivered",
       data: buckets.map((b) => b.workUnits),
-      backgroundColor: "rgba(96, 165, 250, 0.35)",
+      // Lightest neutral so the bars recede behind the ink trend line.
+      backgroundColor: OTHER_SERIES,
       order: 2,
     };
     const trend: ChartDataset<"line", number[]> = {
       label: "Trend",
       data: smoothData(buckets.map((b) => b.workUnits)),
       type: "line",
-      borderColor: "#3b82f6",
+      // Ink from the theme-resolved editorial chart palette.
+      borderColor: seriesColors[0]!,
       backgroundColor: "transparent",
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -92,7 +100,7 @@ function WorkDoneChart({
       order: 1,
     };
     return { labels, datasets: [bars, trend] };
-  }, [buckets]);
+  }, [buckets, seriesColors]);
 
   const options = useMemo<ChartOptions<"bar">>(
     () => ({
@@ -111,14 +119,7 @@ function WorkDoneChart({
           },
         },
         tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
-          padding: 12,
-          boxPadding: 4,
-          usePointStyle: true,
+          ...TOOLTIP,
           callbacks: {
             label: (item) =>
               ` ${item.dataset.label}: ${formatCompact(Number(item.parsed.y ?? 0))}`,
@@ -184,6 +185,7 @@ function EfficiencyChart({
   const hasData = buckets.some(
     (b) => b.costPerUnit !== undefined || b.tokensPerUnit !== undefined,
   );
+  const seriesColors = useSeriesColors();
 
   const chartData = useMemo<{
     labels: string[];
@@ -196,7 +198,8 @@ function EfficiencyChart({
         {
           label: "Cost efficiency",
           data: buckets.map((b) => b.costPerUnit ?? null),
-          borderColor: "#34d399",
+          // Warm neutral from the theme-resolved editorial series ramp.
+          borderColor: seriesColors[1]!,
           backgroundColor: "transparent",
           pointRadius: 2,
           pointHoverRadius: 4,
@@ -208,7 +211,7 @@ function EfficiencyChart({
         {
           label: "Token efficiency",
           data: buckets.map((b) => b.tokensPerUnit ?? null),
-          borderColor: "#a78bfa",
+          borderColor: GOOD_GREEN,
           backgroundColor: "transparent",
           pointRadius: 2,
           pointHoverRadius: 4,
@@ -219,7 +222,7 @@ function EfficiencyChart({
         },
       ],
     };
-  }, [buckets]);
+  }, [buckets, seriesColors]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({
@@ -237,14 +240,7 @@ function EfficiencyChart({
           },
         },
         tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
-          padding: 12,
-          boxPadding: 4,
-          usePointStyle: true,
+          ...TOOLTIP,
           callbacks: {
             label: (item) => {
               const value = Number(item.parsed.y ?? 0);
@@ -306,8 +302,8 @@ function EfficiencyChart({
   );
 }
 
-export default function OrgMemory(): JSX.Element {
-  const telemetry = useTelemetry();
+function OrgMemoryContent(): JSX.Element {
+  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
   const routes = useRoutes();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
@@ -323,12 +319,11 @@ export default function OrgMemory(): JSX.Element {
     {
       throwOnError: false,
       // Don't fire the fetch for users the redirect below is about to bounce.
-      enabled: telemetry.isFeatureEnabled("org-memory") !== false,
+      enabled: isOrgMemoryEnabled,
     },
   );
 
-  // `=== false` so the page still renders while the flag is resolving.
-  if (telemetry.isFeatureEnabled("org-memory") === false) {
+  if (!isOrgMemoryEnabled) {
     return <Navigate to={routes.home.href()} replace />;
   }
 
@@ -336,40 +331,53 @@ export default function OrgMemory(): JSX.Element {
   const scoresAvailable = data?.scoresAvailable ?? false;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Org Memory</h1>
-          <ReleaseStageBadge stage="preview" />
+    <div className="h-full w-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6 pb-24">
+        <div>
+          <Page.Eyebrow className="mb-1" />
+          <div className="flex items-center gap-2">
+            <h1 className="text-display-sm font-thin">Org Memory</h1>
+            <ReleaseStageBadge stage="preview" />
+          </div>
+          <p className="text-muted-foreground mt-1 text-sm">
+            How much work your agents deliver and what it costs, judged by work
+            analysis over the last {TREND_WINDOW_DAYS} days.
+          </p>
         </div>
-        <p className="text-muted-foreground mt-1 text-sm">
-          How much work your agents deliver and what it costs, judged by work
-          analysis over the last {TREND_WINDOW_DAYS} days.
-        </p>
-      </div>
 
-      {!isLoading && !error && !scoresAvailable ? (
-        <div className="border-border bg-card flex h-64 items-center justify-center rounded-lg border">
-          <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work analysis is enabled for your organization." />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <WorkDoneChart
-            buckets={buckets}
-            loading={isLoading}
-            error={Boolean(error)}
-            expandedChart={expandedChart}
-            onExpand={setExpandedChart}
-          />
-          <EfficiencyChart
-            buckets={buckets}
-            loading={isLoading}
-            error={Boolean(error)}
-            expandedChart={expandedChart}
-            onExpand={setExpandedChart}
-          />
-        </div>
-      )}
+        {!isLoading && !error && !scoresAvailable ? (
+          <div className="border-border bg-card flex h-64 items-center justify-center border">
+            <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work analysis is enabled for your organization." />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <WorkDoneChart
+              buckets={buckets}
+              loading={isLoading}
+              error={Boolean(error)}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+            <EfficiencyChart
+              buckets={buckets}
+              loading={isLoading}
+              error={Boolean(error)}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+            />
+          </div>
+        )}
+
+        <BusinessMemoryCorpus />
+      </div>
     </div>
+  );
+}
+
+export default function OrgMemory(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <OrgMemoryContent />
+    </RequireScope>
   );
 }

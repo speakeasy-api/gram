@@ -1,0 +1,224 @@
+edition = "2024";
+
+package gram.otel.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1";
+
+// Span is one OTLP span carried as a single self-contained message.
+//
+// It is a wire-compatible superset of opentelemetry.proto.trace.v1.Span: every
+// field OTLP defines keeps OTLP's exact field number and scalar type, so these
+// bytes unmarshal directly into an OTLP Span and vice versa. That is why the
+// numbering below is not sequential — it is OTLP's numbering, not ours, and it
+// must not be renumbered. Everything Gram adds lives at 1000+, where an OTLP
+// parser skips it as unknown fields.
+//
+// Like gram.otel.v1.LogRecord, this message is the high-resolution record and
+// storage projections are derived from it. The one structural change is that
+// the ResourceSpans → ScopeSpans → Span nesting is collapsed inline; the
+// archive writer regroups spans under a shared resource and scope so the
+// durable copy does not pay for the repetition.
+//
+// The nested Resource, InstrumentationScope, AnyValue and friends are copies of
+// the opentelemetry.proto.{resource,common}.v1 types, field numbers included,
+// for the same reason as in LogRecord: a Pub/Sub schema must be a single
+// self-contained file, so it cannot import them.
+//
+// Delivery is at-least-once and retried publishes can duplicate messages.
+// Unlike log records, spans have natural identity: dedupe on
+// (trace_id, span_id).
+message Span {
+  // OTLP raw form: 16 and 8 bytes respectively.
+  bytes trace_id = 1;
+  bytes span_id = 2;
+  string trace_state = 3; // W3C tracestate header value
+  bytes parent_span_id = 4; // empty => root span
+
+  string name = 5;
+  SpanKind kind = 6;
+
+  fixed64 start_time_unix_nano = 7;
+  fixed64 end_time_unix_nano = 8;
+
+  repeated KeyValue attributes = 9;
+  uint32 dropped_attributes_count = 10;
+
+  repeated Event events = 11;
+  uint32 dropped_events_count = 12;
+
+  repeated Link links = 13;
+  uint32 dropped_links_count = 14;
+
+  Status status = 15;
+
+  // W3C trace flags, plus OTLP's is_remote bits.
+  fixed32 flags = 16;
+
+  // ---------------------------------------------------------------------
+  // Inlined OTLP context and Gram additions. Invisible to an OTLP parser,
+  // which treats these as unknown fields.
+  //
+  // resource and scope are held as whole submessages rather than loose fields
+  // so the archive writer rebuilds ResourceSpans/ScopeSpans by assigning them
+  // across, not by reassembling. The schema_urls sit beside them because
+  // upstream declares those on ResourceSpans/ScopeSpans, not on the resource or
+  // the scope itself.
+  // ---------------------------------------------------------------------
+
+  // 1000 is where LogRecord carries record_id. Spans need no such key — they
+  // already have identity in (trace_id, span_id) — so the number stays reserved
+  // to keep the two messages' 1000+ blocks aligned.
+  reserved 1000;
+
+  Resource resource = 1001;
+  string resource_schema_url = 1002;
+
+  InstrumentationScope scope = 1003;
+  string scope_schema_url = 1004;
+
+  Provenance provenance = 1005;
+
+  // Provenance is where a span came from: which component emitted it and
+  // which tenant it belongs to. Its presence answers whether a span passed
+  // through the Gram ingest edge at all — one relayed straight from an OTLP
+  // producer has none.
+  //
+  // Retention, data classification and anything else policy-derived does not
+  // belong here: those are computed from current policy state rather than
+  // observed, and would need their own submessage if they are ever pinned onto
+  // a record.
+  message Provenance {
+    // Emitting component, e.g. risk, mcp-gateway, rbac.
+    string source = 1;
+
+    // Tenancy, stamped by the ingesting edge from authenticated state. Resource
+    // attributes are producer-controlled, so tenancy is never read back out of
+    // them.
+    string organization_id = 2;
+    string project_id = 3;
+  }
+
+  // Resource is a copy of opentelemetry.proto.resource.v1.Resource, field
+  // numbers included. Field 3 (entity_refs) is not carried: it is Development
+  // status upstream. It stays reserved so the number cannot be reused for
+  // something else, which would break the compatibility guarantee.
+  message Resource {
+    reserved 3;
+
+    repeated KeyValue attributes = 1;
+    uint32 dropped_attributes_count = 2;
+  }
+
+  // InstrumentationScope is a copy of
+  // opentelemetry.proto.common.v1.InstrumentationScope, field numbers included.
+  message InstrumentationScope {
+    string name = 1;
+    string version = 2;
+    repeated KeyValue attributes = 3;
+    uint32 dropped_attributes_count = 4;
+  }
+
+  // SpanKind mirrors opentelemetry.proto.trace.v1.Span.SpanKind value for
+  // value.
+  enum SpanKind {
+    SPAN_KIND_UNSPECIFIED = 0;
+    SPAN_KIND_INTERNAL = 1;
+    SPAN_KIND_SERVER = 2;
+    SPAN_KIND_CLIENT = 3;
+    SPAN_KIND_PRODUCER = 4;
+    SPAN_KIND_CONSUMER = 5;
+  }
+
+  // StatusCode mirrors opentelemetry.proto.trace.v1.Status.StatusCode. OTLP
+  // names its zero value STATUS_CODE_UNSET; the name differs here to satisfy
+  // the repository's enum lint rules, but the value is identical and it is the
+  // value that goes on the wire.
+  enum StatusCode {
+    STATUS_CODE_UNSPECIFIED = 0;
+    STATUS_CODE_OK = 1;
+    STATUS_CODE_ERROR = 2;
+  }
+
+  // Status is a copy of opentelemetry.proto.trace.v1.Status, field numbers
+  // included.
+  message Status {
+    // Field 1 is reserved upstream (a removed deprecated code). Do not use it.
+    reserved 1;
+
+    string message = 2; // set only when code is ERROR
+    StatusCode code = 3;
+  }
+
+  // Event is a timestamped annotation on the span, carrying zero or more
+  // attributes (opentelemetry.proto.trace.v1.Span.Event).
+  message Event {
+    fixed64 time_unix_nano = 1;
+    string name = 2;
+    repeated KeyValue attributes = 3;
+    uint32 dropped_attributes_count = 4;
+  }
+
+  // Link is a pointer from this span to a span in the same or a different
+  // trace (opentelemetry.proto.trace.v1.Span.Link).
+  message Link {
+    bytes trace_id = 1; // OTLP raw form, 16 bytes
+    bytes span_id = 2; // OTLP raw form, 8 bytes
+    string trace_state = 3;
+    repeated KeyValue attributes = 4;
+    uint32 dropped_attributes_count = 5;
+    fixed32 flags = 6;
+  }
+
+  // AnyValue is a copy of opentelemetry.proto.common.v1.AnyValue, field numbers
+  // included. An unset oneof is OTLP's empty value and is distinct from an
+  // empty string.
+  //
+  // Field 8 (string_value_strindex) is not carried: it is Alpha upstream and
+  // used exclusively by the Profiling signal, which specifies that receivers of
+  // other signals treat its presence as non-fatal and process the value as
+  // absent. It stays reserved so the number cannot be reused.
+  message AnyValue {
+    reserved 8;
+
+    oneof value {
+      string string_value = 1;
+      bool bool_value = 2;
+      int64 int_value = 3;
+      double double_value = 4;
+      ArrayValue array_value = 5;
+      KeyValueList kvlist_value = 6;
+      bytes bytes_value = 7;
+    }
+  }
+
+  // ArrayValue is a copy of opentelemetry.proto.common.v1.ArrayValue. Element
+  // types may be heterogeneous, exactly as in OTLP.
+  message ArrayValue {
+    repeated AnyValue values = 1;
+  }
+
+  // KeyValueList is a copy of opentelemetry.proto.common.v1.KeyValueList.
+  message KeyValueList {
+    repeated KeyValue values = 1;
+  }
+
+  // KeyValue is a copy of opentelemetry.proto.common.v1.KeyValue.
+  //
+  // Field 3 (key_strindex) is not carried, for the same reason as
+  // AnyValue.string_value_strindex: it indexes into a Profiling-signal string
+  // table that logs and traces do not carry. Reserved so it cannot be reused.
+  message KeyValue {
+    reserved 3;
+
+    string key = 1;
+    AnyValue value = 2;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

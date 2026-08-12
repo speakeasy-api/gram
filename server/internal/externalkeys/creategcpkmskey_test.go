@@ -12,6 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestCreateGcpKmsKey_Success(t *testing.T) {
@@ -59,6 +61,47 @@ func TestCreateGcpKmsKey_MissingResourceName(t *testing.T) {
 		ExternalCredentialID:   credID,
 		Algorithm:              "ES256",
 		Name:                   "missing-resource",
+		CustomerGrantReference: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestCreateGcpKmsKey_VersionlessResourceName verifies a `.../cryptoKeys/<k>`
+// path without a version suffix is rejected at creation. Asymmetric-sign keys
+// have no primary version, so such a path never resolves to anything signable,
+// and the resource name is frozen once written — catching it here is what keeps
+// "delete and recreate" from being a routine correction.
+func TestCreateGcpKmsKey_VersionlessResourceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credID := createGcpIamCredential(t, ctx, ti, "backing-cred")
+
+	_, err := ti.service.CreateGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpKmsKeyPayload{
+		SessionToken:           nil,
+		ResourceName:           "projects/gram/locations/global/keyRings/signing/cryptoKeys/k",
+		ExternalCredentialID:   credID,
+		Algorithm:              "ES256",
+		Name:                   "versionless",
+		CustomerGrantReference: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestCreateGcpKmsKey_MalformedResourceName verifies a resource name that is not
+// a GCP KMS path at all is rejected at creation.
+func TestCreateGcpKmsKey_MalformedResourceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credID := createGcpIamCredential(t, ctx, ti, "backing-cred")
+
+	_, err := ti.service.CreateGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpKmsKeyPayload{
+		SessionToken:           nil,
+		ResourceName:           "arn:aws:kms:us-east-1:123456789012:key/abcd-1234",
+		ExternalCredentialID:   credID,
+		Algorithm:              "ES256",
+		Name:                   "malformed",
 		CustomerGrantReference: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -131,4 +174,22 @@ func TestCreateGcpKmsKey_CredentialNotFound(t *testing.T) {
 		CustomerGrantReference: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestCreateGcpKmsKey_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credentialID := createGcpIamCredential(t, ctx, ti, "gcp-cred-entitlement-create")
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.CreateGcpKmsKey(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.CreateGcpKmsKeyPayload{
+		SessionToken:           nil,
+		ResourceName:           "projects/gram/locations/global/keyRings/signing/cryptoKeys/" + uuid.NewString() + "/cryptoKeyVersions/1",
+		ExternalCredentialID:   credentialID,
+		Algorithm:              "ES256",
+		Name:                   "gcp-key-entitlement-create",
+		CustomerGrantReference: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

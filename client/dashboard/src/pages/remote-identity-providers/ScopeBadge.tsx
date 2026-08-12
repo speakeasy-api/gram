@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import {
   remoteSessionScopeTier,
   type RemoteSessionScopeTier,
@@ -10,11 +10,11 @@ import {
 // and the org-admin listing so the three tiers never render inconsistently.
 const TIER_BADGE: Record<
   RemoteSessionScopeTier,
-  { label: string; variant: "outline" | "secondary" | "default" }
+  { label: string; variant: BadgeProps["variant"] }
 > = {
-  project: { label: "Project-Specific", variant: "outline" },
-  organization: { label: "Organizational", variant: "secondary" },
-  platform: { label: "Platform", variant: "default" },
+  project: { label: "Project-Specific", variant: "neutral" },
+  organization: { label: "Organizational", variant: "information" },
+  platform: { label: "Platform", variant: "success" },
 };
 
 export function ScopeBadge({

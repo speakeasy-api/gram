@@ -53,6 +53,14 @@ type Client struct {
 	// getGcpIamCredential endpoint.
 	GetGcpIamCredentialDoer goahttp.Doer
 
+	// VerifyGcpIamCredential Doer is the HTTP client used to make requests to the
+	// verifyGcpIamCredential endpoint.
+	VerifyGcpIamCredentialDoer goahttp.Doer
+
+	// GetGcpSetupInfo Doer is the HTTP client used to make requests to the
+	// getGcpSetupInfo endpoint.
+	GetGcpSetupInfoDoer goahttp.Doer
+
 	// DeleteAwsIamCredential Doer is the HTTP client used to make requests to the
 	// deleteAwsIamCredential endpoint.
 	DeleteAwsIamCredentialDoer goahttp.Doer
@@ -91,6 +99,8 @@ func NewClient(
 		ListGcpIamCredentialsDoer:   doer,
 		GetAwsIamCredentialDoer:     doer,
 		GetGcpIamCredentialDoer:     doer,
+		VerifyGcpIamCredentialDoer:  doer,
+		GetGcpSetupInfoDoer:         doer,
 		DeleteAwsIamCredentialDoer:  doer,
 		DeleteGcpIamCredentialDoer:  doer,
 		RestoreResponseBody:         restoreBody,
@@ -312,6 +322,54 @@ func (c *Client) GetGcpIamCredential() goa.Endpoint {
 		resp, err := c.GetGcpIamCredentialDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("externalCredentials", "getGcpIamCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyGcpIamCredential returns an endpoint that makes HTTP requests to the
+// externalCredentials service verifyGcpIamCredential server.
+func (c *Client) VerifyGcpIamCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyGcpIamCredentialRequest(c.encoder)
+		decodeResponse = DecodeVerifyGcpIamCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyGcpIamCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyGcpIamCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("externalCredentials", "verifyGcpIamCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGcpSetupInfo returns an endpoint that makes HTTP requests to the
+// externalCredentials service getGcpSetupInfo server.
+func (c *Client) GetGcpSetupInfo() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGcpSetupInfoRequest(c.encoder)
+		decodeResponse = DecodeGetGcpSetupInfoResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGcpSetupInfoRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGcpSetupInfoDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("externalCredentials", "getGcpSetupInfo", err)
 		}
 		return decodeResponse(resp)
 	}

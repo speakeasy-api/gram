@@ -54,6 +54,8 @@ type PollAIData struct {
 	anthropicAnalyticsUsagePoller *aiintegrations.AnthropicAnalyticsPoller
 	anthropicAnalyticsCostPoller  *aiintegrations.AnthropicAnalyticsPoller
 	codexCostImporter             *aiintegrations.CodexCostImportService
+	chatgptConversationImporter   *aiintegrations.ChatGPTConversationImportService
+	codexCloudImporter            *aiintegrations.CodexCloudImportService
 }
 
 func NewPollAIData(
@@ -84,6 +86,18 @@ func NewPollAIData(
 			"page":     page,
 		})
 	}
+	chatgptHeartbeat := func(ctx context.Context, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{
+			"schedule": aiintegrations.ScheduleChatGPTCompliance,
+			"page":     page,
+		})
+	}
+	codexCloudHeartbeat := func(ctx context.Context, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{
+			"schedule": aiintegrations.ScheduleCodexCloudSessions,
+			"page":     page,
+		})
+	}
 	return &PollAIData{
 		integrations: store,
 		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
@@ -96,6 +110,8 @@ func NewPollAIData(
 		anthropicAnalyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 		anthropicAnalyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 		codexCostImporter:             aiintegrations.NewCodexCostImportService(logger, store, telemetryLogger, guardianPolicy, codexHeartbeat),
+		chatgptConversationImporter:   aiintegrations.NewChatGPTConversationImportService(logger, store, db, guardianPolicy, chatWriter, chatgptHeartbeat),
+		codexCloudImporter:            aiintegrations.NewCodexCloudImportService(logger, store, db, guardianPolicy, chatWriter, codexCloudHeartbeat),
 	}
 }
 
@@ -219,6 +235,44 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		}
 		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record codex compliance schedule success")
+		}
+	case aiintegrations.ScheduleChatGPTCompliance:
+		if cfg.Provider != aiintegrations.ProviderChatGPTCompliance {
+			return oops.E(oops.CodeInvalid, nil, "chatgpt compliance schedule cannot run for provider %s", cfg.Provider)
+		}
+		if err := p.chatgptConversationImporter.SyncChatGPTConversations(ctx, cfg, endTime); err != nil {
+			var httpErr *codexapi.HTTPError
+			if errors.As(err, &httpErr) {
+				switch httpErr.StatusCode {
+				case 401, 403:
+					return oops.E(oops.CodeUnauthorized, err, "chatgpt compliance rejected the configured api key")
+				case 404:
+					return oops.E(oops.CodeNotFound, err, "chatgpt compliance workspace not found or compliance api access not enabled")
+				}
+			}
+			return oops.E(oops.CodeUnexpected, err, "sync chatgpt conversation data")
+		}
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record chatgpt compliance schedule success")
+		}
+	case aiintegrations.ScheduleCodexCloudSessions:
+		if cfg.Provider != aiintegrations.ProviderChatGPTCompliance {
+			return oops.E(oops.CodeInvalid, nil, "codex cloud sessions schedule cannot run for provider %s", cfg.Provider)
+		}
+		if err := p.codexCloudImporter.SyncCodexCloudSessions(ctx, cfg, endTime); err != nil {
+			var httpErr *codexapi.HTTPError
+			if errors.As(err, &httpErr) {
+				switch httpErr.StatusCode {
+				case 401, 403:
+					return oops.E(oops.CodeUnauthorized, err, "codex cloud import rejected the configured api key")
+				case 404:
+					return oops.E(oops.CodeNotFound, err, "codex cloud workspace not found or compliance api access not enabled")
+				}
+			}
+			return oops.E(oops.CodeUnexpected, err, "sync codex cloud session data")
+		}
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record codex cloud sessions schedule success")
 		}
 	default:
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration sync schedule: %s", schedule)

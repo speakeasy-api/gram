@@ -43,8 +43,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
@@ -70,8 +70,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -92,6 +94,16 @@ func newWorkerCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-k8s-namespace",
+			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-backend-service",
+			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
 		},
 		&cli.StringFlag{
 			Name:    "temporal-address",
@@ -307,15 +319,15 @@ func newWorkerCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, redisFlags...)
-	flags = append(flags, clickHouseFlags...)
-	flags = append(flags, functionsFlags...)
-	flags = append(flags, pulseMCPFlags...)
-	flags = append(flags, assistantRuntimeFlags...)
-	flags = append(flags, svixFlags...)
-	flags = append(flags, pluginsFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, gcpFlags...)
+	flags = append(flags, redisFlags()...)
+	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, functionsFlags()...)
+	flags = append(flags, pulseMCPFlags()...)
+	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -421,10 +433,12 @@ func newWorkerCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
+			platformAdmission := platformmcp.NewAdmissionChecker(productFeatures, featureFlags, platformmcp.NewPostgresNewModelEligibility(db))
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
@@ -432,7 +446,7 @@ func newWorkerCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.String("custom-domain-k8s-namespace"), c.String("custom-domain-backend-service"))
 			if err != nil {
 				return fmt.Errorf("failed to create k8s client: %w", err)
 			}
@@ -483,8 +497,6 @@ func newWorkerCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
-
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
@@ -524,7 +536,6 @@ func newWorkerCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
-			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 
 			// Create ClickHouse client and telemetry service for resolution events
@@ -538,12 +549,11 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				chDB,
-				rbacEnabled,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
-				authz.EngineOpts{DevMode: c.String("environment") == "local"},
-			)
+				authz.EngineOpts{
+					DevMode: c.String("environment") == "local",
+				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
@@ -665,7 +675,6 @@ func newWorkerCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
-				productFeatures,
 				cache.SuffixNone,
 			)
 
@@ -673,7 +682,6 @@ func newWorkerCommand() *cli.Command {
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
@@ -717,13 +725,13 @@ func newWorkerCommand() *cli.Command {
 				chatSessionsManager,
 				env,
 				posthogClient,
+				posthogClient,
 				serverURL,
 				nil,
 				encryptionClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
 				functionsOrchestrator,
-				oauthService,
 				billingTracker,
 				billingRepo,
 				telemetryLogger,
@@ -777,6 +785,10 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			assistantsCore.SetAssetStorage(assetStorage)
+			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
+			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
+			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -809,6 +821,8 @@ func newWorkerCommand() *cli.Command {
 					return fmt.Errorf("failed to parse site url: %w", err)
 				}
 			}
+			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,
@@ -850,6 +864,7 @@ func newWorkerCommand() *cli.Command {
 				ProductFeatures:     productFeatures,
 				PluginPublisher:     pluginPublisher,
 				Publishers:          publishers,
+				TrialEmailsService:  trialEmailsService,
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

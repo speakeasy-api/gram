@@ -4,9 +4,9 @@ import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import type { Asset } from "@gram/client/models/components/asset.js";
@@ -73,75 +73,75 @@ export function SourceOverviewTab({
           </Heading>
           <SourceInfoTable>
             <SourceInfoRow label={isOpenAPI ? "API name" : "Function name"}>
-              <Type className="font-medium">{source?.name || "—"}</Type>
+              <Text className="font-medium">{source?.name || "—"}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Source ID">
               <span className="flex items-center gap-1">
-                <Type className="font-mono text-sm">
+                <Text className="font-mono text-sm">
                   {source?.id ? `${source.id.slice(0, 8)}…` : "—"}
-                </Type>
-                {source?.id && <CopyButton text={source.id} size="inline" />}
+                </Text>
+                {source?.id && <CopyButton text={source.id} size="xs" />}
               </span>
             </SourceInfoRow>
             {isOpenAPI ? (
               <SourceInfoRow label="Format">
-                <Type className="font-mono text-sm">
+                <Text className="font-mono text-sm">
                   {underlyingAsset?.contentType?.includes("yaml")
                     ? "YAML"
                     : underlyingAsset?.contentType?.includes("json")
                       ? "JSON"
                       : underlyingAsset?.contentType || "—"}
-                </Type>
+                </Text>
               </SourceInfoRow>
             ) : (
               <>
                 <SourceInfoRow label="Runtime">
-                  <Type className="text-sm">
+                  <Text className="text-sm">
                     {functionSource ? functionSource.runtime : "—"}
-                  </Type>
+                  </Text>
                 </SourceInfoRow>
                 <SourceInfoRow label="Memory">
-                  <Type className="text-sm">
+                  <Text className="text-sm">
                     {formatMemory(
                       functionSource?.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
                     )}
                     {functionSource?.memoryMib == null && (
-                      <Type muted small as="span" className="ml-1">
+                      <Text muted small as="span" className="ml-1">
                         (default)
-                      </Type>
+                      </Text>
                     )}
-                  </Type>
+                  </Text>
                 </SourceInfoRow>
                 <SourceInfoRow label="Instances">
-                  <Type className="text-sm">
+                  <Text className="text-sm">
                     {functionSource?.scale ?? DEFAULT_FUNCTION_SCALE}
                     {functionSource?.scale == null && (
-                      <Type muted small as="span" className="ml-1">
+                      <Text muted small as="span" className="ml-1">
                         (default)
-                      </Type>
+                      </Text>
                     )}
-                  </Type>
+                  </Text>
                 </SourceInfoRow>
               </>
             )}
             <SourceInfoRow label="File size">
-              <Type className="text-sm">
+              <Text className="text-sm">
                 {underlyingAsset?.contentLength
                   ? formatFileSize(underlyingAsset.contentLength)
                   : "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Created">
-              <Type className="text-sm">
+              <Text className="text-sm">
                 {underlyingAsset?.createdAt
                   ? dateTimeFormatters.humanize(
                       new Date(underlyingAsset.createdAt),
                     )
                   : "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Updated">
-              <Type className="text-sm">{lastUpdated}</Type>
+              <Text className="text-sm">{lastUpdated}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Active deployment">
               {activeDeploymentItem ? (
@@ -149,12 +149,12 @@ export function SourceOverviewTab({
                   params={[activeDeploymentItem.id]}
                   className="flex items-center gap-1 hover:no-underline"
                 >
-                  <Type className="text-primary font-mono text-sm">
+                  <Text className="text-primary font-mono text-sm">
                     {activeDeploymentItem.id.slice(0, 8)}
-                  </Type>
+                  </Text>
                 </routes.deployments.deployment.Link>
               ) : (
-                <Type className="text-muted-foreground text-sm">—</Type>
+                <Text className="text-muted-foreground text-sm">—</Text>
               )}
             </SourceInfoRow>
           </SourceInfoTable>

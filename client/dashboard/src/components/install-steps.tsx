@@ -20,7 +20,7 @@ export function InstallSteps({
   steps: InstallStep[];
 }): React.JSX.Element {
   return (
-    <ol className="border-border bg-card list-none rounded-lg border p-4">
+    <ol className="border-border bg-card list-none border p-4">
       {steps.map((step, i) => (
         <li key={i} className="relative flex gap-4 pb-6 last:pb-0">
           {i < steps.length - 1 && (

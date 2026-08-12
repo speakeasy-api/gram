@@ -47,6 +47,7 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		Summary:         conv.FromPGText[string](skill.Summary),
 		SourceKind:      skill.SourceKind,
 		Classification:  skill.Classification,
+		Tags:            skillTagsOrEmpty(skill.Tags),
 		LatestVersionID: latestVersionIDValue,
 		VersionCount:    versionCount,
 		HasValidVersion: hasValidVersion,
@@ -57,6 +58,13 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 	}
+}
+
+func skillTagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {

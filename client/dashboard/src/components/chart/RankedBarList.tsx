@@ -32,9 +32,9 @@ export function RankedBarList({
                 {item.valueLabel ?? item.value.toLocaleString()}
               </span>
             </div>
-            <div className="bg-muted h-1 w-full rounded-full">
+            <div className="bg-muted h-1 w-full">
               <div
-                className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                className="bg-foreground h-1"
                 style={{ width: `${(item.value / max) * 100}%` }}
               />
             </div>

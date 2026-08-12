@@ -163,6 +163,86 @@ func TestPublishFindingsPublishesContentPartAnchor(t *testing.T) {
 	require.Equal(t, "part-1", pub.messages[0].GetContentPartId())
 }
 
+// The published Finding carries the reveal metadata: field/path pass through
+// from the domain finding, surface derives from (source, field, path) via
+// FindingSurface, and tool_call_id is stamped only from McpLookupToolCallID —
+// the real recorded call id shadow_mcp sets. Custom-rule span findings leave
+// it unset (their spans only know the tool NAME, which is not an id).
+func TestStartPublishFindingsStampsRevealMetadata(t *testing.T) {
+	t.Parallel()
+
+	spanFinding := testFinding()
+	spanFinding.Source = "custom"
+	spanFinding.Field = "tool.args"
+	spanFinding.Path = "command.0"
+
+	contentFinding := testFinding()
+	contentFinding.Source = "prompt_injection"
+
+	judgeFinding := testFinding()
+	judgeFinding.Source = "llm_judge"
+
+	derivedFinding := testFinding()
+	derivedFinding.Source = "shadow_mcp"
+	derivedFinding.McpLookupToolCallID = "call_2"
+
+	pub := &recordingFindingPublisher{results: nil, messages: nil}
+	results, _ := scanners.StartPublishFindings(t.Context(), pub, testFindingMetadata(), []scanners.Finding{spanFinding, contentFinding, judgeFinding, derivedFinding})
+	require.Len(t, results, 4)
+	require.Len(t, pub.messages, 4)
+
+	span := pub.messages[0]
+	require.Equal(t, scanners.SurfaceJSONPath, span.GetSurface())
+	require.Equal(t, "tool.args", span.GetField())
+	require.Equal(t, "command.0", span.GetPath())
+	require.Empty(t, span.GetToolCallId())
+
+	require.Equal(t, scanners.SurfaceContent, pub.messages[1].GetSurface())
+	require.Empty(t, pub.messages[1].GetField())
+	require.Empty(t, pub.messages[1].GetToolCallId())
+
+	require.Equal(t, scanners.SurfaceNone, pub.messages[2].GetSurface())
+
+	require.Equal(t, scanners.SurfaceDerived, pub.messages[3].GetSurface())
+	require.Equal(t, "call_2", pub.messages[3].GetToolCallId())
+}
+
+// The span-level arms must stay byte-identical with the offline backfill's
+// spanSurface (server/cmd/tools/migrations/riskfindings); the field=="" arms
+// are the live per-source defaults.
+func TestFindingSurface(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		source, field, path string
+		want                string
+	}{
+		{source: "custom", field: "tool.args", path: "command.0", want: "json_path"},
+		{source: "custom", field: "content", path: "cmd", want: "json_path"},
+		{source: "custom", field: "tool.args", path: "", want: "tool_args"},
+		{source: "custom", field: "content", path: "", want: "content"},
+		{source: "custom", field: "prompt", path: "", want: "content"},
+		{source: "custom", field: "assistant", path: "", want: "content"},
+		{source: "custom", field: "tool_result", path: "", want: "content"},
+		{source: "custom", field: "tool.server", path: "", want: "derived"},
+		{source: "custom", field: "tool.function", path: "", want: "derived"},
+		{source: "custom", field: "tool.name", path: "", want: ""},
+		{source: "gitleaks", field: "", path: "", want: "content"},
+		{source: "presidio", field: "", path: "", want: "content"},
+		{source: "prompt_injection", field: "", path: "", want: "content"},
+		{source: "llm_judge", field: "", path: "", want: "none"},
+		{source: "shadow_mcp", field: "", path: "", want: "derived"},
+		{source: "account_identity", field: "", path: "", want: "derived"},
+		{source: "destructive_tool", field: "", path: "", want: "derived"},
+		{source: "cli_destructive", field: "", path: "", want: "derived"},
+		{source: "custom", field: "", path: "", want: ""},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.want, scanners.FindingSurface(tc.source, tc.field, tc.path),
+			"FindingSurface(%q, %q, %q)", tc.source, tc.field, tc.path)
+	}
+}
+
 func testFindingMetadata() scanners.FindingMetadata {
 	return scanners.FindingMetadata{
 		RequestID:         "req-1",

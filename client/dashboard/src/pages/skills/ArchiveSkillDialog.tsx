@@ -1,6 +1,6 @@
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useArchiveSkillMutation } from "@gram/client/react-query/archiveSkill.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -63,11 +63,11 @@ export function ArchiveSkillDialog({
         </Dialog.Header>
         {error && <ErrorAlert title="Archive failed" error={error} />}
         <Dialog.Footer>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="destructive-primary"
             disabled={archive.isPending || skill === null}
             onClick={() => {
               if (skill) void archiveSkill(skill);

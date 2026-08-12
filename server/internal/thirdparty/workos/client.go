@@ -206,6 +206,8 @@ func convertUser(u usermanagement.User) User {
 		Email:             u.Email,
 		ProfilePictureURL: u.ProfilePictureURL,
 		ExternalID:        u.ExternalID,
+		CreatedAt:         u.CreatedAt,
+		UpdatedAt:         u.UpdatedAt,
 	}
 }
 

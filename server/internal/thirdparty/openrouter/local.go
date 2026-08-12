@@ -22,6 +22,10 @@ func (o *Development) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyT
 	return 0, nil
 }
 
+func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	return nil
+}
+
 func (o *Development) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	return 12.5, 10, nil // arbitrary local numbers
 }

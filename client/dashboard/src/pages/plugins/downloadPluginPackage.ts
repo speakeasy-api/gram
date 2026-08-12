@@ -1,4 +1,9 @@
 import { Gram } from "@gram/client";
+import type { QueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+
+export type PluginPackagePlatform = QueryParamPlatform;
 
 // The SDK returns headers as a plain Record<string, string[]>, not a Fetch
 // Headers instance, so lookups must be done case-insensitively by hand — the
@@ -17,7 +22,7 @@ function getHeader(
 export async function downloadPluginPackage(
   client: Gram,
   pluginId: string,
-  platform: "claude" | "cursor" | "codex",
+  platform: PluginPackagePlatform,
 ): Promise<void> {
   const { headers, result } = await client.plugins.downloadPluginPackage({
     pluginId,
@@ -34,4 +39,41 @@ export async function downloadPluginPackage(
     "plugin.zip";
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function usePluginPackageDownload(
+  client: Gram,
+  pluginId: string,
+  onMenuOpenChange: (open: boolean) => void,
+): {
+  isDownloading: boolean;
+  download: (platform: PluginPackagePlatform) => Promise<void>;
+} {
+  const [downloadingPluginId, setDownloadingPluginId] = useState<string | null>(
+    null,
+  );
+  const activeRequestRef = useRef<{
+    pluginId: string;
+    request: symbol;
+  } | null>(null);
+
+  const download = async (platform: PluginPackagePlatform): Promise<void> => {
+    if (activeRequestRef.current?.pluginId === pluginId) return;
+    const request = Symbol();
+    activeRequestRef.current = { pluginId, request };
+    onMenuOpenChange(false);
+    setDownloadingPluginId(pluginId);
+    try {
+      await downloadPluginPackage(client, pluginId, platform);
+    } catch (_err) {
+      toast.error("Failed to download plugin package");
+    } finally {
+      if (activeRequestRef.current?.request === request) {
+        activeRequestRef.current = null;
+        setDownloadingPluginId(null);
+      }
+    }
+  };
+
+  return { isDownloading: downloadingPluginId === pluginId, download };
 }

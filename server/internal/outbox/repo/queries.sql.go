@@ -8,37 +8,50 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type BulkInsertOutboxEntriesParams struct {
+type BulkInsertPublishOutboxEntriesParams struct {
+	PublicID       uuid.UUID
 	OrganizationID string
-	EventType      string
-	Payload        []byte
+	Topic          string
+	Message        []byte
+	Attributes     []byte
 }
 
-const insertOutboxEntry = `-- name: InsertOutboxEntry :one
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES ($1, $2, $3)
-RETURNING id, created_at
+const insertPublishOutboxEntry = `-- name: InsertPublishOutboxEntry :one
+INSERT INTO publish_outbox (public_id, organization_id, topic, message, attributes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, public_id, created_at
 `
 
-type InsertOutboxEntryParams struct {
+type InsertPublishOutboxEntryParams struct {
+	PublicID       uuid.UUID
 	OrganizationID string
-	EventType      string
-	Payload        []byte
+	Topic          string
+	Message        []byte
+	Attributes     []byte
 }
 
-type InsertOutboxEntryRow struct {
+type InsertPublishOutboxEntryRow struct {
 	ID        int64
+	PublicID  uuid.UUID
 	CreatedAt pgtype.Timestamptz
 }
 
-// Inserts a new outbox event for an organization and returns identifiers
-// needed for downstream relay/signal coordination.
-func (q *Queries) InsertOutboxEntry(ctx context.Context, arg InsertOutboxEntryParams) (InsertOutboxEntryRow, error) {
-	row := q.db.QueryRow(ctx, insertOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
-	var i InsertOutboxEntryRow
-	err := row.Scan(&i.ID, &i.CreatedAt)
+// Enqueues a message for publication to a Pub/Sub topic. public_id is supplied
+// by the caller rather than defaulted so the same value can be embedded in the
+// message body before the row is written.
+func (q *Queries) InsertPublishOutboxEntry(ctx context.Context, arg InsertPublishOutboxEntryParams) (InsertPublishOutboxEntryRow, error) {
+	row := q.db.QueryRow(ctx, insertPublishOutboxEntry,
+		arg.PublicID,
+		arg.OrganizationID,
+		arg.Topic,
+		arg.Message,
+		arg.Attributes,
+	)
+	var i InsertPublishOutboxEntryRow
+	err := row.Scan(&i.ID, &i.PublicID, &i.CreatedAt)
 	return i, err
 }

@@ -1,10 +1,6 @@
 import type { ReactElement } from "react";
 import { Loader2 } from "lucide-react";
 import {
-  CHAT_LANDING_GRADIENT,
-  CHAT_LANDING_GRADIENT_CLASS,
-} from "@/lib/chat-gradient";
-import {
   CHAT_LAUNCH_ADORNMENT_ATTR,
   CHAT_LAUNCH_CARD_ATTR,
   CHAT_LAUNCH_TEXT_ATTR,
@@ -12,13 +8,12 @@ import {
   useChatLaunchState,
 } from "@/lib/chat-launch";
 import { INSIGHTS_SUGGESTION_ICONS } from "@/lib/insights-suggestions";
-import { cn } from "@/lib/utils";
 
 /**
  * The mid-flight state of a suggestion launch: the clicked chip, scaled up and
- * centred over a dimmed page with the chat landing rainbow behind it, spinning
- * a loader until the conversation's user bubble exists. Mounted once in
- * <AppLayout> so it outlives the navigation into the chat route.
+ * centred over a dimmed page, spinning a loader until the conversation's user
+ * bubble exists. Mounted once in <AppLayout> so it outlives the navigation
+ * into the chat route.
  *
  * Every part is addressed by data attribute rather than a ref, because
  * `useChatLaunch` drives the animation imperatively from outside React (see
@@ -47,17 +42,10 @@ export function ChatLaunchOverlay(): ReactElement | null {
         className="absolute inset-0"
       >
         <div className="bg-background/80 absolute inset-0 backdrop-blur-[2px]" />
-        <div
-          className={cn(
-            "pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
-            CHAT_LANDING_GRADIENT_CLASS,
-          )}
-          style={{ background: CHAT_LANDING_GRADIENT }}
-        />
       </div>
       <div
         {...{ [CHAT_LAUNCH_CARD_ATTR]: "" }}
-        className="border-border bg-card text-foreground relative flex max-w-xl items-center gap-3 rounded-2xl border px-6 py-4 text-lg shadow-lg"
+        className="border-border bg-card text-foreground relative flex max-w-xl items-center gap-3 border px-6 py-4 text-lg shadow-lg"
       >
         <SuggestionIcon
           {...{ [CHAT_LAUNCH_ADORNMENT_ATTR]: "" }}

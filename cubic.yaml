@@ -21,10 +21,25 @@ reviews:
   ignore:
     files:
       - client/dashboard/src/sdk/**/*
+      - client/sdk/**/*
+      - hooks/sdk/**/*
       - server/gen/**/*
+      - dev-idp/gen/**/*
+      - infra/gen/**/*
       - "**/repo/*.go"
-      - .changesets/*
+      - "**/chrepo/*.go"
+      - "**/testrepo/*.go"
+      - server/internal/database/*.go
+      - .changeset/*
       - .speakeasy/**/*
+      - "**/.speakeasy/**/*"
+      - "**/pnpm-lock.yaml"
+      - "**/go.sum"
+      - "**/uv.lock"
+      - "**/Cargo.lock"
+      - "**/mise.lock"
+      - "**/atlas.sum"
+      - "**/__snapshots__/**/*"
       - "**/*.svg"
       - "**/*_gen.go"
       - "**/*_gen.yaml"

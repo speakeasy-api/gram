@@ -2,6 +2,7 @@ package marketplace
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
@@ -79,11 +80,25 @@ func TestUploadPackRequestIsReplayable(t *testing.T) {
 	t.Parallel()
 
 	wantBody := []byte("0032want 0123456789012345678901234567890123456789\n0000")
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	_, err := zw.Write(wantBody)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	wantCompressedBody := compressed.Bytes()
+
 	client := &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			gotBody, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
-			require.Equal(t, wantBody, gotBody)
+			require.Equal(t, wantCompressedBody, gotBody)
+			require.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
+			zr, err := gzip.NewReader(bytes.NewReader(gotBody))
+			require.NoError(t, err)
+			decompressedBody, err := io.ReadAll(zr)
+			require.NoError(t, err)
+			require.NoError(t, zr.Close())
+			require.Equal(t, wantBody, decompressedBody)
 			require.NotNil(t, req.GetBody)
 
 			replayedBody, err := req.GetBody()
@@ -91,7 +106,7 @@ func TestUploadPackRequestIsReplayable(t *testing.T) {
 			defer func() { require.NoError(t, replayedBody.Close()) }()
 			gotReplayedBody, err := io.ReadAll(replayedBody)
 			require.NoError(t, err)
-			require.Equal(t, wantBody, gotReplayedBody)
+			require.Equal(t, wantCompressedBody, gotReplayedBody)
 			_, markedIdempotent := req.Header["Idempotency-Key"]
 			require.True(t, markedIdempotent)
 
@@ -120,8 +135,9 @@ func TestUploadPackRequestIsReplayable(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/marketplace/"+strings.Repeat("a", 43)+".git/git-upload-pack",
-		bytes.NewReader(wantBody),
+		bytes.NewReader(wantCompressedBody),
 	)
+	req.Header.Set("Content-Encoding", "gzip")
 	// Incoming server requests do not provide GetBody.
 	req.GetBody = nil
 	rec := httptest.NewRecorder()

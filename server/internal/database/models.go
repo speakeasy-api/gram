@@ -127,6 +127,23 @@ type AssistantDashboardMessage struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssistantMcpOauthClient struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	AssistantID           uuid.UUID
+	OauthServerIssuer     string
+	RedirectUri           string
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ClientSecretExpiresAt pgtype.Timestamptz
+	RegistrationOwner     uuid.NullUUID
+	RegistrationStartedAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
 type AssistantMcpServer struct {
 	ID            uuid.UUID
 	AssistantID   uuid.UUID
@@ -304,6 +321,30 @@ type BillingMetadatum struct {
 	TunneledMcpServerLimit pgtype.Int4
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
+}
+
+type BusinessMemory struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.NullUUID
+	OrganizationID       string
+	Body                 string
+	MemoryType           string
+	StructuralScope      string
+	ContentScope         []byte
+	Embedding            pgvector_go.HalfVector
+	EmbeddingModel       string
+	ExtractionModel      string
+	SourceEvaluationID   uuid.NullUUID
+	SourceCandidateIndex int32
+	SourceChatID         uuid.NullUUID
+	SourceTurn           pgtype.Int4
+	SourceAuthorID       pgtype.Text
+	ExtractedAt          pgtype.Timestamptz
+	LifecycleState       string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type Chat struct {
@@ -538,6 +579,14 @@ type DeploymentsPackage struct {
 	DeploymentID uuid.UUID
 	PackageID    uuid.UUID
 	VersionID    uuid.UUID
+}
+
+type DeviceAgentConfiguration struct {
+	OrganizationID string
+	SchemaVersion  int32
+	Config         []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type DeviceAgentDeviceSync struct {
@@ -994,6 +1043,86 @@ type JsonWebKeySet struct {
 	Deleted        bool
 }
 
+type LitellmInstance struct {
+	ID                       uuid.UUID
+	OrganizationID           string
+	ProjectID                uuid.UUID
+	ApiKeyID                 uuid.UUID
+	CreatedByUserID          string
+	Name                     string
+	FailurePosture           string
+	LastGuardrailEventAt     pgtype.Timestamptz
+	LastOtelEventAt          pgtype.Timestamptz
+	LastErrorAt              pgtype.Timestamptz
+	LastErrorKind            pgtype.Text
+	ReportedLitellmVersion   pgtype.Text
+	ReportedLitellmVersionAt pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	Deleted                  bool
+}
+
+// Append-only approve/deny history with the rationale and the evidence it rested on.
+type McpApprovalDecision struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	Decision             string
+	DecidedBy            string
+	Rationale            pgtype.Text
+	EvidenceSnapshot     []byte
+	EvidenceVersion      int32
+	McpResearchReportID  uuid.NullUUID
+	// Resolved blast radius of the approval. Empty for a denial.
+	GrantedPrincipalUrns []string
+	DecidedAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+// One review per MCP server per project. Re-requests reopen the same row so decisions accumulate as history, giving "have we decided on this before?" for free.
+type McpApprovalRequest struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRaw      string
+	TargetKey      string
+	// Resolved immutable artifact identity. NULL means unidentified, which must surface as unknown rather than as an absence of findings.
+	ArtifactRef pgtype.Text
+	// False for a floating invocation such as an unpinned npx command, where anything scanned may not be what runs.
+	VersionPinned             bool
+	RiskPolicyBypassRequestID uuid.NullUUID
+	Status                    string
+	CurrentEvidence           []byte
+	EvidenceVersion           int32
+	EvidenceCollectedAt       pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	DeletedAt                 pgtype.Timestamptz
+	Deleted                   bool
+}
+
+// Who asked for a server and why. Separate from the request so demand is visible without duplicating reviews.
+type McpApprovalRequestRequester struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	UserID               string
+	UserEmail            pgtype.Text
+	Note                 pgtype.Text
+	RequestedAt          pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
 type McpEndpoint struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -1044,6 +1173,27 @@ type McpRegistry struct {
 	Deleted   bool
 }
 
+// Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
+type McpResearchReport struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	Status               string
+	Report               []byte
+	ReportVersion        int32
+	Model                pgtype.Text
+	PromptVersion        pgtype.Text
+	RequestedBy          pgtype.Text
+	StartedAt            pgtype.Timestamptz
+	CompletedAt          pgtype.Timestamptz
+	Error                pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
 type McpServer struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
@@ -1052,9 +1202,10 @@ type McpServer struct {
 	EnvironmentID       uuid.NullUUID
 	UserSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID   uuid.NullUUID
-	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be set.
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
 	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
+	UnproxiedMcpServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
 	CreatedAt             pgtype.Timestamptz
@@ -1370,6 +1521,152 @@ type PackageVersion struct {
 	Deleted      bool
 }
 
+type PlatformMcpAuthorizationGrant struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	AuthorizationCodeHash string
+	OauthClientID         uuid.UUID
+	ConnectionID          uuid.UUID
+	ConnectionGeneration  uuid.UUID
+	RedirectUri           string
+	CodeChallenge         string
+	ExpiresAt             pgtype.Timestamptz
+	ConsumedAt            pgtype.Timestamptz
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type PlatformMcpCatalogRegistration struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	SourceKind             string
+	CatalogProvider        string
+	CatalogReference       string
+	Status                 string
+	RemoteMcpServerID      uuid.NullUUID
+	RemoteMcpServerOwned   bool
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerOwned bool
+	McpServerID            uuid.NullUUID
+	McpServerOwned         bool
+	McpEndpointID          uuid.NullUUID
+	McpEndpointOwned       bool
+	ConnectionID           uuid.UUID
+	ConnectionGeneration   uuid.UUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
+type PlatformMcpConnection struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SubjectUrn       string
+	OauthClientID    uuid.UUID
+	ActiveGeneration uuid.UUID
+	AuthorizedAt     pgtype.Timestamptz
+	ReauthorizedAt   pgtype.Timestamptz
+	RevokedAt        pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type PlatformMcpOauthClient struct {
+	ID                    uuid.UUID
+	ClientID              string
+	ClientSecretHash      pgtype.Text
+	ClientName            string
+	RedirectUris          []string
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type PlatformMcpOnboardingMilestone struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	Milestone            string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	ProjectID            uuid.NullUUID
+	McpKey               string
+	AttemptID            uuid.NullUUID
+	ProductDay           pgtype.Date
+	CreatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpOperationReceipt struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.NullUUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	Operation            string
+	IdempotencyKey       string
+	InputHash            string
+	Status               string
+	ResultCode           pgtype.Text
+	ExpiresAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpReadiness struct {
+	ID                               uuid.UUID
+	OrganizationID                   string
+	ProjectID                        uuid.UUID
+	RegistrationID                   uuid.UUID
+	ConnectionID                     uuid.UUID
+	ConnectionGeneration             uuid.UUID
+	ProviderAuthorizationFingerprint string
+	State                            string
+	EvidenceCode                     pgtype.Text
+	CheckedAt                        pgtype.Timestamptz
+	ExpiresAt                        pgtype.Timestamptz
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+}
+
+type PlatformMcpSession struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ConnectionID         uuid.UUID
+	OauthClientID        uuid.UUID
+	ConnectionGeneration uuid.UUID
+	Jti                  string
+	RefreshTokenHash     string
+	ExpiresAt            pgtype.Timestamptz
+	RefreshExpiresAt     pgtype.Timestamptz
+	RotatedAt            pgtype.Timestamptz
+	RevokedAt            pgtype.Timestamptz
+	ReplacedBySessionID  uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpSetupHandoff struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	ProviderKey          string
+	Intent               string
+	HandoffHash          string
+	ExpiresAt            pgtype.Timestamptz
+	RedeemedAt           pgtype.Timestamptz
+	InvalidatedAt        pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
 type Plugin struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -1508,6 +1805,45 @@ type PromptTemplate struct {
 	Deleted       bool
 }
 
+// Transactional outbox of pending Pub/Sub publishes. Rows are deleted once published, so the table is near-empty in steady state; permanent failures move to publish_outbox_dead_letters.
+type PublishOutbox struct {
+	ID int64
+	// Stable id a producer can put inside its own message body. Deliberately unindexed: nothing looks a row up by it, so an index here would buy nothing and cost a uniqueness check on the caller's transaction. Collisions are prevented by minting uuidv7, not by the database.
+	PublicID uuid.UUID
+	// Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves. Nothing downstream may reference the organization either: publish_outbox_dead_letters drops its foreign key for the same reason, since a row that outlived its organization still has to be able to reach it.
+	OrganizationID string
+	// Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.
+	Topic string
+	// proto.Marshal of that message, published verbatim. Topic proto changes must stay additive: a row marshaled by one binary may be published after the topic schema has rolled forward.
+	Message []byte
+	// Pub/Sub message attributes. Carries the producer traceparent so the trace survives the database hop. content-type and schema are derived at publish time and cannot be overridden from here.
+	Attributes []byte
+	// Incremented when a row is claimed, not when it fails, so it counts deliveries attempted — the number dead-lettering acts on.
+	Attempts   int32
+	LastError  pgtype.Text
+	RetryAfter pgtype.Timestamptz
+	// Claim lease held by the draining relay. Deliberately absent from every index predicate: predicate columns are HOT-blocking, so indexing this would force a new index tuple on every claim.
+	LockedUntil pgtype.Timestamptz
+	// Identifies the claim currently holding the row, minted by the drainer. Settlement matches on it so a drain that outlived its lease cannot delete, dead-letter or release a row another drainer has since claimed. NULL means unclaimed. Unindexed, like locked_until, so claiming stays a HOT update.
+	LeaseToken uuid.NullUUID
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type PublishOutboxDeadLetter struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	LastError      string
+	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
+	EnqueuedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
+
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -1537,19 +1873,23 @@ type RemoteMcpServerHeader struct {
 }
 
 type RemoteSession struct {
-	ID                    uuid.UUID
-	SubjectUrn            urn.SessionSubject
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
-	AccessExpiresAt       pgtype.Timestamptz
-	RefreshTokenEncrypted pgtype.Text
-	RefreshExpiresAt      pgtype.Timestamptz
-	Scopes                []string
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                     uuid.UUID
+	SubjectUrn             urn.SessionSubject
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientID  uuid.UUID
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	Resource               pgtype.Text
+	AutoRefresh            bool
+	LastRefreshAttemptAt   pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type RemoteSessionClient struct {
@@ -1586,6 +1926,7 @@ type RemoteSessionIssuer struct {
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
+	RevocationEndpoint                pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
 	ServiceDocumentation              pgtype.Text
@@ -1742,6 +2083,7 @@ type RiskResult struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -1768,6 +2110,7 @@ type Skill struct {
 	Summary        pgtype.Text
 	SourceKind     string
 	Classification string
+	Tags           []string
 	FirstSeenAt    pgtype.Timestamptz
 	LastSeenAt     pgtype.Timestamptz
 	SeenCount      int64
@@ -2177,6 +2520,16 @@ type ToolsetVersion struct {
 	Deleted       bool
 }
 
+type Trial struct {
+	OrganizationID string
+	Tier           string
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type TriggerInstance struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -2238,6 +2591,19 @@ type TunneledMcpServerHeader struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+}
+
+type UnproxiedMcpServer struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	Url         string
+	Description pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
 }
 
 type User struct {

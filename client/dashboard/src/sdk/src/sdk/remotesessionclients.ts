@@ -3,7 +3,6 @@
  */
 
 import { remoteSessionClientsAttachUserSessionIssuer } from "../funcs/remoteSessionClientsAttachUserSessionIssuer.js";
-import { remoteSessionClientsCloneClientFromOAuthProxyProvider } from "../funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.js";
 import { remoteSessionClientsCreate } from "../funcs/remoteSessionClientsCreate.js";
 import { remoteSessionClientsCreateCimd } from "../funcs/remoteSessionClientsCreateCimd.js";
 import { remoteSessionClientsDelete } from "../funcs/remoteSessionClientsDelete.js";
@@ -17,10 +16,6 @@ import {
   AttachUserSessionIssuerRequest,
   AttachUserSessionIssuerSecurity,
 } from "../models/operations/attachusersessionissuer.js";
-import {
-  CloneClientFromOAuthProxyProviderRequest,
-  CloneClientFromOAuthProxyProviderSecurity,
-} from "../models/operations/cloneclientfromoauthproxyprovider.js";
 import {
   CreateCimdRemoteSessionClientRequest,
   CreateCimdRemoteSessionClientSecurity,
@@ -66,25 +61,6 @@ export class RemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsAttachUserSessionIssuer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * cloneClientFromOAuthProxyProvider remoteSessionClients
-   *
-   * @remarks
-   * Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.
-   */
-  async cloneClientFromOAuthProxyProvider(
-    request: CloneClientFromOAuthProxyProviderRequest,
-    security?: CloneClientFromOAuthProxyProviderSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RemoteSessionClient> {
-    return unwrapAsync(remoteSessionClientsCloneClientFromOAuthProxyProvider(
       this,
       request,
       security,

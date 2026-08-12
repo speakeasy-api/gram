@@ -21,9 +21,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		// Create and store a session with no active organization
 		session := sessions.Session{
@@ -56,6 +54,11 @@ func TestService_Register(t *testing.T) {
 
 		err = instance.service.Register(ctx, payload)
 		require.NoError(t, err)
+
+		storedSession, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.NotEmpty(t, storedSession.ActiveOrganizationID)
+		require.Empty(t, instance.trialNotifier.trialStarted)
 	})
 
 	t.Run("register fails when user already has active organization", func(t *testing.T) {
@@ -208,6 +211,68 @@ func TestService_Register(t *testing.T) {
 		}
 	})
 
+	t.Run("register fails when org name slugifies to nothing", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		session := sessions.Session{
+			SessionID:            t.Name(),
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "", // No active organization
+			WorkOSSessionID:      "",
+		}
+		err := instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		authCtx := &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			ProjectID:            nil,
+			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
+			AccountType:          "test",
+			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
+		}
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+		// Names built entirely from the punctuation the character rule allows
+		// (or with a single surviving alphanumeric) slugify to an empty or
+		// one-character slug and must be rejected server-side.
+		testCases := []struct {
+			name    string
+			orgName string
+		}{
+			{"only hyphens", "-----"},
+			{"only underscores", "___"},
+			{"mixed punctuation", "- _ -"},
+			{"single alphanumeric", "A-"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				payload := &gen.RegisterPayload{
+					OrgName:      tc.orgName,
+					SessionToken: nil,
+				}
+
+				err := instance.service.Register(ctx, payload)
+				require.Error(t, err)
+
+				var oopsErr *oops.ShareableError
+				require.ErrorAs(t, err, &oopsErr)
+				require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+				require.Contains(t, err.Error(), "organization name must contain at least 2 letters or numbers")
+			})
+		}
+	})
+
 	t.Run("register allows valid characters in org name", func(t *testing.T) {
 		t.Parallel()
 
@@ -230,9 +295,7 @@ func TestService_Register(t *testing.T) {
 				// can run in parallel without racing on shared Redis state.
 				userInfo := defaultMockUserInfo()
 				userInfo.Organizations = []MockOrganizationEntry{}
-				ctx, instance := newTestAuthService(t, userInfo)
-
-				require.NoError(t, instance.createTestUser(ctx, userInfo))
+				ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 				sessionID := "session-" + tc.name
 				session := sessions.Session{
@@ -319,9 +382,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // no orgs yet
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		session := sessions.Session{
 			SessionID:            "workos-register-test",
@@ -356,9 +417,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		session := sessions.Session{
 			SessionID:            "slug-no-collision",
@@ -393,9 +452,7 @@ func TestService_Register(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		// Pre-create an org that occupies the slug "collide-me".
 		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{

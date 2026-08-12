@@ -34,6 +34,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -42,7 +43,6 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -99,6 +99,9 @@ type testInstance struct {
 	shadowMCPClient *shadowmcp.Client
 	cacheAdapter    cache.Cache
 	serverURL       *url.URL
+	// features is the injectable flag provider wired into the wrapped mcp
+	// service; tests enable flag-gated behavior with SetFlag.
+	features *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -129,13 +132,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	mcpMetadataRepo := mcpmetadatarepo.New(conn)
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
@@ -155,7 +157,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter))
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
+	features := &feature.InMemory{}
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, features, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
@@ -177,6 +180,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		shadowMCPClient: shadowMCPClient,
 		cacheAdapter:    cacheAdapter,
 		serverURL:       serverURL,
+		features:        features,
 	}
 }
 

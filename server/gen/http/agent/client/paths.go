@@ -16,3 +16,13 @@ func GetPluginsAgentPath() string {
 func ListSyncedUsersAgentPath() string {
 	return "/rpc/agent.listSyncedUsers"
 }
+
+// GetConfigurationAgentPath returns the URL path to the agent service getConfiguration HTTP endpoint.
+func GetConfigurationAgentPath() string {
+	return "/rpc/agent.getConfiguration"
+}
+
+// UpdateConfigurationAgentPath returns the URL path to the agent service updateConfiguration HTTP endpoint.
+func UpdateConfigurationAgentPath() string {
+	return "/rpc/agent.updateConfiguration"
+}

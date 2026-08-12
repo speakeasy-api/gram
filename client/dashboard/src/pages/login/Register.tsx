@@ -1,4 +1,5 @@
 import { useSession } from "@/contexts/Auth";
+import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import { AuthShell } from "./components/auth-shell";
 import { RegisterPanel } from "./components/register-panel";
@@ -20,7 +21,7 @@ export default function Register(): JSX.Element {
   }
 
   if (session.activeOrganizationId !== "") {
-    const redirect = searchParams.get("redirect");
+    const redirect = safeSameOriginUrl(searchParams.get("redirect"));
     if (redirect) {
       window.location.href = redirect;
     } else {

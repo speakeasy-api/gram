@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Stub the Radix-backed primitive so we can assert TableRowContextMenu's
 // mapping and selection behavior without driving a real right-click in
 // happy-dom.
-vi.mock("./ui/context-menu", () => ({
+vi.mock("@/components/ui/ContextMenu", () => ({
   ContextMenu: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -34,7 +34,7 @@ vi.mock("./ui/context-menu", () => ({
     </button>
   ),
 }));
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Icon", () => ({
   Icon: () => <span data-testid="icon" />,
 }));
 

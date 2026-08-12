@@ -44,6 +44,12 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiza
 func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
+	return seedMcpServerWithVisibility(t, ctx, conn, projectID, "public")
+}
+
+func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string) uuid.UUID {
+	t.Helper()
+
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
@@ -67,7 +73,7 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:          "disabled",
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 	return row.ID

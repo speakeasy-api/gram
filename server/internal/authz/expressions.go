@@ -119,7 +119,7 @@ func (g GrantCheck) Evaluate(grants []Grant) (GrantExpressionResult, error) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
 
-	grant, _ := matchingAllowGrant(grants, g.Check.expand())
+	grant, _ := matchingGrant(grants, g.Check.expand())
 	if grant == nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
@@ -133,13 +133,10 @@ func (g GrantCheck) grantSet(grants []Grant) (grantSet, error) {
 	}
 
 	checks := g.Check.expand()
-	if err := rejectDenyGrantsForExpressionScope(grants, g.Check.Scope); err != nil {
-		return nil, err
-	}
 
-	// matchingAllowGrant already applies Check expansion and the Check's
+	// matchingGrant already applies Check expansion and the Check's
 	// selector match mode. Grant expressions do not reimplement selector logic.
-	grant, _ := matchingAllowGrant(grants, checks)
+	grant, _ := matchingGrant(grants, checks)
 	if grant == nil {
 		return grantSet{}, nil
 	}
@@ -278,25 +275,6 @@ func (s grantSet) subtract(other grantSet) {
 	}
 }
 
-// rejectDenyGrantsForExpressionScope prevents legacy deny grants from being
-// interpreted inside set-expression evaluation. Deny grants have their own
-// deny-wins semantics in Require/RequireAny; grant expressions use explicit
-// set subtraction instead. Mixing both for the same referenced scope would make
-// the result ambiguous, so the expression fails fast even if the deny selector
-// would not match this specific runtime instance.
-func rejectDenyGrantsForExpressionScope(grants []Grant, scope Scope) error {
-	for _, grant := range grants {
-		if grant.Effect != PolicyEffectDeny {
-			continue
-		}
-		if grant.Scope != scope {
-			continue
-		}
-		return fmt.Errorf("%w: deny grant with scope %q cannot be evaluated by grant expressions", ErrUnsupportedMixedGrantSemantics, grant.Scope)
-	}
-	return nil
-}
-
 func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion GrantCheck) (GrantExpressionResult, error) {
 	if err := validateInput(base.Check); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
@@ -304,14 +282,7 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 	if err := validateInput(exclusion.Check); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
-	if err := rejectDenyGrantsForExpressionScope(grants, base.Check.Scope); err != nil {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
-	}
-	if err := rejectDenyGrantsForExpressionScope(grants, exclusion.Check.Scope); err != nil {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
-	}
-
-	baseGrant, _ := matchingAllowGrant(grants, base.Check.expand())
+	baseGrant, _ := matchingGrant(grants, base.Check.expand())
 	if baseGrant == nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
@@ -322,7 +293,7 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 		return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
 	}
 
-	exclusionGrant, _ := matchingAllowGrant(grants, expandWithoutRoot(exclusion.Check))
+	exclusionGrant, _ := matchingGrant(grants, expandWithoutRoot(exclusion.Check))
 	if exclusionGrant != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExclusionMatched}, nil
 	}

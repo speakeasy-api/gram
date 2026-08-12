@@ -36,8 +36,8 @@ const (
 	// stream URN stamped at ingest, mirroring is_codex_otel_row in the MV.
 	sessionCodexOTELRowPredicate = "(gram_urn = 'codex:otel:logs')"
 	// sessionCodexAPIRequestPredicate matches Codex response.completed rows that
-	// carry token counts — the sole Codex usage source (the derived
-	// codex:usage:metrics rows are deprecated). Mirrors is_codex_api_request.
+	// carry token counts — the sole Codex TOKEN source (codex:usage:metrics
+	// compliance rows carry cost only). Mirrors is_codex_api_request.
 	sessionCodexAPIRequestPredicate = "(" +
 		sessionCodexOTELRowPredicate + " AND " +
 		"toString(attributes.event.name) = 'codex.sse_event' AND " +
@@ -51,15 +51,17 @@ const (
 	sessionCodexCacheReadTokensExpr = "least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), " +
 		"greatest(toInt64OrZero(toString(attributes.input_token_count)), 0))"
 	sessionCodexInputTokensExpr = "(greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - " + sessionCodexCacheReadTokensExpr + ")"
-	// sessionAgentUsageRowPredicate matches Cursor/Claude-Chat usage rows —
-	// their only token/cost source. claude_chat:usage rows carry Claude
+	// sessionAgentUsageRowPredicate matches Cursor/Claude-Chat/ChatGPT usage
+	// rows — their only token/cost source. claude_chat:usage rows carry Claude
 	// Chat (web/desktop) token usage and claude_chat:cost rows the matching
-	// spend, both polled from the Admin Analytics API. The codex:usage prefix
-	// is kept only for in-flight rows from pods that predate the Codex
-	// raw-stream cutover. Gram-hosted chat completions and claude-code:usage
-	// rows are deliberately excluded: the summaries cover agent surfaces only,
-	// and claude-code:usage duplicates the OTEL api_request stream.
-	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))"
+	// spend, both polled from the Admin Analytics API. chatgpt:usage rows are
+	// ChatGPT/Work per-user usage+spend from the OpenAI compliance COSTS
+	// import. codex:usage rows are that import's Codex spend, cost-only since
+	// DNO-733 — their tokens would duplicate the Codex OTEL stream. Gram-hosted
+	// chat completions and claude-code:usage rows are deliberately excluded:
+	// the summaries cover agent surfaces only, and claude-code:usage
+	// duplicates the OTEL api_request stream.
+	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))"
 	// sessionOpencodeUsageRowPredicate matches opencode's per-turn usage rows.
 	// opencode reports tokens and cost on its unified-ingest assistant.responded
 	// rows, under the canonical gen_ai.usage.* keys the generic fallback branches
@@ -73,6 +75,13 @@ const (
 		"hook_source = 'opencode' AND " +
 		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
 		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
+		")"
+	// sessionLiteLLMUsageRowPredicate matches only normalized LiteLLM client
+	// model spans. Resource provenance plus the closed event-URN set excludes
+	// guardrail, infrastructure, and metric rows from usage aggregates.
+	sessionLiteLLMUsageRowPredicate = "(" +
+		"gram_urn = 'litellm:otel:traces' AND " +
+		"event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')" +
 		")"
 	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
 	// tool-call hook rows (they have no OTEL stream). The hook.event guard excludes
@@ -105,11 +114,11 @@ const (
 	// usage rows, and opencode assistant.responded rows. This is the sumIf guard
 	// for every token/cost measure, keeping session totals aligned with the
 	// aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + ")"
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage
 	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
@@ -156,17 +165,21 @@ const (
 	sessionModelExpr = "multiIf(" +
 		sessionClaudeAPIRequestPredicate + " AND toString(attributes.model) != '', toString(attributes.model), " +
 		sessionClaudeAPIRequestPredicate + " AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model), " +
+		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.model) != '', toString(attributes.gen_ai.response.model), " +
+		sessionLiteLLMUsageRowPredicate + ", toString(attributes.gen_ai.request.model), " +
 		"toString(attributes.gen_ai.response.model))"
 
 	// sessionMessageIDExpr identifies a distinct message/turn per row: Claude
 	// api_request rows are one turn each (unique prompt.id); Codex
 	// response.completed and opencode assistant.responded rows are one turn each
 	// but carry no stable turn id, so they fall back to the row id (count-per-row,
-	// same degradation as the tool-call dedup); generic rows key off
-	// gen_ai.response.id. Counted distinct for message_count.
+	// same degradation as the tool-call dedup). LiteLLM uses call ID, response ID,
+	// then row ID. Generic rows key off gen_ai.response.id.
 	sessionMessageIDExpr = "multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
 		"toString(attributes.prompt.id), " +
-		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + "), toString(id), " +
+		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), " +
+		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), " +
+		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + "), toString(id), " +
 		"toString(attributes.gen_ai.response.id))"
 	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
 )

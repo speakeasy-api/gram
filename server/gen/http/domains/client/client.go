@@ -33,6 +33,10 @@ type Client struct {
 	// updateDomain endpoint.
 	UpdateDomainDoer goahttp.Doer
 
+	// SetRootMcpEndpoint Doer is the HTTP client used to make requests to the
+	// setRootMcpEndpoint endpoint.
+	SetRootMcpEndpointDoer goahttp.Doer
+
 	// CheckHealth Doer is the HTTP client used to make requests to the checkHealth
 	// endpoint.
 	CheckHealthDoer goahttp.Doer
@@ -65,18 +69,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDomainDoer:        doer,
-		ListDomainsDoer:      doer,
-		CreateDomainDoer:     doer,
-		UpdateDomainDoer:     doer,
-		CheckHealthDoer:      doer,
-		DeleteDomainDoer:     doer,
-		ListMcpEndpointsDoer: doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		GetDomainDoer:          doer,
+		ListDomainsDoer:        doer,
+		CreateDomainDoer:       doer,
+		UpdateDomainDoer:       doer,
+		SetRootMcpEndpointDoer: doer,
+		CheckHealthDoer:        doer,
+		DeleteDomainDoer:       doer,
+		ListMcpEndpointsDoer:   doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -171,6 +176,30 @@ func (c *Client) UpdateDomain() goa.Endpoint {
 		resp, err := c.UpdateDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "updateDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetRootMcpEndpoint returns an endpoint that makes HTTP requests to the
+// domains service setRootMcpEndpoint server.
+func (c *Client) SetRootMcpEndpoint() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetRootMcpEndpointRequest(c.encoder)
+		decodeResponse = DecodeSetRootMcpEndpointResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetRootMcpEndpointRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetRootMcpEndpointDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "setRootMcpEndpoint", err)
 		}
 		return decodeResponse(resp)
 	}

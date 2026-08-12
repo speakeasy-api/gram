@@ -11,13 +11,13 @@ import { GramCore } from "../core.js";
 import { adminRemoteSessionsGetGlobalIssuer } from "../funcs/adminRemoteSessionsGetGlobalIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import {
   GetGlobalRemoteSessionIssuerRequest,
   GetGlobalRemoteSessionIssuerSecurity,
 } from "../models/operations/getglobalremotesessionissuer.js";
 import { unwrapAsync } from "../types/fp.js";
-export type GlobalRemoteSessionIssuerQueryData = RemoteSessionIssuer;
+export type GlobalRemoteSessionIssuerQueryData = GlobalRemoteSessionIssuer;
 
 export function prefetchGlobalRemoteSessionIssuer(
   queryClient: QueryClient,

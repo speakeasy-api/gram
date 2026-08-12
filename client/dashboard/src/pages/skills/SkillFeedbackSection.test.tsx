@@ -109,17 +109,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillFeedbackSection", () => {
-  it("starts collapsed, explains the pool, then shows counts and notes", () => {
+  it("starts open and shows counts and notes", () => {
     render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
-    expect(testState.enabled).toBe(false);
-    expect(screen.getByText(/See collection health/)).toBeTruthy();
-    expect(screen.queryByText("Outcome distribution")).toBeNull();
-
-    const trigger = screen.getByRole("button", { name: /All agent reviews/ });
-    expect(trigger.querySelector("p")).toBeNull();
-    fireEvent.click(trigger);
     expect(testState.enabled).toBe(true);
+    expect(screen.getByText(/See collection health/)).toBeTruthy();
     expect(screen.getByText("Outcome distribution")).toBeTruthy();
+
+    const trigger = screen.getByRole("button", { name: /Agent Feedback/ });
+    expect(trigger.querySelector("p")).toBeNull();
     expect(screen.getByText("Partially helped")).toBeTruthy();
     expect(screen.getByText("25.0%")).toBeTruthy();
     expect(screen.getByText("20.0%")).toBeTruthy();
@@ -131,7 +128,6 @@ describe("SkillFeedbackSection", () => {
   it("shows an error and retries", () => {
     testState.error = new Error("feedback unavailable");
     render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
-    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
     expect(screen.getByText("feedback unavailable")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.refetch).toHaveBeenCalledOnce();
@@ -140,7 +136,6 @@ describe("SkillFeedbackSection", () => {
   it("describes an empty recent page without implying all feedback was searched", () => {
     testState.feedback = [];
     render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
-    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
 
     expect(screen.getByText("No notes among recent feedback.")).toBeTruthy();
   });
@@ -173,7 +168,6 @@ describe("SkillFeedbackSection", () => {
     const { container } = render(
       <SkillFeedbackSection skillId="skill_a" projectId="project_a" />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
 
     expect(container.querySelectorAll("details")).toHaveLength(1);
   });
@@ -189,7 +183,6 @@ describe("SkillFeedbackSection", () => {
     ];
     testState.hasNextPage = true;
     render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
-    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "Load more reviews" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
@@ -197,7 +190,6 @@ describe("SkillFeedbackSection", () => {
 
   it("queues a manual suggestion run", async () => {
     render(<SkillFeedbackSection skillId="skill_a" projectId="project_a" />);
-    fireEvent.click(screen.getByRole("button", { name: /All agent reviews/ }));
     fireEvent.click(
       screen.getByRole("button", { name: "Generate suggestion" }),
     );

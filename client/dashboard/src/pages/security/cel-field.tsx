@@ -103,7 +103,7 @@ export function CelExpressionField({
     <div className="space-y-2">
       <Suspense
         fallback={
-          <div className="border-input bg-input/30 h-16 w-full animate-pulse rounded-md border" />
+          <div className="border-input bg-input/30 h-16 w-full animate-pulse border" />
         }
       >
         <CelMonacoEditorLazy

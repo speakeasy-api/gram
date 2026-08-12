@@ -1,7 +1,7 @@
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { InputField } from "@/components/moon/input-field";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";

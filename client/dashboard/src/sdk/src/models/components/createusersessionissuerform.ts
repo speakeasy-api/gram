@@ -27,7 +27,7 @@ export type CreateUserSessionIssuerForm = {
    */
   authnChallengeMode: AuthnChallengeMode;
   /**
-   * Issued user session lifetime, in hours.
+   * Maximum issued user session lifetime, in hours.
    */
   sessionDurationHours: number;
   /**

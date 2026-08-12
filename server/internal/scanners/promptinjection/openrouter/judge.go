@@ -137,10 +137,15 @@ type trajectoryTelemetry struct {
 var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var (
-	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
 	errTypedRateLimit   = errors.New("typed pi judge rate limited")
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
 )
+
+// unavailableResult is every path where the judge never rendered a verdict.
+// Same fail-open effect as safeResult on the gating path, but callers that
+// record coverage can tell it apart from a judgement. (cubic)
+var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnavailable, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
@@ -167,9 +172,9 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 
 // Classify judges each message independently and returns one result per input,
 // aligned by index. It never returns an error: a per-message judge failure or
-// rate limit yields a SAFE result for that message (fail open) so the scanner
-// keeps the other verdicts. Messages with no content are
-// SAFE without a call.
+// rate limit yields an UNAVAILABLE result for that message (fail open) so the
+// scanner keeps the other verdicts. Messages with no content are SAFE without
+// a call — there is nothing there to be an attack.
 func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ []promptinjection.Result, err error) {
 	n := len(req.Messages)
 	if n == 0 {
@@ -208,13 +213,21 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		)
 	}
 
+	// The rate-limit bucket is identical for every message in the batch, so
+	// resolve the spending key once rather than per message.
+	bucket := gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.logger, c.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, c.model)
+
 	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	for i := range req.Messages {
 		msg := req.Messages[i]
-		if !msg.HasContent() || ctx.Err() != nil {
+		if !msg.HasContent() {
 			results[i] = safeResult
+			continue
+		}
+		if ctx.Err() != nil {
+			results[i] = unavailableResult
 			continue
 		}
 		wg.Add(1)
@@ -230,21 +243,37 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		go func(i int, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID)
+			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, bucket)
 		}(i, msg, trajectory, userID)
 	}
 	wg.Wait()
 	return results, nil
 }
 
-// classifyOne judges one event with a single physical call and returns SAFE for
-// every fail-open path.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
+// classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
+// judgement that cleared the content.
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, bucket string) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
-	// org's budget and throttle real requests into fail-open SAFE. (cubic)
+	// org's budget and throttle real requests into fail-open verdicts. (cubic)
 	if ctx.Err() != nil {
-		return safeResult
+		return unavailableResult
+	}
+
+	// A Store outage is not a throttle: proceed rather than let limiter infra
+	// silence the scanner.
+	switch res, err := c.limiter.Allow(ctx, bucket); {
+	case err != nil:
+		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(req.OrgID),
+		)
+	case !res.Allowed:
+		c.metrics.RecordRateLimited(ctx, req.OrgID, c.model, c.reasoning)
+		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
+			attr.SlogOrganizationID(req.OrgID),
+		)
+		return unavailableResult
 	}
 
 	contextState := observeTrajectory(trajectory)
@@ -310,6 +339,9 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		attribute.Bool(spanAttrFindingSurfaced, stabilized.IsInjection),
 		attribute.Bool(spanAttrFailOpen, failOpen),
 	)
+	if failOpen {
+		return unavailableResult
+	}
 	if !stabilized.IsInjection {
 		return safeResult
 	}
@@ -320,6 +352,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	)
 	return promptinjection.Result{
 		Label:         promptinjection.LabelInjection,
+		Score:         1,
 		Rationale:     stabilized.Rationale,
 		DirectiveKind: stabilized.DirectiveKind,
 		Target:        stabilized.Target,
@@ -355,37 +388,17 @@ func observeTrajectoryField(value string) (present bool, length int, truncated b
 	return present, length, false
 }
 
-// judge makes the rate-limited physical call and records its telemetry. A
-// throttled, failed, or malformed call returns the zero Verdict, which the
-// detection predicate reads as safe.
+// judge makes the physical call and records its telemetry. A failed or
+// malformed call returns the zero Verdict and an error.
 func (c *Engine) judge(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) (Verdict, error) {
 	start := time.Now()
-	var verdict Verdict
-	var err error
-	physicalCall := false
-
-	res, allowErr := c.limiter.Allow(ctx, gramopenrouter.JudgeRateLimitKey(req.OrgID, c.model))
-	if allowErr != nil {
-		c.logger.WarnContext(ctx, "PI judge rate limiter unavailable, allowing call",
-			attr.SlogError(allowErr),
-			attr.SlogOrganizationID(req.OrgID),
-		)
-	}
-	if allowErr == nil && !res.Allowed {
-		c.metrics.RecordRateLimited(ctx, req.OrgID, c.model, c.reasoning)
-		err = errTypedRateLimit
-	} else {
-		physicalCall = true
-		verdict, err = c.call(ctx, req, msg, trajectory, userID)
-	}
+	verdict, err := c.call(ctx, req, msg, trajectory, userID)
 
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	duration := time.Since(start)
 	reason := typedFailureReason(err, outcome)
-	if physicalCall {
-		c.metrics.RecordPhysicalCall(ctx, req.OrgID, c.model, c.reasoning, outcome, reason, duration)
-		c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.model, c.reasoning, outcome, duration)
-	}
+	c.metrics.RecordPhysicalCall(ctx, req.OrgID, c.model, c.reasoning, outcome, reason, duration)
+	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.model, c.reasoning, outcome, duration)
 	if err != nil {
 		c.metrics.RecordFailOpen(ctx, req.OrgID, c.model, c.reasoning, reason)
 		c.logger.WarnContext(ctx, "PI judge call failed; failing open",

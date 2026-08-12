@@ -17,6 +17,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -24,12 +25,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
 	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
@@ -46,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -62,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 type Publishers struct {
@@ -75,9 +80,15 @@ type Publishers struct {
 	// publisher on it (see risk_analysis.batchOnlyFindingSources).
 	RiskFindings  gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
+	// Outbox publishes whatever the publish_outbox table holds. It resolves its
+	// topic per message rather than being bound to one, because the destination
+	// is a property of the row and not of this wiring.
+	Outbox topics.Publisher
 }
 
 type Activities struct {
+	db                              *pgxpool.Pool
+	temporalEnv                     *tenv.Environment
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
@@ -100,6 +111,7 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
+	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	transitionDeployment            *activities.TransitionDeployment
@@ -129,21 +141,22 @@ type Activities struct {
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
-	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
-	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
-	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
+	remoteSessionRefresh            *activities.RemoteSessionRefresh
+	demoteExpiredTrials             *activities.DemoteExpiredTrials
+	trialEmails                     *trialemails.Service
 }
 
 func NewActivities(
@@ -190,6 +203,7 @@ func NewActivities(
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
+	trialEmailsService *trialemails.Service,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -234,9 +248,23 @@ func NewActivities(
 	// chat_analysis_settings row.
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
+		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
+	}
+
+	// The scheduled refresh shares the remotesessions single-flight primitive,
+	// which needs the Redis lock cache; workers wired without one (e.g.
+	// deployment-processing test workers) get a nil activity and the wrapper
+	// fails loudly if the sweep is ever scheduled there.
+	var remoteSessionRefresh *activities.RemoteSessionRefresh
+	if cacheAdapter != nil {
+		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
+			logger,
+			db,
+			remotesessions.NewRefreshService(logger, db, encryption, guardianPolicy, cacheAdapter),
+		)
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
@@ -249,12 +277,14 @@ func NewActivities(
 	}
 
 	return &Activities{
+		db:                              db,
+		temporalEnv:                     temporalEnv,
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, db, encryption, guardianPolicy, features),
-		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, db, encryption, guardianPolicy, features),
+		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features),
+		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
@@ -271,6 +301,7 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
@@ -300,17 +331,16 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
-		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
-		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
-		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
+		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -324,6 +354,8 @@ func NewActivities(
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
+		remoteSessionRefresh:    remoteSessionRefresh,
+		trialEmails:             trialEmailsService,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -336,16 +368,30 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
-	return a.listWorkOSOrganizations.Do(ctx)
-}
+func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialEmails == nil {
+		return fmt.Errorf("trial email service is not configured")
+	}
 
-func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params activities.BackfillWorkOSOrganizationParams) error {
-	return a.backfillWorkOSOrganization.Do(ctx, params)
-}
-
-func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
-	return a.backfillWorkOSGlobalRoles.Do(ctx)
+	switch input.Kind {
+	case TrialStartedEmailKind:
+		if err := a.trialEmails.TrialStarted(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial started: %w", err)
+		}
+		return nil
+	case AdminAddedEmailKind:
+		if err := a.trialEmails.AdminAdded(ctx, input.OrganizationID, input.UserID); err != nil {
+			return fmt.Errorf("admin added: %w", err)
+		}
+		return nil
+	case TrialInactiveEmailKind:
+		if err := a.trialEmails.TrialInactive(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial inactive: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported trial lifecycle email kind %q", input.Kind)
+	}
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
@@ -378,6 +424,13 @@ func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.Ve
 
 func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
 	return a.customDomainIngress.Do(ctx, input)
+}
+
+func (a *Activities) ReconcileCustomDomain(ctx context.Context, input activities.ReconcileCustomDomainArgs) error {
+	if err := a.customDomainIngress.ReconcileCustomDomain(ctx, input); err != nil {
+		return fmt.Errorf("reconcile custom domain: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]activities.CustomDomainHealthCheckTarget, error) {
@@ -465,6 +518,21 @@ func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []str
 
 func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {
 	return a.forwardTokenUsageToPostHog.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]activities.WeeklyUsageSummaryTarget, error) {
+	targets, err := a.weeklyUsageSummary.ListTargets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list weekly usage summary targets: %w", err)
+	}
+	return targets, nil
+}
+
+func (a *Activities) SendWeeklyUsageSummary(ctx context.Context, args activities.SendWeeklyUsageSummaryArgs) error {
+	if err := a.weeklyUsageSummary.Send(ctx, args); err != nil {
+		return fmt.Errorf("send weekly usage summary: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
@@ -680,6 +748,25 @@ func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay
 	return nil
 }
 
+// DrainPublishOutbox claims, publishes and settles one batch in a single
+// activity. Keeping it fused is deliberate: splitting claim from publish would
+// put message bodies into workflow history.
+func (a *Activities) DrainPublishOutbox(ctx context.Context) (publish_outbox.DrainResult, error) {
+	result, err := a.publishOutbox.Drain(ctx)
+	if err != nil {
+		return publish_outbox.DrainResult{}, fmt.Errorf("drain publish outbox: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) GCPublishOutboxDeadLetters(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
+	n, err := a.publishOutbox.DeleteDeadLetters(ctx, cutoff, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("gc publish outbox dead letters: %w", err)
+	}
+	return n, nil
+}
+
 func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
 	n, err := a.outboxGC.DeleteProcessedRows(ctx, cutoff, batchSize)
 	if err != nil {
@@ -722,6 +809,46 @@ func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules
 func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
 	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
 		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ClaimDueRemoteSessionRefreshCandidates(
+	ctx context.Context,
+	input activities.ClaimDueRemoteSessionRefreshCandidatesInput,
+) ([]activities.RemoteSessionRefreshCandidate, error) {
+	if a.remoteSessionRefresh == nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: refresh service not configured")
+	}
+	candidates, err := a.remoteSessionRefresh.ClaimDueCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.RefreshRemoteSessionInput) (activities.RefreshRemoteSessionResult, error) {
+	if a.remoteSessionRefresh == nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: refresh lock cache not configured")
+	}
+	result, err := a.remoteSessionRefresh.Do(ctx, input)
+	if err != nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredTrials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expired trials: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
+	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired trial: %w", err)
 	}
 	return nil
 }

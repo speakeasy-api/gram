@@ -67,7 +67,7 @@ func TestGitHubSignatureVerification(t *testing.T) {
 	headers.Set("X-GitHub-Event", "pull_request")
 	headers.Set("X-GitHub-Delivery", "del-1")
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"GITHUB_WEBHOOK_SECRET": "shh",
 	}, config))
 }
@@ -87,7 +87,7 @@ func TestGitHubSignatureRejectsBadSecret(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 
-	err = definition.AuthenticateWebhook(body, headers, map[string]string{
+	err = definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"GITHUB_WEBHOOK_SECRET": "wrong",
 	}, config)
 	require.Error(t, err)

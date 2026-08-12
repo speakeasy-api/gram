@@ -85,6 +85,13 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
 	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
+
+	// No registered OAuth client backs this mint, so the claim names our own
+	// surface rather than going out empty — empty would be indistinguishable
+	// from a token minted before the claim existed.
+	require.Equal(t, usersessions.FirstPartyClientID, claims.ClientID)
+	require.NotContains(t, claims.ClientID, "://",
+		"a URL-shaped client id would be read as an OAuth Client ID Metadata Document")
 }
 
 func TestMintUserSessionRequiresExactlyOneTarget(t *testing.T) {

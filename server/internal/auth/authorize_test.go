@@ -8,13 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/security"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -88,14 +91,18 @@ func TestAuthorizeOrganizationWideKeyAllowsProjectSlug(t *testing.T) {
 	require.Equal(t, projects[1].Slug, *authCtx.ProjectSlug)
 }
 
-func TestAuthorizeSessionCanSelectEitherOrganizationProject(t *testing.T) {
+func TestAuthorizeSessionCanSelectGrantedOrganizationProjects(t *testing.T) {
 	t.Parallel()
 
 	ctx, instance, projects := newProjectAccessTest(t, "first-project", "second-project")
+	userInfo := defaultMockUserInfo()
+	seedUserProjectGrant(t, ctx, instance, userInfo.Organizations[0].ID, userInfo.UserID, projects[0].ID.String())
+	seedUserProjectGrant(t, ctx, instance, userInfo.Organizations[0].ID, userInfo.UserID, projects[1].ID.String())
+
 	session := sessions.Session{
 		SessionID:            "project-access-session",
-		ActiveOrganizationID: defaultMockUserInfo().Organizations[0].ID,
-		UserID:               defaultMockUserInfo().UserID,
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+		UserID:               userInfo.UserID,
 		WorkOSSessionID:      "workos-project-access-session",
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
@@ -115,6 +122,33 @@ func TestAuthorizeSessionCanSelectEitherOrganizationProject(t *testing.T) {
 	secondAuthCtx, ok := contextvalues.GetAuthContext(secondCtx)
 	require.True(t, ok)
 	require.Equal(t, projects[1].ID, *secondAuthCtx.ProjectID)
+}
+
+func TestAuthorizeSessionRejectsUngrantedOrganizationProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance, projects := newProjectAccessTest(t, "granted-project", "ungranted-project")
+	userInfo := defaultMockUserInfo()
+	seedUserProjectGrant(t, ctx, instance, userInfo.Organizations[0].ID, userInfo.UserID, projects[0].ID.String())
+
+	session := sessions.Session{
+		SessionID:            "project-access-session-ungranted",
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+		UserID:               userInfo.UserID,
+		WorkOSSessionID:      "workos-project-access-session-ungranted",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	authedCtx, err := instance.authorizer.Authorize(t.Context(), session.SessionID, sessionScheme)
+	require.NoError(t, err)
+
+	_, err = instance.authorizer.Authorize(authedCtx, projects[0].Slug, projectSlugScheme)
+	require.NoError(t, err)
+
+	_, err = instance.authorizer.Authorize(authedCtx, projects[1].Slug, projectSlugScheme)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestAuthorizeProjectBoundKeyAllowsEmptySlugForSingleProjectOrganization(t *testing.T) {
@@ -177,4 +211,19 @@ func createTestAPIKey(t *testing.T, ctx context.Context, instance *testInstance,
 	require.NoError(t, err)
 
 	return key
+}
+
+func seedUserProjectGrant(t *testing.T, ctx context.Context, instance *testInstance, organizationID string, userID string, projectID string) {
+	t.Helper()
+
+	selectors, err := authz.NewSelector(authz.ScopeProjectRead, projectID).MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(instance.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
 }

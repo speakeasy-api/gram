@@ -2,6 +2,7 @@ package feature
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -76,6 +77,57 @@ func (imp *InMemory) FlagPayload(ctx context.Context, flag Flag, distinctID stri
 
 func (imp *InMemory) SetFlagPayload(flag Flag, distinctID string, payload []byte) {
 	(*sync.Map)(imp).Store(payloadKey(flag, distinctID), payload)
+}
+
+// Evaluation reports whether a flag provider reached an authoritative decision.
+// It is intentionally separate from Provider so existing feature checks can keep
+// their bool-only contract while safety-sensitive callers can distinguish an
+// explicit disabled result from an unavailable evaluator.
+type Evaluation uint8
+
+const (
+	EvaluationIndeterminate Evaluation = iota
+	EvaluationDisabled
+	EvaluationEnabled
+)
+
+// EvaluationProvider is implemented by providers that can distinguish an
+// unavailable or inconclusive lookup from an explicit flag result.
+type EvaluationProvider interface {
+	EvaluateFlag(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Evaluation, error)
+}
+
+// EvaluateFlag returns an indeterminate result for providers that only expose
+// the legacy bool contract. Callers that need a fail-safe carry-forward decision
+// must not treat that legacy false as an explicit disable.
+func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID string, groups map[string]string) (Evaluation, error) {
+	if provider == nil {
+		return EvaluationIndeterminate, nil
+	}
+	if evaluator, ok := provider.(EvaluationProvider); ok {
+		evaluation, err := evaluator.EvaluateFlag(ctx, flag, distinctID, groups)
+		if err != nil {
+			return EvaluationIndeterminate, fmt.Errorf("evaluate feature flag %q: %w", flag, err)
+		}
+		return evaluation, nil
+	}
+	return EvaluationIndeterminate, nil
+}
+
+func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {
+	key := distinctID + ":" + string(flag)
+	value, ok := (*sync.Map)(imp).Load(key)
+	if !ok {
+		return EvaluationIndeterminate, nil
+	}
+	enabled, ok := value.(bool)
+	if !ok {
+		return EvaluationIndeterminate, nil
+	}
+	if enabled {
+		return EvaluationEnabled, nil
+	}
+	return EvaluationDisabled, nil
 }
 
 // OrgProjectGroups returns the PostHog group memberships used to evaluate

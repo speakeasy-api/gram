@@ -10,28 +10,81 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
-func TestUpdateGcpIamCredential_SwitchToWorkloadIdentityFederation(t *testing.T) {
+func TestUpdateGcpIamCredential_RenameAndRetarget(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	created := createGCPImpersonationCredential(t, ctx, ti, "gcp-switch")
+	created := createGCPImpersonationCredential(t, ctx, ti, "gcp-update")
 
 	updated, err := ti.service.UpdateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpIamCredentialPayload{
 		ID:                        created.ID,
 		SessionToken:              nil,
-		Name:                      "gcp-switch-renamed",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 new("gram-pool"),
-		WifProviderID:             new("gram-provider"),
-		WifProjectNumber:          new("123456789012"),
+		Name:                      "gcp-update-renamed",
+		ImpersonateServiceAccount: "other@customer.iam.gserviceaccount.com",
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, "gcp-switch-renamed", updated.Name)
-	require.Equal(t, "gram-pool", *updated.WifPoolID)
-	require.Nil(t, updated.ImpersonateServiceAccount, "switching to WIF without a hop must clear the impersonation account")
+	require.Equal(t, "gcp-update-renamed", updated.Name)
+	require.Equal(t, "other@customer.iam.gserviceaccount.com", *updated.ImpersonateServiceAccount)
+	require.Nil(t, updated.WifPoolID)
+}
+
+// The organization form cannot express WIF, so an update always writes the
+// impersonation-only shape. A credential that predates the impersonation-only
+// rule converges to it rather than keeping columns the form cannot show.
+func TestUpdateGcpIamCredential_ClearsLegacyWifColumns(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	created := createGCPWifCredentialDirect(t, ctx, ti, "gcp-legacy-wif")
+	require.NotNil(t, created.WifPoolID, "fixture should start with WIF columns set")
+
+	updated, err := ti.service.UpdateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpIamCredentialPayload{
+		ID:                        created.ID,
+		SessionToken:              nil,
+		Name:                      "gcp-legacy-wif",
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, updated.WifPoolID)
+	require.Nil(t, updated.WifProviderID)
+	require.Nil(t, updated.WifProjectNumber)
+	require.Equal(t, "gram@customer.iam.gserviceaccount.com", *updated.ImpersonateServiceAccount)
+}
+
+func TestUpdateGcpIamCredential_BlankImpersonationRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	created := createGCPImpersonationCredential(t, ctx, ti, "gcp-update-blank")
+
+	_, err := ti.service.UpdateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpIamCredentialPayload{
+		ID:                        created.ID,
+		SessionToken:              nil,
+		Name:                      "gcp-update-blank",
+		ImpersonateServiceAccount: "",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestUpdateGcpIamCredential_TargetInGramProjectRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	created := createGCPImpersonationCredential(t, ctx, ti, "gcp-update-self-project")
+
+	_, err := ti.service.UpdateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpIamCredentialPayload{
+		ID:                        created.ID,
+		SessionToken:              nil,
+		Name:                      "gcp-update-self-project",
+		ImpersonateServiceAccount: gramProjectServiceAccount("someone-else"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateGcpIamCredential_NotFound(t *testing.T) {
@@ -42,10 +95,7 @@ func TestUpdateGcpIamCredential_NotFound(t *testing.T) {
 		ID:                        uuid.NewString(),
 		SessionToken:              nil,
 		Name:                      "missing",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
@@ -60,10 +110,7 @@ func TestUpdateGcpIamCredential_WrongProviderNotFound(t *testing.T) {
 		ID:                        aws.ID,
 		SessionToken:              nil,
 		Name:                      "wrong-provider",
-		ImpersonateServiceAccount: new("gram@customer.iam.gserviceaccount.com"),
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
@@ -76,10 +123,7 @@ func TestUpdateGcpIamCredential_InvalidID(t *testing.T) {
 		ID:                        "not-a-uuid",
 		SessionToken:              nil,
 		Name:                      "bad-id",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
@@ -94,10 +138,23 @@ func TestUpdateGcpIamCredential_ForbiddenForReadOnly(t *testing.T) {
 		ID:                        created.ID,
 		SessionToken:              nil,
 		Name:                      "gcp-update-forbidden",
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUpdateGcpIamCredential_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	created := createGCPImpersonationCredential(t, ctx, ti, "gcp-update-no-entitlement")
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.UpdateGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)), &gen.UpdateGcpIamCredentialPayload{
+		ID:                        created.ID,
+		SessionToken:              nil,
+		Name:                      "gcp-update-no-entitlement",
+		ImpersonateServiceAccount: "gram@customer.iam.gserviceaccount.com",
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

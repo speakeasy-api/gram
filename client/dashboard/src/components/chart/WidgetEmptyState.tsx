@@ -1,10 +1,11 @@
-import { Type } from "@/components/ui/type";
-import { cn, Icon } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
 
 /**
  * Shared empty state for analytics widgets (charts, ranked lists, tables).
  * Centralized so every "no data" message on a page renders at the same
- * size/weight instead of each widget improvising its own `<Type>` variant.
+ * size/weight instead of each widget improvising its own `<Text>` variant.
  */
 export function WidgetEmptyState({
   message,
@@ -26,9 +27,9 @@ export function WidgetEmptyState({
           className="text-muted-foreground size-5"
         />
       </div>
-      <Type muted small>
+      <Text muted small>
         {message}
-      </Type>
+      </Text>
     </div>
   );
 }

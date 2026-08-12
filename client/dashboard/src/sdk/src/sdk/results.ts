@@ -4,13 +4,20 @@
 
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
+import { riskResultsListDismissed } from "../funcs/riskResultsListDismissed.js";
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
+import { riskResultsMarkFalsePositive } from "../funcs/riskResultsMarkFalsePositive.js";
+import { riskResultsUnmarkFalsePositive } from "../funcs/riskResultsUnmarkFalsePositive.js";
 import { riskResultsUnmask } from "../funcs/riskResultsUnmask.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListRiskResultsByChatResult } from "../models/components/listriskresultsbychatresult.js";
 import { ListRiskResultsForAgentResult } from "../models/components/listriskresultsforagentresult.js";
 import { ListRiskResultsResult } from "../models/components/listriskresultsresult.js";
 import { RiskUnmaskResultResult } from "../models/components/riskunmaskresultresult.js";
+import {
+  ListDismissedRiskResultsRequest,
+  ListDismissedRiskResultsSecurity,
+} from "../models/operations/listdismissedriskresults.js";
 import {
   ListRiskResultsRequest,
   ListRiskResultsSecurity,
@@ -24,12 +31,39 @@ import {
   ListRiskResultsForAgentSecurity,
 } from "../models/operations/listriskresultsforagent.js";
 import {
+  MarkRiskResultsFalsePositiveRequest,
+  MarkRiskResultsFalsePositiveSecurity,
+} from "../models/operations/markriskresultsfalsepositive.js";
+import {
+  UnmarkRiskResultsFalsePositiveRequest,
+  UnmarkRiskResultsFalsePositiveSecurity,
+} from "../models/operations/unmarkriskresultsfalsepositive.js";
+import {
   UnmaskRiskResultRequest,
   UnmaskRiskResultSecurity,
 } from "../models/operations/unmaskriskresult.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Results extends ClientSDK {
+  /**
+   * listDismissedRiskResults risk
+   *
+   * @remarks
+   * List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.
+   */
+  async listDismissed(
+    request?: ListDismissedRiskResultsRequest | undefined,
+    security?: ListDismissedRiskResultsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListRiskResultsResult> {
+    return unwrapAsync(riskResultsListDismissed(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
   /**
    * listRiskResults risk
    *
@@ -80,6 +114,44 @@ export class Results extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListRiskResultsForAgentResult> {
     return unwrapAsync(riskResultsListForAgent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * markRiskResultsFalsePositive risk
+   *
+   * @remarks
+   * Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.
+   */
+  async markFalsePositive(
+    request: MarkRiskResultsFalsePositiveRequest,
+    security?: MarkRiskResultsFalsePositiveSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(riskResultsMarkFalsePositive(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unmarkRiskResultsFalsePositive risk
+   *
+   * @remarks
+   * Undo a false-positive dismissal for one or more risk results.
+   */
+  async unmarkFalsePositive(
+    request: UnmarkRiskResultsFalsePositiveRequest,
+    security?: UnmarkRiskResultsFalsePositiveSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(riskResultsUnmarkFalsePositive(
       this,
       request,
       security,

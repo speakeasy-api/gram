@@ -1,8 +1,10 @@
 import { slugify } from "@/lib/constants";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import React from "react";
-import { Type } from "../ui/type";
+import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
@@ -46,8 +48,8 @@ export default function NameDeploymentStep(): React.JSX.Element | null {
     stepper.next();
   }
 
-  function handleValueChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setValue(e.target.value);
+  function handleValueChange(next: string) {
+    setValue(next);
   }
 
   if (step.isCurrentStep && step.state === "idle") {
@@ -86,15 +88,15 @@ export default function NameDeploymentStep(): React.JSX.Element | null {
       </form>
     );
   } else if (step.state === "completed") {
-    return <Type>✓ Source named "{stepper.meta.current.assetName}"</Type>;
+    return <Text>✓ Source named "{stepper.meta.current.assetName}"</Text>;
   } else if (!step.isCurrentStep) {
     return null;
   } else {
     return (
-      <Type>
+      <Text>
         An unexpected error occurred. Please refresh your browser, and try
         again.
-      </Type>
+      </Text>
     );
   }
 }

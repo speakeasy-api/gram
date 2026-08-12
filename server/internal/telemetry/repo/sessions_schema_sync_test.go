@@ -25,7 +25,11 @@ var sessionSharedPredicateFragments = []string{
 	// tool_result row markers.
 	"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')",
 	// Agent usage-row URN prefixes.
-	"(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))",
+	"(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))",
+	// Codex OTEL usage rows.
+	"toString(attributes.event.name) = 'codex.sse_event' AND toString(attributes.event.kind) = 'response.completed'",
+	// LiteLLM normalized model spans.
+	"gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')",
 	// Agent completed tool-call hook rows.
 	"hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
 	// Tool-call dedup identity.
@@ -66,7 +70,9 @@ func TestSessionPredicates_SchemaMVStaysInSync(t *testing.T) {
 	goConstants := normalizeSQL(strings.Join([]string{
 		sessionClaudeAPIRequestPredicate,
 		sessionClaudeToolResultPredicate,
+		sessionCodexAPIRequestPredicate,
 		sessionAgentUsageRowPredicate,
+		sessionLiteLLMUsageRowPredicate,
 		sessionAgentToolCallPredicate,
 		sessionFailedToolCallPredicate,
 		sessionCountedToolCallPredicate,

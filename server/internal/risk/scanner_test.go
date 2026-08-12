@@ -59,6 +59,7 @@ func (e *recordingPIEngine) Classify(_ context.Context, req promptinjection.Requ
 	for i := range results {
 		results[i] = promptinjection.Result{
 			Label:         promptinjection.LabelInjection,
+			Score:         0,
 			Rationale:     "test prompt injection",
 			DirectiveKind: "",
 			Target:        "",
@@ -218,7 +219,6 @@ func grantRiskPolicyToAllUsers(t *testing.T, ti *testInstance, ctx context.Conte
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID.String(),
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   nil,
 	}))

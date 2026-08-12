@@ -142,10 +142,6 @@ func TestListSkillFeedbackValidatesAccessLimitCursorAndPrivacyShape(t *testing.T
 	badCursor := "bad"
 	_, err = ti.service.ListFeedback(ctx, &gen.ListFeedbackPayload{ID: created.Skill.ID, Cursor: &badCursor, Limit: 20, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeBadRequest)
-	disableSkills(t, ctx, ti)
-	_, err = ti.service.ListFeedback(ctx, &gen.ListFeedbackPayload{ID: created.Skill.ID, Limit: 20, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
-
 	typeOfFeedback := reflect.TypeFor[gen.SkillFeedback]()
 	for _, privateField := range []string{"UserID", "UserEmail", "SessionID"} {
 		_, found := typeOfFeedback.FieldByName(privateField)

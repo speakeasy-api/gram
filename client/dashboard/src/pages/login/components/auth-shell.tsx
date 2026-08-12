@@ -78,6 +78,7 @@ export function AuthShell({
   headerAction,
   contentClassName,
   showTerms = true,
+  singleColumn = false,
   children,
 }: {
   page: string;
@@ -86,51 +87,70 @@ export function AuthShell({
   /** Overrides the right-pane column width (default max-w-[380px]). */
   contentClassName?: string;
   showTerms?: boolean;
+  /**
+   * Drops the session showcase and the brand lockup for one centered column.
+   * For pages that carry their own headline and need the full width.
+   */
+  singleColumn?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <main className="auth-brand flex min-h-screen flex-col bg-[var(--surface)] text-black">
+    <main className="auth-brand flex min-h-screen flex-col bg-(--surface) text-black">
       <style>{BRAND_STYLES}</style>
 
       <BrandGradientLine className="h-[4px]" />
 
-      <header className="flex h-16 flex-none items-center justify-between border-b border-[var(--edge)] bg-[var(--card)] px-6 md:px-10">
+      <header className="flex h-16 flex-none items-center justify-between border-b border-(--edge) bg-(--card) px-6 md:px-10">
         <span className="auth-mono flex items-center gap-3 text-[13px]">
           <img src={speakeasyIcon} alt="" className="h-[22px] w-[22px]" />
           Speakeasy AI Control Plane
         </span>
-        <span className="flex items-center gap-6">
-          <span className="auth-mono text-[13px] text-[var(--muted)]">
+        {/* leading-none on both sides so the label and the action sit on the
+            same optical line — a button inherits its own line box otherwise. */}
+        <span className="flex items-center gap-4">
+          <span className="auth-mono text-[13px] leading-none text-(--muted)">
             {page}
           </span>
-          {headerAction}
+          {headerAction && (
+            <>
+              <span aria-hidden="true" className="h-3 w-px bg-(--edge)" />
+              {headerAction}
+            </>
+          )}
         </span>
       </header>
 
-      <div className="grid flex-1 xl:grid-cols-2">
-        <AgentSessionShowcase />
+      <div
+        className={cn(
+          "flex-1",
+          singleColumn ? "flex flex-col" : "grid xl:grid-cols-2",
+        )}
+      >
+        {!singleColumn && <AgentSessionShowcase />}
 
         {/* The deep bottom padding only exists to clear the absolutely
             positioned terms footer; without it that space is dead. */}
         <section
           className={cn(
-            "relative flex flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8 pt-16 xl:border-l",
-            showTerms ? "pb-28" : "pb-12",
+            "relative flex flex-1 flex-col items-center justify-center border-(--edge-soft) bg-(--card) px-8",
+            singleColumn ? "pt-14" : "pt-16 xl:border-l",
+            showTerms ? "pb-28" : singleColumn ? "pb-10" : "pb-12",
           )}
         >
           <div
             className={cn(
-              "flex w-full max-w-[380px] flex-col items-center gap-6",
+              "flex w-full flex-col items-center gap-6",
+              singleColumn ? "max-w-[900px]" : "max-w-[380px]",
               contentClassName,
             )}
           >
-            <BrandLockup />
+            {!singleColumn && <BrandLockup />}
             {children}
           </div>
           {showTerms && (
             <TermsFooter
-              className="absolute right-12 bottom-7 left-12 text-[var(--muted-strong)]"
-              linkClassName="text-[var(--link)] hover:text-[var(--focus)]"
+              className="absolute right-12 bottom-7 left-12 text-(--muted-strong)"
+              linkClassName="text-(--muted-strong) hover:text-black"
             />
           )}
         </section>

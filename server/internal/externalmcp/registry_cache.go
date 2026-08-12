@@ -33,9 +33,8 @@ type CachedListServers struct {
 
 var _ cache.CacheableObject[CachedListServers] = (*CachedListServers)(nil)
 
-func (c CachedListServers) CacheKey() string              { return c.Key }
-func (c CachedListServers) AdditionalCacheKeys() []string { return []string{} }
-func (c CachedListServers) TTL() time.Duration            { return registryCacheTTL }
+func (c CachedListServers) CacheKey() string   { return c.Key }
+func (c CachedListServers) TTL() time.Duration { return registryCacheTTL }
 
 // CachedServerDetailsResponse wraps server details for caching.
 type CachedServerDetailsResponse struct {
@@ -45,9 +44,8 @@ type CachedServerDetailsResponse struct {
 
 var _ cache.CacheableObject[CachedServerDetailsResponse] = (*CachedServerDetailsResponse)(nil)
 
-func (c CachedServerDetailsResponse) CacheKey() string              { return c.Key }
-func (c CachedServerDetailsResponse) AdditionalCacheKeys() []string { return []string{} }
-func (c CachedServerDetailsResponse) TTL() time.Duration            { return registryCacheTTL }
+func (c CachedServerDetailsResponse) CacheKey() string   { return c.Key }
+func (c CachedServerDetailsResponse) TTL() time.Duration { return registryCacheTTL }
 
 // registryCacheKey builds a cache key from a prefix and the request's URL + headers.
 // Headers are sorted and hashed with SHA-256 to capture tenant/auth identity.

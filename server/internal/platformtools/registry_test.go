@@ -98,3 +98,31 @@ func BenchmarkFindToolEntriesWithHTTPTools(b *testing.B) {
 		}
 	}
 }
+
+// BuildToolsets must expose the Platform MCP read toolset under its reserved
+// slug so the serve path and attachment logic agree on where the tools live.
+func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
+	t.Parallel()
+
+	tool := ExternalTool{
+		Executor: &fixedDescriptorExecutor{descriptor: ToolDescriptor{
+			SourceSlug:  SourcePlatform,
+			HandlerName: "list_projects",
+			Name:        ToolNameListProjects,
+		}},
+		RequiredFeature: "",
+	}
+
+	toolsets := BuildToolsets(ToolsetDependencies{
+		AssistantMemoryTools:          nil,
+		AssistantSkillTools:           nil,
+		AssistantTriggerTools:         nil,
+		ManagedAssistantInsightsTools: nil,
+		PlatformMCPReadTools:          []ExternalTool{tool},
+	})
+
+	ts, ok := toolsets[PlatformMCPReadToolsetSlug]
+	require.True(t, ok, "platform toolset must be registered")
+	require.Len(t, ts.Tools, 1)
+	require.Equal(t, ToolNameListProjects, ts.Tools[0].Executor.Descriptor().Name)
+}

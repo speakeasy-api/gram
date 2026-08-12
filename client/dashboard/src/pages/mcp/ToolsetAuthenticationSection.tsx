@@ -1,14 +1,13 @@
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { PageSection } from "./MCPDetails";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
 import { useToolsetAuthTarget } from "./x/tabs/settings/sections/authentication/authTarget";
-import { UserSessionsList } from "./x/tabs/settings/sections/authentication/McpServerSessionsPanel";
 import {
   canConfigureExternalOAuth,
   externalOauthIssuerUrl,
@@ -52,14 +51,6 @@ export function ToolsetAuthenticationSection({
           }
         />
       </PageSection>
-      {target.userSessionIssuerId && (
-        <PageSection
-          heading="User sessions"
-          description="Active sessions clients hold into this server, established via OAuth."
-        >
-          <UserSessionsList issuerId={target.userSessionIssuerId} />
-        </PageSection>
-      )}
       <ConnectOAuthModal
         isOpen={externalOAuthOpen}
         onClose={() => setExternalOAuthOpen(false)}

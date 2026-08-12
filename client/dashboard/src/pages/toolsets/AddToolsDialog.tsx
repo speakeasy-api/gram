@@ -1,16 +1,16 @@
 import { ToolList } from "@/components/tool-list";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 

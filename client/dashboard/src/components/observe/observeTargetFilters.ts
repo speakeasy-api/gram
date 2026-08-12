@@ -3,7 +3,7 @@ import type {
   ObserveStatusFilterValue,
   ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
-import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
 import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";

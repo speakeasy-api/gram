@@ -3,12 +3,14 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
@@ -78,7 +80,13 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	userID := request.UserID
 	externalUserID := request.ExternalUserID
 
-	// Create chat with placeholder title - title generation happens via the generateTitle RPC
+	// Create chat with placeholder title - title generation happens via the generateTitle RPC.
+	//
+	// The chat id is client-supplied (Gram-Chat-ID), so it may name a chat in
+	// another project. UpsertChat rejects that conflict rather than landing on
+	// the foreign row, which surfaces here as no returned row: without it a
+	// caller could append messages to another tenant's chat and bump its
+	// generation, blanking the owner's transcript.
 	_, err = s.repo.UpsertChat(ctx, repo.UpsertChatParams{
 		ID:             chatID,
 		ProjectID:      projectID,
@@ -87,12 +95,17 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		ExternalUserID: conv.ToPGText(externalUserID),
 		Title:          conv.ToPGText(DefaultChatTitle),
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Only reachable when the id names a chat in another project, so the
+		// public message must not say so. Cause is kept for logs.
+		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
+	case err != nil:
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
 		return nil, oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, request.Messages)
+	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, projectID, request.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +161,11 @@ type matchResult struct {
 // on both sides — the server may persist them while clients omit them on
 // replay. Any other mismatch, or stored content past the end of incoming,
 // signals divergence and triggers a new generation.
-func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
-	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
+func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
+	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get chat generation", attr.SlogError(err))
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "get chat generation")
@@ -157,6 +173,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 
 	stored, err := s.repo.ListChatMessagesForMatch(ctx, repo.ListChatMessagesForMatchParams{
 		ChatID:     chatID,
+		ProjectID:  projectID,
 		Generation: currentGen,
 	})
 	if err != nil {
@@ -499,7 +516,15 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 		return sess, nil
 	}
 
-	generation, err := s.repo.GetMaxGenerationForChat(ctx, request.ChatID)
+	projectID, err := uuid.Parse(request.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse project ID: %w", err)
+	}
+
+	generation, err := s.repo.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    request.ChatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get chat generation", attr.SlogError(err))
 		return nil, fmt.Errorf("get chat generation: %w", err)

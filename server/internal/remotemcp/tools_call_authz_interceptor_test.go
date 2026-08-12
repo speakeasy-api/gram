@@ -35,7 +35,7 @@ var testServerIdentity = proxy.ServerIdentity{
 
 func newAuthzEngineForTest(t *testing.T) *authz.Engine {
 	t.Helper()
-	return authz.NewEngine(testenv.NewLogger(t), nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	return authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 }
 
 func authzAuthContext(t *testing.T) *contextvalues.AuthContext {

@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -200,10 +199,6 @@ func (l *LocalRuntimeBackend) ServerURL() *url.URL { return l.config.ServerURL }
 
 func (l *LocalRuntimeBackend) ImageRef() string { return l.desiredImageRef() }
 
-// ReusesIdleRuntimes is true: Stop leaves the container and its workspace
-// volume in place, and the next admission restarts the same container.
-func (l *LocalRuntimeBackend) ReusesIdleRuntimes() bool { return true }
-
 func (l *LocalRuntimeBackend) desiredImageRef() string {
 	return runtimeImageRef(l.config.OCIImage, l.config.ImageTag)
 }
@@ -302,8 +297,7 @@ func (l *LocalRuntimeBackend) runnerBusy(ctx context.Context, info localContaine
 	if err != nil {
 		return true
 	}
-	idle := state.minThreadIdle()
-	return idle != nil && *idle == 0
+	return state.turnInFlight()
 }
 
 // startContainer converges the named container onto a running, healthy state
@@ -459,7 +453,7 @@ func (l *LocalRuntimeBackend) RecycleImage(ctx context.Context, runtime assistan
 	return RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: payload}, nil
 }
 
-func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
+func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
 		return err
 	}
@@ -471,7 +465,7 @@ func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRunt
 		return fmt.Errorf("%w: local runtime host port is not available", ErrRuntimeUnhealthy)
 	}
 
-	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, threadID, idempotencyKey, authToken, prompt, mcpServers, localRuntimeTurnTimeout)
+	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, turn, localRuntimeTurnTimeout)
 }
 
 func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

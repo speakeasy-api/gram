@@ -172,7 +172,7 @@ export class McpServers extends ClientSDK {
    * listMcpServers mcpServers
    *
    * @remarks
-   * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
+   * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
    */
   async list(
     request?: ListMcpServersRequest | undefined,

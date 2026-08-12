@@ -171,17 +171,19 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    $3::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
-    OR external_organization_id = $3
+    OR external_organization_id = $4
   )
-ORDER BY (external_organization_id = $3) DESC NULLS LAST
+ORDER BY (external_organization_id = $4) DESC NULLS LAST, updated_at DESC
 LIMIT 1
 `
 
 type GetProviderOrgBillingModeParams struct {
 	OrganizationID string
 	Provider       string
+	MatchAnyOrg    bool
 	ExternalOrgID  pgtype.Text
 }
 
@@ -191,11 +193,20 @@ type GetProviderOrgBillingModeParams struct {
 // provider org; a config with none applies provider-wide. Exact-org matches are
 // preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 // NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
-// Only one live config per (org, provider) can exist today, so the ordering is
-// defensive. Only configs with a non-null billing_mode are considered, so an
-// undeclared org returns no rows (treated as unknown upstream).
+// @match_any_org disables the org scoping entirely: Codex sessions carry no org
+// identity on any layer while codex_compliance configs always pin one, so for
+// them the provider-wide declaration applies regardless of config scope. Only
+// one live config per (org, provider) can exist today, so the ordering (with
+// updated_at as the tiebreak against historical duplicates) is defensive. Only
+// configs with a non-null billing_mode are considered, so an undeclared org
+// returns no rows (treated as unknown upstream).
 func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.MatchAnyOrg,
+		arg.ExternalOrgID,
+	)
 	var billing_mode pgtype.Text
 	err := row.Scan(&billing_mode)
 	return billing_mode, err
@@ -681,6 +692,45 @@ func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKno
 	var known bool
 	err := row.Scan(&known)
 	return known, err
+}
+
+const skillRawHashNeedsPromptInjectionScan = `-- name: SkillRawHashNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean
+`
+
+type SkillRawHashNeedsPromptInjectionScanParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) SkillRawHashNeedsPromptInjectionScan(ctx context.Context, arg SkillRawHashNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillRawHashNeedsPromptInjectionScan, arg.ProjectID, arg.RawSha256)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec

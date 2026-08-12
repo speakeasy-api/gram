@@ -72,6 +72,9 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  invalidateAllSkillTags: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("nuqs", () => ({
   useQueryState: () => [null, testState.setSkillParam],
 }));

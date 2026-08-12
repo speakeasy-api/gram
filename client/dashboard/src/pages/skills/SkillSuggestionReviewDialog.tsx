@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { SkillEditSuggestion } from "@gram/client/models/components/skilleditsuggestion.js";
 import { lazy, Suspense } from "react";
 
@@ -44,7 +44,7 @@ export function SkillSuggestionReviewDialog({
         </Dialog.Header>
 
         <div className="min-h-0 overflow-y-auto pr-1">
-          <Suspense fallback={<Skeleton className="h-64 w-full rounded-lg" />}>
+          <Suspense fallback={<Skeleton className="h-64 w-full" />}>
             <SkillTextDiff
               oldContent={currentContent}
               newContent={suggestion.proposedContent}
@@ -55,11 +55,11 @@ export function SkillSuggestionReviewDialog({
         </div>
 
         <Dialog.Footer className="sm:justify-between">
-          <Button variant="outline" disabled={busy} onClick={onDismiss}>
+          <Button variant="secondary" disabled={busy} onClick={onDismiss}>
             Dismiss suggestion
           </Button>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={busy} onClick={onEdit}>
+            <Button variant="secondary" disabled={busy} onClick={onEdit}>
               Edit before applying
             </Button>
             <Button disabled={busy} onClick={onApplyAll}>

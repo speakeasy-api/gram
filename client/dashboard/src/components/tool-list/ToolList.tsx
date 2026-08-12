@@ -1,9 +1,9 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { MoreActions } from "@/components/ui/more-actions";
-import { TextArea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { TextArea } from "@/components/ui/Textarea";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { useCommandPalette } from "@/contexts/CommandPalette";
@@ -12,9 +12,10 @@ import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import {
   ChevronDown,
   FileCode,
@@ -25,9 +26,9 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnnotationBadges } from "./AnnotationBadges";
 import { ToolVariationBadge } from "../tool-variation-badge";
-import { McpIcon } from "../ui/mcp-icon";
-import { SimpleTooltip } from "../ui/tooltip";
-import { Type } from "../ui/type";
+import { McpIcon } from "@/components/ui/McpIcon";
+import { SimpleTooltip } from "../ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
@@ -472,9 +473,9 @@ function ToolRow({
               <Stack direction="horizontal" gap={2} align="center">
                 <p className="text-foreground truncate text-sm leading-6">
                   {toolPrefix && (
-                    <Type small muted className="inline">
+                    <Text small muted className="inline">
                       {toolPrefix}
-                    </Type>
+                    </Text>
                   )}
                   {toolNameNoPrefix}
                 </p>
@@ -614,12 +615,12 @@ function ToolRow({
                         size="small"
                         className="text-muted-foreground/70"
                       />
-                      <Type small muted>
+                      <Text small muted>
                         Original name:
-                      </Type>
-                      <Type small muted>
+                      </Text>
+                      <Text small muted>
                         {tool.canonical?.name}
-                      </Type>
+                      </Text>
                     </Stack>
                   )}
               </Stack>
@@ -634,18 +635,18 @@ function ToolRow({
                 {tool.variation?.description &&
                   tool.variation?.description !==
                     tool.canonical?.description && (
-                    <Stack className="border-border/70 rounded-md border p-2">
-                      <Type small muted className="inline font-medium">
+                    <Stack className="border-border/70 border p-2">
+                      <Text small muted className="inline font-medium">
                         <Icon
                           name="layers-2"
                           size="small"
                           className="text-muted-foreground/70 inline align-text-bottom"
                         />{" "}
                         Original Description
-                      </Type>
-                      <Type small muted>
+                      </Text>
+                      <Text small muted>
                         {tool.canonical?.description}
-                      </Type>
+                      </Text>
                     </Stack>
                   )}
               </Stack>
@@ -654,7 +655,7 @@ function ToolRow({
           </div>
           <Dialog.Footer>
             <Button
-              variant="ghost"
+              variant="tertiary"
               onClick={() => setEditDialogOpen(false)}
               disabled={isUpdating}
             >
@@ -1075,7 +1076,7 @@ export function ToolList({
     <div className="relative w-full">
       <div
         className={cn(
-          "border-neutral-softest w-full overflow-hidden rounded-lg border",
+          "border-neutral-softest w-full overflow-hidden border",
           className,
         )}
       >
@@ -1147,17 +1148,17 @@ export function ToolList({
 
       {hasChanges && !selectionMode && (
         <div className="sticky right-0 bottom-0 left-0 mt-4 flex justify-center">
-          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3 shadow-lg">
+          <div className="border-neutral-softest bg-background flex items-center gap-4 border px-4 py-3 shadow-lg">
             <p className="text-foreground text-sm">
               {selectedForRemoval.size} tool(s) selected
             </p>
             <div className="flex items-center gap-2">
-              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
+              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
                 <span className="text-xs">⌘</span>K
               </kbd>
               <span className="text-muted-foreground text-sm">for actions</span>
             </div>
-            <Button variant="outline" onClick={handleCancel}>
+            <Button variant="secondary" onClick={handleCancel}>
               Cancel
             </Button>
           </div>

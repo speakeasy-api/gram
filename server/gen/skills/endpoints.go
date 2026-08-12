@@ -21,6 +21,7 @@ type Endpoints struct {
 	RestoreVersion         goa.Endpoint
 	Update                 goa.Endpoint
 	List                   goa.Endpoint
+	ListTags               goa.Endpoint
 	ListSuggestions        goa.Endpoint
 	ListFeedback           goa.Endpoint
 	TriggerSuggestion      goa.Endpoint
@@ -50,6 +51,7 @@ func NewEndpoints(s Service) *Endpoints {
 		RestoreVersion:         NewRestoreVersionEndpoint(s, a.APIKeyAuth),
 		Update:                 NewUpdateEndpoint(s, a.APIKeyAuth),
 		List:                   NewListEndpoint(s, a.APIKeyAuth),
+		ListTags:               NewListTagsEndpoint(s, a.APIKeyAuth),
 		ListSuggestions:        NewListSuggestionsEndpoint(s, a.APIKeyAuth),
 		ListFeedback:           NewListFeedbackEndpoint(s, a.APIKeyAuth),
 		TriggerSuggestion:      NewTriggerSuggestionEndpoint(s, a.APIKeyAuth),
@@ -77,6 +79,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RestoreVersion = m(e.RestoreVersion)
 	e.Update = m(e.Update)
 	e.List = m(e.List)
+	e.ListTags = m(e.ListTags)
 	e.ListSuggestions = m(e.ListSuggestions)
 	e.ListFeedback = m(e.ListFeedback)
 	e.TriggerSuggestion = m(e.TriggerSuggestion)
@@ -388,6 +391,65 @@ func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			return nil, err
 		}
 		return s.List(ctx, p)
+	}
+}
+
+// NewListTagsEndpoint returns an endpoint function that calls the method
+// "listTags" of service "skills".
+func NewListTagsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTagsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTags(ctx, p)
 	}
 }
 

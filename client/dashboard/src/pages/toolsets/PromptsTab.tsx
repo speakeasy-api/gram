@@ -1,13 +1,14 @@
 import { CreateThingCard } from "@/components/create-thing-card";
 import { EmptyState } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Cards } from "@/components/ui/card";
-import { Type } from "@/components/ui/type";
+import { Cards } from "@/components/ui/Card";
+import { Text } from "@/components/ui/Text";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useState } from "react";
 import { PromptTemplateCard } from "../prompts/Prompts";
 import { ToolsetsGraphic } from "./ToolsetsEmptyState";
@@ -110,7 +111,7 @@ export function PromptsTabContent({
                   </CreateThingCard>
                 </div>
               </PromptSelectPopover>
-              <Type muted>or</Type>
+              <Text muted>or</Text>
             </>
           )}
           <div className="w-full">
