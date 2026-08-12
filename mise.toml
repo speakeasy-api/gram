@@ -26,6 +26,9 @@ gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
 melange = "0.56.5"
+# Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
+# aube resolves its own runtime and cannot read this file, so without that
+# mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
 aube = "1.38.1"
 # Kept for `changeset publish` only, which shells out to a package manager by
