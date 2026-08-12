@@ -19,9 +19,14 @@ export function useSkillVersionLabels(
     versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
   const versionLabels = new Map(
     [...versions]
-      .sort(
-        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
-      )
+      .sort((left, right) => {
+        const createdAtDifference =
+          left.createdAt.getTime() - right.createdAt.getTime();
+        if (createdAtDifference !== 0) return createdAtDifference;
+        if (left.id < right.id) return -1;
+        if (left.id > right.id) return 1;
+        return 0;
+      })
       .map((version, index) => [
         version.id,
         `v${versionCount - versions.length + index + 1} (${version.canonicalSha256.slice(0, 8)})`,
