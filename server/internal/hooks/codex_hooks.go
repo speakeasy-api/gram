@@ -409,6 +409,9 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 			if metadata.Hostname == "" {
 				metadata.Hostname = cached.Hostname
 			}
+			if metadata.Cwd == "" {
+				metadata.Cwd = cached.Cwd
+			}
 		}
 	}
 

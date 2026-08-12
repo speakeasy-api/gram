@@ -24,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -2411,15 +2413,23 @@ func TestIngest_PersistsSessionCwd(t *testing.T) {
 	require.True(t, chat.Cwd.Valid, "chat must persist the session cwd")
 	require.Equal(t, cwd, chat.Cwd.String)
 
-	// A follow-up event with no cwd keeps the recorded one.
-	second := "now update the README"
-	followUp := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
-	followUp.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &second}}
-	_, err = ti.service.Ingest(ctx, followUp)
+	// An ordinary follow-up event finds the chat already there and never
+	// reaches the upsert, so drive the conflict directly: a racing insert for
+	// the same chat carrying no cwd must not null out the recorded one.
+	_, err = repo.New(ti.conn).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty("employee@example.com"),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("racing insert"),
+		Cwd:            conv.ToPGTextEmpty(""),
+	})
 	require.NoError(t, err)
 
 	chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.True(t, chat.Cwd.Valid)
+	require.True(t, chat.Cwd.Valid, "a later write without a cwd must not erase the recorded one")
 	require.Equal(t, cwd, chat.Cwd.String)
 }
