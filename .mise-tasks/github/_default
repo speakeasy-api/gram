@@ -9,4 +9,4 @@ mise run github:pre-cache
 echo
 echo Install scripting dependencies
 echo ==============================
-pnpm install --frozen-lockfile --filter @gram/workspace
+aube install --frozen-lockfile --filter @gram/workspace

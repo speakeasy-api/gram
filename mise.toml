@@ -27,6 +27,10 @@ gum = "0.17.0"
 jq = "1.8.2"
 melange = "0.56.5"
 nodejs = "24.16.0"
+aube = "1.38.1"
+# aube reads and writes pnpm-lock.yaml in place, so pnpm stays a working
+# fallback. It is also still required outright: Speakeasy's TypeScript target
+# shells out to `pnpm` directly when generating the SDK (see mise gen:sdk).
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
 uv = "0.12.1"

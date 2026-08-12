@@ -12,4 +12,4 @@ if [[ "${usage_offline:-}" == "true" ]]; then
   args+=(--offline)
 fi
 
-exec pnpm i --config.confirmModulesPurge=false "${args[@]}"
+exec aube install "${args[@]}"

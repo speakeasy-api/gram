@@ -6,11 +6,11 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter ./client/dashboard dev",
-    "dev:docs": "pnpm --filter ./client/docs dev",
-    "lint": "tsc --noEmit && pnpm -r lint",
-    "build": "pnpm -r build",
-    "type-check": "pnpm -r type-check",
+    "dev": "aube run --filter ./client/dashboard dev",
+    "dev:docs": "aube run --filter ./client/docs dev",
+    "lint": "tsc --noEmit && aube run -r --if-present lint",
+    "build": "aube run -r --if-present build",
+    "type-check": "aube run -r --if-present type-check",
     "format": "oxfmt -c .oxfmtrc.json"
   },
   "imports": {
@@ -20,6 +20,13 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@11.19.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.16.0",
+      "onFail": "download"
+    }
+  },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@clack/prompts": "1.7.0",
