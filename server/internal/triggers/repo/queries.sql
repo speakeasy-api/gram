@@ -130,3 +130,14 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: DeleteTriggerInstancesByTargetExceptDefinition :exec
+UPDATE trigger_instances
+SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND definition_slug <> @excluded_definition_slug
+  AND deleted IS FALSE;

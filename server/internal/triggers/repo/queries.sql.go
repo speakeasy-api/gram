@@ -201,6 +201,35 @@ func (q *Queries) DeleteTriggerInstance(ctx context.Context, arg DeleteTriggerIn
 	return i, err
 }
 
+const deleteTriggerInstancesByTargetExceptDefinition = `-- name: DeleteTriggerInstancesByTargetExceptDefinition :exec
+UPDATE trigger_instances
+SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND target_kind = $2
+  AND target_ref = $3
+  AND definition_slug <> $4
+  AND deleted IS FALSE
+`
+
+type DeleteTriggerInstancesByTargetExceptDefinitionParams struct {
+	ProjectID              uuid.UUID
+	TargetKind             string
+	TargetRef              string
+	ExcludedDefinitionSlug string
+}
+
+func (q *Queries) DeleteTriggerInstancesByTargetExceptDefinition(ctx context.Context, arg DeleteTriggerInstancesByTargetExceptDefinitionParams) error {
+	_, err := q.db.Exec(ctx, deleteTriggerInstancesByTargetExceptDefinition,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.ExcludedDefinitionSlug,
+	)
+	return err
+}
+
 const getTriggerInstanceByID = `-- name: GetTriggerInstanceByID :one
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
