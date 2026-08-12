@@ -28,6 +28,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -1569,6 +1570,37 @@ func TestServiceCoreDeleteAssistantReapsRuntimes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, assistant.DeletedAt.Valid)
+}
+
+func TestServiceCoreDeleteAssistantDeletesActiveSlackTriggers(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "delete_assistant_triggers")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
+	trigger, err := triggerrepo.New(conn).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: bgtriggers.DefinitionSlugSlack,
+		Name:           "Slack",
+		EnvironmentID:  uuid.NullUUID{},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{"event_types":["message"]}`),
+		Status:         bgtriggers.StatusActive,
+	})
+	require.NoError(t, err)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger())
+	require.NoError(t, core.DeleteAssistant(t.Context(), projectID, assistantID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
+
+	_, err = triggerrepo.New(conn).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{
+		ID:        trigger.ID,
+		ProjectID: projectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestServiceCoreDeleteAssistantSucceedsEvenWhenReapErrors(t *testing.T) {

@@ -1698,16 +1698,23 @@ function buildAssistantTools(deps: ToolDeps) {
                 t.name === name,
             );
             if (duplicate) {
+              const trigger =
+                duplicate.status === "paused"
+                  ? await sdk.triggers.resume({ id: duplicate.id })
+                  : duplicate;
+              if (duplicate.status === "paused") draft.invalidateAll();
               return okResult({
-                id: duplicate.id,
-                name: duplicate.name,
-                definition_slug: duplicate.definitionSlug,
-                status: duplicate.status,
-                webhook_url: duplicate.webhookUrl,
-                config: duplicate.config,
-                environment_id: duplicate.environmentId,
+                id: trigger.id,
+                name: trigger.name,
+                definition_slug: trigger.definitionSlug,
+                status: trigger.status,
+                webhook_url: trigger.webhookUrl,
+                config: trigger.config,
+                environment_id: trigger.environmentId,
                 notes: [
-                  "Trigger with this name already exists for this assistant; returning the existing one instead of creating a duplicate.",
+                  duplicate.status === "paused"
+                    ? "Trigger with this name already exists for this assistant; reactivated it instead of creating a duplicate."
+                    : "Trigger with this name already exists for this assistant; returning the existing one instead of creating a duplicate.",
                   ...notes,
                 ],
               });
@@ -2180,6 +2187,7 @@ function buildAssistantTools(deps: ToolDeps) {
                   updateTriggerInstanceForm: {
                     id: existingSlackTrigger.id,
                     config: mergedConfig,
+                    status: "active",
                   },
                 });
               } else {
