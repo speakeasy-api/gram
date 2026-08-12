@@ -142,6 +142,12 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		return nil, fmt.Errorf("run web search: %w", err)
 	}
 
+	// Checked before the loop, not inside it: a bound tested after the append
+	// always yields one result, so a cap of zero returned one.
+	if maxResults <= 0 {
+		return nil, nil
+	}
+
 	results := make([]SearchResult, 0, len(response.Annotations))
 	for _, annotation := range response.Annotations {
 		citation := annotation.URLCitation

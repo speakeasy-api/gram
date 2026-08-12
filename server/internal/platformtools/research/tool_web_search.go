@@ -80,6 +80,16 @@ func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	// The budget only means something if the key identifies a run. An absent
+	// chat id would share one bucket across every caller that omitted it,
+	// which is a budget in name only — so a call that cannot say which run it
+	// belongs to does not get to spend. Rotating the id is not reachable:
+	// these tools are not served over HTTP (the platform entrypoint refuses
+	// the research toolset), and the runner sets it to the report id.
+	if env.GramChatID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "a research tool call must identify its run")
+	}
+
 	if !s.budget.take(env.GramChatID, time.Now()) {
 		return fmt.Errorf("this run's search budget of %d searches is exhausted: work with what the previous searches returned", maxSearchesPerChat)
 	}
