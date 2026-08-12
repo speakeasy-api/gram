@@ -1503,7 +1503,7 @@ WHERE project_id = @project_id
 -- project so a leaked asset id from another project cannot be attached.
 SELECT id, name, url, content_type, content_length
 FROM assets
-WHERE project_id = @project_id
+WHERE project_id = @project_id::uuid
   AND id = ANY(@ids::uuid[])
   AND kind = 'chat_attachment'
   AND deleted IS FALSE;

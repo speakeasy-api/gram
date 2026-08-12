@@ -46,6 +46,10 @@ export type ChatOverview = {
    */
   numMessages: number;
   /**
+   * The supported client that originated a chat routed through the source, when known
+   */
+  originatingClient?: string | undefined;
+  /**
    * True when the chat is pinned
    */
   pinned?: boolean | undefined;
@@ -118,6 +122,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.transform(v => new Date(v)),
       ),
       num_messages: z.int(),
+      originating_client: z.optional(z.string()),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
       source: z.optional(z.string()),
@@ -147,6 +152,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",
         "num_messages": "numMessages",
+        "originating_client": "originatingClient",
         "risk_findings_count": "riskFindingsCount",
         "summary_generated_at": "summaryGeneratedAt",
         "total_cost": "totalCost",

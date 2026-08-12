@@ -55004,6 +55004,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        originating_client:
+          type: string
+          description: The supported client that originated a chat routed through the source, when known
         pinned:
           type: boolean
           description: True when the chat is pinned
@@ -55226,6 +55229,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        originating_client:
+          type: string
+          description: The supported client that originated a chat routed through the source, when known
         pinned:
           type: boolean
           description: True when the chat is pinned

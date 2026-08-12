@@ -2070,6 +2070,22 @@ limited_chats AS (
     fc.id DESC
   LIMIT $18
   OFFSET $17
+),
+chat_attribution AS (
+  SELECT
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count,
+    COALESCE(CASE WHEN lc.source = 'litellm' THEN (
+      SELECT CASE
+        WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
+        ELSE ''
+      END
+      FROM chat_messages
+      WHERE chat_id = lc.id
+        AND source = 'litellm'
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) END, '')::text AS originating_client
+  FROM limited_chats lc
 )
 SELECT
   lc.id,
@@ -2077,6 +2093,7 @@ SELECT
   lc.user_id,
   lc.external_user_id,
   lc.source,
+  lc.originating_client,
   lc.created_at,
   lc.updated_at,
   lc.pinned_at,
@@ -2100,7 +2117,7 @@ SELECT
   lc.assistant_id,
   lc.assistant_name,
   lc.total_count
-FROM limited_chats lc
+FROM chat_attribution lc
 `
 
 type ListChatsParams struct {
@@ -2130,6 +2147,7 @@ type ListChatsRow struct {
 	UserID               pgtype.Text
 	ExternalUserID       pgtype.Text
 	Source               pgtype.Text
+	OriginatingClient    string
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	PinnedAt             pgtype.Timestamptz
@@ -2186,6 +2204,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Source,
+			&i.OriginatingClient,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.PinnedAt,
@@ -2806,19 +2825,21 @@ func (q *Queries) SeedChatMessageContent(ctx context.Context, arg SeedChatMessag
 }
 
 const seedChatMessageWithSource = `-- name: SeedChatMessageWithSource :one
-INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
-VALUES ($1, $2, 'user', 'test message', $3, COALESCE($4::timestamptz, clock_timestamp()))
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, user_agent, created_at)
+VALUES ($1, $2, 'user', 'test message', $3, $4::text, COALESCE($5::timestamptz, clock_timestamp()))
 RETURNING id
 `
 
 type SeedChatMessageWithSourceParams struct {
-	ChatID    uuid.UUID
-	ProjectID uuid.NullUUID
-	Source    pgtype.Text
-	CreatedAt pgtype.Timestamptz
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Source            pgtype.Text
+	OriginatingClient pgtype.Text
+	CreatedAt         pgtype.Timestamptz
 }
 
-// Test fixture: insert a chat message carrying a specific source. The per-chat
+// Test fixture: insert a chat message carrying a specific source and optional
+// originating client. The per-chat
 // inferred source (used by the agent-type filter and ListChatSources) is the
 // latest non-null message source, so source-filter tests seed messages this way.
 func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMessageWithSourceParams) (uuid.UUID, error) {
@@ -2826,6 +2847,7 @@ func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMes
 		arg.ChatID,
 		arg.ProjectID,
 		arg.Source,
+		arg.OriginatingClient,
 		arg.CreatedAt,
 	)
 	var id uuid.UUID

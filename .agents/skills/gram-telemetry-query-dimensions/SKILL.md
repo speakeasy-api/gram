@@ -162,7 +162,7 @@ Then:
 ```sh
 go build ./server/internal/telemetry/...
 mise lint:server
-pnpm -F dashboard type-check
+aube run -F dashboard type-check
 ```
 
 ### 5. Tests

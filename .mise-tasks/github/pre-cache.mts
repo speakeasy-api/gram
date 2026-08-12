@@ -4,7 +4,7 @@
 //MISE hide=true
 
 // 💡 It's not possible to use anything other than the Node.js standard library
-// because these initialization scripts run _before_ `pnpm install` has run.
+// because these initialization scripts run _before_ `aube install` has run.
 
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
@@ -83,36 +83,41 @@ async function setupUVCaching() {
   console.log(`GitHub uv partial cache key: ${partialKey}`);
 }
 
-async function setupPNPMCaching() {
-  const storePath = execSync("pnpm store path", { encoding: "utf8" }).trim();
-  const pnpmMajorVersion = execSync("pnpm --version", { encoding: "utf8" })
+async function setupAubeCaching() {
+  // Only the content-addressable store is worth caching here: aube disables its
+  // global virtual store under CI, so nothing is materialized outside the
+  // workspace's own node_modules.
+  const storePath = execSync("aube store path", { encoding: "utf8" }).trim();
+  const aubeMajorVersion = execSync("aube --version", { encoding: "utf8" })
     .trim()
     .split(".")[0];
 
-  await fs.appendFile(env, `PNPM_STORE_PATH=${storePath}\n`);
+  await fs.appendFile(env, `AUBE_STORE_PATH=${storePath}\n`);
 
   const os = process.platform;
   const arch = process.arch;
 
   const hash = crypto.createHash("sha256");
 
+  // aube reads and writes pnpm-lock.yaml in place, so the lockfile keeps its
+  // pnpm name and stays the cache-busting input.
   console.log("Hashing:", "pnpm-lock.yaml");
-  const pnpmLock = await fs.readFile("pnpm-lock.yaml");
-  hash.update(pnpmLock);
+  const lockfile = await fs.readFile("pnpm-lock.yaml");
+  hash.update(lockfile);
 
-  const pnpmHash = hash.digest("hex");
+  const lockfileHash = hash.digest("hex");
 
   const version = 1; // Increment this if you need to bust the cache
-  const cacheKey = `${version}-${os}-${arch}-pnpm${pnpmMajorVersion}-${pnpmHash}`;
-  const partialKey = `${version}-${os}-${arch}-pnpm${pnpmMajorVersion}-`;
-  await fs.appendFile(env, `GH_CACHE_PNPM_KEY=pnpm-${cacheKey}\n`);
-  await fs.appendFile(env, `GH_CACHE_PNPM_KEY_PARTIAL=pnpm-${partialKey}\n`);
+  const cacheKey = `${version}-${os}-${arch}-aube${aubeMajorVersion}-${lockfileHash}`;
+  const partialKey = `${version}-${os}-${arch}-aube${aubeMajorVersion}-`;
+  await fs.appendFile(env, `GH_CACHE_AUBE_KEY=aube-${cacheKey}\n`);
+  await fs.appendFile(env, `GH_CACHE_AUBE_KEY_PARTIAL=aube-${partialKey}\n`);
 
-  console.log(`PNPM store path: ${storePath}`);
-  console.log(`GitHub PNPM cache key: ${cacheKey}`);
-  console.log(`GitHub PNPM partial cache key: ${partialKey}`);
+  console.log(`aube store path: ${storePath}`);
+  console.log(`GitHub aube cache key: ${cacheKey}`);
+  console.log(`GitHub aube partial cache key: ${partialKey}`);
 }
 
 await setupGoCaching();
 await setupUVCaching();
-await setupPNPMCaching();
+await setupAubeCaching();

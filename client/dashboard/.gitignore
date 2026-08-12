@@ -23,7 +23,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.vercel
 
 # Generated risk CEL wasm engine (build with `mise gen:celwasm`)
 /public/cel/
