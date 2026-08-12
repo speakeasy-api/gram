@@ -214,6 +214,7 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 		ProjectID:          target.ProjectID,
 		Fingerprint:        conv.ToPGText(evidencediff.Fingerprint(diff)),
 		ComparedDecisionAt: request.DecisionDecidedAt,
+		ComparedDecisionID: request.DecisionID,
 	})
 	if err != nil {
 		return fmt.Errorf("flag evidence change: %w", err)

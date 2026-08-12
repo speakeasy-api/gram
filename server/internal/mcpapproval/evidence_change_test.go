@@ -15,10 +15,11 @@ import (
 
 const driftEvidence = `{"identity": {"kind": "server_url"}, "authority": {"mode": "oauth", "scopes": ["read:messages"]}}`
 
-// latestDecisionAt is the decided_at a recheck would carry into its flag
-// write. Read from the database rather than taken from the Go clock, which
-// can sit either side of Postgres's clock_timestamp().
-func latestDecisionAt(t *testing.T, ctx context.Context, ti *testInstance, requestID uuid.UUID) pgtype.Timestamptz {
+// latestDecision identifies the decision a recheck would carry into its flag
+// write, in the (decided_at, id) order both sides of the comparison use. Read
+// from the database rather than taken from the Go clock, which can sit either
+// side of Postgres's clock_timestamp().
+func latestDecision(t *testing.T, ctx context.Context, ti *testInstance, requestID uuid.UUID) (pgtype.Timestamptz, uuid.UUID) {
 	t.Helper()
 
 	decisions, err := ti.repo.ListDecisionsForApprovalRequest(ctx, repo.ListDecisionsForApprovalRequestParams{
@@ -28,7 +29,7 @@ func latestDecisionAt(t *testing.T, ctx context.Context, ti *testInstance, reque
 	require.NoError(t, err)
 	require.NotEmpty(t, decisions)
 
-	return decisions[0].DecidedAt
+	return decisions[0].DecidedAt, decisions[0].ID
 }
 
 func shiftedBy(at pgtype.Timestamptz, offset time.Duration) pgtype.Timestamptz {
@@ -61,11 +62,13 @@ func TestRecordDecision_ClearsEvidenceChangeFlag(t *testing.T) {
 	ctx, ti := newTestService(t)
 	requestID := approveSeededRequest(t, ctx, ti, driftEvidence)
 
+	comparedAt, comparedID := latestDecision(t, ctx, ti, requestID)
 	flagged, err := ti.repo.MarkApprovalRequestEvidenceChanged(ctx, repo.MarkApprovalRequestEvidenceChangedParams{
 		ID:                 requestID,
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-drift-1"),
-		ComparedDecisionAt: latestDecisionAt(t, ctx, ti, requestID),
+		ComparedDecisionAt: comparedAt,
+		ComparedDecisionID: comparedID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), flagged)
@@ -97,11 +100,13 @@ func TestMarkEvidenceChanged_IsIdempotentPerFingerprint(t *testing.T) {
 	ctx, ti := newTestService(t)
 	requestID := approveSeededRequest(t, ctx, ti, driftEvidence)
 
+	comparedAt, comparedID := latestDecision(t, ctx, ti, requestID)
 	params := repo.MarkApprovalRequestEvidenceChangedParams{
 		ID:                 requestID,
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-same"),
-		ComparedDecisionAt: latestDecisionAt(t, ctx, ti, requestID),
+		ComparedDecisionAt: comparedAt,
+		ComparedDecisionID: comparedID,
 	}
 
 	first, err := ti.repo.MarkApprovalRequestEvidenceChanged(ctx, params)
@@ -137,13 +142,46 @@ func TestMarkEvidenceChanged_RefusesAfterANewerDecision(t *testing.T) {
 	requestID := approveSeededRequest(t, ctx, ti, driftEvidence)
 
 	// The sweep read its snapshot an hour before the decision landed.
-	comparedAt := shiftedBy(latestDecisionAt(t, ctx, ti, requestID), -time.Hour)
+	decidedAt, decisionID := latestDecision(t, ctx, ti, requestID)
 
 	flagged, err := ti.repo.MarkApprovalRequestEvidenceChanged(ctx, repo.MarkApprovalRequestEvidenceChangedParams{
 		ID:                 requestID,
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-stale"),
-		ComparedDecisionAt: comparedAt,
+		ComparedDecisionAt: shiftedBy(decidedAt, -time.Hour),
+		ComparedDecisionID: decisionID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), flagged)
+
+	row, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.False(t, row.EvidenceChangedAt.Valid)
+}
+
+// Two decisions can share a decided_at, and the recheck picks between them by
+// id. The flag write has to order newer-ness the same way: a decided_at-only
+// test would call the tie no newer decision at all and let the sweep resurrect
+// a flag the tie's winner just cleared. Stated as a comparison against a lower
+// id at the same instant, which is what losing that tie looks like to the
+// write.
+func TestMarkEvidenceChanged_RefusesADecisionThatWonTheTimestampTie(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	requestID := approveSeededRequest(t, ctx, ti, driftEvidence)
+
+	decidedAt, decisionID := latestDecision(t, ctx, ti, requestID)
+	require.NotEqual(t, uuid.Nil, decisionID)
+
+	flagged, err := ti.repo.MarkApprovalRequestEvidenceChanged(ctx, repo.MarkApprovalRequestEvidenceChangedParams{
+		ID:                 requestID,
+		ProjectID:          ti.projectID,
+		Fingerprint:        conv.ToPGText("fp-tie"),
+		ComparedDecisionAt: decidedAt,
+		// Every generated id sorts above the nil uuid, so the stored decision
+		// is the one that won the tie.
+		ComparedDecisionID: uuid.Nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), flagged)
@@ -169,6 +207,7 @@ func TestMarkEvidenceChanged_RefusesUnapprovedRequests(t *testing.T) {
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-pending"),
 		ComparedDecisionAt: pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: pgtype.Finite},
+		ComparedDecisionID: uuid.Nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), flagged)

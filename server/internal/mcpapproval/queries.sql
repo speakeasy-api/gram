@@ -458,12 +458,13 @@ SELECT
   , r.current_evidence
   , r.evidence_version
   , r.evidence_collected_at
+  , d.id AS decision_id
   , d.decided_at AS decision_decided_at
   , d.evidence_snapshot AS decision_evidence_snapshot
   , d.evidence_version AS decision_evidence_version
 FROM mcp_approval_requests r
 JOIN LATERAL (
-    SELECT decided_at, evidence_snapshot, evidence_version
+    SELECT id, decided_at, evidence_snapshot, evidence_version
     FROM mcp_approval_decisions
     WHERE mcp_approval_request_id = r.id
       AND project_id = r.project_id
@@ -495,7 +496,10 @@ WHERE r.id = @id
 --     anything to say about;
 --   * a decision recorded after the one the caller compared against has
 --     already answered this drift, so re-flagging would resurrect a flag the
---     admin just cleared, permanently — only a decision clears it.
+--     admin just cleared, permanently — only a decision clears it. "After" is
+--     ordered by (decided_at, id), the same order the caller picked its
+--     comparison decision by, so a decision that won a decided_at tie by id
+--     blocks the write instead of slipping past a decided_at-only test.
 UPDATE mcp_approval_requests r
 SET evidence_changed_at = COALESCE(r.evidence_changed_at, clock_timestamp())
   , notified_change_fingerprint = @fingerprint
@@ -511,7 +515,10 @@ WHERE r.id = @id
     WHERE d.mcp_approval_request_id = r.id
       AND d.project_id = r.project_id
       AND d.deleted IS FALSE
-      AND d.decided_at > sqlc.arg(compared_decision_at)::timestamptz
+      AND (d.decided_at, d.id) > (
+        sqlc.arg(compared_decision_at)::timestamptz,
+        sqlc.arg(compared_decision_id)::uuid
+      )
   );
 
 -- name: ClearApprovalRequestEvidenceChange :exec
