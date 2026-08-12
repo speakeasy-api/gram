@@ -5,23 +5,10 @@ import SkillDetailRoot from "./SkillDetailRoot";
 
 const testState = vi.hoisted(() => ({
   pathname: "/skills/skill_a",
-  hash: "",
 }));
 
 vi.mock("@/components/page-layout", () => ({
   Page: () => null,
-}));
-vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
-  useDrainInfiniteQuery: vi.fn(),
-}));
-vi.mock("@gram/client/react-query/skillVersions.js", () => ({
-  useSkillVersionsInfinite: () => ({
-    data: { pages: [{ result: { versions: [] } }] },
-    error: null,
-    hasNextPage: false,
-    isFetchingNextPage: false,
-    isPending: false,
-  }),
 }));
 vi.mock("@gram/client/react-query/skill.js", () => ({
   useSkill: () => ({
@@ -58,7 +45,6 @@ vi.mock("react-router", async () => {
 
 beforeEach(() => {
   testState.pathname = "/skills/skill_a";
-  testState.hash = "";
 });
 
 afterEach(cleanup);

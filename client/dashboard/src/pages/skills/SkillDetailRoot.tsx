@@ -8,7 +8,6 @@ import { isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
-import { pageFromLegacySkillHash, pagePath } from "./SkillDetailRouting";
 
 export default function SkillDetailRoot(): JSX.Element {
   const { skillId } = useParams<{ skillId: string }>();
@@ -19,14 +18,12 @@ export default function SkillDetailRoot(): JSX.Element {
     enabled: !!skillId,
   });
   if (skillId) {
-    const legacyPage = pageFromLegacySkillHash(location.hash);
     const isBaseRoute =
       location.pathname === routes.skills.detail.href(skillId);
-    if (isBaseRoute || legacyPage) {
-      const page = legacyPage ?? "overview";
+    if (isBaseRoute) {
       return (
         <Navigate
-          to={`${routes.skills.detail.href(skillId)}/${pagePath(page)}`}
+          to={`${routes.skills.detail.href(skillId)}/overview`}
           replace
         />
       );
