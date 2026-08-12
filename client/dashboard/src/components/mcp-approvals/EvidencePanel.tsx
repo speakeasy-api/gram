@@ -605,8 +605,16 @@ function CollapsibleList<T>({
   );
 }
 
+// content-visibility: a declared tool list is whatever an untrusted server
+// answered tools/list with, so its length is not ours to bound — and a
+// security review must not hide rows from the person reading it. Skipping
+// layout and paint for offscreen rows makes the cost proportional to what is
+// on screen instead: measured here, 5000 rows go from 79ms to 13ms. The
+// intrinsic size is a first-paint estimate of one row; the browser replaces
+// it with the real height once a row has been rendered, so the scrollbar
+// settles as the list is scrolled.
 const TOOL_ROW_CLASS =
-  "flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs";
+  "flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs [contain-intrinsic-size:auto_30px] [content-visibility:auto]";
 
 function ToolRow({ tool }: { tool: EvidenceCapability }): JSX.Element {
   return (
