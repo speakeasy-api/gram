@@ -2019,6 +2019,13 @@ CREATE TABLE IF NOT EXISTS chats (
   -- referenced without a FK; integrity is maintained by ingest.
   user_account_id uuid,
 
+  -- True when any event for this session was observed by the LiteLLM proxy,
+  -- set by hooks ingest independently of whether the proxied transcript row
+  -- itself was persisted. Sessions natively captured by an agent's own hook
+  -- stream suppress their proxied rows as duplicates, so message sources
+  -- alone cannot tell that the session was routed through LiteLLM.
+  litellm_proxied boolean NOT NULL DEFAULT false,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
