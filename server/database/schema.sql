@@ -5230,6 +5230,13 @@ CREATE INDEX IF NOT EXISTS mcp_approval_requests_artifact_ref_idx
 ON mcp_approval_requests (artifact_ref)
 WHERE deleted IS FALSE AND artifact_ref IS NOT NULL;
 
+-- Serves the daily change-detection sweep, which scans approved reviews
+-- across every project in keyset order. Partial and id-ordered so a page is
+-- an index range rather than a walk over every review in the installation.
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_approved_id_idx
+ON mcp_approval_requests (id)
+WHERE deleted IS FALSE AND status = 'approved';
+
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_approval_request_requesters_request_id_user_id_key
 ON mcp_approval_request_requesters (mcp_approval_request_id, user_id)
 WHERE deleted IS FALSE;
