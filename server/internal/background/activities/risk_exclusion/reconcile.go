@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -40,6 +39,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -549,8 +549,9 @@ func regexPredicate(ex repo.RiskExclusion) chrepo.RetroExclusionPredicate {
 // forEachRegexCandidate pages through one day's regex candidates, reconstructs
 // each row's plaintext from the chat store, and reports every candidate to fn
 // with its reconstruction (ok=false when the plaintext could not be rebuilt or
-// the row's chat attribution diverges). The listing is keyset-paginated so a
-// busy day never materializes in memory at once.
+// the row's chat attribution diverges). The listing is keyset-paginated and fn
+// flushes its verdicts in bounded chunks as it goes, so a busy day never
+// materializes in memory at once — not the candidates, not the verdict ids.
 func (a *Reconcile) forEachRegexCandidate(
 	ctx context.Context,
 	run *chRun,
@@ -558,7 +559,7 @@ func (a *Reconcile) forEachRegexCandidate(
 	projectID uuid.UUID,
 	phase, dayKey string,
 	list func(ctx context.Context, afterID uuid.UUID, limit int) ([]chrepo.RetroRegexCandidate, error),
-	fn func(c chrepo.RetroRegexCandidate, match string, ok bool),
+	fn func(c chrepo.RetroRegexCandidate, match string, ok bool) error,
 ) error {
 	// Anchors repeat across findings (several findings per message), so
 	// cache the loaded-and-hydrated anchor per anchor id. The cache is
@@ -625,12 +626,16 @@ func (a *Reconcile) forEachRegexCandidate(
 					attr.SlogChatID(c.ChatID),
 					attr.SlogValueString(c.ID.String()),
 				)
-				fn(c, "", false)
+				if err := fn(c, "", false); err != nil {
+					return err
+				}
 				continue
 			}
 
 			match, ok := risk.MatchingReconstruction(row.MatchLen, reveal.Candidates(ctx, chatID, row, anchor))
-			fn(c, match, ok)
+			if err := fn(c, match, ok); err != nil {
+				return err
+			}
 		}
 
 		if len(candidates) < regexCandidatePage {
@@ -652,31 +657,48 @@ func (a *Reconcile) chApplyRegex(ctx context.Context, run *chRun, ex repo.RiskEx
 	for _, day := range run.days(startDay) {
 		dayKey := day.Format(time.DateOnly)
 
-		var matched []uuid.UUID
+		// Matches flush per chunk DURING evaluation so a day with millions of
+		// matching rows never holds more than one chunk of ids. Flushing
+		// mid-enumeration is safe: the candidate listing pages by ascending id,
+		// so the appended copies only change the latest state of rows the
+		// keyset has already moved past.
+		matched := make([]uuid.UUID, 0, regexAppendChunk)
+		flush := func() error {
+			if len(matched) == 0 {
+				return nil
+			}
+			bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
+			err := a.ch.AppendRetroExclusionApplyByIDs(bctx, run.scope(day), run.exclusionID, run.excludedAt, run.nextInsertedAt(), matched)
+			cancel()
+			if err != nil {
+				return fmt.Errorf("append regex matches: %w", err)
+			}
+			total += len(matched)
+			matched = matched[:0]
+			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHApply, Cursor: uuid.UUID{}, Day: dayKey})
+			return nil
+		}
+
 		err := a.forEachRegexCandidate(ctx, run, reveal, ex.ProjectID, phaseCHApply, dayKey,
 			func(lctx context.Context, afterID uuid.UUID, limit int) ([]chrepo.RetroRegexCandidate, error) {
 				return a.ch.ListRetroRegexCandidates(lctx, run.scope(day), predicate, afterID, limit)
 			},
-			func(c chrepo.RetroRegexCandidate, match string, ok bool) {
+			func(c chrepo.RetroRegexCandidate, match string, ok bool) error {
 				if ok && re.MatchString(match) {
 					matched = append(matched, c.ID)
+					if len(matched) >= regexAppendChunk {
+						return flush()
+					}
 				}
+				return nil
 			},
 		)
 		if err != nil {
 			return fmt.Errorf("day %s: %w", dayKey, err)
 		}
-
-		for chunk := range slices.Chunk(matched, regexAppendChunk) {
-			bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
-			err := a.ch.AppendRetroExclusionApplyByIDs(bctx, run.scope(day), run.exclusionID, run.excludedAt, run.nextInsertedAt(), chunk)
-			cancel()
-			if err != nil {
-				return fmt.Errorf("day %s: append regex matches: %w", dayKey, err)
-			}
-			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHApply, Cursor: uuid.UUID{}, Day: dayKey})
+		if err := flush(); err != nil {
+			return fmt.Errorf("day %s: %w", dayKey, err)
 		}
-		total += len(matched)
 		activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHApply, Cursor: uuid.UUID{}, Day: dayKey})
 	}
 
@@ -726,44 +748,61 @@ func (a *Reconcile) chReverseRegex(ctx context.Context, run *chRun, ex repo.Risk
 			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHReverse, Cursor: uuid.UUID{}, Day: dayKey})
 		}
 
-		var reversed []uuid.UUID
+		// Reversals flush per chunk DURING evaluation, same as the apply path:
+		// the listing pages by ascending id, so appending reversal copies for
+		// rows the keyset already moved past cannot disturb later pages.
+		reversed := make([]uuid.UUID, 0, regexAppendChunk)
+		flush := func() error {
+			if len(reversed) == 0 {
+				return nil
+			}
+			bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
+			err := a.ch.AppendRetroExclusionReversalByIDs(bctx, run.scope(day), run.exclusionID, run.nextInsertedAt(), reversed)
+			cancel()
+			if err != nil {
+				return fmt.Errorf("reverse regex non-matches: %w", err)
+			}
+			total += uint64(len(reversed))
+			reversed = reversed[:0]
+			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHReverse, Cursor: uuid.UUID{}, Day: dayKey})
+			return nil
+		}
+
 		err := a.forEachRegexCandidate(ctx, run, reveal, ex.ProjectID, phaseCHReverse, dayKey,
 			func(lctx context.Context, afterID uuid.UUID, limit int) ([]chrepo.RetroRegexCandidate, error) {
 				return a.ch.ListRetroRegexReversalCandidates(lctx, run.scope(day), run.exclusionID, afterID, limit)
 			},
-			func(c chrepo.RetroRegexCandidate, match string, ok bool) {
+			func(c chrepo.RetroRegexCandidate, match string, ok bool) error {
 				switch {
 				case !ok:
 					kept++
 				case !re.MatchString(match):
 					reversed = append(reversed, c.ID)
+					if len(reversed) >= regexAppendChunk {
+						return flush()
+					}
 				}
+				return nil
 			},
 		)
 		if err != nil {
 			return fmt.Errorf("day %s: %w", dayKey, err)
 		}
-
-		for chunk := range slices.Chunk(reversed, regexAppendChunk) {
-			bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
-			err := a.ch.AppendRetroExclusionReversalByIDs(bctx, run.scope(day), run.exclusionID, run.nextInsertedAt(), chunk)
-			cancel()
-			if err != nil {
-				return fmt.Errorf("day %s: reverse regex non-matches: %w", dayKey, err)
-			}
-			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHReverse, Cursor: uuid.UUID{}, Day: dayKey})
+		if err := flush(); err != nil {
+			return fmt.Errorf("day %s: %w", dayKey, err)
 		}
-		total += uint64(len(reversed))
 		activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHReverse, Cursor: uuid.UUID{}, Day: dayKey})
 	}
 
 	if total > 0 {
-		a.chRows.Add(ctx, int64(total), metric.WithAttributes(attribute.String("phase", "reverse")))
+		reversedRows, _ := conv.ClampedUint64ToInt64(total)
+		a.chRows.Add(ctx, reversedRows, metric.WithAttributes(attribute.String("phase", "reverse")))
 	}
+	rowCount, _ := conv.ClampedUint64ToInt(total)
 	a.logger.InfoContext(ctx, "clickhouse exclusion reverse complete",
 		attr.SlogRiskExclusionID(run.exclusionID.String()),
 		attr.SlogRiskExclusionMatchType(ex.MatchType),
-		attr.SlogRiskReconcileRowCount(int(total)),
+		attr.SlogRiskReconcileRowCount(rowCount),
 		attr.SlogRiskReconcileRowsKept(kept),
 	)
 	return nil
