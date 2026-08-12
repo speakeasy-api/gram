@@ -1547,6 +1547,32 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	return items, nil
 }
 
+const listResolvedChallengeIDs = `-- name: ListResolvedChallengeIDs :many
+SELECT challenge_id FROM authz_challenge_resolutions
+WHERE organization_id = $1
+`
+
+// Returns the resolved challenge IDs used to filter ClickHouse bucket aggregates.
+func (q *Queries) ListResolvedChallengeIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listResolvedChallengeIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var challenge_id string
+		if err := rows.Scan(&challenge_id); err != nil {
+			return nil, err
+		}
+		items = append(items, challenge_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
