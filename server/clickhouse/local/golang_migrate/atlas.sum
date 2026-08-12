@@ -1,4 +1,4 @@
-h1:80P0K0IywDt/4BvQc5I8qvbzXSf3zOIEmTYZIkshm3E=
+h1:nhOWGyyDv98QNWCsyGgXP8YZEKsJsfe0f0Iim/TEUK8=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -86,4 +86,4 @@ h1:80P0K0IywDt/4BvQc5I8qvbzXSf3zOIEmTYZIkshm3E=
 20260803192750_litellm-usage-in-summaries.up.sql h1:7L9bzpMEUz/JyjSe0uh+tQ3fvOhH3Ahm9Xavtl3xgZo=
 20260805105902_risk-findings-app-team-attribution.up.sql h1:UmQaEOmnP7ormKmGnaolNXAq2ogrRNVqxGj7EhfkGQ4=
 20260805161427_risk-findings-user-email.up.sql h1:2m9vZDNhLAZ2w5mVIS4vNtJtbTULtrHn+qZUU6ww3dE=
-20260811155533_challenge-bucket-summaries.up.sql h1:6XXOVJELIuDxKPJy2/6kHO0Ts1bpAXS6jVX1XvLBuIA=
+20260811155533_challenge-bucket-summaries.up.sql h1:wlr0qU+22lW55Px5NMcQRBIuozkNjnU3zlNVnvYQ5Ys=

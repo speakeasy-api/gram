@@ -1274,7 +1274,6 @@ CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     role_slugs AggregateFunction(argMax, Array(String), DateTime64(9)),
     evaluated_grant_count AggregateFunction(argMax, UInt32, DateTime64(9)),
     matched_grant_count SimpleAggregateFunction(max, UInt64),
-    challenge_count AggregateFunction(uniqExact, UUID),
     challenge_ids AggregateFunction(groupUniqArray, UUID),
     first_seen SimpleAggregateFunction(min, DateTime64(9)),
     last_seen SimpleAggregateFunction(max, DateTime64(9))
@@ -1305,7 +1304,6 @@ SELECT
     argMaxState(arrayMap(x -> toString(x), role_slugs), timestamp) AS role_slugs,
     argMaxState(evaluated_grant_count, timestamp) AS evaluated_grant_count,
     max(toUInt64(length(matched_grants.scope))) AS matched_grant_count,
-    uniqExactState(id) AS challenge_count,
     groupUniqArrayState(id) AS challenge_ids,
     min(timestamp) AS first_seen,
     max(timestamp) AS last_seen
