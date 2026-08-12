@@ -28,9 +28,11 @@ jq = "1.8.2"
 melange = "0.56.5"
 nodejs = "24.16.0"
 aube = "1.38.1"
-# aube reads and writes pnpm-lock.yaml in place, so pnpm stays a working
-# fallback. It is also still required outright: Speakeasy's TypeScript target
-# shells out to `pnpm` directly when generating the SDK (see mise gen:sdk).
+# Kept for `changeset publish` only. Changesets picks its publish tool with
+# package-manager-detector, which reports pnpm purely because pnpm-lock.yaml
+# is on disk, and then shells out to `pnpm publish` (it falls back to `npm`
+# only for a non-pnpm result). Since aube keeps writing pnpm-lock.yaml in
+# place, that detection stands, so releases still need a real pnpm on PATH.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
 uv = "0.12.1"
