@@ -508,7 +508,11 @@ JOIN LATERAL (
     WHERE mcp_approval_request_id = r.id
       AND project_id = r.project_id
       AND deleted IS FALSE
-    ORDER BY decided_at DESC
+    -- id breaks a decided_at tie so the pick is stable: without it two
+    -- decisions sharing a timestamp would resolve arbitrarily, and the
+    -- recheck could compare against the older frozen snapshot on one sweep
+    -- and the newer one on the next.
+    ORDER BY decided_at DESC, id DESC
     LIMIT 1
 ) d ON TRUE
 WHERE r.id = $1
@@ -1017,7 +1021,7 @@ FROM mcp_approval_decisions
 WHERE mcp_approval_request_id = $1
   AND project_id = $2
   AND deleted IS FALSE
-ORDER BY decided_at DESC
+ORDER BY decided_at DESC, id DESC
 `
 
 type ListDecisionsForApprovalRequestParams struct {
@@ -1025,6 +1029,9 @@ type ListDecisionsForApprovalRequestParams struct {
 	ProjectID            uuid.UUID
 }
 
+// Newest first. The head is what the read-path evidence diff compares
+// against, so the id tie-break is what stops two decisions sharing a
+// timestamp from making that comparison arbitrary.
 func (q *Queries) ListDecisionsForApprovalRequest(ctx context.Context, arg ListDecisionsForApprovalRequestParams) ([]McpApprovalDecision, error) {
 	rows, err := q.db.Query(ctx, listDecisionsForApprovalRequest, arg.McpApprovalRequestID, arg.ProjectID)
 	if err != nil {
