@@ -363,16 +363,6 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: HasRunningResearchReport :one
-SELECT EXISTS(
-  SELECT 1
-  FROM mcp_research_reports
-  WHERE mcp_approval_request_id = @mcp_approval_request_id
-    AND project_id = @project_id
-    AND status = 'running'
-    AND deleted IS FALSE
-);
-
 -- name: GetRunningResearchReport :one
 SELECT *
 FROM mcp_research_reports
@@ -383,14 +373,11 @@ WHERE mcp_approval_request_id = @mcp_approval_request_id
 ORDER BY created_at DESC
 LIMIT 1;
 
--- name: GetResearchReport :one
-SELECT *
-FROM mcp_research_reports
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
-
 -- name: CompleteResearchReport :one
+-- Only a run still in flight can complete, mirroring the failure update
+-- below: a late result whose activity was already given up on must not turn
+-- a failed or interrupted report back into a completed one, which would hide
+-- the failure behind a report nobody is sure describes this run.
 UPDATE mcp_research_reports
 SET status = 'completed'
   , report = @report
@@ -400,6 +387,7 @@ SET status = 'completed'
   , updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
+  AND status = 'running'
   AND deleted IS FALSE
 RETURNING *;
 

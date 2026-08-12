@@ -869,13 +869,20 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		ProjectID: projectID,
 		OrgID:     orgID,
 	}); err != nil {
-		// The run never started; leaving the row running would strand it.
-		if _, failErr := queries.FailResearchReport(ctx, repo.FailResearchReportParams{
+		// The run never started; leaving the row running would strand it —
+		// the page polls a run that will never resolve and its Run button
+		// stays disabled. The client has usually disconnected by now (a
+		// failed enqueue is what it is reacting to), so this write cannot
+		// borrow the request's context: it would be canceled exactly when it
+		// is needed.
+		failCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if _, failErr := queries.FailResearchReport(failCtx, repo.FailResearchReportParams{
 			ID:        report.ID,
 			ProjectID: projectID,
 			Error:     conv.ToPGText("the research run could not be started"),
 		}); failErr != nil {
-			s.logger.ErrorContext(ctx, "record research start failure", attr.SlogError(failErr))
+			s.logger.ErrorContext(failCtx, "record research start failure", attr.SlogError(failErr))
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error starting research run").LogError(ctx, s.logger)
 	}

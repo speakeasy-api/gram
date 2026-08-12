@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -119,8 +121,10 @@ func TestStartResearch_UnknownRequest(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// Research spends the org's money, so it requires the decide scope — a
-// read-scoped caller is refused.
+// Research spends the org's money, so it requires the decide scope. The
+// caller here holds read — enough to open the request and see its evidence —
+// which is exactly the boundary being asserted: reading a review is not
+// permission to spend against it.
 func TestStartResearch_RequiresDecideScope(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +133,37 @@ func TestStartResearch_RequiresDecideScope(t *testing.T) {
 		targetKey: "https://mcp.example.com/research-scope", status: "requested", evidence: "", version: 0,
 	})
 
-	readOnly := withProject(t, ctx, ti, ti.projectID)
+	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
 	_, err := ti.service.StartResearch(readOnly, startResearchPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A result that arrives after something else resolved the report does not
+// reopen it: a completion is only for a run still in flight, so an admin who
+// has been shown a failure never watches it turn into a report.
+func TestCompleteResearchReport_WillNotResurrectAResolvedReport(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: "https://mcp.example.com/late-completion", status: "requested", evidence: "", version: 0,
+	})
+	reportID := seedResearchReport(t, ctx, ti, ti.projectID, requestID, "failed", `{}`)
+
+	_, err := ti.repo.CompleteResearchReport(ctx, repo.CompleteResearchReportParams{
+		ID:            reportID,
+		ProjectID:     ti.projectID,
+		Report:        []byte(`{"claims":[]}`),
+		ReportVersion: 1,
+		Model:         conv.ToPGText("anthropic/claude-sonnet-5"),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	reports, err := ti.repo.ListResearchReportsForApprovalRequest(ctx, repo.ListResearchReportsForApprovalRequestParams{
+		McpApprovalRequestID: requestID,
+		ProjectID:            ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, reports, 1)
+	require.Equal(t, "failed", reports[0].Status)
 }
