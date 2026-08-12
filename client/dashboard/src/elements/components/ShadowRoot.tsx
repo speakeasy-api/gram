@@ -98,7 +98,18 @@ export const ShadowRoot = ({
     <div
       ref={hostRef}
       className={hostClassName}
-      style={{ isolation: "isolate", ...hostStyle }}
+      // `isolation` alone makes a stacking context on a STATIC box, which
+      // paints with in-flow content — below every positioned sibling, however
+      // low its z-index. Overlays inside the shadow root (the composer's
+      // context popover) then lose to plain `position: relative` page chrome
+      // such as avatars. Positioning the host lifts the whole subtree into the
+      // positioned paint layer so those overlays sit above the page again.
+      style={{
+        isolation: "isolate",
+        position: "relative",
+        zIndex: 1,
+        ...hostStyle,
+      }}
     >
       {shadowRoot
         ? createPortal(
