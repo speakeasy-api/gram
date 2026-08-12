@@ -21,12 +21,19 @@ func TestValidateGrantSurface(t *testing.T) {
 		{Scope: string(ScopeChatWrite)},
 	}))
 	require.NoError(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
+		// risk_policy:read is internal, but surface ownership follows the scope
+		// family, not visibility: the access surface must not be able to hand it
+		// out through a custom role.
+		{Scope: string(ScopeRiskPolicyRead)},
 		{Scope: string(ScopeRiskPolicyEvaluate)},
 		{Scope: string(ScopeRiskPolicyBypass)},
 	}))
 
 	require.ErrorContains(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},
+	}), `managed by "risk_policy" grants`)
+	require.ErrorContains(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{
+		{Scope: string(ScopeRiskPolicyRead)},
 	}), `managed by "risk_policy" grants`)
 	require.ErrorContains(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeProjectRead)},
