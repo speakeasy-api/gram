@@ -392,6 +392,37 @@ type CreateChatMessageParams struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
+const createChatMessageReturningID = `-- name: CreateChatMessageReturningID :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type CreateChatMessageReturningIDParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+	Role       string
+	Content    string
+	ToolCalls  []byte
+	ToolCallID pgtype.Text
+}
+
+// Inserts a message fixture while exposing its durable id to callers that need
+// to refer to that exact message in subsequent operations.
+func (q *Queries) CreateChatMessageReturningID(ctx context.Context, arg CreateChatMessageReturningIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createChatMessageReturningID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.ToolCalls,
+		arg.ToolCallID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createChatMessageWithToolCalls = `-- name: CreateChatMessageWithToolCalls :exec
 INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -1020,6 +1051,53 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	var generation int32
 	err := row.Scan(&generation)
 	return generation, err
+}
+
+const getToolCallSummaryContext = `-- name: GetToolCallSummaryContext :one
+SELECT
+  calls.tool_calls,
+  calls.tool_call_summaries,
+  results.content::text AS result_content
+FROM chat_messages AS calls
+JOIN chat_messages AS results
+  ON results.chat_id = calls.chat_id
+  AND results.project_id = calls.project_id
+  AND results.tool_call_id = $1
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
+WHERE calls.id = $2
+  AND calls.chat_id = $3
+  AND calls.project_id = $4::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
+LIMIT 1
+`
+
+type GetToolCallSummaryContextParams struct {
+	ToolCallID pgtype.Text
+	MessageID  uuid.UUID
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+type GetToolCallSummaryContextRow struct {
+	ToolCalls         []byte
+	ToolCallSummaries []byte
+	ResultContent     string
+}
+
+// Fetch the owning call message and its matching result within one project and
+// chat. The handler validates that tool_calls contains the requested call id.
+func (q *Queries) GetToolCallSummaryContext(ctx context.Context, arg GetToolCallSummaryContextParams) (GetToolCallSummaryContextRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallSummaryContext,
+		arg.ToolCallID,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	var i GetToolCallSummaryContextRow
+	err := row.Scan(&i.ToolCalls, &i.ToolCallSummaries, &i.ResultContent)
+	return i, err
 }
 
 const getTopUsersByMessages = `-- name: GetTopUsersByMessages :many
@@ -3052,6 +3130,41 @@ func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) 
 	var i SoftDeleteChatRow
 	err := row.Scan(&i.Deleted, &i.BacksLiveThread)
 	return i, err
+}
+
+const storeToolCallSummary = `-- name: StoreToolCallSummary :one
+UPDATE chat_messages
+SET tool_call_summaries = jsonb_set(
+  COALESCE(tool_call_summaries, '{}'::jsonb),
+  ARRAY[$1::text],
+  $2::jsonb
+)
+WHERE id = $3
+  AND chat_id = $4
+  AND project_id = $5::uuid
+RETURNING (tool_call_summaries -> $1::text)::text AS summary
+`
+
+type StoreToolCallSummaryParams struct {
+	ToolCallID string
+	Summary    []byte
+	MessageID  uuid.UUID
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// Preserve summaries for sibling calls carried by the same assistant message.
+func (q *Queries) StoreToolCallSummary(ctx context.Context, arg StoreToolCallSummaryParams) (string, error) {
+	row := q.db.QueryRow(ctx, storeToolCallSummary,
+		arg.ToolCallID,
+		arg.Summary,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	var summary string
+	err := row.Scan(&summary)
+	return summary, err
 }
 
 const sumMessageTokenStatsByDay = `-- name: SumMessageTokenStatsByDay :many

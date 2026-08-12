@@ -726,6 +726,10 @@ function ToolUIMetaSection({
 }): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
+
   return (
     <div data-slot="tool-ui-meta-section" className="border-t border-border">
       <SectionDisclosureHeader
@@ -761,6 +765,10 @@ function ToolUISection({
   highlight,
 }: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
 
   // For structured content, we don't stringify it
   const isStructured = isStructuredContent(content);
@@ -1175,6 +1183,10 @@ function ToolUIGroup({
   className,
 }: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
 
   const showChildren = headerless || isExpanded;
 

@@ -336,6 +336,34 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeChat"}`)
 	})
 
+	Method("summarizeToolCall", func() {
+		Description("Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat containing the tool call", func() { Format(FormatUUID) })
+			Attribute("message_id", String, "The ID of the assistant message containing the tool call", func() { Format(FormatUUID) })
+			Attribute("tool_call_id", String, "The provider-assigned ID of the tool call")
+			Required("id", "message_id", "tool_call_id")
+		})
+
+		Result(SummarizeToolCallResult)
+
+		HTTP(func() {
+			POST("/rpc/chat.summarizeToolCall")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "summarizeToolCall")
+		Meta("openapi:extension:x-speakeasy-name-override", "summarizeToolCall")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeToolCall"}`)
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -433,6 +461,15 @@ var SummarizeChatResult = Type("SummarizeChatResult", func() {
 	})
 	Attribute("cached", Boolean, "True when an existing summary was returned without regenerating")
 	Required("summary", "summary_generated_at", "cached")
+})
+
+var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
+	Attribute("summary", String, "A concise two-sentence description of the tool call and its effect")
+	Attribute("impact", String, "Whether the tool call only read data or could change state", func() {
+		Enum("read_only", "destructive")
+	})
+	Attribute("cached", Boolean, "True when a stored summary was returned without calling the model")
+	Required("summary", "impact", "cached")
 })
 
 var ChatOverview = Type("ChatOverview", func() {

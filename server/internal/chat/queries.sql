@@ -1234,6 +1234,47 @@ SET summary = @summary,
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
+-- name: GetToolCallSummaryContext :one
+-- Fetch the owning call message and its matching result within one project and
+-- chat. The handler validates that tool_calls contains the requested call id.
+SELECT
+  calls.tool_calls,
+  calls.tool_call_summaries,
+  results.content::text AS result_content
+FROM chat_messages AS calls
+JOIN chat_messages AS results
+  ON results.chat_id = calls.chat_id
+  AND results.project_id = calls.project_id
+  AND results.tool_call_id = @tool_call_id
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
+WHERE calls.id = @message_id
+  AND calls.chat_id = @chat_id
+  AND calls.project_id = @project_id::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
+LIMIT 1;
+
+-- name: CreateChatMessageReturningID :one
+-- Inserts a message fixture while exposing its durable id to callers that need
+-- to refer to that exact message in subsequent operations.
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id)
+VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
+RETURNING id;
+
+-- name: StoreToolCallSummary :one
+-- Preserve summaries for sibling calls carried by the same assistant message.
+UPDATE chat_messages
+SET tool_call_summaries = jsonb_set(
+  COALESCE(tool_call_summaries, '{}'::jsonb),
+  ARRAY[@tool_call_id::text],
+  @summary::jsonb
+)
+WHERE id = @message_id
+  AND chat_id = @chat_id
+  AND project_id = @project_id::uuid
+RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
+
 -- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages
 SET tool_outcome = @tool_outcome,
