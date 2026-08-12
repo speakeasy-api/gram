@@ -30,8 +30,14 @@ if [ -n "$host_arch" ]; then
             *@sha256:*)
                 # `repo:tag@sha256:...` and `repo@sha256:...` both reduce to the
                 # `repo@sha256:...` form that `docker image ls --digests` prints.
+                # Only the final path component can carry a tag, so look for the
+                # separating colon there — stripping from the whole reference
+                # would eat a registry port instead (`host:5000/img@sha256:...`).
                 repo="${img%@*}"
-                key="${repo%:*}@${img#*@}"
+                case "${repo##*/}" in
+                    *:*) repo="${repo%:*}" ;;
+                esac
+                key="${repo}@${img#*@}"
                 ;;
             *:*) key="$img" ;;
             *) key="$img:latest" ;;
@@ -55,9 +61,17 @@ if [ -n "$host_arch" ]; then
             if [ -n "$img_arch" ] && [ "$img_arch" != "$host_arch" ]; then
                 # A digest-pinned ref cannot simply be re-pulled: the daemon
                 # refuses to rebind a digest it already has ("cannot overwrite
-                # digest"), so the local copy has to be evicted first.
+                # digest"), so the local copy has to be evicted first — and
+                # `docker rmi` refuses while ANY container still references it,
+                # including sibling worktrees'. Scoping the eviction to this
+                # compose project would therefore just make the remedy fail, so
+                # it stays repo-wide and the caveat is stated instead. The
+                # containers it removes come back with the next `infra:start`.
                 case "$img" in
-                    *@sha256:*) fix="${fix_prefix}docker rm -f \$(docker ps -aq --filter ancestor=$img) 2>/dev/null; docker rmi $img && docker pull --platform linux/$host_arch $img" ;;
+                    *@sha256:*)
+                        fix="${fix_prefix}docker rm -f \$(docker ps -aq --filter ancestor=$img) 2>/dev/null; docker rmi $img && docker pull --platform linux/$host_arch $img"
+                        fix="$fix (removes this image's containers in every worktree stack; each is recreated by its next \`mise infra:start\`)"
+                        ;;
                     *) fix="${fix_prefix}docker pull --platform linux/$host_arch $img" ;;
                 esac
                 echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: $fix" >&2

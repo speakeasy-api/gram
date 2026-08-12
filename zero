@@ -231,6 +231,12 @@ if $started; then
 
     mise run "$start_task"
     mise run seed
+else
+    # Nothing will consume the cache, so stop paying for it: without this the
+    # build runs to completion in the background of a `./zero` the user
+    # declined to start, and is never reaped.
+    kill "$server_cache_pid" 2>/dev/null || true
+    wait "$server_cache_pid" 2>/dev/null || true
 fi
 
 mise run zero:summary
