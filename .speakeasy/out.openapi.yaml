@@ -56180,6 +56180,9 @@ components:
           items:
             type: string
           description: Response types advertised by the issuer.
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
         scopes_supported:
           type: array
           items:
@@ -56591,6 +56594,9 @@ components:
           items:
             type: string
           description: Response types advertised by the issuer.
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
         scopes_supported:
           type: array
           items:
@@ -66206,6 +66212,9 @@ components:
           type: array
           items:
             type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
         scopes_supported:
           type: array
           items:
@@ -66281,6 +66290,9 @@ components:
           type: array
           items:
             type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
         scopes_supported:
           type: array
           items:
@@ -73971,6 +73983,9 @@ components:
           type: array
           items:
             type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint.
         scopes_supported:
           type: array
           items:

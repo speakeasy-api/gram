@@ -143,6 +143,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
     clientIdMetadataDocumentSupported: issuer.clientIdMetadataDocumentSupported,
+    revocationEndpoint: issuer.revocationEndpoint ?? "",
     serviceDocumentation: issuer.serviceDocumentation ?? "",
     opPolicyUri: issuer.opPolicyUri ?? "",
     opTosUri: issuer.opTosUri ?? "",
@@ -239,6 +240,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           // Discovery-only, no form inputs. The snapshot is seeded from the saved
           // record, so absent a fresh discovery these round-trip unchanged; a
           // fresh one overwrites them, and "" clears a URL the issuer dropped.
+          revocationEndpoint: discoveredSnapshot?.revocationEndpoint,
           serviceDocumentation: discoveredSnapshot?.serviceDocumentation,
           opPolicyUri: discoveredSnapshot?.opPolicyUri,
           opTosUri: discoveredSnapshot?.opTosUri,

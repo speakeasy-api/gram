@@ -161,6 +161,9 @@ type CreateGlobalIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -452,6 +455,8 @@ type UpdateGlobalIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
