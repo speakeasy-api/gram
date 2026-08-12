@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,12 +27,6 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				next.ServeHTTP(w, r)
 				return
 			}
-			if env == "dev" && strings.Contains(host, "speakeasyapi.vercel.app") {
-				// preview builds are good
-				next.ServeHTTP(w, r)
-				return
-			}
-
 			if host == "" {
 				serr := oops.E(oops.CodeBadRequest, nil, "request host is not set").LogError(ctx, logger, attr.SlogHostName(host))
 				w.Header().Set("Content-Type", "application/json")

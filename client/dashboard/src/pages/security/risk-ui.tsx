@@ -175,6 +175,7 @@ export function MaskedMatch({
   resultId,
   matchRedacted,
   tone = "default",
+  wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
@@ -184,6 +185,12 @@ export function MaskedMatch({
    * revealed value flips to the backdrop's inverse text color.
    */
   tone?: "default" | "contrast";
+  /**
+   * Soft-wrap the revealed value instead of scrolling it horizontally. Use in
+   * detail surfaces (drawers) where the full value should stay visible; table
+   * cells keep the default single-line scroll so row heights stay stable.
+   */
+  wrap?: boolean;
 }): JSX.Element {
   const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
@@ -257,11 +264,19 @@ export function MaskedMatch({
   }
 
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+    <span
+      className={cn(
+        "inline-flex max-w-full min-w-0 gap-1",
+        wrap ? "items-start" : "items-center",
+      )}
+    >
       <SimpleTooltip tooltip={value}>
         <span
           className={cn(
-            "min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap",
+            "min-w-0 font-mono text-xs",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
             contrast && "text-background",
           )}
         >

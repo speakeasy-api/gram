@@ -142,6 +142,9 @@ type Chat struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -250,6 +253,9 @@ type ChatOverview struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
