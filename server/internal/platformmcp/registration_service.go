@@ -24,6 +24,7 @@ type RegistrationPersistence interface {
 	BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error)
 	ConvergeRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt) (OperationReceipt, error)
 	CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, configuration resolvedCatalogConfiguration) (OperationReceipt, error)
+	ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error)
 	ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error)
 	ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error)
 	IssueSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, now time.Time) (IssuedSetupHandoff, error)
@@ -396,6 +397,13 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "unavailable", State: ""})
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
 	}
+	pendingSecretFields := configuration.pendingSecretFields
+	if receipt.Replayed && len(pendingSecretFields) > 0 {
+		pendingSecretFields, err = s.store.ResolveRegistrationPendingSecretFields(ctx, principal, project, receipt.RegistrationID.UUID, configuration.pendingSecretFields)
+		if err != nil {
+			return RegisterCatalogMCPResult{}, fmt.Errorf("resolve persisted catalog registration secret setup state: %w", err)
+		}
+	}
 
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
@@ -405,7 +413,7 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		SetupIntent:         catalog.SetupIntent,
 		Receipt:             receipt,
 		Registration:        receipt.RegistrationID.UUID.String(),
-		SecretFieldsPending: append([]CatalogConfigurationField(nil), configuration.pendingSecretFields...),
+		SecretFieldsPending: append([]CatalogConfigurationField(nil), pendingSecretFields...),
 	}, nil
 }
 

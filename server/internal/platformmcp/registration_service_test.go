@@ -334,6 +334,42 @@ func TestRegistrationServiceReturnsActiveRegistrationCapConflict(t *testing.T) {
 	require.Zero(t, store.completeCalls)
 }
 
+func TestRegistrationServiceReplayReturnsPersistedSecretSetupState(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project: project,
+		begin: OperationReceipt{
+			ID:             uuid.New(),
+			RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true},
+			Status:         receiptStatusSucceeded,
+			Replayed:       true,
+		},
+	}
+	service := newRegistrationService(
+		testCatalog{details: CatalogDetails{
+			CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "dashboard_source_settings"},
+			Transport:        "streamable-http",
+			remoteURL:        "https://provider.test/mcp",
+			Configuration: []CatalogConfigurationField{{
+				Key: "header:x-api-key", Kind: "header", Name: "X-API-Key", Required: true, Secret: true,
+			}},
+		}},
+		&testRegistrationGate{enabled: true},
+		store,
+	)
+
+	result, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+		ProjectSlug: project.Slug, ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, result.SecretFieldsPending)
+	require.Equal(t, 1, store.pendingSecretFieldsCalls)
+}
+
 func TestRegistrationServiceDoesNotReconvergeSucceededReplay(t *testing.T) {
 	t.Parallel()
 
@@ -395,23 +431,25 @@ func (g *testRegistrationGate) Enabled(_ context.Context, organizationID, projec
 }
 
 type recordingRegistrationStore struct {
-	project        ResolvedProject
-	begin          OperationReceipt
-	converged      OperationReceipt
-	completed      OperationReceipt
-	err            error
-	eligible       bool
-	eligibilitySet bool
-	eligibilityErr error
-	request        CatalogRegistrationRequest
-	configuration  resolvedCatalogConfiguration
-	resolveCalls   int
-	beginCalls     int
-	convergeCalls  int
-	completeCalls  int
-	handoffCalls   int
-	candidate      CatalogCandidate
-	dashboard      RegistrationDashboardSetup
+	project                  ResolvedProject
+	begin                    OperationReceipt
+	converged                OperationReceipt
+	completed                OperationReceipt
+	err                      error
+	eligible                 bool
+	eligibilitySet           bool
+	eligibilityErr           error
+	request                  CatalogRegistrationRequest
+	configuration            resolvedCatalogConfiguration
+	resolveCalls             int
+	beginCalls               int
+	convergeCalls            int
+	completeCalls            int
+	handoffCalls             int
+	candidate                CatalogCandidate
+	dashboard                RegistrationDashboardSetup
+	pendingSecretFields      []CatalogConfigurationField
+	pendingSecretFieldsCalls int
 }
 
 func (s *recordingRegistrationStore) ResolveProject(context.Context, string, string) (ResolvedProject, error) {
@@ -443,6 +481,11 @@ func (s *recordingRegistrationStore) CompleteRegistration(_ context.Context, _ P
 	s.request = request
 	s.configuration = configuration
 	return s.completed, s.err
+}
+
+func (s *recordingRegistrationStore) ResolveRegistrationPendingSecretFields(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID, _ []CatalogConfigurationField) ([]CatalogConfigurationField, error) {
+	s.pendingSecretFieldsCalls++
+	return append([]CatalogConfigurationField(nil), s.pendingSecretFields...), s.err
 }
 
 func (s *recordingRegistrationStore) ResolveRegistrationCatalogIdentity(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (CatalogCandidate, error) {

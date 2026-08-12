@@ -45,7 +45,10 @@ func registerCatalogRegistrationTool(server *mcp.Server, registrations *Registra
 			}
 			return nil, RegisterCatalogMCPToolOutput{}, err
 		}
-		nextAction := "continue_dashboard_setup"
+		nextAction := "start_setup"
+		if isBrowserCatalogProviderKey(result.ProviderKey) {
+			nextAction = "continue_dashboard_setup"
+		}
 		if len(result.SecretFieldsPending) > 0 {
 			nextAction = "secure_dashboard_setup_required"
 		}

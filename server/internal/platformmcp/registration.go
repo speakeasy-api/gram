@@ -131,6 +131,44 @@ func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Contex
 	return eligible, nil
 }
 
+// ResolveRegistrationPendingSecretFields projects the persisted secret-header
+// state without reading or decrypting secret values. It is used for idempotent
+// registration replays so the agent is not sent back to dashboard setup after
+// the user has already completed it there.
+func (s *RegistrationStore) ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error) {
+	if s == nil || s.db == nil || registrationID == uuid.Nil {
+		return nil, ErrRegistrationInvalid
+	}
+	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve platform mcp registration secret setup state: %w", err)
+	}
+	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.RemoteMcpServerID.Valid {
+		return nil, ErrRegistrationInvalid
+	}
+	headers, err := remotemcprepo.New(s.db).ListServerHeaders(ctx, remotemcprepo.ListServerHeadersParams{
+		RemoteMcpServerID: registration.RemoteMcpServerID.UUID,
+		ProjectID:         project.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list platform mcp registration headers: %w", err)
+	}
+	configured := make(map[string]bool, len(headers))
+	for _, header := range headers {
+		configured[header.Name] = header.IsSecret && header.Value.Valid && header.Value.String != ""
+	}
+	pending := make([]CatalogConfigurationField, 0, len(declared))
+	for _, field := range declared {
+		if field.Required && field.Secret && !configured[field.Name] {
+			pending = append(pending, field)
+		}
+	}
+	return pending, nil
+}
+
 func (s *RegistrationStore) ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error) {
 	if s == nil || s.db == nil || registrationID == uuid.Nil {
 		return CatalogCandidate{}, ErrRegistrationInvalid
