@@ -305,7 +305,18 @@ GRAM_ADMIN_PORT = "8083"
 GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_PORT}}"
 GRAM_ADMIN_CONTROL_PORT = "8084"
 GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
-GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+GRAM_ADMIN_DASHBOARD_PORT = "5174"
+## Where the admin API itself listens. Only the admin dashboard dev proxy
+## dials this; browsers never do.
+GRAM_ADMIN_BACKEND_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+## The browser-facing admin origin, and therefore the origin the OIDC redirect
+## URI is built from. In production the SPA and the admin API share one origin
+## behind one ingress. Locally the Vite dev server is that origin, because it
+## proxies /admin through to GRAM_ADMIN_BACKEND_URL.
+GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_DASHBOARD_PORT}}"
+## AdminOriginCheck rejects every unsafe method whose Origin is not listed, and
+## the flag has no default, so local writes 403 without this.
+GRAM_ADMIN_ALLOWED_ORIGINS = "{{env.GRAM_ADMIN_SERVER_URL}}"
 GRAM_ADMIN_ENCRYPTION_KEY = "unset"
 GRAM_ADMIN_OIDC_EMULATOR_HOST = "localhost"
 GRAM_ADMIN_OIDC_EMULATOR_PORT = "4000"

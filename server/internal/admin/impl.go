@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -86,6 +87,14 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+
+	// See sessionInfo in session_handler.go for why this one route is hand
+	// written rather than generated from the Goa design.
+	mux.Handle(
+		http.MethodGet,
+		"/admin/session.get",
+		oops.ErrHandle(service.logger, service.handleGetSession).ServeHTTP,
 	)
 }
 
