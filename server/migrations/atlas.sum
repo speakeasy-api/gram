@@ -1,4 +1,4 @@
-h1:fvlme0Jr7SMv7ve0BvCXaxoJa6w+Zicy0zWxB0E65Gg=
+h1:Bs0pT+vnoPML6h15n8czWE8J3jHtihvAmPMIhtTW1TQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -329,3 +329,5 @@ h1:fvlme0Jr7SMv7ve0BvCXaxoJa6w+Zicy0zWxB0E65Gg=
 20260811105106_publish-outbox-insert-path.sql h1:leS1M0XbzRMb45lo8LbQUeKhzhRdgGAnC6lTNLdIzQ0=
 20260811105118_publish-outbox-lz4-seq-cache.sql h1:WUBOsQMQ++yXODWc/pJ8oqr52ogxT0FnI2Ip5tz78IU=
 20260811183332_mcp-approval-workflow.sql h1:UwCSdC5Xh39xdlv47ACNaCw9VkOa/S1Gxsp0pIeFzeM=
+20260811225530_expand-assets-tiers.sql h1:K5IvMnYVFRA8qmUXXPvH5S0HtFWPUNYWbd7KCGlUFC4=
+20260811225943_assets-tier-dedupe-indexes.sql h1:thYfONo6SYry2Aew/GXLvIn/9WZtmZv82BfL7c5jp4A=
