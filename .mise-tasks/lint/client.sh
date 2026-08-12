@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-#MISE description="Run linting on all client projects using pnpm"
+#MISE description="Run linting on all client projects using aube"
 
 set -e
 
-exec pnpm lint
+exec aube run lint
