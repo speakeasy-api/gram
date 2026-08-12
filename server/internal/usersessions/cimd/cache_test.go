@@ -161,7 +161,9 @@ func TestResolve_NotModifiedKeepsCachedDocument(t *testing.T) {
 	require.Equal(t, CacheOutcomeNotModified, result.Outcome)
 	require.Nil(t, result.Document, "a 304 has no body to parse; the caller's row stands")
 	require.Equal(t, `"v1"`, result.ETag)
-	require.Equal(t, 2*time.Hour, result.TTL, "the 304's own freshness headers set the new expiry")
+	// Not exactly two hours: the server stamps a Date, HTTP-date has
+	// one-second granularity, and the apparent age that implies is deducted.
+	require.InDelta(t, (2 * time.Hour).Seconds(), result.TTL.Seconds(), 2, "the 304's own freshness headers set the new expiry")
 
 	total, conditional := ds.counts(t)
 	require.Equal(t, 1, total)
@@ -261,7 +263,7 @@ func TestResolve_RefreshCarriesETagAndTTL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, CacheOutcomeRefreshed, result.Outcome)
 	require.Equal(t, `"v1"`, result.ETag)
-	require.Equal(t, 2*time.Hour, result.TTL)
+	require.InDelta(t, (2 * time.Hour).Seconds(), result.TTL.Seconds(), 2)
 }
 
 func TestResolve_RefreshDropsOversizedETag(t *testing.T) {

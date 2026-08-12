@@ -155,6 +155,50 @@ func TestCacheTTL_AgeExceedingLifetimeClampedToFloor(t *testing.T) {
 	require.Equal(t, minCacheTTL, ttl)
 }
 
+func TestCacheTTL_ApparentAgeFromDateDeducted(t *testing.T) {
+	t.Parallel()
+
+	// An intermediary replaying a stale body without adding an Age header:
+	// the Date it kept is what reveals how much freshness is really left.
+	ttl := cacheTTL(headerWith(t,
+		"Cache-Control", "max-age=86400",
+		"Date", cacheTTLReference.Add(-22*time.Hour).Format(http.TimeFormat),
+	), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+}
+
+func TestCacheTTL_LargerOfAgeAndApparentAgeWins(t *testing.T) {
+	t.Parallel()
+
+	// Age says 22 hours while Date implies only one, so Age wins.
+	ttl := cacheTTL(headerWith(t,
+		"Cache-Control", "max-age=86400",
+		"Age", "79200",
+		"Date", cacheTTLReference.Add(-time.Hour).Format(http.TimeFormat),
+	), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+
+	// Reversed: Date implies 22 hours while Age claims one.
+	ttl = cacheTTL(headerWith(t,
+		"Cache-Control", "max-age=86400",
+		"Age", "3600",
+		"Date", cacheTTLReference.Add(-22*time.Hour).Format(http.TimeFormat),
+	), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+}
+
+func TestCacheTTL_FutureDateDoesNotExtendLifetime(t *testing.T) {
+	t.Parallel()
+
+	// A skewed origin clock implies a negative apparent age, which must not
+	// be added back onto the lifetime.
+	ttl := cacheTTL(headerWith(t,
+		"Cache-Control", "max-age=7200",
+		"Date", cacheTTLReference.Add(time.Hour).Format(http.TimeFormat),
+	), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+}
+
 func TestCacheTTL_MalformedAgeIgnored(t *testing.T) {
 	t.Parallel()
 
@@ -241,8 +285,47 @@ func TestSanitizeETag_EmptyDropped(t *testing.T) {
 func TestSanitizeETag_OversizedDropped(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, strings.Repeat("a", maxETagLength), sanitizeETag(strings.Repeat("a", maxETagLength)))
-	require.Empty(t, sanitizeETag(strings.Repeat("a", maxETagLength+1)))
+	atLimit := `"` + strings.Repeat("a", maxETagLength-2) + `"`
+	require.Len(t, atLimit, maxETagLength)
+	require.Equal(t, atLimit, sanitizeETag(atLimit))
+	require.Empty(t, sanitizeETag(`"`+strings.Repeat("a", maxETagLength-1)+`"`))
+}
+
+func TestSanitizeETag_WildcardDropped(t *testing.T) {
+	t.Parallel()
+
+	// "ETag: *" is not a valid response header, and replaying it as
+	// "If-None-Match: *" would match whenever the host has any
+	// representation at all, so every revalidation would answer 304 and the
+	// cached document could never be superseded.
+	require.Empty(t, sanitizeETag("*"))
+	require.Empty(t, sanitizeETag("W/*"))
+}
+
+func TestSanitizeETag_UnquotedDropped(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, sanitizeETag("abc123"))
+	require.Empty(t, sanitizeETag(`"abc123`))
+	require.Empty(t, sanitizeETag(`abc123"`))
+	require.Empty(t, sanitizeETag(`"`))
+}
+
+func TestSanitizeETag_ListDropped(t *testing.T) {
+	t.Parallel()
+
+	// If-None-Match here asks about one specific stored document, so a list
+	// of candidates is not usable.
+	require.Empty(t, sanitizeETag(`"abc", "def"`))
+	require.Empty(t, sanitizeETag(`W/"abc", W/"def"`))
+}
+
+func TestSanitizeETag_EmptyQuotedAccepted(t *testing.T) {
+	t.Parallel()
+
+	// *etagc permits zero characters, so `""` is a well-formed if unusual
+	// validator and replays harmlessly.
+	require.Equal(t, `""`, sanitizeETag(`""`))
 }
 
 func TestSanitizeETag_ControlAndNonASCIIDropped(t *testing.T) {

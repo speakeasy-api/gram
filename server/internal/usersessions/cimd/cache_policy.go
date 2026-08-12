@@ -60,9 +60,26 @@ func cacheTTL(header http.Header, now time.Time) time.Duration {
 	// CDN-served document far longer than its origin allowed — a document
 	// answered with max-age=86400 and Age: 86000 has minutes of freshness
 	// left, not a day — which is exactly how a rotated redirect_uris set
-	// would go unnoticed. An absent or malformed Age reads as zero.
+	// would go unnoticed.
+	return clampCacheTTL(lifetime - responseAge(header, now))
+}
+
+// responseAge is RFC 9111 §4.2.3's current_age: the larger of the Age header
+// and the apparent age the Date header implies. Taking the larger of the two
+// matters because they fail in different ways — an intermediary can replay a
+// stale body without adding Age, and an origin can send an Age larger than
+// its own Date suggests — and trusting only Age would hand a full lifetime to
+// the first case.
+//
+// An absent or malformed Age reads as zero, and a Date in the future (a
+// skewed origin clock) yields a negative apparent age that never wins the
+// comparison, so the result is never negative.
+func responseAge(header http.Header, now time.Time) time.Duration {
 	age, _ := deltaSeconds(header.Get("Age"))
-	return clampCacheTTL(lifetime - age)
+	if date, err := http.ParseTime(header.Get("Date")); err == nil {
+		age = max(age, now.Sub(date))
+	}
+	return age
 }
 
 // freshnessLifetime is the lifetime the origin granted the response, before
@@ -163,6 +180,25 @@ func sanitizeETag(raw string) string {
 		if r < ' ' || r > '~' {
 			return ""
 		}
+	}
+
+	// RFC 9110 §8.8.3: entity-tag = [ "W/" ] DQUOTE *etagc DQUOTE. Enforcing
+	// the grammar rather than storing any printable string is what keeps the
+	// wildcard out. "ETag: *" is not a valid response header, but a host that
+	// sends one would have it replayed as "If-None-Match: *", which §13.1.2
+	// defines as matching whenever the origin has any representation at all:
+	// every revalidation would then answer 304 and extend the cache, so a
+	// rotated redirect_uris set could never propagate. A list of tags is
+	// rejected for the same reason — If-None-Match is a request for one
+	// specific stored document, not for whichever of several the host likes.
+	opaque, _ := strings.CutPrefix(etag, "W/")
+	if len(opaque) < 2 || !strings.HasPrefix(opaque, `"`) || !strings.HasSuffix(opaque, `"`) {
+		return ""
+	}
+	// etagc excludes DQUOTE, so an interior quote means the value is a list
+	// or is otherwise malformed.
+	if strings.Contains(opaque[1:len(opaque)-1], `"`) {
+		return ""
 	}
 	return etag
 }
