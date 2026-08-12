@@ -583,6 +583,8 @@ func TestRealHooksProxiedAssistantTurnDoesNotDuplicateNativeClaudeStop(t *testin
 		require.Equal(t, "claude-code", message.Source.String,
 			"the native hook stream owns a proxied Claude session's transcript")
 	}
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(sessionID), *authCtx.ProjectID, true,
+		"the suppressed proxied turn must still flag the session as LiteLLM routed")
 
 	// The marker the native prompt wrote is a cache, not the contract: a
 	// session whose marker is gone must still resolve ownership from the
@@ -613,6 +615,21 @@ func TestRealHooksProxiedAssistantTurnDoesNotDuplicateNativeClaudeStop(t *testin
 	require.Equal(t, "assistant", messages[0].Role)
 	require.Equal(t, answer, messages[0].Content)
 	require.Equal(t, "litellm", messages[0].Source.String)
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(proxyOnlySession), *authCtx.ProjectID, true,
+		"proxy-only sessions carry the marker too")
+
+	// A session the proxy never observed must not carry the marker.
+	nativeOnlySession := "claude-native-only-" + uuid.NewString()
+	ingestNativeEvent(nativeOnlySession, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(nativeOnlySession), *authCtx.ProjectID, false,
+		"native-only sessions must not be flagged as LiteLLM routed")
+}
+
+func requireChatLiteLLMProxied(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chatID uuid.UUID, projectID uuid.UUID, want bool, msg string) {
+	t.Helper()
+	row, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, want, row.LitellmProxied, msg)
 }
 
 func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {

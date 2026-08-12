@@ -324,6 +324,17 @@ WHERE chat_id = @chat_id
 ORDER BY created_at DESC, seq DESC
 LIMIT 1;
 
+-- name: MarkChatLiteLLMProxied :exec
+-- Flags a session as observed by the LiteLLM proxy. Set on every proxied
+-- ingest event rather than at chat creation because natively captured
+-- sessions suppress their proxied transcript rows, leaving no message-level
+-- trace of the proxy.
+UPDATE chats
+SET litellm_proxied = TRUE
+WHERE id = @id
+  AND project_id = @project_id
+  AND NOT litellm_proxied;
+
 -- name: CreateChatContentPart :copyfrom
 INSERT INTO chat_content_parts (
     chat_id
@@ -543,6 +554,10 @@ candidate_chats AS (
     )
     AND (
       coalesce(cardinality(@sources::text[]), 0) = 0
+      -- Proxied sessions match the LiteLLM filter even when a native hook
+      -- stream owns every transcript row (proxied rows are suppressed as
+      -- duplicates, so the message-source probe alone would miss them).
+      OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -606,6 +621,7 @@ candidate_chats AS (
     c.created_at,
     c.updated_at,
     c.pinned_at,
+    c.litellm_proxied,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -670,6 +686,10 @@ candidate_chats AS (
     )
     AND (
       coalesce(cardinality(@sources::text[]), 0) = 0
+      -- Proxied sessions match the LiteLLM filter even when a native hook
+      -- stream owns every transcript row (proxied rows are suppressed as
+      -- duplicates, so the message-source probe alone would miss them).
+      OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -707,6 +727,7 @@ filtered_chats AS (
     cc.created_at,
     cc.updated_at,
     cc.pinned_at,
+    cc.litellm_proxied,
     cs.num_messages,
     cs.last_message_timestamp,
     cc.account_type,
@@ -725,6 +746,7 @@ limited_chats AS (
     fc.created_at,
     fc.updated_at,
     fc.pinned_at,
+    fc.litellm_proxied,
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
@@ -777,6 +799,7 @@ SELECT
   lc.external_user_id,
   lc.source,
   lc.originating_client,
+  lc.litellm_proxied,
   lc.created_at,
   lc.updated_at,
   lc.pinned_at,
@@ -827,7 +850,21 @@ WHERE c.project_id = @project_id
   AND c.deleted IS FALSE
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
   AND (@user_id::text = '' OR c.user_id = @user_id::text)
-ORDER BY latest.source;
+UNION
+-- Natively captured proxied sessions carry no litellm message rows (they are
+-- suppressed as duplicates), so the LiteLLM filter option must also be offered
+-- when any visible chat carries the chat-level proxied marker.
+SELECT 'litellm'
+WHERE EXISTS (
+  SELECT 1
+  FROM chats pc
+  WHERE pc.project_id = @project_id
+    AND pc.deleted IS FALSE
+    AND pc.litellm_proxied
+    AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+)
+ORDER BY source;
 
 -- name: GetChat :one
 -- Loads a chat plus the team/personal classification of the AI account that

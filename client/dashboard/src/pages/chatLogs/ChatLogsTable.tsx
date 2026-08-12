@@ -322,7 +322,9 @@ export function ChatLogsTable({
                             />
                             {chat.originatingClient
                               ? `${formatPlatform(chat.originatingClient)} via ${formatPlatform(source)}`
-                              : formatPlatform(source)}
+                              : chat.litellmProxied && source !== "litellm"
+                                ? `${formatPlatform(source)} via ${formatPlatform("litellm")}`
+                                : formatPlatform(source)}
                           </span>
                         </>
                       )}

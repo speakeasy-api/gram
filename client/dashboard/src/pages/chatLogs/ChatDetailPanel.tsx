@@ -263,6 +263,7 @@ function SessionSummary({
     accountType?: string;
     accountEmail?: string;
     source?: string;
+    litellmProxied?: boolean;
     createdAt: Date;
     totalCost?: number;
     totalInputTokens?: number;
@@ -345,7 +346,9 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {formatPlatform(chat.source)}
+                  {chat.litellmProxied && chat.source !== "litellm"
+                    ? `${formatPlatform(chat.source)} via ${formatPlatform("litellm")}`
+                    : formatPlatform(chat.source)}
                 </span>
               </MetaRow>
             )}
@@ -428,7 +431,9 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {formatPlatform(chat.source)}
+              {chat.litellmProxied && chat.source !== "litellm"
+                ? `${formatPlatform(chat.source)} via ${formatPlatform("litellm")}`
+                : formatPlatform(chat.source)}
             </span>
           </Badge.Text>
         </Badge>
