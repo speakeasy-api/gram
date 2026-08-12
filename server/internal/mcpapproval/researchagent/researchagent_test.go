@@ -30,6 +30,9 @@ type scriptedCompletions struct {
 	// lastTools records the tool definitions of the most recent turn, so the
 	// wrap-up turn's tool-lessness is assertable.
 	lastTools []openrouter.Tool
+
+	// firstTurn records the opening request, which carries the briefing.
+	firstTurn openrouter.CompletionRequest
 }
 
 func (s *scriptedCompletions) GetCompletion(_ context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
@@ -37,6 +40,9 @@ func (s *scriptedCompletions) GetCompletion(_ context.Context, req openrouter.Co
 		return nil, fmt.Errorf("unexpected completion turn %d", s.turnIndex)
 	}
 	s.lastTools = req.Tools
+	if s.turnIndex == 0 {
+		s.firstTurn = req
+	}
 	response := s.turns[s.turnIndex]
 	s.turnIndex++
 	return response, nil
@@ -313,6 +319,123 @@ func TestRun_DropsClaimsWhoseCitationsCannotBeFollowed(t *testing.T) {
 	// The surviving mixed claim keeps only the citation that can be opened.
 	require.Len(t, document.Claims[0].Citations, 1)
 	require.Equal(t, "https://example.com/real", document.Claims[0].Citations[0].URL)
+}
+
+// searchTool spends on the run's behalf and reports it, the way the real web
+// search tool does.
+type searchTool struct {
+	prompt     int64
+	completion int64
+	drained    []string
+}
+
+func (s *searchTool) Descriptor() core.ToolDescriptor {
+	return core.ToolDescriptor{
+		SourceSlug:  "research",
+		HandlerName: "web_search",
+		Name:        "platform_web_search",
+		Description: "test search",
+		InputSchema: []byte(`{"type": "object"}`),
+		Variables:   nil,
+		Annotations: core.ReadOnlyAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (s *searchTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, _ io.Reader, wr io.Writer) error {
+	if _, err := fmt.Fprint(wr, `{"results": []}`); err != nil {
+		return fmt.Errorf("write result: %w", err)
+	}
+	return nil
+}
+
+func (s *searchTool) DrainUsage(chatID string) (int64, int64) {
+	s.drained = append(s.drained, chatID)
+	return s.prompt, s.completion
+}
+
+// A search is a completion the run pays for. Counting only the runner's own
+// turns leaves the stored token totals describing less than the run spent.
+func TestRun_CountsWhatItsToolsSpent(t *testing.T) {
+	t.Parallel()
+
+	search := &searchTool{prompt: 5_000, completion: 400, drained: nil}
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			toolCallResponse("platform_web_search", `{"query": "vendor"}`),
+			{Content: "done", Usage: openrouter.Usage{PromptTokens: 10, CompletionTokens: 5}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	runner := researchagent.New(completions, nil, search)
+	input := runInput()
+	_, meta, err := runner.Run(t.Context(), input)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{input.ReportID.String()}, search.drained, "drained for this run, by report id")
+	require.Equal(t, int64(5_110), meta.PromptTokens, "100 for the tool turn, 10 for the wrap-up, 5000 from the search")
+	require.Equal(t, int64(425), meta.CompletionTokens, "20 for the tool turn, 5 for the wrap-up, 400 from the search")
+}
+
+// The extraction pass reads the transcript's tail, because that is where the
+// wrap-up turn puts the findings. A run long enough to overrun the budget
+// keeps both ends: the briefing that names the server, and the conclusions
+// the report is extracted from.
+func TestRun_LongTranscriptKeepsTheWrapUp(t *testing.T) {
+	t.Parallel()
+
+	// Every tool call adds its result to the transcript; a long page repeated
+	// over many turns is what overruns the budget in practice.
+	fetch := &pageTool{url: "https://example.com/long", content: strings.Repeat("filler paragraph. ", 20_000)}
+	turns := make([]*openrouter.CompletionResponse, 0, 12)
+	for range 11 {
+		turns = append(turns, toolCallResponse("platform_fetch_page", `{"url": "https://example.com/long"}`))
+	}
+	turns = append(turns, &openrouter.CompletionResponse{
+		Content: "FINAL FINDINGS: the vendor has no independent coverage. https://example.com/long",
+		Usage:   openrouter.Usage{},
+	})
+
+	completions := &scriptedCompletions{
+		turns:     turns,
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	runner := researchagent.New(completions, nil, fetch)
+	_, _, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	prompt := completions.extraction.Prompt
+	require.Contains(t, prompt, "FINAL FINDINGS", "the wrap-up survives truncation")
+	require.Contains(t, prompt, "npx -y @scope/mcp-server", "and so does the briefing that names the server")
+	require.Contains(t, prompt, "transcript truncated")
+}
+
+// The briefing carries evidence the reviewed server largely wrote itself, so
+// it arrives fenced and labelled as data rather than as task context.
+func TestRun_BriefingFencesTheEvidenceAsUntrusted(t *testing.T) {
+	t.Parallel()
+
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
+	}
+
+	runner := researchagent.New(completions, nil)
+	_, _, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	// The briefing rides in the opening user message.
+	require.NotEmpty(t, completions.firstTurn.Messages)
+	rendered, err := json.Marshal(completions.firstTurn.Messages)
+	require.NoError(t, err)
+	require.Contains(t, string(rendered), "UNTRUSTED DATA")
+	require.Contains(t, string(rendered), "END EVIDENCE")
 }
 
 // A page that tries to steer the agent reading it is a finding about the
