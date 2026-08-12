@@ -180,6 +180,37 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, arg GetProjectBySlugPara
 	return i, err
 }
 
+const getProjectBySlugAcrossOrgs = `-- name: GetProjectBySlugAcrossOrgs :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE slug = $1
+  AND deleted IS FALSE
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+// GetProjectBySlugAcrossOrgs resolves a project by slug alone, without an
+// organization scope. Seeded local databases can hold several orgs with
+// identically-slugged projects, so order by creation time to keep every run
+// landing on the same org. Local-dev only.
+func (q *Queries) GetProjectBySlugAcrossOrgs(ctx context.Context, slug string) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectBySlugAcrossOrgs, slug)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectWithOrganizationMetadata = `-- name: GetProjectWithOrganizationMetadata :one
 SELECT 
     -- Project fields

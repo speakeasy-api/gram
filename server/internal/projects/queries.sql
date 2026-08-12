@@ -42,6 +42,18 @@ WHERE slug = @slug
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- GetProjectBySlugAcrossOrgs resolves a project by slug alone, without an
+-- organization scope. Seeded local databases can hold several orgs with
+-- identically-slugged projects, so order by creation time to keep every run
+-- landing on the same org. Local-dev only.
+-- name: GetProjectBySlugAcrossOrgs :one
+SELECT *
+FROM projects
+WHERE slug = @slug
+  AND deleted IS FALSE
+ORDER BY created_at ASC
+LIMIT 1;
+
 -- name: GetProjectByID :one
 SELECT *
 FROM projects
