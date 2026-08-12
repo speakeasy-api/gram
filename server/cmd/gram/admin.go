@@ -262,6 +262,10 @@ func newAdminCommand() *cli.Command {
 			adminCookieDomain := c.String("admin-cookie-domain")
 			adminCrossOriginCookies := c.Bool("admin-cross-origin-cookies")
 
+			if len(adminAllowedOrigins) == 0 {
+				logger.WarnContext(ctx, "no admin allowed origins configured, so only same-host writes are accepted")
+			}
+
 			mux.Use(middleware.AdminCORS(adminAllowedOrigins))
 			mux.Use(middleware.AdminOriginCheck(adminAllowedOrigins))
 			mux.Use(func(h http.Handler) http.Handler {
