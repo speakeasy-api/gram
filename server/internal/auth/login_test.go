@@ -180,13 +180,51 @@ func TestService_Login(t *testing.T) {
 		require.Equal(t, "Acme Inc", intent.OrgName)
 	})
 
+	t.Run("login stores the normalized org name", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		// A non-breaking space and a doubled space, as arrive from a pasted
+		// name. The org record and the identity provider get the tidied form.
+		orgName := " Acme\u00a0 Inc "
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+		require.NoError(t, err)
+
+		nonce := nonceFromLocation(t, result.Location)
+		var intent struct {
+			OrgName string
+		}
+		require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
+		require.Equal(t, "Acme Inc", intent.OrgName)
+	})
+
+	t.Run("login accepts an org name in a non-latin script", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		orgName := "アクメ株式会社"
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+		require.NoError(t, err)
+
+		nonce := nonceFromLocation(t, result.Location)
+		var intent struct {
+			OrgName string
+		}
+		require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
+		require.Equal(t, orgName, intent.OrgName)
+	})
+
 	t.Run("login with an invalid org name errors and stores nothing", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		orgName := "Bob's Bakery"
+		orgName := "Acme\u202eInc"
 		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
 		require.Error(t, err)
 		require.Nil(t, result)
@@ -313,7 +351,7 @@ func TestService_Login(t *testing.T) {
 	})
 }
 
-func TestService_LoginRejectsOrgNameWithShortSlug(t *testing.T) {
+func TestService_LoginRejectsOrgNameWithTooFewLetters(t *testing.T) {
 	t.Parallel()
 
 	userInfo := defaultMockUserInfo()

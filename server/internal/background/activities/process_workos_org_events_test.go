@@ -199,36 +199,44 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 	require.Equal(t, "event_01HZGOOD", cursor)
 }
 
-func TestProcessWorkOSOrganizationEvents_OrganizationCreateRejectsEmptySlug(t *testing.T) {
+// An organization named entirely in a non-Latin script has no slug to derive
+// from its name, and a WorkOS event is in no position to reject the name or ask
+// anyone to change it, so the organization gets a generated slug instead.
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateGeneratesSlugWhenNameHasNone(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_org_empty_slug")
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_generated_slug")
 	logger := testenv.NewLogger(t)
 
-	const workosOrgID = "org_01HZEMPTYSLUG"
+	const workosOrgID = "org_01HZNOSLUG"
+	const orgName = "顶尖科技"
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
 			{
-				ID:        "event_01HZEMPTYSLUG",
+				ID:        "event_01HZNOSLUG",
 				Event:     "organization.created",
 				CreatedAt: time.Now(),
-				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"!!!",` +
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"` + orgName + `",` +
 					`"updated_at":"2026-05-06T12:00:00Z"}`),
 			},
 		},
 	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
-	require.Error(t, err)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZNOSLUG", res.LastEventID)
 
-	_, err = orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, orgName, row.Name)
+	require.Regexp(t, `^org-[a-z1-9]{8}$`, row.Slug)
 
-	_, err = workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZNOSLUG", cursor)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCreates(t *testing.T) {

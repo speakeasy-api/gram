@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -80,57 +80,114 @@ func generateLegibleOrgName() string {
 	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
 }
 
-// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and
-// underscores.
-//
-// A literal space, not `\s`: Go's `\s` is `[\t\n\f\r ]`, and this runs on an
-// unauthenticated endpoint, so the client's whitespace normalization is not a
-// control. A name carrying a newline would otherwise reach the org record, the
-// identity provider, and every log line that prints an org name.
-var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9 _-]+$`)
-
-// maxOrgNameLength bounds the org name. validOrgNameRegex constrains the
-// character set but not the length, and the signup path accepts this value on
-// an unauthenticated endpoint that writes it to Redis.
+// maxOrgNameLength bounds the org name in runes, not bytes: a name in a
+// non-Latin script spends two to four bytes per character, and a byte cap would
+// give it a third of the room a Latin name gets. The signup path accepts this
+// value on an unauthenticated endpoint that writes it to Redis.
 const maxOrgNameLength = 100
 
-// minOrgNameSlugChars is the floor on what survives slugification, mirroring
-// MIN_ORG_NAME_SLUG_CHARS in the sign-up form. Two rather than one: a single
-// alphanumeric such as "A-" still yields the one-character slug "a".
-const minOrgNameSlugChars = 2
+// minOrgNameLetterOrDigit is the floor on letters and digits in the name,
+// mirroring MIN_ORG_NAME_LETTERS_OR_DIGITS in the sign-up form. It keeps out
+// names made only of punctuation ("-----", "___", "- _ -"), which carry no
+// meaning and slugify to nothing. Two rather than one so a name is a name
+// rather than an initial.
+const minOrgNameLetterOrDigit = 2
 
 // shortOrgNameFormat matches the sign-up form's constraint and keeps the
 // server's established "organization name" terminology; the form calls it a
 // "Company name".
 const shortOrgNameFormat = "organization name must contain at least %d letters or numbers"
 
+// Zero-width joiner and non-joiner. Both are Cf, the category this rejects
+// wholesale for carrying bidi overrides, but Indic, Arabic and Persian
+// orthography needs them to render correct glyphs — an allowlist that drops
+// them mangles names in the very scripts the rest of this rule admits.
+const (
+	zeroWidthNonJoiner = '\u200C'
+	zeroWidthJoiner    = '\u200D'
+)
+
 // validateOrgName is the single org-name rule, shared by the authenticated
-// register endpoint and the unauthenticated signup parameter on login.
-func validateOrgName(name string) error {
-	if strings.TrimSpace(name) == "" {
-		return oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
-	}
-
-	if len(name) > maxOrgNameLength {
-		return oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
-	}
-
-	if !validOrgNameRegex.MatchString(name) {
+// register endpoint and the unauthenticated signup parameter on login. It
+// returns the name to store: whitespace-normalized, so a pasted non-breaking
+// space or a run of spaces does not reach the org record and the identity
+// provider verbatim.
+//
+// The rule is a denylist, and deliberately a permissive one. A display name
+// never has to be URL-safe — orgslug derives and sanitizes the slug separately —
+// so it only has to be safe to render and to log. "Acme, Inc.", "Bob's Bakery",
+// "Café Zoë" and every name written in a non-Latin script are names, not
+// attacks, and a company that has one should not have to transliterate it to
+// sign up.
+func validateOrgName(name string) (string, error) {
+	invalidChars := func() error {
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	// Measured on Slugify's own output rather than restating its character rule,
-	// so the two cannot drift. The character set above admits names made only of
-	// punctuation ("-----", "___", "- _ -"), which slugify to nothing and would
-	// otherwise create an org reachable at app.getgram.ai//.
-	if len(orgslug.Slugify(name)) < minOrgNameSlugChars {
-		return oops.E(
+	// Invalid UTF-8 would otherwise survive as replacement characters in the
+	// org record and in every log line that prints the name.
+	if !utf8.ValidString(name) {
+		return "", invalidChars()
+	}
+
+	normalized := normalizeOrgNameSpaces(name)
+	if normalized == "" {
+		return "", oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
+	}
+
+	if utf8.RuneCountInString(normalized) > maxOrgNameLength {
+		return "", oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
+	}
+
+	letterOrDigit := 0
+	for _, r := range normalized {
+		// IsGraphic covers letters, marks, numbers, punctuation, symbols and
+		// space separators, and so admits every script while rejecting control
+		// characters, bidi overrides and other formatting codes, private-use
+		// and surrogate code points, and unassigned ones.
+		if !unicode.IsGraphic(r) && r != zeroWidthJoiner && r != zeroWidthNonJoiner {
+			return "", invalidChars()
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			letterOrDigit++
+		}
+	}
+
+	if letterOrDigit < minOrgNameLetterOrDigit {
+		return "", oops.E(
 			oops.CodeInvalid,
-			fmt.Errorf(shortOrgNameFormat, minOrgNameSlugChars),
+			fmt.Errorf(shortOrgNameFormat, minOrgNameLetterOrDigit),
 			shortOrgNameFormat,
-			minOrgNameSlugChars,
+			minOrgNameLetterOrDigit,
 		)
 	}
 
-	return nil
+	return normalized, nil
+}
+
+// normalizeOrgNameSpaces maps every Unicode space separator to a plain space,
+// collapses runs of them, and trims the ends. Pasted names routinely carry a
+// non-breaking or ideographic space, and this runs on an unauthenticated
+// endpoint, so the client's own normalization is not a control.
+//
+// Tabs, newlines and other control characters are deliberately left alone here
+// for validateOrgName to reject rather than quietly absorb.
+func normalizeOrgNameSpaces(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+
+	pendingSpace := false
+	for _, r := range name {
+		if unicode.Is(unicode.Zs, r) {
+			pendingSpace = b.Len() > 0
+			continue
+		}
+		if pendingSpace {
+			b.WriteRune(' ')
+			pendingSpace = false
+		}
+		b.WriteRune(r)
+	}
+
+	return b.String()
 }
