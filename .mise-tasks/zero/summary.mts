@@ -161,12 +161,8 @@ await pokeDockerService(
   `http://localhost:${temporalWebPort}`,
 );
 
-const jaegerWebPort = process.env["JAEGER_WEB_PORT"] ?? "16686";
-await pokeDockerService(
-  "jaeger",
-  "Jaeger",
-  `http://localhost:${jaegerWebPort}`,
-);
+const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
+await pokeDockerService("lgtm", "Grafana", `http://localhost:${grafanaPort}`);
 
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
 await pokeDockerService(
