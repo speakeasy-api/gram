@@ -379,7 +379,14 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 		// A response that offers none — or an unusable one — leaves the
 		// stored validator in place: it still identifies content the
 		// upstream just confirmed is unchanged.
-		etag := cache.ETag
+		//
+		// The stored value is re-sanitized so what gets persisted is what
+		// went on the wire. Reaching here at all means it survived
+		// sanitizing (an empty result suppresses the conditional request and
+		// with it this branch), so this only ever normalizes surrounding
+		// whitespace, but persisting a value the request did not use would
+		// be a quiet inconsistency.
+		etag := sanitizeETag(cache.ETag)
 		if refreshed := sanitizeETag(fetched.header.Get("ETag")); refreshed != "" {
 			etag = refreshed
 		}

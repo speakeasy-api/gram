@@ -134,6 +134,36 @@ func TestCacheTTL_MaxAgeNegativeFallsBackToDefault(t *testing.T) {
 	require.Equal(t, defaultCacheTTL, ttl)
 }
 
+func TestCacheTTL_MaxAgeSignedFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	// delta-seconds is 1*DIGIT, so a sign is not part of the grammar even
+	// where strconv would accept it.
+	require.Equal(t, defaultCacheTTL, cacheTTL(headerWith(t, "Cache-Control", "max-age=+7200"), cacheTTLReference))
+	require.Equal(t, defaultCacheTTL, cacheTTL(headerWith(t, "Cache-Control", "max-age=-0"), cacheTTLReference))
+}
+
+func TestCacheTTL_UnterminatedQuoteDiscardsWholeField(t *testing.T) {
+	t.Parallel()
+
+	// The directive boundaries after an unterminated quote are guesswork, so
+	// the field is treated as no opinion rather than as a partial one.
+	ttl := cacheTTL(headerWith(t, "Cache-Control", `max-age=7200, no-cache="unterminated`), cacheTTLReference)
+	require.Equal(t, defaultCacheTTL, ttl)
+}
+
+func TestCacheTTL_OverflowingAgeReadsAsAncient(t *testing.T) {
+	t.Parallel()
+
+	// An Age too large to represent means the host is calling the response
+	// ancient. Reading it as zero would hand a stale document a full day.
+	ttl := cacheTTL(headerWith(t,
+		"Cache-Control", "max-age=86400",
+		"Age", "99999999999999999999",
+	), cacheTTLReference)
+	require.Equal(t, minCacheTTL, ttl)
+}
+
 func TestCacheTTL_MaxAgeMalformedFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 

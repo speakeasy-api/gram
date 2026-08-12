@@ -82,11 +82,33 @@ func cacheTTL(header http.Header, now time.Time) time.Duration {
 // skewed origin clock) yields a negative apparent age that never wins the
 // comparison, so the result is never negative.
 func responseAge(header http.Header, now time.Time) time.Duration {
-	age, _ := deltaSeconds(header.Get("Age"))
+	age := headerAge(header)
 	if date, err := http.ParseTime(header.Get("Date")); err == nil {
 		age = max(age, now.Sub(date))
 	}
 	return age
+}
+
+// headerAge reads the Age header.
+//
+// An age too large to represent is treated as the opposite of an unparseable
+// lifetime. A lifetime we cannot parse means the host expressed no opinion,
+// so the default applies; an age we cannot parse because it is astronomically
+// large is the host saying the response is ancient, so it saturates and the
+// subtraction drives the TTL to the floor. Reading it as zero instead would
+// grant a document the host called stale its full lifetime.
+func headerAge(header http.Header) time.Duration {
+	raw := header.Get("Age")
+	if raw == "" {
+		return 0
+	}
+	if age, ok := deltaSeconds(raw); ok {
+		return age
+	}
+	if _, wellFormed := deltaSecondsDigits(raw); wellFormed {
+		return time.Duration(math.MaxInt64)
+	}
+	return 0
 }
 
 // freshnessLifetime is the lifetime the origin granted the response, before
@@ -178,6 +200,13 @@ func splitDirectives(value string) []string {
 			}
 		}
 	}
+	// An unterminated quoted-string means the field value is malformed and
+	// its directive boundaries are guesswork. Discarding it entirely keeps
+	// the same rule the rest of this parser follows: what cannot be read as
+	// the host meant it is treated as no opinion, not as a partial one.
+	if quoted {
+		return nil
+	}
 	return append(directives, value[start:])
 }
 
@@ -187,23 +216,49 @@ func splitDirectives(value string) []string {
 // so an unguarded multiplication would wrap into a negative duration that the
 // clamp would silently read as "expire immediately".
 func deltaSeconds(raw string) (time.Duration, bool) {
+	digits, ok := deltaSecondsDigits(raw)
+	if !ok {
+		return 0, false
+	}
+
+	// Guard the multiplication rather than the result: time.Duration is
+	// nanoseconds, so a value past this bound overflows into a negative
+	// duration that the clamp would silently read as "expire immediately".
+	seconds, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil || seconds > math.MaxInt64/int64(time.Second) {
+		return 0, false
+	}
+	return time.Duration(seconds) * time.Second, true
+}
+
+// deltaSecondsDigits returns the digits of a well-formed delta-seconds value,
+// reporting false for anything that is not one. The grammar is 1*DIGIT, so a
+// sign is not part of it: strconv would happily read "+7200" and "-0", and
+// honouring either would mean acting on a lifetime the host did not express.
+//
+// It reports true for digit strings too large to be a duration, which is why
+// it is separate from deltaSeconds — the two callers want opposite fallbacks
+// for an overflow.
+func deltaSecondsDigits(raw string) (string, bool) {
 	value := strings.TrimSpace(raw)
 
 	// RFC 9110 §5.6.6 allows a directive argument to be sent as a
 	// quoted-string even when the grammar calls for a token, but only as a
-	// matched pair. Stripping stray quotes instead would honour a lifetime
-	// the upstream never expressed; anything still holding a quote after one
-	// matched pair comes off fails the parse below and falls through to the
-	// next source of freshness.
+	// matched pair. Stripping stray quotes instead would accept a value the
+	// upstream never expressed.
 	if len(value) >= 2 && strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
 		value = value[1 : len(value)-1]
 	}
 
-	seconds, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || seconds < 0 || seconds > math.MaxInt64/int64(time.Second) {
-		return 0, false
+	if value == "" {
+		return "", false
 	}
-	return time.Duration(seconds) * time.Second, true
+	for i := 0; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return "", false
+		}
+	}
+	return value, true
 }
 
 // sanitizeETag returns the entity tag to persist and replay in If-None-Match,
