@@ -2357,8 +2357,9 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Platform MCP distribution", mcpservers.VisibilityPublic)
 	platformRepo := platformmcprepo.New(ti.conn)
 	oauthClient, err := platformRepo.CreatePlatformMCPOAuthClient(ctx, platformmcprepo.CreatePlatformMCPOAuthClientParams{
-		ClientID:   "client-" + uuid.NewString(),
-		ClientName: "Platform MCP publish test client",
+		ClientID:     "client-" + uuid.NewString(),
+		ClientName:   "Platform MCP publish test client",
+		RedirectUris: []string{"http://127.0.0.1:3000/callback"},
 	})
 	require.NoError(t, err)
 	connectionID := uuid.New()
