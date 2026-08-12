@@ -16,8 +16,6 @@ export interface PromptHistory {
   navigate: (direction: "up" | "down", draft: string) => string | null;
   /** True while the composer still shows the text this hook last recalled. */
   isShowingRecalled: (text: string) => boolean;
-  /** Forget the cursor, e.g. after the user edits the recalled text. */
-  reset: () => void;
 }
 
 function readEntries(key: string): string[] {
@@ -55,14 +53,24 @@ export function usePromptHistory(projectSlug: string): PromptHistory {
   const slotRef = useRef(DRAFT_SLOT);
   const draftRef = useRef("");
   // The text we last handed the composer. Anything else on screen means the
-  // user has typed since, so the next Up starts a fresh walk from the draft.
+  // user has typed since, so the next step starts a fresh walk from the draft.
   const appliedRef = useRef<string | null>(null);
+  const keyRef = useRef(key);
 
   const reset = useCallback(() => {
     slotRef.current = DRAFT_SLOT;
     draftRef.current = "";
     appliedRef.current = null;
   }, []);
+
+  // A composer that outlives a project switch must not carry the old project's
+  // cursor into the new project's entries.
+  if (keyRef.current !== key) {
+    keyRef.current = key;
+    slotRef.current = DRAFT_SLOT;
+    draftRef.current = "";
+    appliedRef.current = null;
+  }
 
   const record = useCallback(
     (text: string) => {
@@ -81,6 +89,10 @@ export function usePromptHistory(projectSlug: string): PromptHistory {
       const entries = readEntries(key);
       if (entries.length === 0) return null;
 
+      // Text the user has typed or edited since the last step ends the walk it
+      // came from: it becomes the new draft, so the step starts over from there
+      // and the edit is waiting at the draft slot on the way back.
+      if (appliedRef.current !== draft) slotRef.current = DRAFT_SLOT;
       if (slotRef.current === DRAFT_SLOT) draftRef.current = draft;
 
       const slots = entries.length + 1;
@@ -103,7 +115,7 @@ export function usePromptHistory(projectSlug: string): PromptHistory {
   );
 
   return useMemo(
-    () => ({ record, navigate, isShowingRecalled, reset }),
-    [record, navigate, isShowingRecalled, reset],
+    () => ({ record, navigate, isShowingRecalled }),
+    [record, navigate, isShowingRecalled],
   );
 }

@@ -668,18 +668,21 @@ export const Composer: FC<ComposerProps> = ({
     setActiveSlashIndex(0);
   }, [slashQuery]);
 
-  const runSlashCommand = (command: ComposerSlashCommand) => {
-    const composer = aui.composer();
-    composer.setText(command.prompt);
-    composer.send();
-  };
-
   // Terminal-style prompt recall. The draft text lives on the runtime, so the
   // ref is what the submit handler reads: the runtime clears the composer as
   // part of sending, and refs still hold the pre-send render's value there.
   const promptHistory = usePromptHistory(config.projectSlug);
   const composerTextRef = useRef(composerText);
   composerTextRef.current = composerText;
+
+  const runSlashCommand = (command: ComposerSlashCommand) => {
+    const composer = aui.composer();
+    composer.setText(command.prompt);
+    composer.send();
+    // Sends straight through the runtime, so the form never submits and the
+    // prompt would otherwise be missing from recall.
+    promptHistory.record(command.prompt);
+  };
 
   const recallPrompt = (
     textarea: HTMLTextAreaElement,
@@ -706,9 +709,10 @@ export const Composer: FC<ComposerProps> = ({
     textarea: HTMLTextAreaElement,
     direction: "up" | "down",
   ) => {
-    if (promptHistory.isShowingRecalled(textarea.value)) return true;
     const { value, selectionStart, selectionEnd } = textarea;
+    // A live selection is the user placing their cursor, never a recall.
     if (selectionStart !== selectionEnd) return false;
+    if (promptHistory.isShowingRecalled(value)) return true;
     return direction === "up"
       ? !value.slice(0, selectionStart).includes("\n")
       : !value.slice(selectionEnd).includes("\n");
@@ -836,7 +840,20 @@ export const Composer: FC<ComposerProps> = ({
             // else claimed.
             onKeyDown={(event) => {
               if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-              if (isDictating || isReplay) return;
+              // Modified arrows select, jump by word, or move the caret to the
+              // ends of the field — all of them the textarea's to handle.
+              if (
+                event.shiftKey ||
+                event.altKey ||
+                event.metaKey ||
+                event.ctrlKey
+              ) {
+                return;
+              }
+              // The slash menu owns the arrows while it is open. It runs in
+              // capture on the form and calls preventDefault, but the event
+              // still reaches this handler.
+              if (slashOpen || isDictating || isReplay) return;
               const textarea = event.currentTarget;
               const direction = event.key === "ArrowUp" ? "up" : "down";
               if (!canRecall(textarea, direction)) return;
