@@ -2022,6 +2022,13 @@ CREATE TABLE IF NOT EXISTS chats (
   -- referenced without a FK; integrity is maintained by ingest.
   user_account_id uuid,
 
+  -- Working directory of the captured agent session, as reported by the
+  -- device-side hook adapter (hook.ingest.v1 session.cwd). Enables
+  -- session-portability targeting (materialize a moved session into the right
+  -- project directory). NULL for non-agent chats and rows ingested before
+  -- capture began.
+  cwd TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
