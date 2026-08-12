@@ -101,7 +101,7 @@ export function EvidenceChangedNotice({
   return (
     <section
       role="alert"
-      className="border-warning-default bg-warning/10 border-l-warning-default space-y-2.5 border border-l-4 p-4 text-xs"
+      className="border-warning-default bg-warning/10 space-y-2.5 border p-4 text-xs"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="text-default-warning flex items-center gap-2">
