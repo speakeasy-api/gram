@@ -85,6 +85,39 @@ func TestCacheTTL_MaxAgeCaseInsensitive(t *testing.T) {
 	require.Equal(t, 2*time.Hour, ttl)
 }
 
+func TestCacheTTL_CommaInsideQuotedDirectiveIsNotADirective(t *testing.T) {
+	t.Parallel()
+
+	// The quoted argument of no-cache must not be split into a fragment that
+	// reads as a max-age the host never granted.
+	ttl := cacheTTL(headerWith(t, "Cache-Control", `no-cache="Set-Cookie, max-age=99999"`), cacheTTLReference)
+	require.Equal(t, defaultCacheTTL, ttl)
+}
+
+func TestCacheTTL_QuotedDirectiveDoesNotHideRealMaxAge(t *testing.T) {
+	t.Parallel()
+
+	ttl := cacheTTL(headerWith(t, "Cache-Control", `private="Set-Cookie, Authorization", max-age=7200`), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+}
+
+func TestCacheTTL_EscapedQuoteInsideDirectiveHandled(t *testing.T) {
+	t.Parallel()
+
+	// A quoted-pair escaping a quote must not be read as closing the string,
+	// which would put the rest of the value back in directive position.
+	ttl := cacheTTL(headerWith(t, "Cache-Control", `no-cache="a\", max-age=99999", max-age=7200`), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+}
+
+func TestCacheTTL_UnmatchedQuoteFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, defaultCacheTTL, cacheTTL(headerWith(t, "Cache-Control", `max-age="7200`), cacheTTLReference))
+	require.Equal(t, defaultCacheTTL, cacheTTL(headerWith(t, "Cache-Control", `max-age=7200"`), cacheTTLReference))
+	require.Equal(t, defaultCacheTTL, cacheTTL(headerWith(t, "Cache-Control", `max-age=""7200""`), cacheTTLReference))
+}
+
 func TestCacheTTL_MaxAgeOverflowFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 

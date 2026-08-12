@@ -587,6 +587,16 @@ func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID st
 		return fetchedDocument{body: nil, status: 0, notModified: false, header: nil}, fmt.Errorf("build document request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+
+	// Re-sanitize rather than trusting the stored value. Everything written
+	// to client_id_metadata_etag passes sanitizeETag today, but that is a
+	// caller-side invariant across a process and a database: a row written
+	// under laxer rules than the ones now compiled in, or by hand during an
+	// incident, would otherwise be replayed forever. Dropping a validator
+	// here also correctly suppresses the 304 branch below, so a malformed
+	// stored tag cannot make this AS accept a revalidation it never asked
+	// for.
+	etag = sanitizeETag(etag)
 	if etag != "" {
 		req.Header.Set("If-None-Match", etag)
 	}

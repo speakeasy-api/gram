@@ -136,7 +136,7 @@ func clampCacheTTL(ttl time.Duration) time.Duration {
 // instead of pinning the row at the floor.
 func cacheControlDelta(header http.Header, directive string) (time.Duration, bool) {
 	for _, value := range header.Values("Cache-Control") {
-		for candidate := range strings.SplitSeq(value, ",") {
+		for _, candidate := range splitDirectives(value) {
 			name, arg, found := strings.Cut(strings.TrimSpace(candidate), "=")
 			if !found || !strings.EqualFold(strings.TrimSpace(name), directive) {
 				continue
@@ -149,15 +149,57 @@ func cacheControlDelta(header http.Header, directive string) (time.Duration, boo
 	return 0, false
 }
 
+// splitDirectives splits one Cache-Control field value on the commas that
+// separate directives, leaving commas inside a quoted-string alone.
+//
+// Splitting naively would let a quoted argument masquerade as a directive:
+// no-cache="Set-Cookie, max-age=99999" breaks into a fragment reading
+// `max-age=99999"`, which is a lifetime the host never granted. Directives
+// that take a quoted field-name list (no-cache, private) are exactly the ones
+// where this arises, and the field value is chosen by the document host.
+func splitDirectives(value string) []string {
+	directives := make([]string, 0, strings.Count(value, ",")+1)
+	quoted := false
+	start := 0
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '\\':
+			// RFC 9110 §5.6.4 quoted-pair: the next octet is literal, so it
+			// can neither open nor close the string.
+			if quoted {
+				i++
+			}
+		case '"':
+			quoted = !quoted
+		case ',':
+			if !quoted {
+				directives = append(directives, value[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(directives, value[start:])
+}
+
 // deltaSeconds parses an RFC 9111 §1.2.2 delta-seconds value into a duration.
 // It reports not-found for anything negative, unparseable, or large enough to
 // overflow: the value is attacker-supplied and time.Duration is nanoseconds,
 // so an unguarded multiplication would wrap into a negative duration that the
 // clamp would silently read as "expire immediately".
 func deltaSeconds(raw string) (time.Duration, bool) {
+	value := strings.TrimSpace(raw)
+
 	// RFC 9110 §5.6.6 allows a directive argument to be sent as a
-	// quoted-string even when the grammar calls for a token.
-	seconds, err := strconv.ParseInt(strings.Trim(strings.TrimSpace(raw), `"`), 10, 64)
+	// quoted-string even when the grammar calls for a token, but only as a
+	// matched pair. Stripping stray quotes instead would honour a lifetime
+	// the upstream never expressed; anything still holding a quote after one
+	// matched pair comes off fails the parse below and falls through to the
+	// next source of freshness.
+	if len(value) >= 2 && strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
+		value = value[1 : len(value)-1]
+	}
+
+	seconds, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || seconds < 0 || seconds > math.MaxInt64/int64(time.Second) {
 		return 0, false
 	}

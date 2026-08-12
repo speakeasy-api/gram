@@ -239,6 +239,28 @@ func TestResolve_RefreshClearsStoredETagWhenHostStopsSendingOne(t *testing.T) {
 	require.Empty(t, result.ETag, "the refreshed document carries no validator, so none is kept")
 }
 
+func TestResolve_MalformedStoredETagNotReplayed(t *testing.T) {
+	t.Parallel()
+
+	// Stored validators are sanitized on the way in, but that invariant
+	// spans a process and a database: a row written under laxer rules, or by
+	// hand, must not be replayed. A wildcard is the case that matters, since
+	// "If-None-Match: *" matches whenever the host has any representation at
+	// all and would pin the cached document forever.
+	ds := newConditionalDocServer(t, `"v1"`)
+
+	result, err := ds.resolver.Resolve(t.Context(), ds.clientID, CacheState{
+		ExpiresAt: time.Now().Add(-time.Minute),
+		ETag:      "*",
+	})
+	require.NoError(t, err)
+	require.Equal(t, CacheOutcomeRefreshed, result.Outcome, "a full document must be re-read, not confirmed")
+	require.Equal(t, `"v1"`, result.ETag, "the refresh stores the host's own validator")
+
+	_, conditional := ds.counts(t)
+	require.Zero(t, conditional, "a malformed stored validator must not reach the wire")
+}
+
 func TestResolve_UnconditionalRequestRejectsNotModified(t *testing.T) {
 	t.Parallel()
 
