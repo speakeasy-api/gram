@@ -38,6 +38,7 @@ const (
 	ScopeSkillBlockedRead        Scope = "skill:blocked_read"
 	ScopeSkillWrite              Scope = "skill:write"
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
+	ScopeRiskPolicyRead          Scope = "risk_policy:read"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
@@ -105,6 +106,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedRead:        scopeVisibilityInternal,
 	ScopeSkillWrite:              scopeVisibilityUserVisible,
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
+	ScopeRiskPolicyRead:          scopeVisibilityUserVisible,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
@@ -192,11 +194,15 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedRead:        nil,
 	ScopeSkillWrite:              nil,
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
-	ScopeRiskPolicyEvaluate:      nil,
-	ScopeRiskPolicyBypass:        nil,
-	ScopeRiskPolicyBlock:         nil,
-	ScopeChatRead:                {ScopeChatWrite},
-	ScopeChatWrite:               nil,
+	// org:admin satisfies risk_policy:read so every existing org admin keeps the
+	// risk dashboard without a grant migration, and org admin remains the only
+	// way to reach the risk write paths (which check org:admin directly).
+	ScopeRiskPolicyRead:     {ScopeOrgAdmin},
+	ScopeRiskPolicyEvaluate: nil,
+	ScopeRiskPolicyBypass:   nil,
+	ScopeRiskPolicyBlock:    nil,
+	ScopeChatRead:           {ScopeChatWrite},
+	ScopeChatWrite:          nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -226,6 +232,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedRead:        "",
 	ScopeSkillWrite:              ScopeSkillBlockedWrite,
 	ScopeSkillBlockedWrite:       "",
+	ScopeRiskPolicyRead:          "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
