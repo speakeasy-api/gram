@@ -1384,7 +1384,7 @@ func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRi
 
 // BuildCreateRiskPolicyBypassRequestPayload builds the payload for the risk
 // createRiskPolicyBypassRequest endpoint from CLI flags.
-func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequestBody string, riskCreateRiskPolicyBypassRequestSessionToken string) (*risk.CreateRiskPolicyBypassRequestPayload, error) {
+func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequestBody string, riskCreateRiskPolicyBypassRequestSessionToken string, riskCreateRiskPolicyBypassRequestApikeyToken string) (*risk.CreateRiskPolicyBypassRequestPayload, error) {
 	var err error
 	var body CreateRiskPolicyBypassRequestRequestBody
 	{
@@ -1399,10 +1399,17 @@ func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequest
 			sessionToken = &riskCreateRiskPolicyBypassRequestSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if riskCreateRiskPolicyBypassRequestApikeyToken != "" {
+			apikeyToken = &riskCreateRiskPolicyBypassRequestApikeyToken
+		}
+	}
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: body.RequestToken,
 	}
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }

@@ -85,18 +85,19 @@ type ApiKey struct {
 }
 
 type Asset struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	Name          string
-	Url           string
-	Kind          string
-	ContentType   string
-	ContentLength int64
-	Sha256        string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Url            string
+	Kind           string
+	ContentType    string
+	ContentLength  int64
+	Sha256         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type Assistant struct {
@@ -438,6 +439,7 @@ type ChatMessage struct {
 	ToolUrn           urn.Tool
 	ToolOutcome       pgtype.Text
 	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
 	ContentHash       []byte
 	Generation        int32
 	Replayed          bool
@@ -1316,7 +1318,8 @@ type OauthProxyServer struct {
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
-	Key            string
+	Key            pgtype.Text
+	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 	Disabled       bool

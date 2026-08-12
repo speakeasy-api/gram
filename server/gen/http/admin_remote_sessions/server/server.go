@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts                                []*MountPoint
 	CreateGlobalIssuer                    http.Handler
+	GetGlobalIssuerDuplicatePreflight     http.Handler
 	ListGlobalIssuers                     http.Handler
 	GetGlobalIssuer                       http.Handler
 	UpdateGlobalIssuer                    http.Handler
@@ -64,6 +65,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateGlobalIssuer", "POST", "/rpc/adminRemoteSessions.createGlobalIssuer"},
+			{"GetGlobalIssuerDuplicatePreflight", "GET", "/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight"},
 			{"ListGlobalIssuers", "GET", "/rpc/adminRemoteSessions.listGlobalIssuers"},
 			{"GetGlobalIssuer", "GET", "/rpc/adminRemoteSessions.getGlobalIssuer"},
 			{"UpdateGlobalIssuer", "POST", "/rpc/adminRemoteSessions.updateGlobalIssuer"},
@@ -80,6 +82,7 @@ func New(
 			{"MigrateToGlobalIssuer", "POST", "/rpc/adminRemoteSessions.migrateToGlobalIssuer"},
 		},
 		CreateGlobalIssuer:                    NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightHandler(e.GetGlobalIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
 		ListGlobalIssuers:                     NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
 		GetGlobalIssuer:                       NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
 		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
@@ -103,6 +106,7 @@ func (s *Server) Service() string { return "adminRemoteSessions" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateGlobalIssuer = m(s.CreateGlobalIssuer)
+	s.GetGlobalIssuerDuplicatePreflight = m(s.GetGlobalIssuerDuplicatePreflight)
 	s.ListGlobalIssuers = m(s.ListGlobalIssuers)
 	s.GetGlobalIssuer = m(s.GetGlobalIssuer)
 	s.UpdateGlobalIssuer = m(s.UpdateGlobalIssuer)
@@ -125,6 +129,7 @@ func (s *Server) MethodNames() []string { return adminremotesessions.MethodNames
 // Mount configures the mux to serve the adminRemoteSessions endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateGlobalIssuerHandler(mux, h.CreateGlobalIssuer)
+	MountGetGlobalIssuerDuplicatePreflightHandler(mux, h.GetGlobalIssuerDuplicatePreflight)
 	MountListGlobalIssuersHandler(mux, h.ListGlobalIssuers)
 	MountGetGlobalIssuerHandler(mux, h.GetGlobalIssuer)
 	MountUpdateGlobalIssuerHandler(mux, h.UpdateGlobalIssuer)
@@ -177,6 +182,61 @@ func NewCreateGlobalIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGlobalIssuerDuplicatePreflightHandler configures the mux to serve
+// the "adminRemoteSessions" service "getGlobalIssuerDuplicatePreflight"
+// endpoint.
+func MountGetGlobalIssuerDuplicatePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight", f)
+}
+
+// NewGetGlobalIssuerDuplicatePreflightHandler creates a HTTP handler which
+// loads the HTTP request and calls the "adminRemoteSessions" service
+// "getGlobalIssuerDuplicatePreflight" endpoint.
+func NewGetGlobalIssuerDuplicatePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGlobalIssuerDuplicatePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetGlobalIssuerDuplicatePreflightResponse(encoder)
+		encodeError    = EncodeGetGlobalIssuerDuplicatePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGlobalIssuerDuplicatePreflight")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "adminRemoteSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

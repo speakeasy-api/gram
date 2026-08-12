@@ -118,6 +118,13 @@ SELECT * FROM authz_challenge_resolutions
 WHERE organization_id = @organization_id
   AND challenge_id = ANY(@challenge_ids::text[]);
 
+-- name: ListRetainedResolvedChallengeIDs :many
+-- Resolutions cannot predate their challenge, so records older than ClickHouse's
+-- 90-day challenge retention cannot match a retained bucket.
+SELECT challenge_id FROM authz_challenge_resolutions
+WHERE organization_id = @organization_id
+  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days';
+
 -- name: InsertChallengeResolutions :many
 -- Creates resolution records for one or more denied challenges.
 -- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).

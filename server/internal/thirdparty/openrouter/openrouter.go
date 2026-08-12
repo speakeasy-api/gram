@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -302,7 +303,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows), key.Key.String == "":
 		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
@@ -315,7 +316,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		if key.Disabled {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		openrouterKey = key.Key
+		openrouterKey = key.Key.String
 	}
 
 	if err := inv.Check("openrouter provisioning", "key is set", openrouterKey != ""); err != nil {
@@ -360,9 +361,9 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	// ProvisionAPIKey.
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows), key.Key.String == "":
 	default:
-		return key.Key, nil
+		return key.Key.String, nil
 	}
 
 	// Read through the transaction: this goroutine already holds a pool
@@ -389,7 +390,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
-		Key:            *keyResponse.Key,
+		Key:            conv.ToPGText(*keyResponse.Key),
 		KeyHash:        keyResponse.Data.Hash,
 		MonthlyCredits: int64(creditAmount),
 	})
@@ -548,7 +549,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
-	used, _, err := o.GetKeyUsage(ctx, key.Key)
+	used, _, err := o.GetKeyUsage(ctx, key.Key.String)
 	if err != nil {
 		return 0, limit, err
 	}
@@ -844,7 +845,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	q.Set("id", generationID)
 	req.URL.RawQuery = q.Encode()
 
-	req.Header.Set("Authorization", "Bearer "+key.Key)
+	req.Header.Set("Authorization", "Bearer "+key.Key.String)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)

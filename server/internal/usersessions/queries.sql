@@ -441,9 +441,14 @@ RETURNING *;
 -- Lazy upsert for a client resolved from a Client ID Metadata Document at
 -- authorize time. For CIMD rows the document URL IS the client_id, so the
 -- conflict target is the same partial unique index that serves DCR lookups.
--- On refresh the mutable metadata (client_name, redirect_uris) and the fetch
--- stamp are replaced wholesale — the document is refetched on every
--- authorize.
+-- On refresh the mutable metadata (client_name, redirect_uris) and every
+-- cache column are replaced wholesale, including the ETag, which is set to
+-- NULL when the response carried no usable validator so the next refresh is
+-- unconditional rather than replaying a stale one.
+--
+-- The cache expiry is derived from the database clock rather than the
+-- application's, so it can never land before the client_id_metadata_fetched_at
+-- written in the same statement.
 --
 -- Two deliberate behaviors:
 --   - A soft-deleted row does not conflict (partial index), so revoking a
@@ -464,7 +469,9 @@ INSERT INTO user_session_clients (
     redirect_uris,
     client_secret_expires_at,
     client_id_metadata_uri,
-    client_id_metadata_fetched_at
+    client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at,
+    client_id_metadata_etag
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -475,7 +482,9 @@ VALUES (
     @redirect_uris,
     NULL,
     @client_id,
-    clock_timestamp()
+    clock_timestamp(),
+    clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    sqlc.narg('client_id_metadata_etag')
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -483,8 +492,61 @@ DO UPDATE SET
     redirect_uris = EXCLUDED.redirect_uris,
     client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
     client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
+    client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
+RETURNING *;
+
+-- name: UpdateUserSessionClientCIMDCache :one
+-- Refreshes the cache bookkeeping on a CIMD-resolved client whose document
+-- host answered 304 Not Modified. The stored client_name and redirect_uris
+-- are current by definition of the 304, so they are deliberately untouched;
+-- only the fetch stamp, the expiry, and the validator move.
+--
+-- The guards mirror UpsertUserSessionClientFromCIMD's. A secret-bearing DCR
+-- row, or a row that is not CIMD-resolved at all, is never written, so this
+-- statement cannot push a row into violating the client_id_metadata_uri
+-- CHECK constraints; such a collision surfaces as no-rows, which handlers
+-- already map to invalid_client. Project scoping is intentionally absent for
+-- the same reason as GetUserSessionClientByClientID: the OAuth surface is
+-- public, and the id comes from a row the caller already resolved through
+-- the issuer.
+UPDATE user_session_clients
+SET client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: PurgeUserSessionClientCIMDCache :one
+-- Forces the next authorize to re-read, re-parse, and re-validate a CIMD
+-- client's metadata document instead of serving the stored copy.
+--
+-- This is the purge lever for the cache: a document whose contents must stop
+-- being honoured before its TTL lapses — a compromised or mistakenly
+-- published redirect_uris set, a validation rule tightened after the row was
+-- written — is dealt with by running this and letting the next authorize
+-- refetch. The validator is cleared along with the expiry on purpose: leaving
+-- it would make the refresh conditional, and a 304 would confirm the very
+-- document being purged without the body ever being re-validated.
+--
+-- Revoking the client purges its cache as a side effect, since the lookup
+-- behind every authorize filters on deleted IS FALSE and a miss forces an
+-- unconditional fetch. This query exists for the case where the client should
+-- keep working and only its stored document is suspect. It has no endpoint
+-- yet and is run by hand; AIS-211 wires it to a per-client refresh action.
+UPDATE user_session_clients
+SET client_id_metadata_cache_expires_at = NULL,
+    client_id_metadata_etag = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: CreateUserSession :one

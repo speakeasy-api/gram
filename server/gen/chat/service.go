@@ -49,6 +49,9 @@ type Service interface {
 	// When a summary already exists and regenerate is false, returns the cached
 	// summary without calling the model.
 	Summarize(context.Context, *SummarizePayload) (res *SummarizeChatResult, err error)
+	// Generate or return a persisted two-sentence summary of one tool call.
+	// Concurrent requests share the same cached result.
+	SummarizeToolCall(context.Context, *SummarizeToolCallPayload) (res *SummarizeToolCallResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 	// List the distinct agent sources present in this project's chats, for
@@ -78,7 +81,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "submitFeedback", "listSources"}
+var MethodNames = [11]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -142,6 +145,9 @@ type Chat struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -250,6 +256,9 @@ type ChatOverview struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -599,6 +608,30 @@ type SummarizePayload struct {
 	ID string
 	// When true, regenerate and overwrite any existing summary. Defaults to false.
 	Regenerate bool
+}
+
+// SummarizeToolCallPayload is the payload type of the chat service
+// summarizeToolCall method.
+type SummarizeToolCallPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat containing the tool call
+	ID string
+	// The ID of the assistant message containing the tool call
+	MessageID string
+	// The provider-assigned ID of the tool call
+	ToolCallID string
+}
+
+// SummarizeToolCallResult is the result type of the chat service
+// summarizeToolCall method.
+type SummarizeToolCallResult struct {
+	// A concise two-sentence description of the tool call and its effect
+	Summary string
+	// Whether the tool call only read data or could change state
+	Impact string
+	// True when a stored summary was returned without calling the model
+	Cached bool
 }
 
 type WorkUnitsTrendBucket struct {

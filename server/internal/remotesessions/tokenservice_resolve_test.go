@@ -41,6 +41,8 @@ func newResolveManager(t *testing.T, conn *pgxpool.Pool, enc *encryption.Client)
 	require.NoError(t, err)
 	return remotesessions.NewChallengeManager(
 		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		conn,
 		enc,
 		policy,

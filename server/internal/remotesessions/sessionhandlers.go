@@ -125,5 +125,16 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Tell the upstream to drop the credentials the row was holding. Strictly
+	// after the commit and strictly best-effort: the local revoke the caller
+	// asked for has already taken effect, and an issuer that is slow, down, or
+	// simply advertises no revocation endpoint must not turn a successful
+	// revoke into a failed request. See upstreamrevoke.go.
+	s.revoker.RevokeDetached(ctx, RevokedCredentials{
+		RemoteSessionClientID: revoked.RemoteSessionClientID,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+	})
+
 	return nil
 }

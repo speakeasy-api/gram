@@ -271,9 +271,21 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
+-- Assets are uploaded blobs (OpenAPI documents, function bundles, chat
+-- attachments, images) tracked at one of three ownership tiers, mirroring the
+-- tiers remote_session_issuers and remote_session_clients already carry. The
+-- tier is derived from the two tenancy columns:
+--
+--   project      project_id IS NOT NULL
+--   organization project_id IS NULL AND organization_id IS NOT NULL
+--   platform     project_id IS NULL AND organization_id IS NULL
+--
+-- Tier validity is enforced in application code, not by a CHECK constraint, so
+-- adding a future tier does not require a migration.
 CREATE TABLE IF NOT EXISTS assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   url TEXT NOT NULL,
@@ -288,8 +300,32 @@ CREATE TABLE IF NOT EXISTS assets (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT assets_pkey PRIMARY KEY (id),
-  CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256)
+  CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256),
+  CONSTRAINT assets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+-- Content-addressed dedupe for the organization and platform tiers.
+--
+-- Deliberately NOT filtered on `deleted IS FALSE`, unlike the sibling
+-- remote_session_issuers indexes. assets_project_id_sha256_key spans
+-- soft-deleted rows too, and the CreateAsset upsert relies on colliding with a
+-- soft-deleted row to resurrect it (ON CONFLICT ... DO UPDATE SET deleted_at =
+-- NULL). Adding the filter here would diverge the tiers and break that path.
+--
+-- Any upsert targeting these indexes must repeat the predicate verbatim in its
+-- ON CONFLICT target, e.g.
+--   ON CONFLICT (organization_id, sha256)
+--     WHERE project_id IS NULL AND organization_id IS NOT NULL
+-- Postgres refuses to infer a partial index from a mismatched predicate, and a
+-- conflict raised against a non-arbiter index surfaces as an uncaught 23505 on
+-- the second upload of the same bytes rather than at deploy time.
+CREATE UNIQUE INDEX IF NOT EXISTS assets_organization_id_sha256_key
+ON assets (organization_id, sha256)
+WHERE project_id IS NULL AND organization_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assets_platform_sha256_key
+ON assets (sha256)
+WHERE project_id IS NULL AND organization_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS skills (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1430,10 +1466,13 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   -- this URL, so storing it as a discriminator avoids parsing client_id at
   -- runtime to tell CIMD rows from DCR rows.
   client_id_metadata_uri TEXT,
-  -- Last successful fetch of the metadata document (observability and ops).
+  -- Last successful read of the metadata document, whether that was a fresh
+  -- body or a 304 confirming the stored one (observability and ops).
   client_id_metadata_fetched_at timestamptz,
   -- Cache TTL hint derived from upstream Cache-Control / Expires headers,
-  -- bounded by application-side min/max. NULL means no cached fetch yet.
+  -- bounded by application-side min/max. NULL means no cached fetch yet, and
+  -- setting it back to NULL is the purge lever that forces the next
+  -- authorization to re-read the document.
   client_id_metadata_cache_expires_at timestamptz,
   -- ETag from the last successful fetch, used for If-None-Match conditional
   -- refresh. Optional, since not all metadata hosts emit one.
@@ -1939,7 +1978,15 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   -- and 402 the customer's chat surface.
   key_type TEXT NOT NULL DEFAULT 'chat',
 
-  key TEXT NOT NULL,
+  -- Plaintext upstream OpenRouter key. Deprecated in favor of key_encrypted:
+  -- new rows dual-write both columns during the expand phase, and the
+  -- platform-admin encrypt action clears this column once the encrypted copy
+  -- is verified. Kept nullable until a later contract migration drops it.
+  key TEXT,
+  -- AES-256-GCM encrypted upstream OpenRouter key, encrypted at rest and
+  -- never returned by the API. Nullable while pre-encryption rows are
+  -- migrated; reads prefer this column and fall back to key.
+  key_encrypted TEXT,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -2308,6 +2355,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   tool_urn TEXT,
   tool_outcome TEXT,
   tool_outcome_notes TEXT,
+  -- Lazily generated descriptions keyed by provider tool-call id. A single
+  -- assistant message may contain multiple tool calls.
+  tool_call_summaries JSONB,
 
   -- Chained hash of (role, content, tool_call_id) linked to the parent message's
   -- hash. Used to detect whether an incoming completion request has diverged
@@ -5633,6 +5683,18 @@ CREATE TABLE IF NOT EXISTS json_web_key_sets (
 CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_organization_id_id_key
 ON json_web_key_sets (organization_id, id);
 
+-- Non-partial index backing json_web_key_sets_external_key_tenant_fkey, which
+-- has no ON DELETE clause (NO ACTION). Postgres does not index the referencing
+-- side automatically, so without this the check on every hard-deleted
+-- external_keys row falls back to the (organization_id, id) unique index above
+-- and filters external_key_id from the heap. Also serves the external key
+-- delete guard, which reads the same two columns. Non-partial because the
+-- foreign-key check has to see soft-deleted rows, which a
+-- WHERE deleted IS FALSE index would exclude; the delete guard alone would be
+-- happy with a partial one.
+CREATE INDEX IF NOT EXISTS json_web_key_sets_external_key_tenant_idx
+ON json_web_key_sets (organization_id, external_key_id);
+
 -- Individual published key entries within a JSON Web Key Set. Each row is one
 -- public JWK (identified by `kid`) with a lifecycle state.
 CREATE TABLE IF NOT EXISTS json_web_keys (
@@ -5672,6 +5734,17 @@ WHERE deleted IS FALSE;
 -- rows that the partial unique indexes above exclude.
 CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
 ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Non-partial index backing json_web_keys_external_key_tenant_fkey, which has
+-- no ON DELETE clause (NO ACTION). Postgres does not index the referencing side
+-- automatically, so without this the check on every hard-deleted external_keys
+-- row falls back to json_web_keys_set_tenant_idx above and filters
+-- external_key_id from the heap. Also serves the external key delete guard,
+-- which reads the same two columns. Non-partial for the same reason as
+-- json_web_keys_set_tenant_idx: the foreign-key check has to see soft-deleted
+-- rows.
+CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
+ON json_web_keys (organization_id, external_key_id);
 
 -- Customer-supplied model provider API keys (BYOK), scoped per project and
 -- responsibility slot (completion surface). The 'default' slot applies to

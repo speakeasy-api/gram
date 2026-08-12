@@ -208,3 +208,39 @@ func TestClampedUint32ToInt(t *testing.T) {
 		require.Equal(t, math.MaxInt, out)
 	}
 }
+
+func TestClampedUint64ToInt64(t *testing.T) {
+	t.Parallel()
+
+	out, clamped := conv.ClampedUint64ToInt64(0)
+	require.Equal(t, int64(0), out)
+	require.False(t, clamped)
+
+	out, clamped = conv.ClampedUint64ToInt64(42)
+	require.Equal(t, int64(42), out)
+	require.False(t, clamped)
+
+	out, clamped = conv.ClampedUint64ToInt64(math.MaxInt64)
+	require.Equal(t, int64(math.MaxInt64), out)
+	require.False(t, clamped)
+
+	out, clamped = conv.ClampedUint64ToInt64(math.MaxUint64)
+	require.True(t, clamped)
+	require.Equal(t, int64(math.MaxInt64), out)
+}
+
+func TestClampedUint64ToInt(t *testing.T) {
+	t.Parallel()
+
+	out, clamped := conv.ClampedUint64ToInt(0)
+	require.Equal(t, 0, out)
+	require.False(t, clamped)
+
+	out, clamped = conv.ClampedUint64ToInt(42)
+	require.Equal(t, 42, out)
+	require.False(t, clamped)
+
+	out, clamped = conv.ClampedUint64ToInt(math.MaxUint64)
+	require.True(t, clamped)
+	require.Equal(t, math.MaxInt, out)
+}

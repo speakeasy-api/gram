@@ -13,7 +13,7 @@
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "@tailwindcss/vite": "catalog:",
-    "@tanstack/match-sorter-utils": "^8.19.4",
+    "@tanstack/match-sorter-utils": "^9.0.0",
     "@tanstack/react-form": "^1.33.2",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "^1.170.18",

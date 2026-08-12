@@ -753,6 +753,22 @@ limited_chats AS (
     fc.id DESC
   LIMIT @page_limit
   OFFSET @page_offset
+),
+chat_attribution AS (
+  SELECT
+    lc.*,
+    COALESCE(CASE WHEN lc.source = 'litellm' THEN (
+      SELECT CASE
+        WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
+        ELSE ''
+      END
+      FROM chat_messages
+      WHERE chat_id = lc.id
+        AND source = 'litellm'
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) END, '')::text AS originating_client
+  FROM limited_chats lc
 )
 SELECT
   lc.id,
@@ -760,6 +776,7 @@ SELECT
   lc.user_id,
   lc.external_user_id,
   lc.source,
+  lc.originating_client,
   lc.created_at,
   lc.updated_at,
   lc.pinned_at,
@@ -783,7 +800,7 @@ SELECT
   lc.assistant_id,
   lc.assistant_name,
   lc.total_count
-FROM limited_chats lc;
+FROM chat_attribution lc;
 
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the
@@ -1217,6 +1234,47 @@ SET summary = @summary,
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
+-- name: GetToolCallSummaryContext :one
+-- Fetch the owning call message and its matching result within one project and
+-- chat. The handler validates that tool_calls contains the requested call id.
+SELECT
+  calls.tool_calls,
+  calls.tool_call_summaries,
+  results.content::text AS result_content
+FROM chat_messages AS calls
+JOIN chat_messages AS results
+  ON results.chat_id = calls.chat_id
+  AND results.project_id = calls.project_id
+  AND results.tool_call_id = @tool_call_id
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
+WHERE calls.id = @message_id
+  AND calls.chat_id = @chat_id
+  AND calls.project_id = @project_id::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
+LIMIT 1;
+
+-- name: CreateChatMessageReturningID :one
+-- Inserts a message fixture while exposing its durable id to callers that need
+-- to refer to that exact message in subsequent operations.
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id)
+VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
+RETURNING id;
+
+-- name: StoreToolCallSummary :one
+-- Preserve summaries for sibling calls carried by the same assistant message.
+UPDATE chat_messages
+SET tool_call_summaries = jsonb_set(
+  COALESCE(tool_call_summaries, '{}'::jsonb),
+  ARRAY[@tool_call_id::text],
+  @summary::jsonb
+)
+WHERE id = @message_id
+  AND chat_id = @chat_id
+  AND project_id = @project_id::uuid
+RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
+
 -- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages
 SET tool_outcome = @tool_outcome,
@@ -1539,11 +1597,12 @@ VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('creat
 RETURNING id;
 
 -- name: SeedChatMessageWithSource :one
--- Test fixture: insert a chat message carrying a specific source. The per-chat
+-- Test fixture: insert a chat message carrying a specific source and optional
+-- originating client. The per-chat
 -- inferred source (used by the agent-type filter and ListChatSources) is the
 -- latest non-null message source, so source-filter tests seed messages this way.
-INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
-VALUES (@chat_id, @project_id, 'user', 'test message', @source, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, user_agent, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', @source, sqlc.narg('originating_client')::text, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
 -- name: SeedChatTranscriptMessage :one
