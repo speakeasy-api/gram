@@ -1359,10 +1359,6 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
 	}
 
-	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
-		returnAddress = "https://" + requestCtx.Host
-	}
-
 	return returnAddress + "/rpc/auth.callback"
 }
 
