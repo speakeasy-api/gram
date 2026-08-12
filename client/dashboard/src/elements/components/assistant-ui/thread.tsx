@@ -1128,7 +1128,7 @@ function ContextSectionHeader({
   count?: number;
 }): React.ReactElement {
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-popover px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-background px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
       <Icon className="size-3.5 shrink-0" />
       <span>{label}</span>
       {count !== undefined && (
@@ -1308,7 +1308,10 @@ const ComposerContextPicker: FC = () => {
       <PopoverContent
         side="top"
         align="start"
-        className="aui-composer-context-popover w-[560px] max-w-[calc(100vw-2rem)] overflow-hidden p-0"
+        // `bg-background` rather than the primitive's `bg-popover`: hosts that
+        // mount Elements outside the dashboard's own theme leave `--popover`
+        // unset, and the pane renders see-through over the page behind it.
+        className="aui-composer-context-popover w-[560px] max-w-[calc(100vw-2rem)] overflow-hidden bg-background p-0"
         onEscapeKeyDown={(event) => {
           if (query !== "") {
             event.preventDefault();
@@ -1489,7 +1492,11 @@ function ContextToolResults({
                 </span>
               )}
               {tool.description && (
-                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                // No `block` here: it wins over the `display: -webkit-box`
+                // that `line-clamp` needs, and the clamp silently stops
+                // clamping — which is how a paragraph-long tool description
+                // ends up filling the pane.
+                <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                   {tool.description}
                 </span>
               )}
@@ -1599,7 +1606,7 @@ function ContextSkillResults({
                 {skill.name}
               </span>
               {skill.summary ? (
-                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                   {skill.summary}
                 </span>
               ) : null}
