@@ -141,20 +141,26 @@ func logSafeURL(u *url.URL) string {
 // Only "&" separates parameters here, matching the parser. ";" is handled
 // inside a parameter instead, by redactRegion.
 func redactRawQuery(raw string) (string, bool) {
-	// A denylisted name has to appear literally somewhere for any pair to need
-	// rewriting, so a query without one settles here without allocating. A
-	// substring hit can be a false positive (?xemail=1), which costs only the
-	// scan below, and that then finds nothing to change.
-	possible := false
-	for name := range redactedQueryParams {
-		if strings.Contains(raw, name) {
-			possible = true
-			break
+	// Skipping the rewrite keeps the ordinary request from allocating, but the
+	// skip is only safe once nothing can decode into a denylisted name. A
+	// percent escape is the one thing that can (?em%61il= is ?email=), so a
+	// query carrying any escape goes through the full scan, which compares
+	// decoded keys. Without one, a name absent from the raw text cannot appear
+	// after decoding either, and the substring test decides. That test can
+	// still hit a false positive (?xemail=1), costing only a scan that finds
+	// nothing to change.
+	if !strings.ContainsRune(raw, '%') {
+		possible := false
+		for name := range redactedQueryParams {
+			if strings.Contains(raw, name) {
+				possible = true
+				break
+			}
 		}
-	}
 
-	if !possible {
-		return raw, false
+		if !possible {
+			return raw, false
+		}
 	}
 
 	var b strings.Builder

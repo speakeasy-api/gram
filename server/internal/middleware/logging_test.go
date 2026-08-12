@@ -112,6 +112,21 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/auth.login?xemail=1&emails_enabled=true",
 		},
 		{
+			name: "percent-encoded email key redacted",
+			in:   "/rpc/auth.login?em%61il=dev%40acme.corp",
+			want: "/rpc/auth.login?em%61il=REDACTED",
+		},
+		{
+			name: "percent-encoded token key redacted",
+			in:   "/rpc/skills.getShared?to%6ben=supersecret",
+			want: "/rpc/skills.getShared?to%6ben=REDACTED",
+		},
+		{
+			name: "percent-encoded key redacted alongside plain parameters",
+			in:   "/rpc/auth.login?redirect=%2Fhome&em%61il=dev%40acme.corp",
+			want: "/rpc/auth.login?redirect=%2Fhome&em%61il=REDACTED",
+		},
+		{
 			name: "semicolon inside a redacted value takes the whole value",
 			in:   "/rpc/auth.login?email=dev%40acme.corp;x=1",
 			want: "/rpc/auth.login?email=REDACTED",
