@@ -599,6 +599,22 @@ SELECT
 WHERE EXISTS (
     SELECT 1
     FROM projects AS project
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = $3
+     AND registration.organization_id = project.organization_id
+     AND registration.project_id = project.id
+     AND registration.deleted IS FALSE
+    JOIN plugins AS plugin
+      ON plugin.id = $4
+     AND plugin.organization_id = project.organization_id
+     AND plugin.project_id = project.id
+     AND plugin.is_default IS TRUE
+     AND plugin.deleted IS FALSE
+    JOIN platform_mcp_connections AS connection
+      ON connection.id = $9
+     AND connection.organization_id = project.organization_id
+     AND connection.active_generation = $10
+     AND connection.revoked_at IS NULL
     WHERE project.id = $2
       AND project.organization_id = $1
       AND project.deleted IS FALSE
@@ -3296,17 +3312,25 @@ func (q *Queries) LockPlatformMCPSetupHandoff(ctx context.Context, arg LockPlatf
 	return err
 }
 
-const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :exec
+const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
     milestone,
     connection_id,
     connection_generation
-) VALUES (
+)
+SELECT
     $1,
     'catalog_explored',
     $2,
     $3
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_connections AS connection
+    WHERE connection.id = $2
+      AND connection.organization_id = $1
+      AND connection.active_generation = $3
+      AND connection.revoked_at IS NULL
 )
 ON CONFLICT (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
@@ -3319,7 +3343,7 @@ WHERE connection_id IS NOT NULL
     'first_read_succeeded',
     'first_write_succeeded',
     'read_only_cohort'
-  )
+)
 DO NOTHING
 `
 
@@ -3329,9 +3353,12 @@ type RecordPlatformMCPCatalogExploredParams struct {
 	ConnectionGeneration uuid.NullUUID
 }
 
-func (q *Queries) RecordPlatformMCPCatalogExplored(ctx context.Context, arg RecordPlatformMCPCatalogExploredParams) error {
-	_, err := q.db.Exec(ctx, recordPlatformMCPCatalogExplored, arg.OrganizationID, arg.ConnectionID, arg.ConnectionGeneration)
-	return err
+func (q *Queries) RecordPlatformMCPCatalogExplored(ctx context.Context, arg RecordPlatformMCPCatalogExploredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPlatformMCPCatalogExplored, arg.OrganizationID, arg.ConnectionID, arg.ConnectionGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordPlatformMCPConnectionReady = `-- name: RecordPlatformMCPConnectionReady :exec
@@ -3514,7 +3541,7 @@ func (q *Queries) RecordPlatformMCPOnboardingInstallIntent(ctx context.Context, 
 	return i, err
 }
 
-const recordPlatformMCPOnboardingLifecycleMilestone = `-- name: RecordPlatformMCPOnboardingLifecycleMilestone :exec
+const recordPlatformMCPOnboardingLifecycleMilestone = `-- name: RecordPlatformMCPOnboardingLifecycleMilestone :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
     milestone,
@@ -3533,6 +3560,16 @@ SELECT
 WHERE EXISTS (
     SELECT 1
     FROM projects AS project
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = $6
+     AND registration.organization_id = project.organization_id
+     AND registration.project_id = project.id
+     AND registration.deleted IS FALSE
+    JOIN platform_mcp_connections AS connection
+      ON connection.id = $3
+     AND connection.organization_id = project.organization_id
+     AND connection.active_generation = $4
+     AND connection.revoked_at IS NULL
     WHERE project.id = $5
       AND project.organization_id = $1
       AND project.deleted IS FALSE
@@ -3551,8 +3588,8 @@ type RecordPlatformMCPOnboardingLifecycleMilestoneParams struct {
 	AttemptID            uuid.NullUUID
 }
 
-func (q *Queries) RecordPlatformMCPOnboardingLifecycleMilestone(ctx context.Context, arg RecordPlatformMCPOnboardingLifecycleMilestoneParams) error {
-	_, err := q.db.Exec(ctx, recordPlatformMCPOnboardingLifecycleMilestone,
+func (q *Queries) RecordPlatformMCPOnboardingLifecycleMilestone(ctx context.Context, arg RecordPlatformMCPOnboardingLifecycleMilestoneParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPlatformMCPOnboardingLifecycleMilestone,
 		arg.OrganizationID,
 		arg.Milestone,
 		arg.ConnectionID,
@@ -3560,7 +3597,10 @@ func (q *Queries) RecordPlatformMCPOnboardingLifecycleMilestone(ctx context.Cont
 		arg.ProjectID,
 		arg.AttemptID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordPlatformMCPRegistrationSucceeded = `-- name: RecordPlatformMCPRegistrationSucceeded :exec
@@ -4049,6 +4089,22 @@ WHERE platform_mcp_distributions.id = $7
   AND EXISTS (
       SELECT 1
       FROM projects AS project
+      JOIN platform_mcp_catalog_registrations AS registration
+        ON registration.id = platform_mcp_distributions.registration_id
+       AND registration.organization_id = project.organization_id
+       AND registration.project_id = project.id
+       AND registration.deleted IS FALSE
+      JOIN plugins AS plugin
+        ON plugin.id = platform_mcp_distributions.default_plugin_id
+       AND plugin.organization_id = project.organization_id
+       AND plugin.project_id = project.id
+       AND plugin.is_default IS TRUE
+       AND plugin.deleted IS FALSE
+      JOIN platform_mcp_connections AS connection
+        ON connection.id = $5
+       AND connection.organization_id = project.organization_id
+       AND connection.active_generation = $6
+       AND connection.revoked_at IS NULL
       WHERE project.id = platform_mcp_distributions.project_id
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
@@ -4119,6 +4175,22 @@ WHERE platform_mcp_distributions.id = $2
   AND EXISTS (
       SELECT 1
       FROM projects AS project
+      JOIN platform_mcp_catalog_registrations AS registration
+        ON registration.id = platform_mcp_distributions.registration_id
+       AND registration.organization_id = project.organization_id
+       AND registration.project_id = project.id
+       AND registration.deleted IS FALSE
+      JOIN plugins AS plugin
+        ON plugin.id = platform_mcp_distributions.default_plugin_id
+       AND plugin.organization_id = project.organization_id
+       AND plugin.project_id = project.id
+       AND plugin.is_default IS TRUE
+       AND plugin.deleted IS FALSE
+      JOIN platform_mcp_connections AS connection
+        ON connection.id = platform_mcp_distributions.connection_id
+       AND connection.organization_id = project.organization_id
+       AND connection.active_generation = platform_mcp_distributions.connection_generation
+       AND connection.revoked_at IS NULL
       WHERE project.id = platform_mcp_distributions.project_id
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE

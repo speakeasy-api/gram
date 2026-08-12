@@ -38,7 +38,7 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 		identity.RegistrationID.String() + "\x00"
 	switch identity.Absence {
 	case "":
-		if identity.RemoteSessionID == uuid.Nil || identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID == uuid.Nil {
+		if identity.RemoteSessionID == uuid.Nil || identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID == uuid.Nil || identity.RemoteSessionIssuerID == uuid.Nil {
 			return "", ErrReadinessInvalid
 		}
 		payload += "active_session\x00" +

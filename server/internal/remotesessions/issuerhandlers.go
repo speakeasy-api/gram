@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -891,6 +892,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	defer cancel()
 
 	client := policy.Client()
+	// Guardian owns the transport and its SSRF protections. Keep redirect policy
+	// narrow here without changing TLS verification or the transport itself.
+	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if !validIssuerDiscoveryURL(req.URL) {
+			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+		}
+		return nil
+	}
 
 	var firstErr *discoveryError
 	var fallbackDoc rfc8414Document
@@ -930,6 +939,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // returns either the parsed RFC 8414 / OIDC document or a typed error annotated
 // with the probed URL and upstream status.
 func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+	requestURL, err := url.Parse(wellKnown)
+	if err != nil || !validIssuerDiscoveryURL(requestURL) {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       0,
+			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
 	if err != nil {
 		return rfc8414Document{}, &discoveryError{
@@ -996,8 +1013,8 @@ func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
 	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("issuer url must include scheme and host")
+	if !validIssuerDiscoveryURL(u) {
+		return nil, fmt.Errorf("issuer url must use HTTPS outside local loopback")
 	}
 
 	origin := (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
@@ -1027,6 +1044,27 @@ func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	}
 
 	return candidates, nil
+}
+
+// validIssuerDiscoveryURL permits HTTPS issuers and the explicit HTTP loopback
+// exception used by local development and deterministic tests. It is applied to
+// every initial probe and redirect before a request leaves the process.
+func validIssuerDiscoveryURL(u *url.URL) bool {
+	if u == nil || u.Host == "" || u.User != nil {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata

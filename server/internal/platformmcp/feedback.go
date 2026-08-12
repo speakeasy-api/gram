@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 	"unicode"
@@ -176,7 +177,7 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 }
 
 func validateFeedbackInput(principal Principal, input FeedbackInput) error {
-	if principal.UserID == "" || principal.OrganizationID == "" || input.IdempotencyKey == "" || !feedbackSafeText(input.IdempotencyKey, 128) || !validFeedbackCategory(input.Category) || !validOptionalFeedbackRating(input.Rating) || !validOptionalFeedbackTool(input.ToolName) || !validOptionalFeedbackFailureCategory(input.FailureCategory) || !feedbackSafeText(input.Note, 500) {
+	if principal.UserID == "" || principal.OrganizationID == "" || input.IdempotencyKey == "" || !feedbackSafeText(input.IdempotencyKey, 128) || !validFeedbackCategory(input.Category) || !validOptionalFeedbackRating(input.Rating) || !validOptionalFeedbackTool(input.ToolName) || !validOptionalFeedbackFailureCategory(input.FailureCategory) || !feedbackNoteSafeText(input.Note) {
 		return ErrFeedbackInvalid
 	}
 	return nil
@@ -225,6 +226,36 @@ func feedbackSafeText(value string, maxRunes int) bool {
 	lower := strings.ToLower(value)
 	for _, disallowed := range []string{"http://", "https://", "www.", "authorization:", "bearer ", "password", "secret", "api_key", "api-key", "token", "@", "{", "}"} {
 		if strings.Contains(lower, disallowed) {
+			return false
+		}
+	}
+	return true
+}
+
+// feedbackNoteSafeText applies the deliberately stricter retention policy for
+// free-form notes. Idempotency keys use feedbackSafeText but may be UUID-shaped;
+// notes are never allowed to carry identifiers, URLs, or session material.
+func feedbackNoteSafeText(value string) bool {
+	if !feedbackSafeText(value, 500) {
+		return false
+	}
+	if parsed, err := url.ParseRequestURI(value); err == nil && parsed.Scheme != "" {
+		return false
+	}
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"://", "urn:"} {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+	for _, word := range strings.FieldsFunc(value, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-'
+	}) {
+		lowerWord := strings.ToLower(word)
+		if lowerWord == "cookie" || lowerWord == "set-cookie" || lowerWord == "session" {
+			return false
+		}
+		if _, err := uuid.Parse(word); err == nil {
 			return false
 		}
 	}

@@ -302,6 +302,8 @@ func onboardingLifecycleToolError(err error) (*mcp.CallToolResult, bool) {
 		result = onboardingLifecycleErrorResult{Code: "not_ready", Message: "Complete secure setup and recheck fresh readiness in the Gram dashboard before adding this MCP."}
 	case errors.Is(err, ErrDistributionDefaultAbsent):
 		result = onboardingLifecycleErrorResult{Code: "default_plugin_missing", Message: "This project does not have an existing Default plugin, so Platform MCP cannot add the MCP."}
+	case errors.Is(err, ErrDistributionTargetUnavailable):
+		result = onboardingLifecycleErrorResult{Code: "distribution_target_unavailable", Message: "The selected project or its Platform MCP setup is no longer available. Check onboarding status and choose the supported next action."}
 	case errors.Is(err, ErrDistributionConflict):
 		result = onboardingLifecycleErrorResult{Code: "conflict", Message: "The project distribution changed. Check onboarding status and retry the supported next action."}
 	default:

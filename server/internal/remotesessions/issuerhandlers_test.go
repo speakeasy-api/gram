@@ -20,7 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -999,6 +1001,30 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 	}))
 	t.Cleanup(server.Close)
 	return server
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackIssuer(t *testing.T) {
+	t.Parallel()
+
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, "http://identity.example")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "HTTPS outside local loopback")
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureRedirect(t *testing.T) {
+	t.Parallel()
+
+	redirected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://identity.example/.well-known/oauth-authorization-server", http.StatusFound)
+	}))
+	t.Cleanup(redirected.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, redirected.URL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "redirect target must use HTTPS outside local loopback")
 }
 
 func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {

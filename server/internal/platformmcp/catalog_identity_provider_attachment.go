@@ -327,7 +327,7 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 		ClientID:                registered.ClientID,
 		ClientSecretEncrypted:   secret,
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		ClientSecretExpiresAt:   registered.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: optionalText(registered.TokenEndpointAuthMethod),
 		Scope:                   append([]string(nil), scopes...),
 		Audience:                pgtype.Text{},
@@ -387,15 +387,9 @@ func validDynamicClientRegistrationEndpoint(raw string) bool {
 // browser-catalog flow. The local fixture deliberately registers public clients
 // through its separate configurator path and never reaches this boundary.
 func validBrowserCatalogDynamicClient(registered remotesessions.ProxyRegisterResponse) bool {
-	if registered.ClientID == "" || registered.ClientSecret == "" {
-		return false
-	}
-	switch registered.TokenEndpointAuthMethod {
-	case "", string(remotesessions.TokenEndpointAuthMethodBasic), string(remotesessions.TokenEndpointAuthMethodPost):
-		return true
-	default:
-		return false
-	}
+	return registered.ClientID != "" &&
+		registered.ClientSecret != "" &&
+		(registered.TokenEndpointAuthMethod == "" || registered.TokenEndpointAuthMethod == browserCatalogDCRAuthMethod)
 }
 
 func optionalString(value string) *string {

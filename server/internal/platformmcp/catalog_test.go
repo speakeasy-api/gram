@@ -56,7 +56,7 @@ func TestCatalogDetailsUseSnakeCaseJSONKeys(t *testing.T) {
 	}, Transport: "streamable-http", ToolNames: []string{"tool"}})
 
 	require.NoError(t, err)
-	require.JSONEq(t, `{"provider_key":"provider","catalog_ref":"reviewed/mcp","name":"","description":"","version":"","tool_count":1,"setup_intent":"authorize","transport":"streamable-http","tool_names":["tool"]}`, string(encoded))
+	require.JSONEq(t, `{"provider_key":"provider","catalog_ref":"reviewed/mcp","name":"","description":"","version":"","tool_count":1,"setup_intent":"authorize","transport":"streamable-http","tool_names":["tool"],"configuration":null,"requires_dashboard_setup":false}`, string(encoded))
 }
 
 func TestCatalogConfigurationRejectsSecretAndUndeclaredValues(t *testing.T) {
@@ -177,7 +177,7 @@ func TestCatalogCandidateFromEntryUsesConfiguredIdentity(t *testing.T) {
 	})
 
 	require.Equal(t, "reviewed-provider", candidate.ProviderKey)
-	require.Equal(t, "reviewed/mcp", candidate.CatalogRef)
+	require.Equal(t, "untrusted/entry", candidate.CatalogRef)
 	require.Equal(t, "Reviewed MCP", candidate.Name)
 	require.Equal(t, "authorize", candidate.SetupIntent)
 }

@@ -247,12 +247,16 @@ func (s *OnboardingService) RecordCatalogExplored(ctx context.Context, principal
 	if err != nil {
 		return err
 	}
-	if err := platformrepo.New(s.db).RecordPlatformMCPCatalogExplored(ctx, platformrepo.RecordPlatformMCPCatalogExploredParams{
+	rows, err := platformrepo.New(s.db).RecordPlatformMCPCatalogExplored(ctx, platformrepo.RecordPlatformMCPCatalogExploredParams{
 		OrganizationID:       principal.OrganizationID,
 		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
 		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("record platform mcp catalog exploration: %w", err)
+	}
+	if rows == 0 {
+		return ErrUnavailable
 	}
 	return nil
 }
@@ -277,15 +281,19 @@ func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, princi
 	if err != nil {
 		return err
 	}
-	if err := platformrepo.New(s.db).RecordPlatformMCPOnboardingLifecycleMilestone(ctx, platformrepo.RecordPlatformMCPOnboardingLifecycleMilestoneParams{
+	rows, err := platformrepo.New(s.db).RecordPlatformMCPOnboardingLifecycleMilestone(ctx, platformrepo.RecordPlatformMCPOnboardingLifecycleMilestoneParams{
 		OrganizationID:       principal.OrganizationID,
 		Milestone:            milestone,
 		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
 		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		ProjectID:            uuid.NullUUID{UUID: projectID, Valid: true},
 		AttemptID:            uuid.NullUUID{UUID: registrationID, Valid: true},
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("record platform mcp %s: %w", milestone, err)
+	}
+	if rows == 0 {
+		return ErrUnavailable
 	}
 	return nil
 }

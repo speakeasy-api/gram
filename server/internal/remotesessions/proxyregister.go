@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -30,9 +31,10 @@ type ProxyRegisterRequest struct {
 }
 
 type ProxyRegisterResponse struct {
-	ClientID                string `json:"client_id"`
-	ClientSecret            string `json:"client_secret,omitempty"`
-	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method,omitempty"`
+	ClientID                string             `json:"client_id"`
+	ClientSecret            string             `json:"client_secret,omitempty"`
+	ClientSecretExpiresAt   pgtype.Timestamptz `json:"-"`
+	TokenEndpointAuthMethod string             `json:"token_endpoint_auth_method,omitempty"`
 }
 
 // DynamicClientRegistrationError classifies a refusal from the upstream
@@ -141,9 +143,14 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	if dcrResp.ClientID == "" {
 		return ProxyRegisterResponse{}, errors.New("DCR response missing client_id")
 	}
+	clientSecretExpiresAt := pgtype.Timestamptz{}
+	if dcrResp.ClientSecretExpiresAt > 0 {
+		clientSecretExpiresAt = conv.ToPGTimestamptz(time.Unix(dcrResp.ClientSecretExpiresAt, 0).UTC())
+	}
 	return ProxyRegisterResponse{
 		ClientID:                dcrResp.ClientID,
 		ClientSecret:            dcrResp.ClientSecret,
+		ClientSecretExpiresAt:   clientSecretExpiresAt,
 		TokenEndpointAuthMethod: dcrResp.TokenEndpointAuthMethod,
 	}, nil
 }

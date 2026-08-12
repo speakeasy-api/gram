@@ -969,6 +969,22 @@ SELECT
 WHERE EXISTS (
     SELECT 1
     FROM projects AS project
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = @registration_id
+     AND registration.organization_id = project.organization_id
+     AND registration.project_id = project.id
+     AND registration.deleted IS FALSE
+    JOIN plugins AS plugin
+      ON plugin.id = @default_plugin_id
+     AND plugin.organization_id = project.organization_id
+     AND plugin.project_id = project.id
+     AND plugin.is_default IS TRUE
+     AND plugin.deleted IS FALSE
+    JOIN platform_mcp_connections AS connection
+      ON connection.id = @connection_id
+     AND connection.organization_id = project.organization_id
+     AND connection.active_generation = @connection_generation
+     AND connection.revoked_at IS NULL
     WHERE project.id = @project_id
       AND project.organization_id = @organization_id
       AND project.deleted IS FALSE
@@ -994,6 +1010,22 @@ WHERE platform_mcp_distributions.id = @id
   AND EXISTS (
       SELECT 1
       FROM projects AS project
+      JOIN platform_mcp_catalog_registrations AS registration
+        ON registration.id = platform_mcp_distributions.registration_id
+       AND registration.organization_id = project.organization_id
+       AND registration.project_id = project.id
+       AND registration.deleted IS FALSE
+      JOIN plugins AS plugin
+        ON plugin.id = platform_mcp_distributions.default_plugin_id
+       AND plugin.organization_id = project.organization_id
+       AND plugin.project_id = project.id
+       AND plugin.is_default IS TRUE
+       AND plugin.deleted IS FALSE
+      JOIN platform_mcp_connections AS connection
+        ON connection.id = @connection_id
+       AND connection.organization_id = project.organization_id
+       AND connection.active_generation = @connection_generation
+       AND connection.revoked_at IS NULL
       WHERE project.id = platform_mcp_distributions.project_id
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
@@ -1014,6 +1046,22 @@ WHERE platform_mcp_distributions.id = @id
   AND EXISTS (
       SELECT 1
       FROM projects AS project
+      JOIN platform_mcp_catalog_registrations AS registration
+        ON registration.id = platform_mcp_distributions.registration_id
+       AND registration.organization_id = project.organization_id
+       AND registration.project_id = project.id
+       AND registration.deleted IS FALSE
+      JOIN plugins AS plugin
+        ON plugin.id = platform_mcp_distributions.default_plugin_id
+       AND plugin.organization_id = project.organization_id
+       AND plugin.project_id = project.id
+       AND plugin.is_default IS TRUE
+       AND plugin.deleted IS FALSE
+      JOIN platform_mcp_connections AS connection
+        ON connection.id = platform_mcp_distributions.connection_id
+       AND connection.organization_id = project.organization_id
+       AND connection.active_generation = platform_mcp_distributions.connection_generation
+       AND connection.revoked_at IS NULL
       WHERE project.id = platform_mcp_distributions.project_id
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
@@ -1329,17 +1377,25 @@ SELECT EXISTS (
       AND milestone.connection_generation = @connection_generation
 );
 
--- name: RecordPlatformMCPCatalogExplored :exec
+-- name: RecordPlatformMCPCatalogExplored :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
     milestone,
     connection_id,
     connection_generation
-) VALUES (
+)
+SELECT
     @organization_id,
     'catalog_explored',
     @connection_id,
     @connection_generation
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_connections AS connection
+    WHERE connection.id = @connection_id
+      AND connection.organization_id = @organization_id
+      AND connection.active_generation = @connection_generation
+      AND connection.revoked_at IS NULL
 )
 ON CONFLICT (milestone, connection_id, connection_generation)
 WHERE connection_id IS NOT NULL
@@ -1352,7 +1408,7 @@ WHERE connection_id IS NOT NULL
     'first_read_succeeded',
     'first_write_succeeded',
     'read_only_cohort'
-  )
+)
 DO NOTHING;
 
 -- name: BindPlatformMCPOnboardingRegistration :one
@@ -1497,7 +1553,7 @@ SELECT EXISTS (
       AND milestone.connection_generation = @connection_generation
 );
 
--- name: RecordPlatformMCPOnboardingLifecycleMilestone :exec
+-- name: RecordPlatformMCPOnboardingLifecycleMilestone :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
     milestone,
@@ -1516,6 +1572,16 @@ SELECT
 WHERE EXISTS (
     SELECT 1
     FROM projects AS project
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = @attempt_id
+     AND registration.organization_id = project.organization_id
+     AND registration.project_id = project.id
+     AND registration.deleted IS FALSE
+    JOIN platform_mcp_connections AS connection
+      ON connection.id = @connection_id
+     AND connection.organization_id = project.organization_id
+     AND connection.active_generation = @connection_generation
+     AND connection.revoked_at IS NULL
     WHERE project.id = @project_id
       AND project.organization_id = @organization_id
       AND project.deleted IS FALSE

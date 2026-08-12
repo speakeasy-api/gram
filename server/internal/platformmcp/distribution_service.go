@@ -28,10 +28,11 @@ const (
 )
 
 var (
-	ErrDistributionInvalid       = errors.New("invalid platform mcp distribution input")
-	ErrDistributionConflict      = errors.New("platform mcp distribution version conflict")
-	ErrDistributionNotReady      = errors.New("platform mcp distribution requires fresh readiness")
-	ErrDistributionDefaultAbsent = errors.New("platform mcp distribution requires an existing default plugin")
+	ErrDistributionInvalid           = errors.New("invalid platform mcp distribution input")
+	ErrDistributionConflict          = errors.New("platform mcp distribution version conflict")
+	ErrDistributionNotReady          = errors.New("platform mcp distribution requires fresh readiness")
+	ErrDistributionDefaultAbsent     = errors.New("platform mcp distribution requires an existing default plugin")
+	ErrDistributionTargetUnavailable = errors.New("platform mcp distribution target is unavailable")
 )
 
 // DistributionInput deliberately identifies only the project selected by its
@@ -146,7 +147,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		return Distribution{}, err
 	}
 
-	plugin, err := pluginsrepo.New(tx).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+	plugin, err := pluginsrepo.New(tx).GetDefaultPluginForUpdate(ctx, pluginsrepo.GetDefaultPluginForUpdateParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      target.ProjectID,
 	})
@@ -154,7 +155,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		return Distribution{}, ErrDistributionDefaultAbsent
 	}
 	if err != nil {
-		return Distribution{}, fmt.Errorf("get platform mcp distribution default plugin: %w", err)
+		return Distribution{}, fmt.Errorf("lock platform mcp distribution default plugin: %w", err)
 	}
 
 	if err := q.LockPlatformMCPDistribution(ctx, repo.LockPlatformMCPDistributionParams{
@@ -257,7 +258,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	if err != nil {
 		return Distribution{}, err
 	}
-	plugin, err := pluginsrepo.New(tx).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+	plugin, err := pluginsrepo.New(tx).GetDefaultPluginForUpdate(ctx, pluginsrepo.GetDefaultPluginForUpdateParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      target.ProjectID,
 	})
@@ -265,7 +266,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 		return Distribution{}, ErrDistributionDefaultAbsent
 	}
 	if err != nil {
-		return Distribution{}, fmt.Errorf("get platform mcp distribution default plugin for removal: %w", err)
+		return Distribution{}, fmt.Errorf("lock platform mcp distribution default plugin for removal: %w", err)
 	}
 
 	if err := q.LockPlatformMCPDistribution(ctx, repo.LockPlatformMCPDistributionParams{
@@ -481,7 +482,7 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 			ConnectionGeneration: input.connectionGeneration,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return repo.PlatformMcpDistribution{}, ErrDistributionConflict
+			return repo.PlatformMcpDistribution{}, ErrDistributionTargetUnavailable
 		}
 		if err != nil {
 			return repo.PlatformMcpDistribution{}, fmt.Errorf("create platform mcp distribution: %w", err)
@@ -502,7 +503,7 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 		DefaultPluginID:      input.defaultPluginID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return repo.PlatformMcpDistribution{}, ErrDistributionConflict
+		return repo.PlatformMcpDistribution{}, ErrDistributionTargetUnavailable
 	}
 	if err != nil {
 		return repo.PlatformMcpDistribution{}, fmt.Errorf("update platform mcp distribution: %w", err)

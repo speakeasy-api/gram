@@ -442,7 +442,7 @@ func (s *ManagementService) mapOnboardingError(err error) error {
 	switch {
 	case errors.Is(err, ErrOnboardingInvalid), errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrSetupHandoffInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrReadinessRegistrationNotFound), errors.Is(err, ErrDistributionInvalid), errors.Is(err, ErrDistributionVersionTokenInvalid):
 		return oops.C(oops.CodeBadRequest)
-	case errors.Is(err, ErrDistributionConflict), errors.Is(err, ErrDistributionDefaultAbsent), errors.Is(err, ErrDistributionNotReady):
+	case errors.Is(err, ErrDistributionConflict), errors.Is(err, ErrDistributionDefaultAbsent), errors.Is(err, ErrDistributionNotReady), errors.Is(err, ErrDistributionTargetUnavailable):
 		return oops.C(oops.CodeConflict)
 	case errors.Is(err, ErrForbidden), errors.Is(err, ErrTargetIneligible):
 		return oops.C(oops.CodeForbidden)
