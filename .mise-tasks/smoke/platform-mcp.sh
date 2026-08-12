@@ -9,6 +9,8 @@ set -euo pipefail
 
 phase="${1:-read-only}"
 platform_mcp_feature="platform_mcp"
+platform_mcp_rollout_flag="platform-mcp"
+platform_mcp_dashboard_flag="platform-mcp-dashboard"
 
 fail() {
   echo "platform-mcp smoke: $*" >&2
@@ -105,8 +107,20 @@ setup() {
   docker compose exec -T gram-cache redis-cli -p 35299 -a "$redis_password" \
     DEL "feature:${organization_id}:${platform_mcp_feature}:" >/dev/null
 
-  echo "Platform MCP local product features prepared."
-  echo "Restart the local server before browser acceptance."
+  csv_tmp="$(mktemp)"
+  trap 'rm -f "$csv_tmp"' RETURN
+  awk -F, -v OFS=, -v organization_id="$organization_id" \
+    -v rollout_flag="$platform_mcp_rollout_flag" -v dashboard_flag="$platform_mcp_dashboard_flag" '
+      NR == 1 { print; next }
+      !($1 == organization_id && ($2 == rollout_flag || $2 == dashboard_flag)) { print }
+    ' "$GRAM_LOCAL_FEATURE_FLAGS_CSV" > "$csv_tmp"
+  printf '%s,%s,true\n%s,%s,true\n' \
+    "$organization_id" "$platform_mcp_rollout_flag" \
+    "$organization_id" "$platform_mcp_dashboard_flag" >> "$csv_tmp"
+  mv "$csv_tmp" "$GRAM_LOCAL_FEATURE_FLAGS_CSV"
+
+  echo "Platform MCP local feature gates prepared."
+  echo "Restart the local server with GRAM_PLATFORM_MCP_LOCAL_FIXTURE=1 before browser acceptance."
 }
 
 read_only() {

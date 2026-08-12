@@ -442,11 +442,8 @@ func newWorkerCommand() *cli.Command {
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
 			platformAdmission := platformmcp.NewAdmissionChecker(
-				platformmcp.NewOrganizationGate(
-					productFeatures,
-					featureFlags,
-					platformmcp.NewPostgresOrganizationSlugResolver(db),
-				),
+				productFeatures,
+				featureFlags,
 				platformmcp.NewPostgresNewModelEligibility(db),
 			)
 			if pluginsGitHub != nil {

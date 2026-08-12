@@ -3,6 +3,9 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 type Admission uint8
@@ -22,34 +25,53 @@ type NewModelEligibility interface {
 // indeterminate package decision must preserve published bytes, while runtime
 // requests still fail closed.
 type AdmissionChecker struct {
-	gate        Gate
-	eligibility NewModelEligibility
+	capabilities CapabilityChecker
+	rollout      feature.Provider
+	eligibility  NewModelEligibility
 }
 
-func NewAdmissionChecker(gate Gate, eligibility NewModelEligibility) *AdmissionChecker {
+func NewAdmissionChecker(capabilities CapabilityChecker, rollout feature.Provider, eligibility NewModelEligibility) *AdmissionChecker {
 	return &AdmissionChecker{
-		gate:        gate,
-		eligibility: eligibility,
+		capabilities: capabilities,
+		rollout:      rollout,
+		eligibility:  eligibility,
 	}
 }
 
-func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, _ string) (Admission, error) {
-	if c == nil || c.gate == nil || c.eligibility == nil || organizationID == "" {
+func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organizationSlug string) (Admission, error) {
+	if c == nil || c.capabilities == nil || c.rollout == nil || c.eligibility == nil || organizationID == "" || organizationSlug == "" {
 		return AdmissionIndeterminate, nil
 	}
 	if err := ctx.Err(); err != nil {
 		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context: %w", err)
 	}
 
-	enabled, err := c.gate.Enabled(ctx, organizationID)
+	capable, err := c.capabilities.IsFeatureEnabled(ctx, organizationID, productfeatures.FeaturePlatformMCP)
 	if err != nil {
-		return AdmissionIndeterminate, fmt.Errorf("check platform mcp gate: %w", err)
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp capability: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
-		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after gate: %w", err)
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after capability: %w", err)
 	}
-	if !enabled {
+	if !capable {
 		return AdmissionDisabled, nil
+	}
+
+	rollout, err := feature.EvaluateFlag(ctx, c.rollout, feature.FlagPlatformMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
+	if err != nil {
+		return AdmissionIndeterminate, fmt.Errorf("evaluate platform mcp rollout: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return AdmissionIndeterminate, fmt.Errorf("check platform mcp admission context after rollout: %w", err)
+	}
+	switch rollout {
+	case feature.EvaluationEnabled:
+	case feature.EvaluationDisabled:
+		return AdmissionDisabled, nil
+	case feature.EvaluationIndeterminate:
+		return AdmissionIndeterminate, nil
+	default:
+		return AdmissionIndeterminate, nil
 	}
 
 	eligible, err := c.eligibility.EligibleForPlatformMCP(ctx, organizationID)

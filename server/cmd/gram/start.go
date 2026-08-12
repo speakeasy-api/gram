@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -347,6 +348,12 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
+		&cli.BoolFlag{
+			Name:    platformMCPLocalFixtureFlag,
+			Usage:   "Enable the synthetic local-only Platform MCP reviewed-provider fixture",
+			EnvVars: []string{"GRAM_PLATFORM_MCP_LOCAL_FIXTURE"},
+			Value:   false,
+		},
 
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -489,6 +496,11 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
+			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.Bool(platformMCPLocalFixtureFlag), c.String("server-url"))
+			if err != nil {
+				return fmt.Errorf("invalid Platform MCP local fixture configuration: %w", err)
+			}
 
 			if serviceEnv == "local" {
 				scanners.EnableRuleIDFormatEnforcement()
@@ -1265,17 +1277,22 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
+			if platformFixture != nil && pluginsGitHub == nil {
+				pluginsGitHub = &plugins.GitHubConfig{
+					Client:         localfixture.NewInMemoryGitHubPublisher(),
+					Org:            "local-fixture",
+					InstallationID: 1,
+				}
+				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
+			}
 
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			var pluginPublisher *plugins.Service
 			platformAdmission := platformmcp.NewAdmissionChecker(
-				platformmcp.NewOrganizationGate(
-					productFeatures,
-					featureFlags,
-					platformmcp.NewPostgresOrganizationSlugResolver(db),
-				),
+				productFeatures,
+				featureFlags,
 				platformmcp.NewPostgresNewModelEligibility(db),
 			)
 			if pluginsGitHub != nil {
@@ -1355,6 +1372,7 @@ func newStartCommand() *cli.Command {
 				RemoteChallengeManager: remoteChallengeManager,
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
+				LocalFixture:           platformFixture,
 			}); err != nil {
 				return err
 			}

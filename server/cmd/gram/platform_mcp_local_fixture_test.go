@@ -1,20 +1,36 @@
 package gram
 
-import "testing"
+import (
+	"testing"
 
-// Production startup does not compose the local fixture. Synthetic provider
-// setup remains covered in server/internal/platformmcp/localfixture tests.
-func TestPlatformMCPStartupDoesNotExposeFixtureFlag(t *testing.T) {
+	"github.com/stretchr/testify/require"
+)
+
+func TestPlatformMCPLocalFixtureConfigIsLocalOnly(t *testing.T) {
 	t.Parallel()
 
-	const removedFlag = "platform-mcp-local-fixture"
+	fixture, err := platformMCPLocalFixtureConfigFromCLI(
+		"local",
+		true,
+		"https://localhost:8080",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, fixture)
+	require.NotNil(t, fixture.Fixture)
 
-	command := newStartCommand()
-	for _, flag := range command.Flags {
-		for _, name := range flag.Names() {
-			if name == removedFlag {
-				t.Fatalf("unexpected Platform MCP fixture flag %q", removedFlag)
-			}
-		}
-	}
+	fixture, err = platformMCPLocalFixtureConfigFromCLI(
+		"production",
+		true,
+		"https://localhost:8080",
+	)
+	require.ErrorContains(t, err, "only supported when environment is local")
+	require.Nil(t, fixture)
+}
+
+func TestPlatformMCPLocalFixtureConfigIsDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	fixture, err := platformMCPLocalFixtureConfigFromCLI("local", false, "https://localhost:8080")
+	require.NoError(t, err)
+	require.Nil(t, fixture)
 }
