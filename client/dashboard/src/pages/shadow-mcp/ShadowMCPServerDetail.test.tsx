@@ -120,9 +120,13 @@ vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
 }));
 
 vi.mock("@/components/mcp-approvals/ApprovalReview", () => ({
+  // The double renders the usage slot, because the real review does: observed
+  // traffic is a section of the review, and a double that swallowed it would
+  // hide the page's own table from every test here.
   ApprovalReview: ({
     audience,
     requestId,
+    usage,
   }: {
     audience?: {
       disposition: string | null;
@@ -130,12 +134,15 @@ vi.mock("@/components/mcp-approvals/ApprovalReview", () => ({
       roles: unknown[];
     };
     requestId: string;
+    usage?: React.ReactNode;
   }) => (
     <div
       data-testid="approval-review"
       data-audience-disposition={audience?.disposition ?? undefined}
       data-request-id={requestId}
-    />
+    >
+      {usage}
+    </div>
   ),
   RefreshEvidenceButton: ({
     projectSlug,

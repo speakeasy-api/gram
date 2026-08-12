@@ -1,4 +1,7 @@
-import { authorityModeLabel } from "@/components/mcp-approvals/evidence";
+import {
+  authorityModeLabel,
+  USAGE_QUESTION,
+} from "@/components/mcp-approvals/evidence";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -32,9 +35,18 @@ import { gapLabel } from "./evidence";
 export function EvidencePanel({
   document,
   collectedAt,
+  usage,
 }: {
   document: EvidenceDocument | null;
   collectedAt: Date | undefined;
+  /**
+   * Who is calling the server today, supplied by the page that has the
+   * traffic query. It reads as one more question about the server, and it
+   * belongs beside the tools it declares: what it can do, and who is doing
+   * it. Absent for a decision's frozen snapshot, which is evidence as it
+   * stood rather than traffic as it is now.
+   */
+  usage?: React.ReactNode;
 }): JSX.Element {
   if (!document) {
     return (
@@ -46,7 +58,7 @@ export function EvidencePanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {document.gaps.length > 0 && <GapsNotice gaps={document.gaps} />}
       {collectedAt && (
         <p className="text-muted-foreground text-xs">
@@ -55,53 +67,105 @@ export function EvidencePanel({
           nothing is verified behavior.
         </p>
       )}
-      <TrustSection
-        identity={document.identity}
-        pkg={document.package}
-        domain={document.domain}
-      />
-      <AuthoritySection authority={document.authority} />
-      <DeclaredCapabilitySection
-        capabilities={document.capabilities}
-        source={document.capabilitiesSource}
-      />
-      <MaturitySection
-        pkg={document.package}
-        notPublished={document.packageNotPublished}
-        packageName={document.identity.packageName}
-        provenance={document.provenance}
-        identityKind={document.identity.kind}
-        repository={document.repository}
-        repositoryNotFound={document.repositoryNotFound}
-      />
-      <AdvisoriesSection
-        advisories={document.advisories}
-        identityKind={document.identity.kind}
-      />
-      <ExposureSection
-        exposure={document.exposure}
-        identity={document.identity}
-      />
+      {/* Two columns on a wide screen. Each question is short enough that
+          stacking them all made the page scroll for no reason; the reading
+          order still runs left to right, identity first. */}
+      <div className="grid gap-x-6 gap-y-3 lg:grid-cols-2">
+        <TrustSection
+          identity={document.identity}
+          pkg={document.package}
+          domain={document.domain}
+        />
+        <AuthoritySection authority={document.authority} />
+        {usage ? (
+          <>
+            <DeclaredCapabilitySection
+              capabilities={document.capabilities}
+              source={document.capabilitiesSource}
+              fill
+            />
+            <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
+          </>
+        ) : (
+          <div className="lg:col-span-2">
+            <DeclaredCapabilitySection
+              capabilities={document.capabilities}
+              source={document.capabilitiesSource}
+            />
+          </div>
+        )}
+        {/* Full width for the same reason as the tools: this group carries
+            the most facts, and a fact list laid out across the page is half
+            the rows it is in a column. */}
+        <div className="lg:col-span-2">
+          <MaturitySection
+            pkg={document.package}
+            notPublished={document.packageNotPublished}
+            packageName={document.identity.packageName}
+            provenance={document.provenance}
+            identityKind={document.identity.kind}
+            repository={document.repository}
+            repositoryNotFound={document.repositoryNotFound}
+          />
+        </div>
+        <AdvisoriesSection
+          advisories={document.advisories}
+          identityKind={document.identity.kind}
+        />
+        <ExposureSection
+          exposure={document.exposure}
+          identity={document.identity}
+        />
+      </div>
     </div>
   );
 }
 
-function EvidenceGroup({
+export function EvidenceGroup({
   question,
+  note,
+  fill = false,
   children,
 }: {
   question: string;
+  /**
+   * The group's one-line headline, set beside the question rather than in a
+   * band below it. For the finding a reader should not be able to miss —
+   * everything else belongs in the body.
+   */
+  note?: React.ReactNode;
+  /**
+   * Give the body the full height of the grid row instead of its natural
+   * height, so a list inside it can size itself against whatever the group
+   * beside it turned out to be.
+   */
+  fill?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
+  // A container, so the fact lists inside decide their own column count from
+  // the width this group actually got — two when it spans the page, one when
+  // it is sharing a row — rather than from the viewport.
   return (
-    <section className="space-y-1.5">
+    <section
+      className={cn(
+        "@container",
+        fill ? "flex h-full flex-col gap-1.5" : "space-y-1.5",
+      )}
+    >
       {/* The questions are the page's real structure, so they keep the serif
           treatment content subsections use — sized down so a full gather fits
           on one screen without zooming. */}
-      <Heading variant="h3" className="text-lg font-thin">
-        {question}
-      </Heading>
-      {children}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <Heading variant="h3" className="text-lg font-thin">
+          {question}
+        </Heading>
+        {note}
+      </div>
+      {fill ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">{children}</div>
+      ) : (
+        children
+      )}
     </section>
   );
 }
@@ -144,7 +208,7 @@ function FactList({
   return (
     <dl
       className={cn(
-        "grid grid-cols-1 gap-x-6 gap-y-1 px-3 py-2 sm:grid-cols-2",
+        "@2xl:grid-cols-2 grid grid-cols-1 gap-x-6 gap-y-1 px-3 py-2",
         !bare && "border-border border",
       )}
     >
@@ -420,9 +484,12 @@ function capabilitySourceNote(
 function DeclaredCapabilitySection({
   capabilities,
   source,
+  fill = false,
 }: {
   capabilities: EvidenceCapability[];
   source: "server" | "registry" | undefined;
+  /** Share a row with another group, and size the tool list to it. */
+  fill?: boolean;
 }): JSX.Element {
   if (capabilities.length === 0) {
     // A source that answered with zero tools is a real declaration —
@@ -452,19 +519,27 @@ function DeclaredCapabilitySection({
   const actingTools = capabilities.filter((tool) => tool.actsOnBehalf);
 
   return (
-    <EvidenceGroup question="What does it say it can do?">
+    <EvidenceGroup
+      question="What does it say it can do?"
+      fill={fill}
+      note={
+        actingTools.length > 0 && (
+          <span className="border-warning border px-2.5 py-1 text-xs">
+            {actingTools.length === 1
+              ? "One tool declares"
+              : `${actingTools.length} of ${capabilities.length} tools declare`}{" "}
+            acting on your behalf.
+          </span>
+        )
+      }
+    >
       <p className="text-muted-foreground text-xs">
-        {capabilitySourceNote(source)}
+        {capabilitySourceNote(source)}{" "}
+        {capabilities.length === 1
+          ? "1 tool declared."
+          : `${capabilities.length} tools declared.`}
       </p>
-      {actingTools.length > 0 && (
-        <div className="border-warning border px-2.5 py-1.5 text-xs">
-          {actingTools.length === 1
-            ? "One tool declares"
-            : `${actingTools.length} of ${capabilities.length} tools declare`}{" "}
-          acting on your behalf.
-        </div>
-      )}
-      <ToolList capabilities={capabilities} />
+      <ToolList capabilities={capabilities} fill={fill} />
     </EvidenceGroup>
   );
 }
@@ -530,39 +605,70 @@ function CollapsibleList<T>({
   );
 }
 
+const TOOL_ROW_CLASS =
+  "flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs";
+
+function ToolRow({ tool }: { tool: EvidenceCapability }): JSX.Element {
+  return (
+    <>
+      <span className="font-mono">{tool.tool}</span>
+      {tool.unannotated ? (
+        <span className="text-muted-foreground italic">
+          declares nothing — authority unknown
+        </span>
+      ) : (
+        <span className="flex flex-wrap justify-end gap-1">
+          {[...tool.declared, ...tool.schemaImplied].map((value) => (
+            <span
+              key={value}
+              className="border-border text-muted-foreground border px-1.5 py-px"
+            >
+              {capabilityLabel(value)}
+            </span>
+          ))}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * Every declared tool. Sharing a row with another group, the list takes
+ * whatever height that group settled on and scrolls past it — a fixed preview
+ * count would be a guess about the neighbour, right for one server's traffic
+ * and wrong for the next. The scroller is absolutely positioned because a
+ * grid row is sized by its content: left in flow, the list would set the
+ * height it is supposed to be reading.
+ */
 function ToolList({
   capabilities,
+  fill,
 }: {
   capabilities: EvidenceCapability[];
+  fill: boolean;
 }): JSX.Element {
+  if (!fill) {
+    return (
+      <CollapsibleList
+        items={capabilities}
+        itemKey={(tool) => tool.tool}
+        itemClassName={TOOL_ROW_CLASS}
+        noun="tools"
+        renderItem={(tool) => <ToolRow tool={tool} />}
+      />
+    );
+  }
+
   return (
-    <CollapsibleList
-      items={capabilities}
-      itemKey={(tool) => tool.tool}
-      itemClassName="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
-      noun="tools"
-      renderItem={(tool) => (
-        <>
-          <span className="font-mono">{tool.tool}</span>
-          {tool.unannotated ? (
-            <span className="text-muted-foreground italic">
-              declares nothing — authority unknown
-            </span>
-          ) : (
-            <span className="flex flex-wrap justify-end gap-1">
-              {[...tool.declared, ...tool.schemaImplied].map((value) => (
-                <span
-                  key={value}
-                  className="border-border text-muted-foreground border px-1.5 py-px"
-                >
-                  {capabilityLabel(value)}
-                </span>
-              ))}
-            </span>
-          )}
-        </>
-      )}
-    />
+    <div className="border-border relative min-h-40 flex-1 border">
+      <ul className="divide-border absolute inset-0 divide-y overflow-y-auto">
+        {capabilities.map((tool) => (
+          <li key={tool.tool} className={TOOL_ROW_CLASS}>
+            <ToolRow tool={tool} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
