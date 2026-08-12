@@ -277,17 +277,18 @@ export function ChallengesTab(): JSX.Element {
   const outcomeParam = useOutcomeApiParam(outcomeFilter);
   const offset = (pageCount - 1) * PAGE_SIZE;
 
-  const { data, isFetching } = useChallengeBuckets(
-    {
-      ...outcomeParam,
-      principalUrn: principalFilter !== "all" ? principalFilter : undefined,
-      scope: scopeFilter !== "all" ? scopeFilter : undefined,
-      limit: PAGE_SIZE,
-      offset,
-    },
-    undefined,
-    { placeholderData: keepPreviousData },
-  );
+  const { data, isLoading, isFetching, isPlaceholderData } =
+    useChallengeBuckets(
+      {
+        ...outcomeParam,
+        principalUrn: principalFilter !== "all" ? principalFilter : undefined,
+        scope: scopeFilter !== "all" ? scopeFilter : undefined,
+        limit: PAGE_SIZE,
+        offset,
+      },
+      undefined,
+      { placeholderData: keepPreviousData },
+    );
 
   // Reset accumulated data when filters change.
   const filterKey = `${outcomeFilter}|${principalFilter}|${scopeFilter}`;
@@ -408,13 +409,16 @@ export function ChallengesTab(): JSX.Element {
     wrappedActionsColumn,
   ];
 
-  // Show the skeleton whenever a first-page fetch is in flight with nothing to
-  // display yet. `isLoading` alone is insufficient: with `keepPreviousData`,
-  // switching filters resets `accumulated` to [] while `isLoading` stays false
-  // (placeholder data keeps the query out of the pending state), which would
-  // otherwise flash the "no challenges" empty state during a slow load.
+  // Show the skeleton for the first/active load of the current filter, so a slow
+  // load never flashes the "no challenges" empty state. Two cases need it:
+  //   - initial load: `isLoading` is true (no data yet); and
+  //   - a filter switch under `keepPreviousData`: `isLoading` stays false because
+  //     the previous filter's data lingers, but `isPlaceholderData` is true while
+  //     the new filter's request is in flight (and `accumulated` was reset to []).
+  // Gating on these (rather than the raw `isFetching`) keeps the empty state
+  // stable during background refetches of a filter that genuinely has no results.
   const hasRows = accumulated.length > 0;
-  const showInitialLoading = !hasRows && isFetching;
+  const showInitialLoading = !hasRows && (isLoading || isPlaceholderData);
 
   return (
     <div>
