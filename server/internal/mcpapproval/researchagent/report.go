@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -164,7 +165,7 @@ var extractionSchema = json.RawMessage(`{
 							"additionalProperties": false,
 							"required": ["url", "title"],
 							"properties": {
-								"url": {"type": "string"},
+								"url": {"type": "string", "pattern": "^https?://"},
 								"title": {"type": ["string", "null"]}
 							}
 						}
@@ -178,6 +179,13 @@ var extractionSchema = json.RawMessage(`{
 // validate drops web-tier claims without citations — an untraceable web claim
 // is one the admin cannot defend — and rejects unknown tiers and levels so a
 // drifted extraction fails loudly rather than storing junk.
+//
+// A citation is only a citation if it can be followed: the model writes these
+// after reading pages that are themselves untrusted, so a URL that is empty,
+// unparseable, or not http(s) is discarded before it can be stored. That last
+// case is the one that matters most — the review page renders citations as
+// links, and a javascript: or data: URL there would put attacker-authored
+// script one admin click away.
 func (d *Document) validate() (int, error) {
 	// A degenerate extraction — empty, literal filler, or the debris of
 	// OpenRouter's response healing (which stuffs unparseable output into
@@ -211,6 +219,13 @@ func (d *Document) validate() (int, error) {
 			// restating them is noise. Dropped silently — nothing is lost.
 			continue
 		case TierIndependentlyReported, TierVendorClaim:
+			// A claim with nothing to say is not a finding, and the approval
+			// page would render it as a blank row inside the top five.
+			if strings.TrimSpace(claim.Text) == "" {
+				dropped++
+				continue
+			}
+			claim.Citations = followableCitations(claim.Citations)
 			if len(claim.Citations) == 0 {
 				dropped++
 				continue
@@ -228,4 +243,33 @@ func (d *Document) validate() (int, error) {
 	d.Claims = kept
 
 	return dropped, nil
+}
+
+// followableCitations keeps the citations an admin can actually open. The
+// scheme check is the security-relevant half: citation URLs are written by a
+// model that has just read untrusted pages, and the review page turns them
+// into links.
+func followableCitations(citations []Citation) []Citation {
+	kept := make([]Citation, 0, len(citations))
+	for _, citation := range citations {
+		citation.URL = strings.TrimSpace(citation.URL)
+		if citation.URL == "" {
+			continue
+		}
+
+		parsed, err := url.Parse(citation.URL)
+		if err != nil {
+			continue
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			continue
+		}
+		if parsed.Host == "" {
+			continue
+		}
+
+		kept = append(kept, citation)
+	}
+
+	return kept
 }
