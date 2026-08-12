@@ -1248,9 +1248,6 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Gating the shared helper covers both readers (ListRiskResults and
-	// ListRiskResultsForAgent); neither mutates, and both redact match content
-	// before returning it.
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeRiskPolicyRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}

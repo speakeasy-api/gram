@@ -40,8 +40,6 @@ func TestPrepareContext_demoOrgGetsReadOnlyGrants(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceID: "chat_demo"}))
-	// The risk dashboard reads: policies, detection rules, and findings. The
-	// risk write paths check org:admin, which is denied below.
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeRiskPolicyRead, ResourceID: constants.DemoOrganizationID}))
 
 	// Writes and environment reads denied.

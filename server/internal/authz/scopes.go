@@ -106,7 +106,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedRead:        scopeVisibilityInternal,
 	ScopeSkillWrite:              scopeVisibilityUserVisible,
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
-	ScopeRiskPolicyRead:          scopeVisibilityUserVisible,
+	ScopeRiskPolicyRead:          scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
@@ -194,15 +194,12 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedRead:        nil,
 	ScopeSkillWrite:              nil,
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
-	// org:admin satisfies risk_policy:read so every existing org admin keeps the
-	// risk dashboard without a grant migration, and org admin remains the only
-	// way to reach the risk write paths (which check org:admin directly).
-	ScopeRiskPolicyRead:     {ScopeOrgAdmin},
-	ScopeRiskPolicyEvaluate: nil,
-	ScopeRiskPolicyBypass:   nil,
-	ScopeRiskPolicyBlock:    nil,
-	ScopeChatRead:           {ScopeChatWrite},
-	ScopeChatWrite:          nil,
+	ScopeRiskPolicyRead:          {ScopeOrgAdmin},
+	ScopeRiskPolicyEvaluate:      nil,
+	ScopeRiskPolicyBypass:        nil,
+	ScopeRiskPolicyBlock:         nil,
+	ScopeChatRead:                {ScopeChatWrite},
+	ScopeChatWrite:               nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
