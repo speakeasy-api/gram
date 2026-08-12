@@ -96,7 +96,7 @@ func NewSearchClient(completions CompletionProvider) *SearchClient {
 // model's own prose is discarded: the citations are the deliverable, and
 // keeping them free of model narration keeps this tool a search, not a
 // summarizer. No results with a nil error is a real answer.
-func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query string, maxResults int) ([]SearchResult, error) {
+func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query string, maxResults int) ([]SearchResult, SearchUsage, error) {
 	temperature := 0.0
 	response, err := c.completions.GetCompletion(ctx, openrouter.CompletionRequest{
 		OrgID:     orgID,
@@ -136,7 +136,15 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		DisableResponseHealing:    false,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("run web search: %w", err)
+		return nil, SearchUsage{PromptTokens: 0, CompletionTokens: 0}, fmt.Errorf("run web search: %w", err)
+	}
+
+	// A search is a completion, and the run that asked for it pays for it.
+	// Returned rather than swallowed so the caller's own accounting is not
+	// short by every search it ran.
+	usage := SearchUsage{
+		PromptTokens:     int64(response.Usage.PromptTokens),
+		CompletionTokens: int64(response.Usage.CompletionTokens),
 	}
 
 	results := make([]SearchResult, 0, len(response.Annotations))
@@ -150,12 +158,21 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 			URL:     citation.URL,
 			Snippet: citation.Content,
 		})
-		if len(results) == maxResults {
+		// >= not ==: a non-positive cap must yield nothing rather than every
+		// citation the model reports, and the loop must not re-enter the
+		// truncation branch once it is full.
+		if len(results) >= maxResults {
 			break
 		}
 	}
 
-	return results, nil
+	return results, usage, nil
+}
+
+// SearchUsage is what one search cost, for the caller's own run accounting.
+type SearchUsage struct {
+	PromptTokens     int64
+	CompletionTokens int64
 }
 
 // fetchBudget counts fetches per run, keyed by the assistant chat id. It is

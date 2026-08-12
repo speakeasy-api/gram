@@ -20,10 +20,22 @@ func TestMcpResearchWorkflow_RunTimeoutOutlivesItsActivities(t *testing.T) {
 	require.Greater(t, mcpResearchScheduleToCloseTimeout, mcpResearchRunActivityTimeout,
 		"schedule-to-close must leave room for queue time on top of a full run")
 
+	// The compensation's window has to fit its own retries, or the retry
+	// policy is a promise the schedule-to-close will not keep.
+	require.GreaterOrEqual(t,
+		mcpResearchCompensationScheduleToClose,
+		mcpResearchCompensationBudget(),
+		"the compensation window must fit every attempt and the backoff between them",
+	)
+
+	// The invariant rests on the bounded windows, not on the retry budget:
+	// queue time counts against the workflow and against neither
+	// StartToClose, so only schedule-to-close bounds what a saturated queue
+	// can cost.
 	require.Greater(t,
 		mcpResearchRunTimeout,
-		mcpResearchScheduleToCloseTimeout+mcpResearchCompensationBudget(),
-		"the workflow must outlive a maximally slow run plus every compensation retry",
+		mcpResearchScheduleToCloseTimeout+mcpResearchCompensationScheduleToClose,
+		"the workflow must outlive a maximally slow run plus its compensation",
 	)
 }
 

@@ -24,6 +24,7 @@ import (
 type fakeCompletions struct {
 	request     openrouter.CompletionRequest
 	annotations []openrouter.ResponseAnnotation
+	usage       openrouter.Usage
 	err         error
 }
 
@@ -33,7 +34,11 @@ func (f *fakeCompletions) GetCompletion(_ context.Context, req openrouter.Comple
 		return nil, f.err
 	}
 
-	return &openrouter.CompletionResponse{Annotations: f.annotations, Content: "prose the tool must discard"}, nil
+	return &openrouter.CompletionResponse{
+		Annotations: f.annotations,
+		Usage:       f.usage,
+		Content:     "prose the tool must discard",
+	}, nil
 }
 
 func authedContext(t *testing.T) context.Context {
@@ -101,6 +106,41 @@ func TestWebSearch(t *testing.T) {
 	// The search route rejects a disabled reasoning setting with a 400, so
 	// the override must stay unset.
 	require.Nil(t, completions.request.Reasoning)
+}
+
+// A search is a billed completion the tool runs on the caller's behalf, so
+// the caller can collect what its searches cost. Draining forgets it: this
+// tool outlives every run that uses it.
+func TestWebSearch_ReportsWhatItsSearchesCost(t *testing.T) {
+	t.Parallel()
+
+	completions := &fakeCompletions{
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{
+				URL: "https://example.com/a", Title: "a", Content: "…",
+			}},
+		},
+		usage: openrouter.Usage{PromptTokens: 1200, CompletionTokens: 340},
+	}
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions))
+
+	var out bytes.Buffer
+	env := toolconfig.ToolCallEnv{GramChatID: "report-1"}
+	require.NoError(t, tool.Call(authedContext(t), env, strings.NewReader(`{"query": "one"}`), &out))
+	out.Reset()
+	require.NoError(t, tool.Call(authedContext(t), env, strings.NewReader(`{"query": "two"}`), &out))
+
+	prompt, completion := tool.DrainUsage("report-1")
+	require.Equal(t, int64(2400), prompt, "both searches count")
+	require.Equal(t, int64(680), completion)
+
+	prompt, completion = tool.DrainUsage("report-1")
+	require.Zero(t, prompt, "drained usage is not counted twice")
+	require.Zero(t, completion)
+
+	prompt, completion = tool.DrainUsage("another-report")
+	require.Zero(t, prompt, "and one run never collects another's spend")
+	require.Zero(t, completion)
 }
 
 func TestWebSearch_ClampsMaxResults(t *testing.T) {

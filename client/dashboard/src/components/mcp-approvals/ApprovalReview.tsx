@@ -449,7 +449,14 @@ function ResearchReports({
         <Heading variant="h3" className="text-lg font-thin">
           Web research
         </Heading>
-        <RequireScope scope="mcp_approval:decide" level="component">
+        {/* Scoped to this project, like the endpoint behind it: a grant on
+            some other project must not enable a button whose click spends
+            here and comes back 403. */}
+        <RequireScope
+          scope="mcp_approval:decide"
+          resourceId={project.id}
+          level="component"
+        >
           <Button
             size="sm"
             variant="secondary"
