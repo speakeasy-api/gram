@@ -85,6 +85,22 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 		ReportVersion: researchagent.ReportVersion,
 		Model:         conv.ToPGText(meta.Model),
 	}); err != nil {
+		// The row is no longer running: a compensation already resolved it
+		// while this activity was finishing. The late result is discarded on
+		// purpose — the terminal state an admin has already been shown must
+		// not flip back to completed underneath them — and the workflow ends
+		// cleanly rather than firing a compensation that would no-op.
+		if errors.Is(err, pgx.ErrNoRows) {
+			m.logger.WarnContext(ctx, "discarding mcp research result for an already-resolved report")
+			return nil
+		}
+
+		// The run itself succeeded and the spend already happened, but the
+		// row still says running. Resolve it here with the real reason
+		// rather than leaving it to the workflow's compensation, which can
+		// only report that something was interrupted.
+		m.logger.ErrorContext(ctx, "complete mcp research report failed", attr.SlogError(err))
+		m.failReport(ctx, queries, input, "the research run finished but its report could not be stored")
 		return fmt.Errorf("complete research report: %w", err)
 	}
 
