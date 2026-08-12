@@ -1,6 +1,6 @@
 ---
 name: grafana-lgtm
-description: Use when inspecting OpenTelemetry traces or metrics that gram-server, gram-worker or pystreams emitted during local development — confirming an endpoint is instrumented, finding the slow or failing span after hitting a local route, proving a request propagated from server into a Temporal activity, or checking a local counter/histogram. Also use when a local trace search comes back empty, a metric looks missing from Prometheus, or results look like they came from the wrong worktree. Triggers — "check the trace", "did that get instrumented", "why is this slow locally", "what did the worker do", TraceQL, Tempo, Grafana, LGTM, spanmetrics, `mise run open:grafana`, GRAFANA_PORT / TEMPO_HTTP_PORT / PROMETHEUS_PORT, and any leftover Jaeger instruction such as `/api/traces?service=` or JAEGER_WEB_PORT (Jaeger is gone; those 404).
+description: Use when inspecting OpenTelemetry traces or metrics that gram-server, gram-worker or pystreams emitted during local development — confirming an endpoint is instrumented, finding the slow or failing span after hitting a local route, proving a request propagated from server into a Temporal activity, or checking a local counter/histogram. Also use when a local trace search comes back empty, a metric looks missing from Prometheus, or results look like they came from the wrong worktree. Triggers — "check the trace", "did that get instrumented", "why is this slow locally", "what did the worker do", TraceQL, Tempo, Grafana, LGTM, spanmetrics, `mise run open:grafana`, GRAFANA_PORT / TEMPO_HTTP_PORT / PROMETHEUS_PORT, and any local trace or metric lookup that returns 404 or an empty result.
 ---
 
 # Local traces and metrics
@@ -137,9 +137,10 @@ by_id = {s["spanId"]: f"{svc}/{s['name']}" for svc, s in spans}
 
 for svc, s in spans:
     a = flat(s.get("attributes", []))          # plenty of real spans carry none
+    st = s.get("status", {})                   # unset status serialises as {}
     print(f"{svc:12} {s['name']:34} {a.get('url.path','')} "
           f"{a.get('http.response.status_code','')} "
-          f"{s['status'].get('code','')} {s['status'].get('message','')}")
+          f"{st.get('code','')} {st.get('message','')}")
     for ev in s.get("events", []):
         e = flat(ev.get("attributes", []))
         print(f"{'':12} • {ev['name']}: {e.get('exception.type','')} {e.get('exception.message','')}")
@@ -153,7 +154,7 @@ Every span names its parent, so "did this cross the boundary?" is answered by th
 
 ## Common mistakes
 
-- Reaching for Jaeger's API (`/api/traces?service=…`, `/api/services`) — it returns 404. Tempo's equivalents are in the table above.
+- Assuming a `/api/traces?service=…` or `/api/services` style endpoint exists. Tempo serves neither and returns 404; its equivalents are in the table above.
 - Hardcoding `3000`, `3200` or `9090`. Those are container-internal; host ports are remapped per worktree.
 - Treating an empty result as proof of absence — for traces retry and widen the window, for metrics wrap in `last_over_time`.
 - Querying a metric by its Go instrument name instead of the translated series name, or without a `service_name` filter.
