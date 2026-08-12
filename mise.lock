@@ -70,6 +70,42 @@ url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.0.0.exe"
 version = "1.38.1"
 backend = "aqua:jdx/aube"
 
+[tools.aube."platforms.linux-arm64"]
+checksum = "sha256:dda1d6ac8d4c9cba58b52be8f86ceb222bb3b28ca79b76fb4ca0d46633f44212"
+url = "https://github.com/jdx/aube/releases/download/v1.38.1/aube-v1.38.1-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/508113920"
+provenance = "github-attestations"
+
+[tools.aube."platforms.linux-arm64-musl"]
+checksum = "sha256:c19365e4dd68f1177da4dc36e9b3e5dad623b12bfa252298c907564ab0cfa099"
+url = "https://github.com/jdx/aube/releases/download/v1.38.1/aube-v1.38.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/508077830"
+provenance = "github-attestations"
+
+[tools.aube."platforms.linux-x64"]
+checksum = "sha256:1f10a0a7bd38d94b348b52f785a7496dab6985775b3dfc2ba74914d1c739fba9"
+url = "https://github.com/jdx/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/508095865"
+provenance = "github-attestations"
+
+[tools.aube."platforms.linux-x64-musl"]
+checksum = "sha256:3557dc1c64f47479440eda76c41bee23998ea3336a70aee22749d298a95938cf"
+url = "https://github.com/jdx/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/508091774"
+provenance = "github-attestations"
+
+[tools.aube."platforms.macos-arm64"]
+checksum = "sha256:120989b5613a48333424c0aa4c3518573baec74836ba700d8d791900b974004b"
+url = "https://github.com/jdx/aube/releases/download/v1.38.1/aube-v1.38.1-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/508129180"
+provenance = "github-attestations"
+
+[tools.aube."platforms.windows-x64"]
+checksum = "sha256:3eadbe826a79184792f423c52e6ad3a20575f0c408ede66612f6db175339a180"
+url = "https://github.com/jdx/aube/releases/download/v1.38.1/aube-v1.38.1-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/jdx/aube/releases/assets/508093335"
+provenance = "github-attestations"
+
 [[tools.buf]]
 version = "1.72.0"
 backend = "aqua:bufbuild/buf"
