@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/stretchr/testify/assert"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,37 +49,25 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	// Someone else's usage must stay out of this employee's totals.
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9000, 9000, 99)
 
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	// Telemetry writes use ClickHouse async inserts; drain the queue synchronously
+	// so the rows are deterministically visible (no polling — see the telemetry
+	// README).
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &employeeID,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	m := userMetrics(t, ctx, ti, employeeID)
 
-		m := res.Metrics
+	// Directory email row (100/50) + personal account row (400/200).
+	require.Equal(t, int64(500), m.TotalInputTokens)
+	require.Equal(t, int64(250), m.TotalOutputTokens)
+	require.Equal(t, int64(750), m.TotalTokens)
+	require.Equal(t, int64(2), m.TotalChatRequests)
 
-		// Directory email row (100/50) + personal account row (400/200).
-		assert.Equal(c, int64(500), m.TotalInputTokens)
-		assert.Equal(c, int64(250), m.TotalOutputTokens)
-		assert.Equal(c, int64(750), m.TotalTokens)
-		assert.Equal(c, int64(2), m.TotalChatRequests)
+	// Cost is what the page's tile reads, and it only reached the response once
+	// this query started selecting it.
+	require.InDelta(t, 10.0, m.TotalCost, 0.001)
 
-		// Cost is what the page's tile reads, and it only reached the response
-		// once this query started selecting it.
-		assert.InDelta(c, 10.0, m.TotalCost, 0.001)
-
-		// The id-carrying row still aggregates alongside them.
-		assert.Equal(c, int64(1), m.TotalToolCalls)
-	}, 10*time.Second, 200*time.Millisecond)
+	// The id-carrying row still aggregates alongside them.
+	require.Equal(t, int64(1), m.TotalToolCalls)
 }
 
 // An email identifier that resolves to a directory user must still pick up the
@@ -99,25 +87,12 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employeeID, "")
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
 
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &employeeEmail,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	m := userMetrics(t, ctx, ti, employeeEmail)
 
-		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
-		assert.Equal(c, int64(1), res.Metrics.TotalToolCalls)
-	}, 10*time.Second, 200*time.Millisecond)
+	require.Equal(t, int64(100), m.TotalInputTokens)
+	require.Equal(t, int64(1), m.TotalToolCalls)
 }
 
 // The employee page falls back to an email identifier for someone who has usage
@@ -138,25 +113,12 @@ func TestGetUserMetricsSummary_EmailIdentifierWithNoDirectoryRow(t *testing.T) {
 	now := time.Now().UTC()
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), unknownEmail, 100, 50, 2.5)
 
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &unknownEmail,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	m := userMetrics(t, ctx, ti, unknownEmail)
 
-		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
-		assert.InDelta(c, 2.5, res.Metrics.TotalCost, 0.001)
-	}, 10*time.Second, 200*time.Millisecond)
+	require.Equal(t, int64(100), m.TotalInputTokens)
+	require.InDelta(t, 2.5, m.TotalCost, 0.001)
 }
 
 // A row pairing this employee's email with somebody else's gram user id belongs
@@ -179,25 +141,30 @@ func TestGetUserMetricsSummary_IgnoresEmailRowsOwnedByAnotherUser(t *testing.T) 
 	// Same email, but the row already names a different owner.
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), otherID, employeeEmail, 700, 300, 42)
 
-	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
-	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
-			From:   from,
-			To:     to,
-			UserID: &employeeID,
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
-			return
-		}
+	m := userMetrics(t, ctx, ti, employeeID)
 
-		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
-		assert.InDelta(c, 2.5, res.Metrics.TotalCost, 0.001)
-	}, 10*time.Second, 200*time.Millisecond)
+	require.Equal(t, int64(100), m.TotalInputTokens)
+	require.InDelta(t, 2.5, m.TotalCost, 0.001)
+}
+
+// userMetrics fetches one employee's metrics summary over a window wide enough
+// to cover everything these tests insert.
+func userMetrics(t *testing.T, ctx context.Context, ti *testInstance, identifier string) *gen.ProjectSummary {
+	t.Helper()
+
+	now := time.Now().UTC()
+	res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:     now.Add(1 * time.Hour).Format(time.RFC3339),
+		UserID: &identifier,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotNil(t, res.Metrics)
+
+	return res.Metrics
 }
 
 func linkUserAccount(t *testing.T, ctx context.Context, ti *testInstance, userID, email, accountType string) {
