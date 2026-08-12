@@ -430,12 +430,19 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     member?.email ??
     (resolvedUserId?.includes("@") ? resolvedUserId : "Unknown email");
 
-  const totalTokens = getTotalTokens(summary);
-  const totalCost = summary?.totalCost ?? 0;
+  // Usage totals come from the per-user metrics query, not the employees-list
+  // summary. That query aggregates the person's rows without grouping them by
+  // identity, so a session's hook rows and its token/cost-bearing OTEL rows —
+  // which carry different identities, and for a personal account a different
+  // email entirely — land in one total instead of one identity's slice of it
+  // (DNO-827).
+  const totalTokens = getTotalTokens(metrics);
+  const totalCost = metrics?.totalCost ?? 0;
   const isLoading =
     membersLoading ||
     (member == null && fallbackUserQuery.isLoading) ||
     (resolvedUserId != null && summaryQuery.isLoading) ||
+    (resolvedUserId != null && metricsQuery.isLoading) ||
     // When an account is scoped, the metric cards read the scoped summary — wait
     // on it too, else they briefly render zeros before it resolves.
     (selectedOrgId !== "" && scopedSummaryQuery.isLoading);

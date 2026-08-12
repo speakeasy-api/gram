@@ -711,6 +711,111 @@ func (s *Service) resolveSummaryOwnerIDs(ctx context.Context, orgID string, keys
 	return ownerByKey
 }
 
+// resolveEmployeeIdentity expands the single identifier the employee views pass
+// — a gram user id, or an email when the person has no directory row — into
+// every identity that person's telemetry rows can carry.
+//
+// The expansion is necessary because ingest attributes rows two ways. Hook
+// events resolve the sender's email to a gram user id and write both, but the
+// rows that carry tokens and cost (Claude and Codex OTEL, plus the Anthropic,
+// Codex and Cursor usage imports) only carry the provider account's email. A
+// filter on one identifier matches one shape and drops the other, so the
+// employee page showed sessions and tool calls with no tokens or cost
+// (DNO-827). Personal accounts are hit hardest: their provider email is often
+// not the directory email, so their usage only joins through user_accounts.
+//
+// Ownership comes from the directory, never from telemetry row identity — the
+// same rule attachUserAccounts follows, so a stray row pairing one person's
+// email with another person's user id cannot pull a second person's usage into
+// this employee's totals (DNO-509).
+//
+// Best effort: a directory lookup failure falls back to the identifier alone,
+// which is the behaviour that predates this expansion.
+func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier string) repo.UserIdentity {
+	identity := repo.UserIdentity{UserIDs: nil, Emails: nil}
+	if identifier == "" {
+		return identity
+	}
+
+	users := usersRepo.New(s.db)
+	if strings.Contains(identifier, "@") {
+		email := conv.NormalizeEmail(identifier)
+		identity.Emails = append(identity.Emails, email)
+
+		// Usage from someone with no directory row still aggregates by email, so
+		// an email that resolves to nobody is not an error.
+		rows, err := users.GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
+			Emails:         []string{email},
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve employee email to org user", attr.SlogError(err))
+		}
+		for _, row := range rows {
+			identity.UserIDs = append(identity.UserIDs, row.ID)
+		}
+	} else {
+		identity.UserIDs = append(identity.UserIDs, identifier)
+	}
+
+	if len(identity.UserIDs) > 0 {
+		rows, err := users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
+			Ids:            identity.UserIDs,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve employee user id to org user", attr.SlogError(err))
+		}
+		for _, row := range rows {
+			identity.Emails = append(identity.Emails, conv.NormalizeEmail(row.Email))
+		}
+
+		// Linked AI accounts (team and personal, every provider). A personal
+		// account usually signs in with a different email than the directory
+		// one, and that is the email its OTEL and usage-import rows carry.
+		accounts, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
+			OrganizationID: orgID,
+			UserIds:        identity.UserIDs,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to load linked accounts for employee identity", attr.SlogError(err))
+		}
+		for _, account := range accounts {
+			if email := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email)); email != "" {
+				identity.Emails = append(identity.Emails, email)
+			}
+		}
+	}
+
+	identity.Emails = dedupeNonEmpty(identity.Emails)
+	identity.UserIDs = dedupeNonEmpty(identity.UserIDs)
+
+	return identity
+}
+
+// dedupeNonEmpty drops blanks and repeats while keeping first-seen order, so an
+// identity carries each value once no matter how many directory rows supplied it.
+func dedupeNonEmpty(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+
+	return out
+}
+
 // attachUserAccounts populates UserSummary.Accounts from the user_accounts
 // directory. Ownership comes from the directory itself, never from telemetry
 // row identity: an account row attaches to the summary whose resolved owner
@@ -1113,7 +1218,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		UserID:         userID,
+		User:           s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID),
 		ExternalUserID: externalUserID,
 		EventSource:    conv.PtrValOr(payload.EventSource, ""),
 		HookSource:     conv.PtrValOr(payload.HookSource, ""),
@@ -1168,7 +1273,7 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		UserID:         userID,
+		User:           s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID),
 		ExternalUserID: externalUserID,
 		AccountType:    conv.PtrValOr(payload.AccountType, ""),
 		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
@@ -1645,6 +1750,11 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
 	}
 
+	// Resolved once and shared by every query below so the summary, its
+	// comparison period, the time series and the tool breakdowns all scope to
+	// the same set of identities.
+	user := s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID)
+
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
 
@@ -1658,7 +1768,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
-		UserID:            userID,
+		User:              user,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1677,7 +1787,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         comparisonStart,
 		TimeEnd:           comparisonEnd,
-		UserID:            userID,
+		User:              user,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1699,7 +1809,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			TimeStart:         timeStart,
 			TimeEnd:           timeEnd,
 			IntervalSeconds:   intervalSeconds,
-			UserID:            userID,
+			User:              user,
 			ExternalUserID:    externalUserID,
 			APIKeyID:          apiKeyID,
 			ToolsetSlug:       toolsetSlug,
@@ -1719,7 +1829,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
-		UserID:            userID,
+		User:              user,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1740,7 +1850,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:     projectID,
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
-		UserID:            userID,
+		User:              user,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
