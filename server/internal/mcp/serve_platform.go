@@ -134,6 +134,16 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 // downstream tools to refuse the call.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
 	switch slug {
+	case platformtools.ResearchToolsetSlug:
+		// Nobody reaches the research tools over HTTP. The research runner
+		// holds these executors in-process, so an assistant token arriving
+		// here is an assistant that was never meant to have them — and what
+		// it would get is billable web search plus arbitrary page fetch,
+		// available to any assistant in any organization with the
+		// mcp_approval feature. If the runner is ever moved onto the
+		// assistant runtime, this is where its principal is checked; until
+		// then the honest answer is that the toolset is not there.
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
 	default:
 		return nil

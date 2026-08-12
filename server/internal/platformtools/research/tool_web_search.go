@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -18,10 +19,15 @@ import (
 type WebSearch struct {
 	search *SearchClient
 
-	// usage accumulates what searches cost, keyed by the caller's chat id —
-	// the research runner's report id. A search is a billed completion the
-	// tool makes on the run's behalf, so the run has to be able to count it;
-	// nothing else here knows the run exists.
+	// budget bounds how many searches one run may run. Each is a billed
+	// completion, and the agent decides its next search from the last one's
+	// results, so nothing but this stops a seeded chain from spending
+	// without limit.
+	budget *callBudget
+
+	// usage accumulates what those searches cost, keyed by the caller's chat
+	// id — the research runner's report id. The budget caps the count; this
+	// reports the price, which is what the run stores.
 	usage sync.Map
 }
 
@@ -36,7 +42,7 @@ type webSearchResult struct {
 
 // NewWebSearchTool builds the search tool over the supplied search client.
 func NewWebSearchTool(search *SearchClient) *WebSearch {
-	return &WebSearch{search: search, usage: sync.Map{}}
+	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat), usage: sync.Map{}}
 }
 
 // DrainUsage returns what this caller's searches have cost since the last
@@ -118,9 +124,16 @@ func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		maxResults = min(max(*input.MaxResults, 1), maxSearchResults)
 	}
 
+	// authCtx == nil included: a present-but-nil context is what a direct
+	// executor call carries, and dereferencing it here would panic rather
+	// than refuse.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if !s.budget.take(env.GramChatID, time.Now()) {
+		return fmt.Errorf("this run's search budget of %d searches is exhausted: work with what the previous searches returned", maxSearchesPerChat)
 	}
 
 	results, usage, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)

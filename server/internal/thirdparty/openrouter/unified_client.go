@@ -473,6 +473,16 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 // - Parses SSE chunks internally to extract message metadata
 // - Automatically triggers capture/tracking strategies when the stream closes
 func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequest) (StreamReader, error) {
+	// The streaming reader accumulates content and tool calls but never
+	// parses url_citation annotations, so a streamed web search would return
+	// its prose with every citation silently missing — and a search whose
+	// citations are gone is not a search result, it is unsourced text. Refuse
+	// rather than answer with less than the caller asked for; the
+	// non-streaming path carries annotations and is what search uses.
+	if req.WebSearch != nil {
+		return nil, fmt.Errorf("web search is not available on the streaming path: its citations would be dropped")
+	}
+
 	// Build request body (streaming)
 	initResult, err := c.initializeRequest(ctx, req)
 	if err != nil {
@@ -633,11 +643,14 @@ func (r *streamingResponseReader) Close() error {
 	// If we have accumulated message data, trigger strategies
 	if r.messageID != "" {
 		response := CompletionResponse{
-			StartTime:    r.startTime,
-			Message:      nil, // Not available in streaming mode
-			MessageID:    r.messageID,
-			Model:        r.model,
-			Content:      r.messageContent.String(),
+			StartTime: r.startTime,
+			Message:   nil, // Not available in streaming mode
+			MessageID: r.messageID,
+			Model:     r.model,
+			Content:   r.messageContent.String(),
+			// Never populated here: the reader does not parse annotations,
+			// and GetCompletionStream refuses the web plugin for that
+			// reason, so a stream has none to carry.
 			Annotations:  nil,
 			FinishReason: r.finishReason,
 			Usage:        r.usage,
