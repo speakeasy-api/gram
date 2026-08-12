@@ -1283,13 +1283,13 @@ func TestComputeCodexHookApprovalsMatchHashesCodexAccepts(t *testing.T) {
 	require.NoError(t, err)
 
 	want := map[string]string{
-		"session_start":      "sha256:97fd1499a0458fb2edc14d885394b26353238af17e2ce6ad9fbd8f003457dff5",
-		"session_end":        "sha256:b9b35b076d1375c9f7492d22d1aa76bde7f451722a1d33f44f05760bbaf5ccdf",
-		"pre_tool_use":       "sha256:43699348b88b5b6ff7db849bd4483982c218d931911528e8232a75525f9ead6f",
-		"permission_request": "sha256:11c7123a75f447d513faf77e68129c553890033e130c5a5727f28893337b4747",
-		"post_tool_use":      "sha256:bc734beadf467b7bfe7204a4362038682868e18be8fede3dcfb4138f226469aa",
-		"user_prompt_submit": "sha256:51b8c02c25a53d3c4aa1293bb0383c41a0d76c9b3199d3adece17a439c0ce297",
-		"stop":               "sha256:30af2129bbe2d0cf860943f122415e704c64e5074c32243c83a85b5ecfaf93cf",
+		"session_start":      "sha256:01aa9026f9191e84ba6d993afb74f7d0415e84714b6abe9663e732bfdf341677",
+		"session_end":        "sha256:a9a6220fdd0aebc83248da0b91f500784fb48e19437d97f92c493cd264c96d05",
+		"pre_tool_use":       "sha256:f1d673b42ef2ce2d16a93d2509fe08cbce64942de1ba4fab0eabe94e0bc39cbd",
+		"permission_request": "sha256:ea2d44b06d6c36971d5fb9121aaedc64b1e49a65e854e284f0c6f164f60fa897",
+		"post_tool_use":      "sha256:d0e7d5c001f156a748ad7471930012a6c9d3d726ceffe9d17e893a5fa743ef97",
+		"user_prompt_submit": "sha256:4e18decc3bc5d57114130d3b2bb80b7c8999cc654e92a5590b489762a98878c9",
+		"stop":               "sha256:a2ff79157b9cdf19f1342772f4d25ab0cc58e141d9426681c5708f00feeb3a4b",
 	}
 	got := make(map[string]string, len(approvals))
 	for _, approval := range approvals {
@@ -1538,11 +1538,11 @@ func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	require.Contains(t, stderr, "refreshed-bootstrap",
 		"the hook that refreshes the bundle must immediately execute the new bootstrap")
-	require.Contains(t, stdout, "--config="+stableConfig,
-		"a ready bundle must execute independently while refreshing from the cache")
 	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
 	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
 	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"the refreshed bootstrap must execute with the config from its immutable generation")
 	require.Equal(t, refreshedScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
 	require.Equal(t, refreshedConfig, requireFileBytes(t, stableConfig))
 	require.NoDirExists(t, persistLock, "an expired lock must be reclaimed even if its PID was reused")
