@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -16,6 +17,12 @@ import (
 // agent to read and follow up on.
 type WebSearch struct {
 	search *SearchClient
+
+	// budget bounds how many searches one run may run. Each is a billed
+	// completion, and the agent decides its next search from the last one's
+	// results, so nothing but this stops a seeded chain from spending
+	// without limit.
+	budget *callBudget
 }
 
 type webSearchInput struct {
@@ -29,7 +36,7 @@ type webSearchResult struct {
 
 // NewWebSearchTool builds the search tool over the supplied search client.
 func NewWebSearchTool(search *SearchClient) *WebSearch {
-	return &WebSearch{search: search}
+	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat)}
 }
 
 func (s *WebSearch) Descriptor() core.ToolDescriptor {
@@ -47,7 +54,7 @@ func (s *WebSearch) Descriptor() core.ToolDescriptor {
 	}
 }
 
-func (s *WebSearch) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	input := webSearchInput{Query: "", MaxResults: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -65,9 +72,16 @@ func (s *WebSearch) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		maxResults = min(max(*input.MaxResults, 1), maxSearchResults)
 	}
 
+	// authCtx == nil included: a present-but-nil context is what a direct
+	// executor call carries, and dereferencing it here would panic rather
+	// than refuse.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if !s.budget.take(env.GramChatID, time.Now()) {
+		return fmt.Errorf("this run's search budget of %d searches is exhausted: work with what the previous searches returned", maxSearchesPerChat)
 	}
 
 	results, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)

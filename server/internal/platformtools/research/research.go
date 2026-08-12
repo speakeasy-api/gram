@@ -56,9 +56,16 @@ const maxContentChars = 40_000
 // unbounded crawl.
 const maxFetchesPerChat = 25
 
-// fetchBudgetWindow is how long a run's fetch count is retained. Runs are far
+// maxSearchesPerChat bounds how many searches one run may run. Each is a
+// billed completion against the organization's chat key, and the loop that
+// issues them is steered by the results of the previous one — search, follow
+// the links, search again — so the same seeded chain that could run away with
+// fetches can run away with spend.
+const maxSearchesPerChat = 15
+
+// callBudgetWindow is how long a run's call counts are retained. Runs are far
 // shorter than this; the window only bounds the tracking map.
-const fetchBudgetWindow = time.Hour
+const callBudgetWindow = time.Hour
 
 // CompletionProvider is the slice of the OpenRouter client search needs.
 // *openrouter.ChatClient satisfies it.
@@ -146,7 +153,10 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 			URL:     citation.URL,
 			Snippet: citation.Content,
 		})
-		if len(results) == maxResults {
+		// >= not ==: a non-positive cap must yield nothing rather than every
+		// citation the model reports, and the loop must not re-enter the
+		// truncation branch once it is full.
+		if len(results) >= maxResults {
 			break
 		}
 	}
@@ -154,11 +164,14 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 	return results, nil
 }
 
-// fetchBudget counts fetches per run, keyed by the assistant chat id. It is
-// per-replica state: the point is damping a runaway crawl, not exact
+// callBudget counts a tool's calls per run, keyed by the assistant chat id.
+// It is per-replica state: the point is damping a runaway loop, not exact
 // cross-replica accounting.
-type fetchBudget struct {
+type callBudget struct {
 	mu sync.Mutex
+
+	// limit is how many calls one key may make within the window.
+	limit int
 
 	// startedAt records when each key's window opened, so stale runs age out
 	// of the map.
@@ -166,31 +179,32 @@ type fetchBudget struct {
 	counts    map[string]int
 }
 
-func newFetchBudget() *fetchBudget {
-	return &fetchBudget{
+func newCallBudget(limit int) *callBudget {
+	return &callBudget{
 		mu:        sync.Mutex{},
+		limit:     limit,
 		startedAt: make(map[string]time.Time),
 		counts:    make(map[string]int),
 	}
 }
 
-// take consumes one fetch from the key's budget, reporting whether one was
+// take consumes one call from the key's budget, reporting whether one was
 // available. Every call prunes expired windows so the map stays bounded by
 // the runs active within the current window. An empty key — a caller outside
 // an assistant run — shares one conservative bucket rather than getting an
 // unlimited one.
-func (b *fetchBudget) take(key string, now time.Time) bool {
+func (b *callBudget) take(key string, now time.Time) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	for other, started := range b.startedAt {
-		if now.Sub(started) >= fetchBudgetWindow {
+		if now.Sub(started) >= callBudgetWindow {
 			delete(b.startedAt, other)
 			delete(b.counts, other)
 		}
 	}
 
-	if b.counts[key] >= maxFetchesPerChat {
+	if b.counts[key] >= b.limit {
 		return false
 	}
 

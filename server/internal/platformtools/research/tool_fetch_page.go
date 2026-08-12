@@ -28,7 +28,7 @@ const maxFetchRedirects = 5
 // each redirect hop — dials under egress policy.
 type FetchPage struct {
 	http   *guardian.HTTPClient
-	budget *fetchBudget
+	budget *callBudget
 }
 
 type fetchPageInput struct {
@@ -68,7 +68,7 @@ func ConfigureFetchClient(client *guardian.HTTPClient) *guardian.HTTPClient {
 // NewFetchPageTool builds the page-fetch tool. Pass the client through
 // ConfigureFetchClient at wiring time so the transport bounds apply.
 func NewFetchPageTool(client *guardian.HTTPClient) *FetchPage {
-	return &FetchPage{http: client, budget: newFetchBudget()}
+	return &FetchPage{http: client, budget: newCallBudget(maxFetchesPerChat)}
 }
 
 func (s *FetchPage) Descriptor() core.ToolDescriptor {
@@ -94,10 +94,15 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 
 	target, err := url.Parse(strings.TrimSpace(input.URL))
 	if err != nil || !target.IsAbs() || target.Host == "" {
-		return fmt.Errorf("url must be an absolute http(s) URL")
+		return fmt.Errorf("url must be an absolute https URL")
 	}
-	if target.Scheme != "http" && target.Scheme != "https" {
-		return fmt.Errorf("unsupported scheme %q: only http and https pages are fetchable", target.Scheme)
+	// https only. This tool follows links found in search results about a
+	// party under review, and what it returns becomes evidence an admin
+	// decides on — over plaintext http, anyone on the path chooses what that
+	// evidence says. A site that only answers http is a finding of its own,
+	// not a page to quote.
+	if target.Scheme != "https" {
+		return fmt.Errorf("unsupported scheme %q: only https pages are fetchable, because a page fetched over plaintext http is not evidence anyone can rely on", target.Scheme)
 	}
 
 	if !s.budget.take(env.GramChatID, time.Now()) {
@@ -121,7 +126,8 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 	}
 
 	mediaType := responseMediaType(resp)
-	if !fetchableMediaType(mediaType) {
+	declared := mediaType != ""
+	if declared && !fetchableMediaType(mediaType) {
 		return fmt.Errorf("the page is %q, not a text format this tool can return", mediaType)
 	}
 
@@ -138,11 +144,26 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		truncated = true
 	}
 
+	// A server that declared nothing, or declared something unparseable, has
+	// told us nothing about what it sent — and "nothing" was being read as
+	// permission. Sniff the bytes instead: plenty of small sites really do
+	// omit the header, but a binary the agent cannot read must not arrive as
+	// mojibake it will try to quote.
+	if !declared {
+		mediaType = sniffedMediaType(body)
+		if !fetchableMediaType(mediaType) {
+			return fmt.Errorf("the page declared no content type and its bytes are %q, not a text format this tool can return", mediaType)
+		}
+	}
+
 	content := string(body)
 	if strings.Contains(mediaType, "html") {
-		content = extractText(content)
+		// Collapsing belongs to markup, where the whitespace is layout. A
+		// JSON or plain-text body is returned as the result contract says:
+		// as it was served, indentation and all, because the agent may be
+		// reading structure out of it.
+		content = collapseWhitespace(extractText(content))
 	}
-	content = collapseWhitespace(content)
 	content, clipped := clipRunes(content, maxContentChars)
 	truncated = truncated || clipped
 
@@ -160,6 +181,19 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 	})
 }
 
+// sniffedMediaType reports what a body looks like when its server declared
+// nothing. http.DetectContentType is the same algorithm browsers use, and it
+// answers "application/octet-stream" for anything it cannot place — which is
+// exactly the answer this tool needs for content it should refuse.
+func sniffedMediaType(body []byte) string {
+	mediaType, _, err := mime.ParseMediaType(http.DetectContentType(body))
+	if err != nil {
+		return "application/octet-stream"
+	}
+
+	return mediaType
+}
+
 func responseMediaType(resp *http.Response) string {
 	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil {
@@ -169,11 +203,12 @@ func responseMediaType(resp *http.Response) string {
 	return mediaType
 }
 
-// fetchableMediaType reports whether a response is a text format worth
-// returning. An empty type is allowed — plenty of small sites omit the
-// header — and binary formats are refused rather than dumped as bytes.
+// fetchableMediaType reports whether a media type is a text format worth
+// returning. Binary formats are refused rather than dumped as bytes. The
+// caller decides what an absent type means; here it is simply not fetchable,
+// because nothing was said about it.
 func fetchableMediaType(mediaType string) bool {
-	if mediaType == "" || strings.HasPrefix(mediaType, "text/") {
+	if strings.HasPrefix(mediaType, "text/") {
 		return true
 	}
 
