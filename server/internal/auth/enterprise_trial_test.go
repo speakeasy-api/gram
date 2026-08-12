@@ -49,7 +49,8 @@ func signUpWithoutOrganization(t *testing.T, workosUserID, email string) (contex
 func TestRegister_ArmsEnterpriseTrial(t *testing.T) {
 	t.Parallel()
 
-	ctx, inst, _ := signUpWithoutOrganization(t, "user_01TRIAL_ARMED", "trial-armed@example.com")
+	const email = "trial-armed@example.com"
+	ctx, inst, _ := signUpWithoutOrganization(t, "user_01TRIAL_ARMED", email)
 
 	auditsBefore, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
@@ -82,16 +83,6 @@ func TestRegister_ArmsEnterpriseTrial(t *testing.T) {
 	auditsAfter, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
 	require.Equal(t, auditsBefore+1, auditsAfter)
-}
-
-func TestRegister_TrialArmedAuditRecordsActorDisplayName(t *testing.T) {
-	t.Parallel()
-
-	const email = "trial-actor@example.com"
-	const workosUserID = "user_01TRIAL_ACTOR"
-	ctx, inst, _ := signUpWithoutOrganization(t, workosUserID, email)
-
-	require.NoError(t, inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Enterprise Actor Org"}))
 
 	entry, err := audittest.LatestAuditLogByAction(ctx, inst.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
