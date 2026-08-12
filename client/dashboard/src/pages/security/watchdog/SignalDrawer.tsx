@@ -310,10 +310,7 @@ export function SignalDrawer({
                           {signal.teams > 0 ? signal.teams : "-"}
                         </StatCell>
                         <StatCell label="Trend">
-                          <SignalTrend
-                            findings={signal.findings}
-                            previousFindings={signal.previousFindings}
-                          />
+                          <SignalTrend sparkline={signal.sparkline} />
                         </StatCell>
                       </div>
 
