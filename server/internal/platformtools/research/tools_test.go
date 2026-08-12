@@ -55,7 +55,7 @@ func runSearch(t *testing.T, ctx context.Context, tool *research.WebSearch, inpu
 	t.Helper()
 
 	var out bytes.Buffer
-	if err := tool.Call(ctx, toolconfig.ToolCallEnv{}, strings.NewReader(input), &out); err != nil {
+	if err := tool.Call(ctx, toolconfig.ToolCallEnv{GramChatID: "report-default"}, strings.NewReader(input), &out); err != nil {
 		return nil, fmt.Errorf("call web search: %w", err)
 	}
 
@@ -295,6 +295,54 @@ func TestFetchPage_StopsReadingAtTheByteCap(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, strings.HasPrefix(content, "somevendor security notes"), "what is returned is the head of the page")
 	require.LessOrEqual(t, len(content), 41_000, "and the character clip still applies on top")
+}
+
+// The https rule has to survive the redirect chain: the site under review
+// chooses where it sends the fetcher, and a hop to plaintext would hand back
+// content anyone on the path could have written.
+func TestFetchPage_RefusesARedirectOffHTTPS(t *testing.T) {
+	t.Parallel()
+
+	plaintext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("content an attacker on the path chose"))
+	}))
+	t.Cleanup(plaintext.Close)
+
+	redirector := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plaintext.URL, http.StatusFound)
+	}))
+	t.Cleanup(redirector.Close)
+
+	tool := research.NewFetchPageTool(research.ConfigureFetchClient(redirector.Client()))
+	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, redirector.URL))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "every hop must stay on https")
+}
+
+// A call that cannot say which run it belongs to would share one bucket with
+// every other such call, so the budget it is subject to would not be a
+// per-run budget at all.
+func TestResearchTools_RefuseACallWithNoRun(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("page"))
+	}))
+	t.Cleanup(server.Close)
+
+	fetch := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	var out bytes.Buffer
+	err := fetch.Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(fmt.Sprintf(`{"url": %q}`, server.URL)), &out)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "identify its run")
+
+	search := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}))
+	out.Reset()
+	err = search.Call(authedContext(t), toolconfig.ToolCallEnv{}, strings.NewReader(`{"query": "vendor"}`), &out)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "identify its run")
 }
 
 func TestFetchPage_RefusesBinaryContent(t *testing.T) {
