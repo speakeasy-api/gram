@@ -187,9 +187,11 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 
 	resolvedID := uuid.NewString()
 	unresolvedID := uuid.NewString()
+	unresolvedID2 := uuid.NewString()
 	// Different principals so they land in different buckets.
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, resolvedID, "deny", "user:resolved-user", "org:read")
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID, "deny", "user:unresolved-user", "org:read")
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID2, "deny", "user:unresolved-user-2", "org:read")
 
 	// Resolve only the first.
 	_, err := accessrepo.New(ti.conn).InsertChallengeResolutions(ctx, accessrepo.InsertChallengeResolutionsParams{
@@ -228,6 +230,7 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 		if !assert.Len(c, result.Buckets, 1) {
 			return
 		}
+		assert.Equal(c, 1, result.Total)
 		assert.NotNil(c, result.Buckets[0].ResolvedAt)
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -239,14 +242,15 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 		Scope:        nil,
 		ProjectID:    nil,
 		Resolved:     &resolvedFalse,
-		Limit:        20,
+		Limit:        1,
 		Offset:       0,
 		ApikeyToken:  nil,
 		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Buckets, 1)
-	require.Equal(t, "user:unresolved-user", result.Buckets[0].PrincipalUrn)
+	require.Equal(t, 2, result.Total)
+	require.Contains(t, []string{"user:unresolved-user", "user:unresolved-user-2"}, result.Buckets[0].PrincipalUrn)
 }
 
 func TestListChallengeBuckets_Pagination(t *testing.T) {
