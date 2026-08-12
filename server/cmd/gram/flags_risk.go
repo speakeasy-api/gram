@@ -15,5 +15,11 @@ func riskFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_DISABLE_CLICKHOUSE_RISK_WRITES"},
 			Value:   false,
 		},
+		&cli.BoolFlag{
+			Name:    "disable-clickhouse-risk-retro-reconcile",
+			Usage:   "Disable propagating retroactive risk-exclusion changes into ClickHouse (kill switch; the Postgres reconcile still runs)",
+			EnvVars: []string{"GRAM_DISABLE_CLICKHOUSE_RISK_RETRO_RECONCILE"},
+			Value:   false,
+		},
 	}
 }

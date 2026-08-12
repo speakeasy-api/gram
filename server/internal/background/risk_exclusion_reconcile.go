@@ -19,6 +19,15 @@ import (
 
 const reconcileStartToCloseTimeout = 30 * time.Minute
 
+// reconcileSecondSweepDelay covers the ClickHouse ingest race: the finding
+// writer annotates rows from an exclusion-set cache with a 60s TTL (plus a
+// ~1s async-insert flush), so rows consumed inside that window after an
+// exclusion change can land with stale flags AFTER the first sweep already
+// scanned their partition. A single delayed re-run converges them; it is
+// near-free because the reconcile's predicates only touch rows whose latest
+// state actually differs.
+const reconcileSecondSweepDelay = 2 * time.Minute
+
 // RiskExclusionReconcileParams identifies the exclusion to reconcile.
 type RiskExclusionReconcileParams struct {
 	ProjectID   uuid.UUID
@@ -26,8 +35,11 @@ type RiskExclusionReconcileParams struct {
 }
 
 // RiskExclusionReconcileWorkflow flags/unflags stored findings to match an
-// exclusion's current state. The activity reads the exclusion's live state, so
-// even if a newer reconcile supersedes this one the result converges.
+// exclusion's current state, then re-runs once after a short delay to catch
+// findings ingested with stale exclusion flags during the writer cache's TTL
+// window. The activity reads the exclusion's live state, so even if a newer
+// reconcile supersedes this one (TERMINATE_IF_RUNNING — including during the
+// sleep) the result converges.
 func RiskExclusionReconcileWorkflow(ctx workflow.Context, params RiskExclusionReconcileParams) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: reconcileStartToCloseTimeout,
@@ -41,10 +53,22 @@ func RiskExclusionReconcileWorkflow(ctx workflow.Context, params RiskExclusionRe
 	})
 
 	var a *Activities
-	return workflow.ExecuteActivity(ctx, a.ReconcileExclusion, risk_exclusion.ReconcileArgs{
+	args := risk_exclusion.ReconcileArgs{
 		ProjectID:   params.ProjectID,
 		ExclusionID: params.ExclusionID,
-	}).Get(ctx, nil)
+	}
+	if err := workflow.ExecuteActivity(ctx, a.ReconcileExclusion, args).Get(ctx, nil); err != nil {
+		return fmt.Errorf("reconcile exclusion: %w", err)
+	}
+
+	if err := workflow.Sleep(ctx, reconcileSecondSweepDelay); err != nil {
+		return fmt.Errorf("sleep before reconcile second sweep: %w", err)
+	}
+
+	if err := workflow.ExecuteActivity(ctx, a.ReconcileExclusion, args).Get(ctx, nil); err != nil {
+		return fmt.Errorf("reconcile exclusion second sweep: %w", err)
+	}
+	return nil
 }
 
 func reconcileWorkflowID(exclusionID uuid.UUID) string {
