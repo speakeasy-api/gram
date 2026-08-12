@@ -55,7 +55,7 @@ export type CreateUserSessionIssuerCimdClientMutationError =
  * createUserSessionIssuerCimdClient userSessionIssuersCimdClients
  *
  * @remarks
- * Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.
+ * Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.
  */
 export function useCreateUserSessionIssuerCimdClientMutation(
   options?: MutationHookOptions<

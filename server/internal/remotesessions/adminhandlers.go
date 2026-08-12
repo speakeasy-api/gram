@@ -99,6 +99,13 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
+	// never crosses a network: tokens are sensitive credentials that must not
+	// be transmitted in plaintext. An empty value stays legal.
+	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+
 	// Discovery drops malformed documentation URLs, but a caller holding the write
 	// scope can POST them without ever calling discover, and they are persisted
 	// and later rendered as links. An empty value stays legal: the update queries
@@ -129,6 +136,7 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
 		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
@@ -156,6 +164,41 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	logGlobalMutation(ctx, logger, authCtx, "create", "issuer", issuer.ID.String())
 
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
+}
+
+// GetGlobalIssuerDuplicatePreflight reports the global issuers that already
+// describe a given upstream authorization server, so the catalog create and edit
+// forms can warn before curating a second entry for one issuer.
+//
+// Scoped to the global partition. Tenant issuers naming the same URL are not
+// reported: ListGlobalIssuerConvergenceCandidates is the surface for those, and
+// answering that question here would put another organization's configuration
+// in front of a form that is only asking about the shared catalog.
+func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+	_, logger, err := s.requirePlatformAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	if err != nil {
+		return emptyIssuerDuplicatePreflight(), nil
+	}
+
+	candidates, err := repo.New(s.db).ListGlobalRemoteSessionIssuersByIssuerURL(ctx, repo.ListGlobalRemoteSessionIssuersByIssuerURLParams{
+		Issuers:    canonical.matchCandidates(),
+		LimitValue: maxIssuerDuplicateMatchesPerTier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list global remote session issuers by issuer url").LogError(ctx, logger)
+	}
+
+	rows := make([]issuerDuplicateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, issuerDuplicateCandidateFromRecord(candidate))
+	}
+
+	return buildIssuerDuplicatePreflight(rows), nil
 }
 
 // ListGlobalIssuers lists the global remote_session_issuers, each with the
@@ -261,6 +304,13 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
+	// never crosses a network: tokens are sensitive credentials that must not
+	// be transmitted in plaintext. An empty value stays legal.
+	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+
 	// Discovery drops malformed documentation URLs, but a caller holding the write
 	// scope can POST them without ever calling discover, and they are persisted
 	// and later rendered as links. An empty value stays legal: the update queries
@@ -292,6 +342,7 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
 		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
@@ -1042,13 +1093,19 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
 	}
 
-	if _, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID); err != nil {
+	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Deleting the client cascaded a soft-delete to its sessions, so their
+	// upstream tokens are revoked on the same best-effort terms as an explicit
+	// revoke: post-commit, bounded, never surfaced to the caller.
+	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
 
 	logGlobalMutation(ctx, logger, authCtx, "delete", "client", deleted.ID.String())
 

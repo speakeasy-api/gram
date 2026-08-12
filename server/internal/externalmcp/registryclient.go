@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -154,7 +155,35 @@ type serverJSON struct {
 	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
-	Remotes []serverRemoteJSON `json:"remotes"`
+	Remotes    []serverRemoteJSON    `json:"remotes"`
+	Repository *serverRepositoryJSON `json:"repository"`
+	Packages   []serverPackageJSON   `json:"packages"`
+}
+
+type serverRepositoryJSON struct {
+	URL       string `json:"url"`
+	Source    string `json:"source"`
+	Subfolder string `json:"subfolder"`
+}
+
+type serverPackageJSON struct {
+	RegistryType    string `json:"registryType"`
+	RegistryBaseURL string `json:"registryBaseUrl"`
+	Identifier      string `json:"identifier"`
+	Version         string `json:"version"`
+	RuntimeHint     string `json:"runtimeHint"`
+	FileSHA256      string `json:"fileSha256"`
+	Transport       struct {
+		Type string `json:"type"`
+	} `json:"transport"`
+	EnvironmentVariables []serverPackageEnvironmentVariableJSON `json:"environmentVariables"`
+}
+
+type serverPackageEnvironmentVariableJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsSecret    bool   `json:"isSecret"`
+	IsRequired  bool   `json:"isRequired"`
 }
 
 type serverRemoteJSON struct {
@@ -162,6 +191,56 @@ type serverRemoteJSON struct {
 	Type      string                    `json:"type"`
 	Headers   []RemoteHeader            `json:"headers"`
 	Variables map[string]RemoteVariable `json:"variables"`
+}
+
+// toExternalMCPRepository maps the registry's repository declaration, nil in
+// and nil out: a registry that links no repository is the common case, and it
+// must surface as absent rather than as an empty link.
+func toExternalMCPRepository(repository *serverRepositoryJSON) *types.ExternalMCPRepository {
+	if repository == nil || repository.URL == "" {
+		return nil
+	}
+
+	return &types.ExternalMCPRepository{
+		URL:       repository.URL,
+		Source:    conv.PtrEmpty(repository.Source),
+		Subfolder: conv.PtrEmpty(repository.Subfolder),
+	}
+}
+
+// toExternalMCPPackages maps the registry's published packages, dropping
+// entries too incomplete to identify an artifact.
+func toExternalMCPPackages(packages []serverPackageJSON) []*types.ExternalMCPPackage {
+	var out []*types.ExternalMCPPackage
+	for _, entry := range packages {
+		if entry.RegistryType == "" || entry.Identifier == "" || entry.Version == "" {
+			continue
+		}
+		var variables []*types.ExternalMCPPackageEnvironmentVariable
+		for _, variable := range entry.EnvironmentVariables {
+			if variable.Name == "" {
+				continue
+			}
+			variables = append(variables, &types.ExternalMCPPackageEnvironmentVariable{
+				Name:        variable.Name,
+				Description: conv.PtrEmpty(variable.Description),
+				IsSecret:    variable.IsSecret,
+				IsRequired:  variable.IsRequired,
+			})
+		}
+		out = append(out, &types.ExternalMCPPackage{
+			RegistryType:         entry.RegistryType,
+			RegistryBaseURL:      conv.PtrEmpty(entry.RegistryBaseURL),
+			Identifier:           entry.Identifier,
+			Version:              entry.Version,
+			RuntimeHint:          conv.PtrEmpty(entry.RuntimeHint),
+			TransportType:        conv.PtrEmpty(entry.Transport.Type),
+			EnvironmentVariables: variables,
+			FileSha256:           conv.PtrEmpty(entry.FileSHA256),
+		})
+	}
+
+	return out
 }
 
 // RemoteHeader represents a header requirement from the registry.
@@ -525,6 +604,8 @@ func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types
 		}
 
 		servers = append(servers, &types.ExternalMCPServerEntry{
+			Repository:                          toExternalMCPRepository(s.Server.Repository),
+			Packages:                            toExternalMCPPackages(s.Server.Packages),
 			RegistrySpecifier:                   s.Server.Name,
 			Version:                             s.Server.Version,
 			Description:                         s.Server.Description,

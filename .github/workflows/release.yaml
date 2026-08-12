@@ -39,18 +39,18 @@ jobs:
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Generate a token
         id: generate-token
@@ -71,13 +71,13 @@ jobs:
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           title: "chore: version packages"
-          publish: mise exec --env viteprod -- pnpm changeset publish
+          publish: mise exec --env viteprod -- aube exec changeset -- publish
           setupGitUser: false
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
 
-      - name: Prune PNPM store
-        run: pnpm store prune
+      - name: Prune aube store
+        run: aube store prune
 
   release-cli:
     needs: [release]

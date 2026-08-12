@@ -202,6 +202,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ToolName:        toolName,
 				ToolInput:       ev.ToolInput,
 				RiskPolicyID:    policy.ID,
+				PolicyName:      policy.Name,
 			})
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{

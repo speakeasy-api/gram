@@ -105,7 +105,7 @@ func UsageCommands() []string {
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
+		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -139,9 +139,9 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
-		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
-		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
+		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
+		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -161,7 +161,7 @@ func UsageCommands() []string {
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
-		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
+		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
@@ -682,6 +682,11 @@ func ParseEndpoint(
 		chatSummarizeBodyFlag             = chatSummarizeFlags.String("body", "REQUIRED", "")
 		chatSummarizeSessionTokenFlag     = chatSummarizeFlags.String("session-token", "", "")
 		chatSummarizeProjectSlugInputFlag = chatSummarizeFlags.String("project-slug-input", "", "")
+
+		chatSummarizeToolCallFlags                = flag.NewFlagSet("summarize-tool-call", flag.ExitOnError)
+		chatSummarizeToolCallBodyFlag             = chatSummarizeToolCallFlags.String("body", "REQUIRED", "")
+		chatSummarizeToolCallSessionTokenFlag     = chatSummarizeToolCallFlags.String("session-token", "", "")
+		chatSummarizeToolCallProjectSlugInputFlag = chatSummarizeToolCallFlags.String("project-slug-input", "", "")
 
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
@@ -1880,6 +1885,11 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionTokenFlag = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyTokenFlag  = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.String("apikey-token", "", "")
 
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags            = flag.NewFlagSet("get-issuer-duplicate-preflight", flag.ExitOnError)
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuerFlag       = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.String("issuer", "", "")
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionTokenFlag = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyTokenFlag  = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.String("apikey-token", "", "")
+
 		organizationRemoteSessionIssuersUpdateIssuerFlags            = flag.NewFlagSet("update-issuer", flag.ExitOnError)
 		organizationRemoteSessionIssuersUpdateIssuerBodyFlag         = organizationRemoteSessionIssuersUpdateIssuerFlags.String("body", "REQUIRED", "")
 		organizationRemoteSessionIssuersUpdateIssuerSessionTokenFlag = organizationRemoteSessionIssuersUpdateIssuerFlags.String("session-token", "", "")
@@ -1957,6 +1967,12 @@ func ParseEndpoint(
 		remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("apikey-token", "", "")
 		remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("project-slug-input", "", "")
 
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags                = flag.NewFlagSet("get-remote-session-issuer-duplicate-preflight", flag.ExitOnError)
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuerFlag           = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("issuer", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionTokenFlag     = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("session-token", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyTokenFlag      = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("apikey-token", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInputFlag = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.String("project-slug-input", "", "")
+
 		remoteSessionIssuersDeleteRemoteSessionIssuerFlags                = flag.NewFlagSet("delete-remote-session-issuer", flag.ExitOnError)
 		remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag               = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
 		remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("session-token", "", "")
@@ -1968,6 +1984,10 @@ func ParseEndpoint(
 		adminRemoteSessionsCreateGlobalIssuerFlags            = flag.NewFlagSet("create-global-issuer", flag.ExitOnError)
 		adminRemoteSessionsCreateGlobalIssuerBodyFlag         = adminRemoteSessionsCreateGlobalIssuerFlags.String("body", "REQUIRED", "")
 		adminRemoteSessionsCreateGlobalIssuerSessionTokenFlag = adminRemoteSessionsCreateGlobalIssuerFlags.String("session-token", "", "")
+
+		adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags            = flag.NewFlagSet("get-global-issuer-duplicate-preflight", flag.ExitOnError)
+		adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuerFlag       = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags.String("issuer", "", "")
+		adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionTokenFlag = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags.String("session-token", "", "")
 
 		adminRemoteSessionsListGlobalIssuersFlags            = flag.NewFlagSet("list-global-issuers", flag.ExitOnError)
 		adminRemoteSessionsListGlobalIssuersCursorFlag       = adminRemoteSessionsListGlobalIssuersFlags.String("cursor", "", "")
@@ -2233,6 +2253,7 @@ func ParseEndpoint(
 		riskCreateRiskPolicyBypassRequestFlags            = flag.NewFlagSet("create-risk-policy-bypass-request", flag.ExitOnError)
 		riskCreateRiskPolicyBypassRequestBodyFlag         = riskCreateRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
 		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
+		riskCreateRiskPolicyBypassRequestApikeyTokenFlag  = riskCreateRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
 
 		riskAcknowledgeRiskPolicyChallengeFlags            = flag.NewFlagSet("acknowledge-risk-policy-challenge", flag.ExitOnError)
 		riskAcknowledgeRiskPolicyChallengeBodyFlag         = riskAcknowledgeRiskPolicyChallengeFlags.String("body", "REQUIRED", "")
@@ -3170,6 +3191,12 @@ func ParseEndpoint(
 		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientApikeyTokenFlag      = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("apikey-token", "", "")
 		userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientProjectSlugInputFlag = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.String("project-slug-input", "", "")
 
+		userSessionIssuersCimdClientsVerifyURLFlags                = flag.NewFlagSet("verify-url", flag.ExitOnError)
+		userSessionIssuersCimdClientsVerifyURLBodyFlag             = userSessionIssuersCimdClientsVerifyURLFlags.String("body", "REQUIRED", "")
+		userSessionIssuersCimdClientsVerifyURLSessionTokenFlag     = userSessionIssuersCimdClientsVerifyURLFlags.String("session-token", "", "")
+		userSessionIssuersCimdClientsVerifyURLApikeyTokenFlag      = userSessionIssuersCimdClientsVerifyURLFlags.String("apikey-token", "", "")
+		userSessionIssuersCimdClientsVerifyURLProjectSlugInputFlag = userSessionIssuersCimdClientsVerifyURLFlags.String("project-slug-input", "", "")
+
 		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags                   = flag.NewFlagSet("list-user-session-issuer-cimd-clients", flag.ExitOnError)
 		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUserSessionIssuerIDFlag = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("user-session-issuer-id", "REQUIRED", "")
 		userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsCursorFlag              = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.String("cursor", "", "")
@@ -3359,6 +3386,7 @@ func ParseEndpoint(
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSetPinnedFlags.Usage = chatSetPinnedUsage
 	chatSummarizeFlags.Usage = chatSummarizeUsage
+	chatSummarizeToolCallFlags.Usage = chatSummarizeToolCallUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
 
@@ -3651,6 +3679,7 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersListIssuersFlags.Usage = organizationRemoteSessionIssuersListIssuersUsage
 	organizationRemoteSessionIssuersGetIssuerFlags.Usage = organizationRemoteSessionIssuersGetIssuerUsage
 	organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerDeletePreflightUsage
+	organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightUsage
 	organizationRemoteSessionIssuersUpdateIssuerFlags.Usage = organizationRemoteSessionIssuersUpdateIssuerUsage
 	organizationRemoteSessionIssuersDeleteIssuerFlags.Usage = organizationRemoteSessionIssuersDeleteIssuerUsage
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
@@ -3666,10 +3695,12 @@ func ParseEndpoint(
 	remoteSessionIssuersUpdateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersUpdateRemoteSessionIssuerUsage
 	remoteSessionIssuersListRemoteSessionIssuersFlags.Usage = remoteSessionIssuersListRemoteSessionIssuersUsage
 	remoteSessionIssuersGetRemoteSessionIssuerFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerUsage
+	remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightUsage
 	remoteSessionIssuersDeleteRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDeleteRemoteSessionIssuerUsage
 
 	adminRemoteSessionsFlags.Usage = adminRemoteSessionsUsage
 	adminRemoteSessionsCreateGlobalIssuerFlags.Usage = adminRemoteSessionsCreateGlobalIssuerUsage
+	adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags.Usage = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightUsage
 	adminRemoteSessionsListGlobalIssuersFlags.Usage = adminRemoteSessionsListGlobalIssuersUsage
 	adminRemoteSessionsGetGlobalIssuerFlags.Usage = adminRemoteSessionsGetGlobalIssuerUsage
 	adminRemoteSessionsUpdateGlobalIssuerFlags.Usage = adminRemoteSessionsUpdateGlobalIssuerUsage
@@ -3906,6 +3937,7 @@ func ParseEndpoint(
 	userSessionIssuersCimdClientsFlags.Usage = userSessionIssuersCimdClientsUsage
 	userSessionIssuersCimdClientsListPresetsFlags.Usage = userSessionIssuersCimdClientsListPresetsUsage
 	userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage
+	userSessionIssuersCimdClientsVerifyURLFlags.Usage = userSessionIssuersCimdClientsVerifyURLUsage
 	userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags.Usage = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUsage
 	userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsGetUserSessionIssuerCimdClientUsage
 	userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientFlags.Usage = userSessionIssuersCimdClientsDeleteUserSessionIssuerCimdClientUsage
@@ -4402,6 +4434,9 @@ func ParseEndpoint(
 
 			case "summarize":
 				epf = chatSummarizeFlags
+
+			case "summarize-tool-call":
+				epf = chatSummarizeToolCallFlags
 
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
@@ -5211,6 +5246,9 @@ func ParseEndpoint(
 			case "get-issuer-delete-preflight":
 				epf = organizationRemoteSessionIssuersGetIssuerDeletePreflightFlags
 
+			case "get-issuer-duplicate-preflight":
+				epf = organizationRemoteSessionIssuersGetIssuerDuplicatePreflightFlags
+
 			case "update-issuer":
 				epf = organizationRemoteSessionIssuersUpdateIssuerFlags
 
@@ -5254,6 +5292,9 @@ func ParseEndpoint(
 			case "get-remote-session-issuer":
 				epf = remoteSessionIssuersGetRemoteSessionIssuerFlags
 
+			case "get-remote-session-issuer-duplicate-preflight":
+				epf = remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightFlags
+
 			case "delete-remote-session-issuer":
 				epf = remoteSessionIssuersDeleteRemoteSessionIssuerFlags
 
@@ -5263,6 +5304,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create-global-issuer":
 				epf = adminRemoteSessionsCreateGlobalIssuerFlags
+
+			case "get-global-issuer-duplicate-preflight":
+				epf = adminRemoteSessionsGetGlobalIssuerDuplicatePreflightFlags
 
 			case "list-global-issuers":
 				epf = adminRemoteSessionsListGlobalIssuersFlags
@@ -5932,6 +5976,9 @@ func ParseEndpoint(
 			case "create-user-session-issuer-cimd-client":
 				epf = userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientFlags
 
+			case "verify-url":
+				epf = userSessionIssuersCimdClientsVerifyURLFlags
+
 			case "list-user-session-issuer-cimd-clients":
 				epf = userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsFlags
 
@@ -6321,6 +6368,9 @@ func ParseEndpoint(
 			case "summarize":
 				endpoint = c.Summarize()
 				data, err = chatc.BuildSummarizePayload(*chatSummarizeBodyFlag, *chatSummarizeSessionTokenFlag, *chatSummarizeProjectSlugInputFlag)
+			case "summarize-tool-call":
+				endpoint = c.SummarizeToolCall()
+				data, err = chatc.BuildSummarizeToolCallPayload(*chatSummarizeToolCallBodyFlag, *chatSummarizeToolCallSessionTokenFlag, *chatSummarizeToolCallProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -7129,6 +7179,9 @@ func ParseEndpoint(
 			case "get-issuer-delete-preflight":
 				endpoint = c.GetIssuerDeletePreflight()
 				data, err = organizationremotesessionissuersc.BuildGetIssuerDeletePreflightPayload(*organizationRemoteSessionIssuersGetIssuerDeletePreflightIDFlag, *organizationRemoteSessionIssuersGetIssuerDeletePreflightSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerDeletePreflightApikeyTokenFlag)
+			case "get-issuer-duplicate-preflight":
+				endpoint = c.GetIssuerDuplicatePreflight()
+				data, err = organizationremotesessionissuersc.BuildGetIssuerDuplicatePreflightPayload(*organizationRemoteSessionIssuersGetIssuerDuplicatePreflightIssuerFlag, *organizationRemoteSessionIssuersGetIssuerDuplicatePreflightSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerDuplicatePreflightApikeyTokenFlag)
 			case "update-issuer":
 				endpoint = c.UpdateIssuer()
 				data, err = organizationremotesessionissuersc.BuildUpdateIssuerPayload(*organizationRemoteSessionIssuersUpdateIssuerBodyFlag, *organizationRemoteSessionIssuersUpdateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersUpdateIssuerApikeyTokenFlag)
@@ -7172,6 +7225,9 @@ func ParseEndpoint(
 			case "get-remote-session-issuer":
 				endpoint = c.GetRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerPayload(*remoteSessionIssuersGetRemoteSessionIssuerIDFlag, *remoteSessionIssuersGetRemoteSessionIssuerSlugFlag, *remoteSessionIssuersGetRemoteSessionIssuerIssuerFlag, *remoteSessionIssuersGetRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag)
+			case "get-remote-session-issuer-duplicate-preflight":
+				endpoint = c.GetRemoteSessionIssuerDuplicatePreflight()
+				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerDuplicatePreflightPayload(*remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuerFlag, *remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInputFlag)
 			case "delete-remote-session-issuer":
 				endpoint = c.DeleteRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildDeleteRemoteSessionIssuerPayload(*remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag)
@@ -7182,6 +7238,9 @@ func ParseEndpoint(
 			case "create-global-issuer":
 				endpoint = c.CreateGlobalIssuer()
 				data, err = adminremotesessionsc.BuildCreateGlobalIssuerPayload(*adminRemoteSessionsCreateGlobalIssuerBodyFlag, *adminRemoteSessionsCreateGlobalIssuerSessionTokenFlag)
+			case "get-global-issuer-duplicate-preflight":
+				endpoint = c.GetGlobalIssuerDuplicatePreflight()
+				data, err = adminremotesessionsc.BuildGetGlobalIssuerDuplicatePreflightPayload(*adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuerFlag, *adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionTokenFlag)
 			case "list-global-issuers":
 				endpoint = c.ListGlobalIssuers()
 				data, err = adminremotesessionsc.BuildListGlobalIssuersPayload(*adminRemoteSessionsListGlobalIssuersCursorFlag, *adminRemoteSessionsListGlobalIssuersLimitFlag, *adminRemoteSessionsListGlobalIssuersSessionTokenFlag)
@@ -7323,7 +7382,7 @@ func ParseEndpoint(
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
 			case "create-risk-policy-bypass-request":
 				endpoint = c.CreateRiskPolicyBypassRequest()
-				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag)
+				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag, *riskCreateRiskPolicyBypassRequestApikeyTokenFlag)
 			case "acknowledge-risk-policy-challenge":
 				endpoint = c.AcknowledgeRiskPolicyChallenge()
 				data, err = riskc.BuildAcknowledgeRiskPolicyChallengePayload(*riskAcknowledgeRiskPolicyChallengeBodyFlag, *riskAcknowledgeRiskPolicyChallengeSessionTokenFlag)
@@ -7849,6 +7908,9 @@ func ParseEndpoint(
 			case "create-user-session-issuer-cimd-client":
 				endpoint = c.CreateUserSessionIssuerCimdClient()
 				data, err = usersessionissuerscimdclientsc.BuildCreateUserSessionIssuerCimdClientPayload(*userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientBodyFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientSessionTokenFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientApikeyTokenFlag, *userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientProjectSlugInputFlag)
+			case "verify-url":
+				endpoint = c.VerifyURL()
+				data, err = usersessionissuerscimdclientsc.BuildVerifyURLPayload(*userSessionIssuersCimdClientsVerifyURLBodyFlag, *userSessionIssuersCimdClientsVerifyURLSessionTokenFlag, *userSessionIssuersCimdClientsVerifyURLApikeyTokenFlag, *userSessionIssuersCimdClientsVerifyURLProjectSlugInputFlag)
 			case "list-user-session-issuer-cimd-clients":
 				endpoint = c.ListUserSessionIssuerCimdClients()
 				data, err = usersessionissuerscimdclientsc.BuildListUserSessionIssuerCimdClientsPayload(*userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUserSessionIssuerIDFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsCursorFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsLimitFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsSessionTokenFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsApikeyTokenFlag, *userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsProjectSlugInputFlag)
@@ -9851,6 +9913,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
 	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
+	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
 	fmt.Fprintln(os.Stderr)
@@ -10083,6 +10146,28 @@ func chatSummarizeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatSummarizeToolCallUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat summarize-tool-call", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize-tool-call --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_call_id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {
@@ -11414,16 +11499,16 @@ func externalKeysUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external-keys COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-aws-kms-key: Create an AWS KMS external key. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 	fmt.Fprintln(os.Stderr, `    create-gcp-kms-key: Create a GCP KMS external key. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 	fmt.Fprintln(os.Stderr, `    list-external-keys: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-aws-kms-keys: List the organization's AWS KMS external keys. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-gcp-kms-keys: List the organization's GCP KMS external keys. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-aws-kms-key: Get an AWS KMS external key by ID. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-gcp-kms-key: Get a GCP KMS external key by ID. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s external-keys COMMAND --help\n", os.Args[0])
@@ -11457,7 +11542,7 @@ func externalKeysUpdateAwsKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11465,7 +11550,7 @@ func externalKeysUpdateAwsKmsKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func externalKeysCreateGcpKmsKeyUsage() {
@@ -11497,7 +11582,7 @@ func externalKeysUpdateGcpKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11505,7 +11590,7 @@ func externalKeysUpdateGcpKmsKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func externalKeysListExternalKeysUsage() {
@@ -11613,7 +11698,7 @@ func externalKeysDeleteAwsKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -11633,7 +11718,7 @@ func externalKeysDeleteGcpKmsKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -15490,6 +15575,11 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-issuers: List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer: Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-issuer-duplicate-preflight: Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+	
+	Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+	
+	Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
@@ -15520,7 +15610,7 @@ func organizationRemoteSessionIssuersCreateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersListIssuersUsage() {
@@ -15591,6 +15681,32 @@ func organizationRemoteSessionIssuersGetIssuerDeletePreflightUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-issuer-delete-preflight --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
+func organizationRemoteSessionIssuersGetIssuerDuplicatePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers get-issuer-duplicate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+	
+	Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+	
+	Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-issuer-duplicate-preflight --issuer \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
 func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers update-issuer", os.Args[0])
@@ -15610,7 +15726,7 @@ func organizationRemoteSessionIssuersUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersDeleteIssuerUsage() {
@@ -15763,6 +15879,11 @@ func remoteSessionIssuersUsage() {
 	Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
 	
 	The issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.`)
+	fmt.Fprintln(os.Stderr, `    get-remote-session-issuer-duplicate-preflight: Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+	
+	Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+	
+	Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.`)
 	fmt.Fprintln(os.Stderr, `    delete-remote-session-issuer: Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -15837,7 +15958,7 @@ func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
@@ -15861,7 +15982,7 @@ func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersListRemoteSessionIssuersUsage() {
@@ -15922,6 +16043,34 @@ func remoteSessionIssuersGetRemoteSessionIssuerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers get-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --issuer \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers get-remote-session-issuer-duplicate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+	
+	Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+	
+	Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers get-remote-session-issuer-duplicate-preflight --issuer \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionIssuersDeleteRemoteSessionIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers delete-remote-session-issuer", os.Args[0])
@@ -15953,6 +16102,11 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-global-issuer: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-global-issuer-duplicate-preflight: Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+	
+	Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+	
+	The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.`)
 	fmt.Fprintln(os.Stderr, `    list-global-issuers: List global remote_session_issuers. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-global-issuer: Get a global remote_session_issuer by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-issuer: Update a global remote_session_issuer. Requires platform admin.`)
@@ -15988,7 +16142,31 @@ func adminRemoteSessionsCreateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions create-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsGetGlobalIssuerDuplicatePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions get-global-issuer-duplicate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+	
+	Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+	
+	The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions get-global-issuer-duplicate-preflight --issuer \"abc123\" --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsListGlobalIssuersUsage() {
@@ -16050,7 +16228,7 @@ func adminRemoteSessionsUpdateGlobalIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions update-global-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsDeleteGlobalIssuerUsage() {
@@ -17087,6 +17265,7 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-policy-bypass-request", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -17096,10 +17275,11 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func riskAcknowledgeRiskPolicyChallengeUsage() {
@@ -20990,7 +21170,8 @@ func userSessionIssuersCimdClientsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-issuers-cimd-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-presets: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.`)
-	fmt.Fprintln(os.Stderr, `    create-user-session-issuer-cimd-client: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.`)
+	fmt.Fprintln(os.Stderr, `    create-user-session-issuer-cimd-client: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.`)
+	fmt.Fprintln(os.Stderr, `    verify-url: Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.`)
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuer-cimd-clients: List the custom CIMD document URLs configured on a user_session_issuer. Does not include the preset catalog — call listPresets for that.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-issuer-cimd-client: Get a single custom CIMD document URL entry by id.`)
 	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer-cimd-client: Remove a custom CIMD document URL from a user_session_issuer. New authorization requests from that client are denied immediately; sessions already issued to it are unaffected and continue until they expire.`)
@@ -21031,7 +21212,7 @@ func userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.`)
+	fmt.Fprintln(os.Stderr, `Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -21042,6 +21223,30 @@ func userSessionIssuersCimdClientsCreateUserSessionIssuerCimdClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients create-user-session-issuer-cimd-client --body '{\n      \"client_id_metadata_uri\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersCimdClientsVerifyURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers-cimd-clients verify-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers-cimd-clients verify-url --body '{\n      \"client_id_metadata_uri\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionIssuersCimdClientsListUserSessionIssuerCimdClientsUsage() {

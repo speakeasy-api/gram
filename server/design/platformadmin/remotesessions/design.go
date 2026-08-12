@@ -42,6 +42,32 @@ var _ = Service("adminRemoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateGlobalRemoteSessionIssuer"}`)
 	})
 
+	Method("getGlobalIssuerDuplicatePreflight", func() {
+		Description("Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.\n\nScoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.\n\nThe global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.")
+
+		Payload(func() {
+			// Not Required: Goa cannot tell an absent query parameter from an
+			// empty one, so requiring it would turn a blank form field into a
+			// 400 at the transport decoder, contradicting the empty-match
+			// contract below before the handler ever runs.
+			Attribute("issuer", String, "The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.")
+			security.SessionPayload()
+		})
+
+		Result(rsissuers.RemoteSessionIssuerDuplicatePreflight)
+
+		HTTP(func() {
+			GET("/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight")
+			Param("issuer")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getGlobalRemoteSessionIssuerDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGlobalIssuerDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GlobalRemoteSessionIssuerDuplicatePreflight"}`)
+	})
+
 	Method("listGlobalIssuers", func() {
 		Description("List global remote_session_issuers. Requires platform admin.")
 

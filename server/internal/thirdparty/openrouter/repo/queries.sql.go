@@ -7,6 +7,8 @@ package repo
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createOpenRouterAPIKey = `-- name: CreateOpenRouterAPIKey :one
@@ -23,13 +25,13 @@ INSERT INTO openrouter_api_keys (
   , $4
   , $5
 )
-RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
 	OrganizationID string
 	KeyType        string
-	Key            string
+	Key            pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 }
@@ -47,6 +49,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -81,7 +84,7 @@ func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRo
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -100,6 +103,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -134,13 +138,13 @@ SET monthly_credits = $1, key_hash = $2, key = $3,
 WHERE organization_id = $5
   AND key_type = $6
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
-	Key            string
+	Key            pgtype.Text
 	Reinstate      bool
 	OrganizationID string
 	KeyType        string
@@ -160,6 +164,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		&i.OrganizationID,
 		&i.KeyType,
 		&i.Key,
+		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,

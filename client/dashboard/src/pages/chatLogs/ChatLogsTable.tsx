@@ -320,7 +320,9 @@ export function ChatLogsTable({
                               source={source}
                               className="size-3.5"
                             />
-                            {formatPlatform(source)}
+                            {chat.originatingClient
+                              ? `${formatPlatform(chat.originatingClient)} via ${formatPlatform(source)}`
+                              : formatPlatform(source)}
                           </span>
                         </>
                       )}

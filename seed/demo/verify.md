@@ -26,8 +26,8 @@ where a value is expected.
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.
 2. **Risk events** — findings list non-empty; each finding is
-   `stripe-access-token`, policy "Acme secrets & PII policy"; opening one
-   shows the `sk_live_DEMO…` match.
+   `stripe-access-token`, policy "Acme secrets & PII policy", badged **High**
+   (policy score 8.0); opening one shows the `sk_live_DEMO…` match.
 3. **Cost dashboard** — non-zero total cost; breakdown by user shows the six
    demo users; by model shows claude-sonnet-4-6 / claude-opus-4-5 / gpt-5.6;
    by agent shows claude-code / cursor.
@@ -37,6 +37,12 @@ where a value is expected.
    status.
 6. **Isolation spot-check** — switch back out of the demo org: your own org's
    pages show no `*@demo.getgram.ai` data anywhere.
+7. **Policy Center** — six policies listed; Action column shows a mix of
+   Flag / Warn / Block; Severity shows Medium through Critical; "Applies To"
+   varies (All types, Tool Requests, ...); no row renders an empty summary.
+8. **Detection rules** — three custom rules (`custom.sensitive_file_read`,
+   `custom.env_secret_dump`, `custom.ssrf_metadata_endpoint`), each opening
+   with a populated CEL expression that the editor reports as valid.
 
 ## On failure
 

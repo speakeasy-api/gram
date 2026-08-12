@@ -4,17 +4,38 @@
 // fetching the document it names, parsing it, and validating it against the
 // spec's rules plus Gram's own origin-binding policy.
 //
-// The Resolver owns the fetch lifecycle and its telemetry (metrics + logs) but
-// deliberately nothing else: no caching (until AIS-216) and no persistence.
-// Callers own the upsert of the resolved client and the mapping of returned
-// errors onto their wire format. Spec-defined rejections are returned as
-// *oauthwire.Error with a client-safe description; transport-level fetch
-// failures are returned as plain wrapped errors whose text may reference
-// internal details and MUST NOT be echoed to the OAuth client verbatim. The
-// same opacity rule applies to the internal result taxonomy: parse failures
-// are distinguished from fetch failures only in metrics and logs, never in the
-// returned error shape, so unauthenticated callers cannot use the wire
+// The Resolver owns the fetch lifecycle, its cache policy, and its telemetry
+// (metrics + logs) but deliberately not persistence: the caller passes in the
+// cache state it has stored and applies the returned outcome to its own
+// tables. Callers own the upsert of the resolved client and the mapping of
+// returned errors onto their wire format.
+//
+// # Two entry points, two disclosure levels
+//
+// Resolve is the OAuth path. It serves an UNAUTHENTICATED surface, so it
+// deliberately discloses as little as possible: spec-defined rejections come
+// back as *oauthwire.Error with a client-safe description, while every
+// transport-level failure comes back as a plain wrapped error whose text may
+// reference internal details and MUST NOT be echoed to the OAuth client
+// verbatim. The opacity rule extends to the result taxonomy — a parse failure
+// is distinguished from a fetch failure only in metrics and logs, never in the
+// returned error shape, so an unauthenticated caller cannot use the wire
 // response as an oracle for probing external hosts through Gram.
+//
+// Inspect is the management path. It serves an AUTHENTICATED, project-scoped
+// surface where the caller is an operator configuring their own issuer, and
+// the oracle concern above does not apply: they are entitled to know whether
+// the URL they just typed is unreachable, serving something that is not JSON,
+// or serving a document that violates the spec, because that is the whole
+// point of asking. It therefore returns the full outcome taxonomy plus an
+// operator-facing explanation.
+//
+// Inspect still does NOT leak Gram's internals. Its Detail is composed from
+// the outcome, never from the raw transport error, so guardian SSRF denials,
+// DNS failures, and internal hostnames stay in the logs where they belong.
+// Both entry points run exactly the same fetch and validation logic and emit
+// exactly the same telemetry; they differ only in how much of what was
+// learned reaches the caller.
 package cimd
 
 import (
@@ -70,6 +91,16 @@ const (
 	maxRedirectURIs      = 32
 	maxRedirectURILength = 2048
 )
+
+// ErrDocumentTooLarge marks the one fetch failure that arrives with a
+// successful HTTP status: the response began, but the body ran past
+// maxDocumentBytes. It exists so Inspect can tell an operator their document
+// is oversized instead of guessing at a 200 that failed to read.
+//
+// It is wrapped behind the existing descriptive prefix rather than replacing
+// it, so the "document exceeds N byte limit" text every log and the opaque
+// OAuth error already carried is preserved; the sentinel is appended to it.
+var ErrDocumentTooLarge = errors.New("document exceeds size limit")
 
 // Document is the subset of a Client ID Metadata Document that the
 // user-session AS honours, plus the fields it must detect to reject a
@@ -192,14 +223,57 @@ func newFetchClientFrom(base *guardian.HTTPClient) *guardian.HTTPClient {
 	return &client
 }
 
-// Resolve fetches, parses, and validates the Client ID Metadata Document
-// named by clientID. The returned Document has passed every check this AS
-// imposes: -02 §3 URL syntax, §4 triple client_id equality (the fetch never
+// Resolve returns the Client ID Metadata Document state for clientID,
+// fetching it only when the caller's cache says it must.
+//
+// The cache policy, in order: a cache whose expiry is still in the future
+// short-circuits with CacheOutcomeCached and no upstream request; otherwise a
+// conditional GET runs, carrying If-None-Match when cache.ETag is set, and
+// yields CacheOutcomeNotModified on 304 or CacheOutcomeRefreshed on 200.
+// Every failure — transport, status, parse, or validation — returns an error
+// and leaves the caller's cached row untouched. Serving a stale document when
+// a refresh fails is deliberately not offered: -02 §5.1 says a fetch failure
+// SHOULD abort the authorization request.
+//
+// A document returned with CacheOutcomeRefreshed has passed every check this
+// AS imposes: -02 §3 URL syntax, §4 triple client_id equality (the fetch never
 // follows redirects, so the fetched URL is the presented URL by
 // construction), required client_name + redirect_uris, public-client-only
 // auth method, secret/private-key bans, and Gram's same-origin redirect-URI
-// binding.
-func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, error) {
+// binding. Those checks run against the document as fetched, so a cached row
+// carries the verdict of the validation code that was deployed when it was
+// last refreshed: tightening a rule in validate.go does not re-reject a
+// cached client until its TTL lapses, up to maxCacheTTL later. Callers that
+// need a rule applied sooner must purge their stored cache state, which
+// forces the next resolve to fetch and re-validate a full document.
+func (r *Resolver) Resolve(ctx context.Context, clientID string, cache CacheState) (*CacheResult, error) {
+	// The OAuth path takes only the cache effect and the error, discarding
+	// the outcome taxonomy. That discard is the disclosure boundary described
+	// in the package doc: everything Inspect would reveal is computed here
+	// too, and deliberately dropped before it can reach an unauthenticated
+	// caller.
+	result := r.inspect(ctx, clientID, cache)
+	if result.err != nil {
+		return nil, result.err
+	}
+	return &CacheResult{
+		Outcome:  result.cacheOutcome,
+		Document: result.Document,
+		ETag:     result.etag,
+		TTL:      result.ttl,
+	}, nil
+}
+
+// inspect runs the full resolution and records the telemetry. It is the sole
+// implementation behind both Resolve and Inspect, so the two can never drift
+// in what they fetch, what they accept, or what they report to o11y.
+//
+// cache is always the zero value on the Inspect path: an operator asking what
+// a URL serves right now must not be answered from a copy the authorize path
+// stored earlier. The two short-circuit outcomes below are therefore
+// unreachable from Inspect, which is what lets Inspection keep its invariant
+// that a valid outcome carries a document.
+func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheState) inspection {
 	clientIDURL, err := ValidateClientIDURL(clientID)
 	if err != nil {
 		// Pre-fetch rejection: no origin has been established (the URL did
@@ -216,32 +290,131 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: 0,
 			err:           err,
 		})
-		return nil, err
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeInvalidURL,
+			status:          0,
+			reason:          validationReasonOf(err),
+			err:             err,
+			safeDescription: safeDescriptionOf(err),
+			tooLarge:        false,
+			cacheOutcome:    CacheOutcomeRefreshed,
+			etag:            "",
+			ttl:             0,
+		}
 	}
 	origin := clientIDURL.Host
 
+	// Freshness is consulted only after the URL itself has passed §3, so a
+	// cached row can never keep a client_id alive that current syntax rules
+	// reject.
+	if !cache.ExpiresAt.IsZero() && cache.ExpiresAt.After(time.Now()) {
+		r.observe(ctx, resolveObservation{
+			clientID:      clientID,
+			origin:        origin,
+			result:        fetchResultCached,
+			reason:        "",
+			status:        0,
+			duration:      0,
+			fetched:       false,
+			responseBytes: 0,
+			err:           nil,
+		})
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeValid,
+			status:          0,
+			reason:          "",
+			err:             nil,
+			safeDescription: "",
+			tooLarge:        false,
+			cacheOutcome:    CacheOutcomeCached,
+			// Sanitized even though the caller persists nothing on a cache
+			// hit: every etag this package hands back must be safe to
+			// store, or a future caller trusting the field would launder a
+			// malformed stored validator back into the database.
+			etag: sanitizeETag(cache.ETag),
+			ttl:  0,
+		}
+	}
+
 	start := time.Now()
-	body, status, err := r.fetchDocument(ctx, origin, clientID)
+	fetched, err := r.fetchDocument(ctx, origin, clientID, cache.ETag)
 	if err != nil {
 		r.observe(ctx, resolveObservation{
 			clientID:      clientID,
 			origin:        origin,
 			result:        fetchResultFetchError,
 			reason:        "",
-			status:        status,
+			status:        fetched.status,
 			duration:      time.Since(start),
 			fetched:       true,
 			responseBytes: 0,
 			err:           err,
 		})
-		return nil, fmt.Errorf("fetch client metadata document: %w", err)
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeUnreachable,
+			status:          fetched.status,
+			reason:          "",
+			err:             fmt.Errorf("fetch client metadata document: %w", err),
+			safeDescription: "",
+			tooLarge:        errors.Is(err, ErrDocumentTooLarge),
+			cacheOutcome:    CacheOutcomeRefreshed,
+			etag:            "",
+			ttl:             0,
+		}
 	}
 
-	// A malformed body is reported like any other fetch failure (plain
-	// wrapped error, generic wire response) rather than as a distinct OAuth
-	// error: a distinguishable "reachable but not JSON" response would give
-	// unauthenticated callers an oracle for probing external hosts through
-	// Gram. The parse_error result exists only in telemetry.
+	if fetched.notModified {
+		r.observe(ctx, resolveObservation{
+			clientID:      clientID,
+			origin:        origin,
+			result:        fetchResultConditionalNotModified,
+			reason:        "",
+			status:        fetched.status,
+			duration:      time.Since(start),
+			fetched:       true,
+			responseBytes: 0,
+			err:           nil,
+		})
+		// RFC 9110 §15.4.5 lets a 304 carry a new validator, and a cache
+		// that ignores one revalidates against a superseded ETag forever.
+		// A response that offers none — or an unusable one — leaves the
+		// stored validator in place: it still identifies content the
+		// upstream just confirmed is unchanged.
+		//
+		// The stored value is re-sanitized so what gets persisted is what
+		// went on the wire. Reaching here at all means it survived
+		// sanitizing (an empty result suppresses the conditional request and
+		// with it this branch), so this only ever normalizes surrounding
+		// whitespace, but persisting a value the request did not use would
+		// be a quiet inconsistency.
+		etag := sanitizeETag(cache.ETag)
+		if refreshed := sanitizeETag(fetched.header.Get("ETag")); refreshed != "" {
+			etag = refreshed
+		}
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeValid,
+			status:          fetched.status,
+			reason:          "",
+			err:             nil,
+			safeDescription: "",
+			tooLarge:        false,
+			cacheOutcome:    CacheOutcomeNotModified,
+			etag:            etag,
+			ttl:             cacheTTL(fetched.header, time.Now()),
+		}
+	}
+	body, status := fetched.body, fetched.status
+
+	// On the OAuth path a malformed body is reported like any other fetch
+	// failure (plain wrapped error, generic wire response) rather than as a
+	// distinct OAuth error: a distinguishable "reachable but not JSON"
+	// response would give unauthenticated callers an oracle for probing
+	// external hosts through Gram. The distinction lives in telemetry and on
+	// the authenticated Inspect path only.
 	var doc Document
 	if err := json.Unmarshal(body, &doc); err != nil {
 		r.observe(ctx, resolveObservation{
@@ -255,7 +428,18 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: len(body),
 			err:           err,
 		})
-		return nil, fmt.Errorf("parse client metadata document: %w", err)
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeUnparseable,
+			status:          status,
+			reason:          "",
+			err:             fmt.Errorf("parse client metadata document: %w", err),
+			safeDescription: "",
+			tooLarge:        false,
+			cacheOutcome:    CacheOutcomeRefreshed,
+			etag:            "",
+			ttl:             0,
+		}
 	}
 
 	if err := validateDocument(&doc, clientID, clientIDURL); err != nil {
@@ -270,7 +454,18 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: len(body),
 			err:           err,
 		})
-		return nil, err
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeInvalidDocument,
+			status:          status,
+			reason:          validationReasonOf(err),
+			err:             err,
+			safeDescription: safeDescriptionOf(err),
+			tooLarge:        false,
+			cacheOutcome:    CacheOutcomeRefreshed,
+			etag:            "",
+			ttl:             0,
+		}
 	}
 
 	r.observe(ctx, resolveObservation{
@@ -284,7 +479,18 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 		responseBytes: len(body),
 		err:           nil,
 	})
-	return &doc, nil
+	return inspection{
+		Document:        &doc,
+		outcome:         OutcomeValid,
+		status:          status,
+		reason:          "",
+		err:             nil,
+		safeDescription: "",
+		tooLarge:        false,
+		cacheOutcome:    CacheOutcomeRefreshed,
+		etag:            sanitizeETag(fetched.header.Get("ETag")),
+		ttl:             cacheTTL(fetched.header, time.Now()),
+	}
 }
 
 // resolveObservation carries everything one Resolve attempt learned to the
@@ -348,14 +554,39 @@ func (r *Resolver) observe(ctx context.Context, o resolveObservation) {
 	r.logger.InfoContext(ctx, "cimd document resolved", logAttrs...)
 }
 
-// fetchDocument retrieves the metadata document. Only HTTP 200 is accepted
-// (-02 §5 MUST; other statuses — including the unfollowed redirects — are
-// fetch failures and are never cached per §5.2), and the body read is capped
-// at maxDocumentBytes. The returned status is 0 when no response was
-// received. Response size is recorded here because the byte count only
-// exists inside the read: the full body length on success, or the cap itself
-// when the read tripped it.
-func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID string) ([]byte, int, error) {
+// fetchedDocument is one HTTP exchange with a document host.
+type fetchedDocument struct {
+	// body is the document bytes, empty unless the response was a 200.
+	body []byte
+
+	// status is the HTTP status, 0 when no response was received.
+	status int
+
+	// notModified reports a 304 answer to a conditional request, meaning
+	// body is empty and the caller's cached document still stands.
+	notModified bool
+
+	// header is the response header, read for the freshness directives and
+	// the ETag. Nil when no response was received.
+	header http.Header
+}
+
+// fetchDocument retrieves the metadata document, conditionally when etag is
+// non-empty. HTTP 200 is the only status that yields a body (-02 §5 MUST;
+// other statuses — including the unfollowed redirects — are fetch failures
+// and are never cached per §5.2), and the body read is capped at
+// maxDocumentBytes.
+//
+// A 304 is accepted only in answer to a conditional request. An
+// unconditional GET that draws one is a broken or intermediary-fronted host
+// rather than a revalidation, and treating it as a cache confirmation would
+// mean confirming a document this AS has never seen, so it falls through to
+// the same fetch failure as any other unexpected status.
+//
+// Response size is recorded here because the byte count only exists inside
+// the read: the full body length on success, or the cap itself when the read
+// tripped it. A 304 records none, having read no body.
+func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID string, etag string) (fetchedDocument, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
@@ -364,29 +595,46 @@ func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID st
 	// accepted despite no request having been sent.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("build document request: %w", err)
+		return fetchedDocument{body: nil, status: 0, notModified: false, header: nil}, fmt.Errorf("build document request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
+	// Re-sanitize rather than trusting the stored value. Everything written
+	// to client_id_metadata_etag passes sanitizeETag today, but that is a
+	// caller-side invariant across a process and a database: a row written
+	// under laxer rules than the ones now compiled in, or by hand during an
+	// incident, would otherwise be replayed forever. Dropping a validator
+	// here also correctly suppresses the 304 branch below, so a malformed
+	// stored tag cannot make this AS accept a revalidation it never asked
+	// for.
+	etag = sanitizeETag(etag)
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("request document: %w", err)
+		return fetchedDocument{body: nil, status: 0, notModified: false, header: nil}, fmt.Errorf("request document: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
+	if etag != "" && resp.StatusCode == http.StatusNotModified {
+		return fetchedDocument{body: nil, status: resp.StatusCode, notModified: true, header: resp.Header}, nil
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("document endpoint returned status %d", resp.StatusCode)
+		return fetchedDocument{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, fmt.Errorf("document endpoint returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxDocumentBytes))
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			r.metrics.RecordResponseSize(ctx, origin, maxDocumentBytes)
-			return nil, resp.StatusCode, fmt.Errorf("document exceeds %d byte limit", maxDocumentBytes)
+			return fetchedDocument{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, fmt.Errorf("document exceeds %d byte limit: %w", maxDocumentBytes, ErrDocumentTooLarge)
 		}
-		return nil, resp.StatusCode, fmt.Errorf("read document body: %w", err)
+		return fetchedDocument{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, fmt.Errorf("read document body: %w", err)
 	}
 	r.metrics.RecordResponseSize(ctx, origin, int64(len(body)))
 
-	return body, resp.StatusCode, nil
+	return fetchedDocument{body: body, status: resp.StatusCode, notModified: false, header: resp.Header}, nil
 }

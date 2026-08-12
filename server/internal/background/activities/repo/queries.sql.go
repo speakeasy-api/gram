@@ -493,7 +493,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
-	ApiKey           string
+	ApiKey           pgtype.Text
 }
 
 // Targets for periodic OpenRouter credit usage polling. Filters out disabled

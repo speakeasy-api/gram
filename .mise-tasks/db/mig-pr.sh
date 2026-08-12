@@ -111,8 +111,8 @@ git worktree add "$dest" "$base"
 
   # The pre-commit hook runs gofix which is a Node/zx task; install root
   # node_modules from the offline cache so the hook can resolve `zx`.
-  if ! mise run install:pnpm --offline >/dev/null 2>&1; then
-    mise run install:pnpm >/dev/null
+  if ! mise run install:aube --offline >/dev/null 2>&1; then
+    mise run install:aube >/dev/null
   fi
 
   git add -A

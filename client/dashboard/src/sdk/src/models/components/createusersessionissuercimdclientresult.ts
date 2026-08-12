@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -13,32 +12,20 @@ import {
 } from "./usersessionissuercimdclient.js";
 
 /**
- * Result of allowing a CIMD document URL, including any non-fatal probe warning.
+ * Result of allowing a CIMD document URL. Reachability is not reported here — call verifyURL for that.
  */
 export type CreateUserSessionIssuerCimdClientResult = {
   /**
    * A CIMD document URL explicitly allowed on a user_session_issuer, additive to the preset catalog.
    */
   client: UserSessionIssuerCimdClient;
-  /**
-   * Set when Gram could not fetch or validate the document at this URL. The entry was still saved; the URL will be admitted, but a client presenting it will fail at authorization time until the document is reachable and valid.
-   */
-  probeWarning?: string | undefined;
 };
 
 /** @internal */
 export const CreateUserSessionIssuerCimdClientResult$inboundSchema:
-  z.ZodMiniType<CreateUserSessionIssuerCimdClientResult, unknown> = z.pipe(
-    z.object({
-      client: UserSessionIssuerCimdClient$inboundSchema,
-      probe_warning: z.optional(z.string()),
-    }),
-    z.transform((v) => {
-      return remap$(v, {
-        "probe_warning": "probeWarning",
-      });
-    }),
-  );
+  z.ZodMiniType<CreateUserSessionIssuerCimdClientResult, unknown> = z.object({
+    client: UserSessionIssuerCimdClient$inboundSchema,
+  });
 
 export function createUserSessionIssuerCimdClientResultFromJSON(
   jsonString: string,

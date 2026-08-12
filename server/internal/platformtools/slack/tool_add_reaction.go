@@ -2,11 +2,13 @@ package slack
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -29,7 +31,7 @@ func NewAddReactionTool(httpClient *guardian.HTTPClient) core.PlatformToolExecut
 			SourceSlug:  sourceSlack,
 			HandlerName: "add_reaction",
 			Name:        toolNameAddReaction,
-			Description: "Add an emoji reaction to a Slack message using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN.",
+			Description: "Add an emoji reaction to a Slack message using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN. Adding a reaction that is already on the message succeeds and reports already_reacted.",
 			InputSchema: core.BuildInputSchema[addReactionInput](),
 			Variables:   nil,
 			Annotations: slackToolAnnotations(readOnly, destructive, idempotent, openWorld),
@@ -70,6 +72,14 @@ func callAddReaction(ctx context.Context, client *apiClient, env toolconfig.Tool
 
 	body, err := client.Call(ctx, "reactions.add", request, tokenPreferBot, env)
 	if err != nil {
+		// Slack refuses a repeat reaction with already_reacted, but the end
+		// state the caller asked for already holds, so report it as the
+		// successful no-op it is rather than sending a caller that cannot tell
+		// the difference off to reconcile a failure.
+		var apiErr *slackAPIError
+		if errors.As(err, &apiErr) && apiErr.Code == slackapi.ErrCodeAlreadyReacted {
+			return writeResponse(wr, []byte(`{"ok":true,"already_reacted":true}`))
+		}
 		return err
 	}
 	return writeResponse(wr, body)
