@@ -595,9 +595,7 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeleteRemoteSessionsByClientID :many
--- Returns the stored credentials of every session it tombstones so the caller
--- can push RFC 7009 revocations upstream after the transaction commits. The
--- row count callers previously read is the length of the result.
+-- Returns the stored credentials of every session it tombstones.
 UPDATE remote_sessions
 SET deleted_at = clock_timestamp()
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
@@ -772,9 +770,8 @@ WHERE s.id = @id
 -- name: GetRemoteSessionClientWithIssuerByID :one
 -- Joined client + issuer view scoped to a single client_id. Used by
 -- the runtime token resolver to find the upstream token endpoint when
--- refreshing an expired access token, and by the post-commit upstream
--- revoke to find the RFC 7009 revocation endpoint. Callers establish that
--- the client belongs to the request's project upstream
+-- refreshing an expired access token. Callers establish that the
+-- client belongs to the request's project upstream
 -- (ListRemoteSessionClientsForUserSessionIssuer); this lookup itself
 -- needs only the id since client ids are globally unique.
 SELECT
@@ -928,9 +925,8 @@ WHERE s.subject_urn = @subject_urn
 -- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
 -- Cascade for a revoked user session: tombstones every upstream grant the
 -- subject holds through one user session issuer and returns their stored
--- credentials, so the caller can push RFC 7009 revocations once its
--- transaction commits. Scoped through the issuer's project so the write
--- cannot cross tenants.
+-- credentials. Scoped through the issuer's project so the write cannot
+-- cross tenants.
 --
 -- A subject's grant is shared by every MCP client it authenticates, because
 -- remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
@@ -954,10 +950,8 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 -- the challenge state and the endpoint's bindings, never from the form;
 -- scoped through the issuer's project so the write cannot cross tenants.
 --
--- Returns the stored credentials it tombstones so the caller can push an
--- RFC 7009 revocation upstream once the write has committed. The row count
--- callers read is the length of the result; the partial unique index on
--- (subject_urn, remote_session_client_id) caps that at one.
+-- Returns the stored credentials it tombstones; the partial unique index on
+-- (subject_urn, remote_session_client_id) caps that at one row.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi

@@ -386,8 +386,8 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		attr.SlogRemoteSessionIssuerID(client.RemoteSessionIssuerID.String()),
 	)
 
-	// The quiet skip the ticket asks for. Most upstreams advertise no
-	// revocation_endpoint, so this is the common path and must not log.
+	// Most upstreams advertise no revocation_endpoint, so this is the common
+	// path and must not log.
 	endpoint := ""
 	if client.RevocationEndpoint.Valid {
 		endpoint = client.RevocationEndpoint.String

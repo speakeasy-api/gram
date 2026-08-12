@@ -1903,9 +1903,8 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 
 // Joined client + issuer view scoped to a single client_id. Used by
 // the runtime token resolver to find the upstream token endpoint when
-// refreshing an expired access token, and by the post-commit upstream
-// revoke to find the RFC 7009 revocation endpoint. Callers establish that
-// the client belongs to the request's project upstream
+// refreshing an expired access token. Callers establish that the
+// client belongs to the request's project upstream
 // (ListRemoteSessionClientsForUserSessionIssuer); this lookup itself
 // needs only the id since client ids are globally unique.
 func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientWithIssuerByIDRow, error) {
@@ -4266,10 +4265,8 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 // the challenge state and the endpoint's bindings, never from the form;
 // scoped through the issuer's project so the write cannot cross tenants.
 //
-// Returns the stored credentials it tombstones so the caller can push an
-// RFC 7009 revocation upstream once the write has committed. The row count
-// callers read is the length of the result; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one.
+// Returns the stored credentials it tombstones; the partial unique index on
+// (subject_urn, remote_session_client_id) caps that at one row.
 func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient,
 		arg.SubjectUrn,
@@ -4308,9 +4305,7 @@ type SoftDeleteRemoteSessionsByClientIDRow struct {
 	RefreshTokenEncrypted pgtype.Text
 }
 
-// Returns the stored credentials of every session it tombstones so the caller
-// can push RFC 7009 revocations upstream after the transaction commits. The
-// row count callers previously read is the length of the result.
+// Returns the stored credentials of every session it tombstones.
 func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remoteSessionClientID uuid.UUID) ([]SoftDeleteRemoteSessionsByClientIDRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsByClientID, remoteSessionClientID)
 	if err != nil {
@@ -4358,9 +4353,8 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 
 // Cascade for a revoked user session: tombstones every upstream grant the
 // subject holds through one user session issuer and returns their stored
-// credentials, so the caller can push RFC 7009 revocations once its
-// transaction commits. Scoped through the issuer's project so the write
-// cannot cross tenants.
+// credentials. Scoped through the issuer's project so the write cannot
+// cross tenants.
 //
 // A subject's grant is shared by every MCP client it authenticates, because
 // remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
