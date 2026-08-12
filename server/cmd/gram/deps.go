@@ -777,11 +777,12 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
 }
 
+//nolint:unused // Retained for the local fixture composition once the registry path uses the fixture CA.
 func newLocalFixtureMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, localCAPath string, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
 	if localCAPath == "" {
 		return nil, fmt.Errorf("local Platform MCP fixture CA path is required")
 	}
-	caPEM, err := os.ReadFile(localCAPath)
+	caPEM, err := os.ReadFile(localCAPath) //nolint:gosec // Local fixture CA path comes from trusted server configuration.
 	if err != nil {
 		return nil, fmt.Errorf("read local Platform MCP fixture CA: %w", err)
 	}

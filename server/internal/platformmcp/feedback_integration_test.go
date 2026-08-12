@@ -1,3 +1,4 @@
+//nolint:glint // This test exercises raw feedback retention state that has no dedicated fixture helper.
 package platformmcp
 
 import (

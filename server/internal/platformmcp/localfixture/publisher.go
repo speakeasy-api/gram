@@ -1,8 +1,10 @@
+//nolint:exhaustruct // In-memory fixture state initializes the fields it needs.
 package localfixture
 
 import (
 	"context"
 	"maps"
+	"strings"
 	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -13,14 +15,15 @@ import (
 // publishing transport. It keeps generated package files in process memory and
 // never contacts or represents a remote source-control destination.
 type InMemoryGitHubPublisher struct {
-	mu    sync.RWMutex
-	files map[string]map[string][]byte
+	mu            sync.RWMutex
+	files         map[string]map[string][]byte
+	collaborators map[string]bool
 }
 
 var _ plugins.GitHubPublisher = (*InMemoryGitHubPublisher)(nil)
 
 func NewInMemoryGitHubPublisher() *InMemoryGitHubPublisher {
-	return &InMemoryGitHubPublisher{files: make(map[string]map[string][]byte)}
+	return &InMemoryGitHubPublisher{files: make(map[string]map[string][]byte), collaborators: make(map[string]bool)}
 }
 
 func (p *InMemoryGitHubPublisher) CreateRepo(context.Context, int64, string, string, bool) error {
@@ -34,11 +37,21 @@ func (p *InMemoryGitHubPublisher) PushFiles(_ context.Context, _ int64, owner, r
 	return "local-fixture", nil
 }
 
-func (p *InMemoryGitHubPublisher) AddCollaborator(context.Context, int64, string, string, string, string) error {
+func (p *InMemoryGitHubPublisher) AddCollaborator(_ context.Context, _ int64, owner, repo, username, _ string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.collaborators[p.collaboratorKey(owner, repo, username)] = true
 	return nil
 }
 
-func (p *InMemoryGitHubPublisher) HasDirectCollaborator(context.Context, int64, string, string) (bool, error) {
+func (p *InMemoryGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int64, owner, repo string) (bool, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for key := range p.collaborators {
+		if strings.HasPrefix(key, owner+"/"+repo+"/") {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 
@@ -68,6 +81,10 @@ func (p *InMemoryGitHubPublisher) GetFileContent(_ context.Context, _ int64, own
 
 func (p *InMemoryGitHubPublisher) key(owner, repo, branch string) string {
 	return owner + "/" + repo + "/" + branch
+}
+
+func (p *InMemoryGitHubPublisher) collaboratorKey(owner, repo, username string) string {
+	return owner + "/" + repo + "/" + username
 }
 
 func cloneFiles(files map[string][]byte) map[string][]byte {

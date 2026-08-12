@@ -1,3 +1,4 @@
+//nolint:wrapcheck // Integration assertions intentionally return test setup errors directly.
 package platformmcp
 
 import (

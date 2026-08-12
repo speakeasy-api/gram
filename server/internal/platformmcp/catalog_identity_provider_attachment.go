@@ -1,3 +1,4 @@
+//nolint:exhaustruct // OAuth persistence values intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -63,8 +64,8 @@ func NewCatalogIdentityProviderAttachmentService(db *pgxpool.Pool, enc *encrypti
 	if serverURL == nil {
 		return &CatalogIdentityProviderAttachmentService{}
 	}
-	copy := *serverURL
-	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, serverURL: &copy}
+	serverURLCopy := *serverURL
+	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, serverURL: &serverURLCopy}
 }
 
 // Attach discovers the exact provider advertised by the lifecycle-owned Remote
@@ -132,17 +133,9 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
 	}
-	if len(resourceMetadata.AuthorizationServers) != 1 || strings.TrimSpace(resourceMetadata.AuthorizationServers[0]) == "" {
-		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
-	}
-
-	authorizationServer := strings.TrimSpace(resourceMetadata.AuthorizationServers[0])
-	metadata, err := remotesessions.DiscoverIssuerMetadata(ctx, s.policy, authorizationServer)
+	metadata, err := s.discoverSupportedIssuerMetadata(ctx, resourceMetadata.AuthorizationServers)
 	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("discover registered identity-provider metadata: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
-	}
-	if strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint) {
-		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
+		return CatalogIdentityProviderAttachmentResult{}, err
 	}
 	if err := lockQ.LockPlatformMCPRemoteIssuerAttachment(ctx, platformrepo.LockPlatformMCPRemoteIssuerAttachmentParams{
 		OrganizationID: principal.OrganizationID,
@@ -182,6 +175,21 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
 	return CatalogIdentityProviderAttachmentResult{Attached: attached, ProviderURL: metadata.Issuer}, nil
+}
+
+func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetadata(ctx context.Context, authorizationServers []string) (remotesessions.DiscoveredIssuerMetadata, error) {
+	for _, rawAuthorizationServer := range authorizationServers {
+		authorizationServer := strings.TrimSpace(rawAuthorizationServer)
+		if authorizationServer == "" {
+			continue
+		}
+		metadata, err := remotesessions.DiscoverIssuerMetadata(ctx, s.policy, authorizationServer)
+		if err != nil || strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint) {
+			continue
+		}
+		return metadata, nil
+	}
+	return remotesessions.DiscoveredIssuerMetadata{}, ErrIdentityProviderAttachmentUnsupported
 }
 
 func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (bool, error) {

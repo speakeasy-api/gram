@@ -197,7 +197,7 @@ func (f *ProxyManager) BuildTarget(
 		f.toolsCallUsageTrackingInterceptor,
 		clickHouseLogInterceptor,
 	}
-	if f.platformMCPSelectedUseRecorder != nil {
+	if f.platformMCPSelectedUseRecorder != nil && identity.RemoteMCPServerID != "" {
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
 	}
 

@@ -1,3 +1,4 @@
+//nolint:exhaustruct,wrapcheck // Service defaults use optional zero values and preserve typed persistence errors.
 package platformmcp
 
 import (
@@ -128,8 +129,8 @@ func (s *RegistrationService) WithIdentityProviderAttachment(attachment CatalogI
 // trusted same-origin setup links for persisted registrations.
 func (s *RegistrationService) WithDashboardURL(dashboardURL *url.URL) *RegistrationService {
 	if s != nil && dashboardURL != nil && dashboardURL.Scheme == "https" && dashboardURL.Host != "" && dashboardURL.User == nil {
-		copy := *dashboardURL
-		s.dashboardURL = &copy
+		dashboardURLCopy := *dashboardURL
+		s.dashboardURL = &dashboardURLCopy
 	}
 	return s
 }

@@ -184,17 +184,15 @@ func (s *OnboardingService) Start(ctx context.Context, organizationID, userID st
 		return OnboardingProjection{}, err
 	}
 	if workflow == nil {
-		row, err := q.CreatePlatformMCPOnboardingWorkflow(ctx, platformrepo.CreatePlatformMCPOnboardingWorkflowParams{
+		if _, err := q.CreatePlatformMCPOnboardingWorkflow(ctx, platformrepo.CreatePlatformMCPOnboardingWorkflowParams{
 			OrganizationID:       organizationID,
 			InitiatingSubjectUrn: userSubjectURN(userID),
 			SourceSurface:        onboardingSourceDashboard,
 			ClientFamily:         string(OnboardingClientClaudeCode),
 			ExpiresAt:            timestamp(s.now().UTC().Add(onboardingWorkflowLifetime)),
-		})
-		if err != nil {
+		}); err != nil {
 			return OnboardingProjection{}, fmt.Errorf("create platform mcp onboarding workflow: %w", err)
 		}
-		workflow = onboardingWorkflowFromRow(row)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -281,7 +279,14 @@ func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, princi
 	if err != nil {
 		return err
 	}
-	rows, err := platformrepo.New(s.db).RecordPlatformMCPOnboardingLifecycleMilestone(ctx, platformrepo.RecordPlatformMCPOnboardingLifecycleMilestoneParams{
+	q := platformrepo.New(s.db)
+	if _, err := lifecycleRegistration(ctx, q, principal, projectID, registrationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUnavailable
+		}
+		return fmt.Errorf("validate platform mcp %s registration: %w", milestone, err)
+	}
+	rows, err := q.RecordPlatformMCPOnboardingLifecycleMilestone(ctx, platformrepo.RecordPlatformMCPOnboardingLifecycleMilestoneParams{
 		OrganizationID:       principal.OrganizationID,
 		Milestone:            milestone,
 		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
@@ -293,7 +298,12 @@ func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, princi
 		return fmt.Errorf("record platform mcp %s: %w", milestone, err)
 	}
 	if rows == 0 {
-		return ErrUnavailable
+		if _, err := lifecycleRegistration(ctx, q, principal, projectID, registrationID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrUnavailable
+			}
+			return fmt.Errorf("revalidate platform mcp %s registration: %w", milestone, err)
+		}
 	}
 	return nil
 }

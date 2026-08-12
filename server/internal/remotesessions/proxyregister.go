@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Dynamic registration responses intentionally omit optional expiration values.
 package remotesessions
 
 import (
@@ -23,6 +24,8 @@ import (
 // proxyRegisterMaxBodyBytes caps both the inbound request body and the upstream
 // DCR response read at 10 MiB.
 const proxyRegisterMaxBodyBytes int64 = 10 * 1024 * 1024
+
+var ErrInvalidDynamicClientRegistrationEndpoint = errors.New("invalid dynamic client registration endpoint")
 
 type ProxyRegisterRequest struct {
 	RegistrationEndpoint    string  `json:"registration_endpoint"`
@@ -87,7 +90,7 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 
 	endpoint, err := url.Parse(request.RegistrationEndpoint)
 	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
-		return ProxyRegisterResponse{}, fmt.Errorf("invalid registration endpoint")
+		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
 	}
 
 	origin := serverURL.String()
@@ -188,6 +191,9 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	registered, err := RegisterDynamicClient(ctx, s.policy, s.serverURL, req)
 	if err != nil {
+		if errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint) {
+			return oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, s.logger)
+		}
 		var registrationErr *DynamicClientRegistrationError
 		if errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError {
 			return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, s.logger)

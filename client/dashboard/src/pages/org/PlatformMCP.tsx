@@ -16,6 +16,7 @@ import {
   invalidatePlatformMCPOnboarding,
   usePlatformMCPOnboarding,
 } from "@gram/client/react-query/platformMCPOnboarding.js";
+import { useEffect, useState } from "react";
 
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -38,7 +39,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRecordPlatformMCPAgentConfigurationCopiedMutation } from "@gram/client/react-query/recordPlatformMCPAgentConfigurationCopied.js";
 import { useRecordPlatformMCPInstallIntentMutation } from "@gram/client/react-query/recordPlatformMCPInstallIntent.js";
 import { useStartPlatformMCPOnboardingMutation } from "@gram/client/react-query/startPlatformMCPOnboarding.js";
-import { useState } from "react";
 
 const clients: Array<{ id: ClientFamily; label: string }> = [
   { id: "claude_code", label: "Claude Code" },
@@ -719,6 +719,10 @@ function PlatformMCPSetupSheet({
       : firstIncompleteStepIndex);
   const currentStep = steps[currentStepIndex]!;
 
+  useEffect(() => {
+    if (open) setSelectedStepIndex(null);
+  }, [open]);
+
   const showStep = (): JSX.Element => {
     switch (currentStepIndex) {
       case 0:
@@ -863,7 +867,7 @@ function PlatformMCPSetupSheet({
             <button
               key={step.title}
               type="button"
-              disabled={index >= currentStepIndex}
+              disabled={index > currentStepIndex && !step.complete}
               onClick={() => setSelectedStepIndex(index)}
               className={cn(
                 "h-1 rounded-full transition-all",

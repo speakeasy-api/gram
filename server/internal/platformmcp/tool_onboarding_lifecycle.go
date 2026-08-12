@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct,wrapcheck // MCP SDK manifests use optional zero values and preserve bounded typed errors.
 package platformmcp
 
 import (
@@ -204,7 +204,7 @@ func registerOnboardingLifecycleTools(server *mcp.Server, onboarding *Onboarding
 		}
 		authorizationURL, err := registrations.DashboardAuthorizationURL(ctx, principal, input.ProjectSlug, registrationID)
 		if err != nil {
-			return onboardingIdentityProviderAttachmentUnavailableResult()
+			return onboardingIdentityProviderAttachmentAuthorizationUnavailableResult()
 		}
 		return nil, onboardingIdentityProviderAttachmentOutput(input.ProjectSlug, registrationID, attachment, authorizationURL), nil
 	})
@@ -277,6 +277,14 @@ func onboardingIdentityProviderAttachmentUnavailableResult() (*mcp.CallToolResul
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, AttachOnboardingMCPIdentityProviderToolOutput{}, nil
 }
+func onboardingIdentityProviderAttachmentAuthorizationUnavailableResult() (*mcp.CallToolResult, AttachOnboardingMCPIdentityProviderToolOutput, error) {
+	content, err := json.Marshal(onboardingLifecycleErrorResult{Code: "identity_provider_attached_authorization_url_unavailable", Message: "The discovered remote identity provider was attached, but Gram could not create the server-issued Inspect authorization link. Open the registered MCP's Inspect page and use Connect or Authorize, then force a fresh onboarding status check."})
+	if err != nil {
+		return nil, AttachOnboardingMCPIdentityProviderToolOutput{}, err
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, AttachOnboardingMCPIdentityProviderToolOutput{}, nil
+}
+
 func onboardingIdentityProviderAttachmentError(err error) (*mcp.CallToolResult, bool) {
 	var result onboardingLifecycleErrorResult
 	switch {

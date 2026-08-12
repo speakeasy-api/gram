@@ -1,3 +1,4 @@
+//nolint:exhaustruct,wrapcheck // Readiness probes intentionally omit documented optional fields and preserve typed errors.
 package platformmcp
 
 import (
@@ -17,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -51,15 +53,18 @@ type RemoteMCPReadinessProber struct {
 }
 
 func NewRemoteMCPReadinessProber(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
-	if logger == nil {
-		logger = slog.Default()
-	}
 	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions}
 }
 
 func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
 	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
+	}
+	if _, err := projectsrepo.New(p.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: principal.OrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProviderReadinessProbeResult{}, ErrReadinessInvalid
+		}
+		return ProviderReadinessProbeResult{}, fmt.Errorf("validate registered Remote MCP project: %w", err)
 	}
 	remote, err := remotemcprepo.New(p.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: remoteMCPServerID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -146,7 +151,13 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
 	}
-	roundTripper := &catalogAuthorizationRoundTripper{base: baseTransport, token: token, headers: headers}
+	roundTripper := &catalogAuthorizationRoundTripper{
+		base:         baseTransport,
+		token:        token,
+		headers:      headers,
+		unauthorized: atomic.Bool{},
+		tooLarge:     atomic.Bool{},
+	}
 	httpClient.Transport = roundTripper
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "speakeasy-aicp-platform-mcp-readiness", Version: "1.0.0"}, nil)

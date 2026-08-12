@@ -60,15 +60,7 @@ func registerFeedbackTool(server *mcp.Server, feedback *FeedbackService) {
 		if err != nil {
 			return nil, SendPlatformMCPFeedbackToolOutput{}, err
 		}
-		result, err := feedback.Submit(ctx, principal, FeedbackInput{
-			Category:        input.Category,
-			Rating:          input.Rating,
-			Success:         input.Success,
-			ToolName:        input.ToolName,
-			FailureCategory: input.FailureCategory,
-			Note:            input.Note,
-			IdempotencyKey:  input.IdempotencyKey,
-		})
+		result, err := feedback.Submit(ctx, principal, FeedbackInput(input))
 		if err != nil {
 			if feedbackResult, ok := feedbackToolResult(err); ok {
 				return feedbackResult, SendPlatformMCPFeedbackToolOutput{}, nil

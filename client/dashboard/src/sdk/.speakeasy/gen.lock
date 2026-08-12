@@ -324,7 +324,6 @@ trackedFiles:
   src/funcs/platformMcpRecheckOnboardingReadiness.ts: {}
   src/funcs/platformMcpRecordAgentConfigurationCopied.ts: {}
   src/funcs/platformMcpRecordInstallIntent.ts: {}
-  src/funcs/platformMcpRegisterOnboardingCandidate.ts: {}
   src/funcs/platformMcpRemoveOnboardingDistribution.ts: {}
   src/funcs/platformMcpRepairOnboardingPublication.ts: {}
   src/funcs/platformMcpStartOnboarding.ts: {}
@@ -1075,7 +1074,6 @@ trackedFiles:
   src/models/components/redeemresponsebody.ts: {}
   src/models/components/redeployrequestbody.ts: {}
   src/models/components/redeployresult.ts: {}
-  src/models/components/registeronboardingcandidaterequestbody.ts: {}
   src/models/components/registerrequestbody.ts: {}
   src/models/components/remotemcpserver.ts: {}
   src/models/components/remotemcpserverheader.ts: {}
@@ -1788,7 +1786,6 @@ trackedFiles:
   src/models/operations/refreshremotesessionissuermetadata.ts: {}
   src/models/operations/register.ts: {}
   src/models/operations/registerdomain.ts: {}
-  src/models/operations/registerplatformmcponboardingcandidate.ts: {}
   src/models/operations/removeoauthserver.ts: {}
   src/models/operations/removeorganizationremotesessionclientfrommcpserver.ts: {}
   src/models/operations/removeorganizationuser.ts: {}
@@ -2405,7 +2402,6 @@ trackedFiles:
   src/react-query/refreshRemoteSessionIssuerMetadata.ts: {}
   src/react-query/register.ts: {}
   src/react-query/registerDomain.ts: {}
-  src/react-query/registerPlatformMCPOnboardingCandidate.ts: {}
   src/react-query/remoteMcpServerHeaders.core.ts: {}
   src/react-query/remoteMcpServerHeaders.ts: {}
   src/react-query/remoteMcpServers.core.ts: {}

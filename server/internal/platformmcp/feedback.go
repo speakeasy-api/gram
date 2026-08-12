@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Optional feedback values use documented zero values.
 package platformmcp
 
 import (
@@ -220,7 +221,7 @@ func feedbackSafeText(value string, maxRunes int) bool {
 	if len(value) == 0 {
 		return true
 	}
-	if len([]rune(value)) > maxRunes || strings.ContainsAny(value, "\r\n") || strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) }) >= 0 {
+	if len([]rune(value)) > maxRunes || strings.ContainsAny(value, "\r\n") || strings.IndexFunc(value, unicode.IsControl) >= 0 {
 		return false
 	}
 	lower := strings.ToLower(value)
@@ -239,20 +240,14 @@ func feedbackNoteSafeText(value string) bool {
 	if !feedbackSafeText(value, 500) {
 		return false
 	}
-	if parsed, err := url.ParseRequestURI(value); err == nil && parsed.Scheme != "" {
+	if strings.Contains(value, "/") || hasEmbeddedURIScheme(value) {
 		return false
-	}
-	lower := strings.ToLower(value)
-	for _, marker := range []string{"://", "urn:"} {
-		if strings.Contains(lower, marker) {
-			return false
-		}
 	}
 	for _, word := range strings.FieldsFunc(value, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-'
 	}) {
 		lowerWord := strings.ToLower(word)
-		if lowerWord == "cookie" || lowerWord == "set-cookie" || lowerWord == "session" {
+		if strings.Contains(lowerWord, ".") || lowerWord == "cookie" || lowerWord == "set-cookie" || lowerWord == "session" || hasSensitiveFeedbackToken(word) {
 			return false
 		}
 		if _, err := uuid.Parse(word); err == nil {
@@ -260,6 +255,34 @@ func feedbackNoteSafeText(value string) bool {
 		}
 	}
 	return true
+}
+
+func hasEmbeddedURIScheme(value string) bool {
+	for _, word := range strings.FieldsFunc(value, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsPunct(r) && r != ':' && r != '-' && r != '_'
+	}) {
+		if parsed, err := url.ParseRequestURI(word); err == nil && parsed.Scheme != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSensitiveFeedbackToken(value string) bool {
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"cookie", "session"} {
+		index := strings.Index(lower, marker)
+		if index < 0 {
+			continue
+		}
+		before := index == 0 || !unicode.IsLetter(rune(value[index-1])) || unicode.IsUpper(rune(value[index]))
+		afterIndex := index + len(marker)
+		after := afterIndex == len(value) || !unicode.IsLetter(rune(value[afterIndex])) || unicode.IsUpper(rune(value[afterIndex])) || index == 0
+		if before && after {
+			return true
+		}
+	}
+	return false
 }
 
 func feedbackInputHash(input FeedbackInput) string {
@@ -279,7 +302,7 @@ func optionalFeedbackRating(value *int) pgtype.Int4 {
 	if value == nil {
 		return pgtype.Int4{}
 	}
-	return pgtype.Int4{Int32: int32(*value), Valid: true}
+	return pgtype.Int4{Int32: int32(*value), Valid: true} //nolint:gosec // Validation limits ratings to 1 through 5.
 }
 
 func optionalFeedbackSuccess(value *bool) pgtype.Bool {

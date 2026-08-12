@@ -22,7 +22,13 @@ func TestValidateFeedbackInputRejectsSensitiveOrOutOfBoundsValues(t *testing.T) 
 		{Category: "success", Note: "mailto:person", IdempotencyKey: "feedback-8"},
 		{Category: "success", Note: "request urn:user:example", IdempotencyKey: "feedback-9"},
 		{Category: "success", Note: "id 6b5f8805-01d1-4d1b-bf35-125a38f3db84", IdempotencyKey: "feedback-10"},
-		{Category: "success", Note: strings.Repeat("a", 501), IdempotencyKey: "feedback-11"},
+		{Category: "success", Note: "//unsafe.invalid/path", IdempotencyKey: "feedback-11"},
+		{Category: "success", Note: "unsafe.invalid/path", IdempotencyKey: "feedback-12"},
+		{Category: "success", Note: "promo:SAVE50", IdempotencyKey: "feedback-13"},
+		{Category: "success", Note: "sessionId copied", IdempotencyKey: "feedback-14"},
+		{Category: "success", Note: "mySession value", IdempotencyKey: "feedback-15"},
+		{Category: "success", Note: "cookieValue copied", IdempotencyKey: "feedback-16"},
+		{Category: "success", Note: strings.Repeat("a", 501), IdempotencyKey: "feedback-17"},
 		{Category: "success", IdempotencyKey: strings.Repeat("a", 129)},
 	} {
 		err := validateFeedbackInput(testPrincipal(), input)

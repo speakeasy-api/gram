@@ -1,3 +1,4 @@
+//nolint:exhaustruct,wrapcheck // Composition intentionally relies on documented optional zero values.
 package gram
 
 import (
@@ -278,7 +279,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 	}
 	if !budgets.Valid() {
-		return errors.New("Platform MCP operation budgets are incomplete")
+		return errors.New("platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(

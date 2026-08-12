@@ -2568,6 +2568,39 @@ func (q *Queries) GetPlatformMCPSetupHandoffForDashboardStart(ctx context.Contex
 	return i, err
 }
 
+const hasAttachedPlatformMCPOnboardingDistributionForProject = `-- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS distribution
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = distribution.registration_id
+     AND registration.organization_id = distribution.organization_id
+     AND registration.project_id = distribution.project_id
+     AND registration.deleted IS FALSE
+    JOIN projects AS project
+      ON project.id = distribution.project_id
+     AND project.organization_id = distribution.organization_id
+     AND project.deleted IS FALSE
+    WHERE distribution.organization_id = $1
+      AND distribution.project_id = $2
+      AND distribution.state = 'attached'
+      AND registration.status = 'registered'
+      AND registration.mcp_server_id IS NOT NULL
+)
+`
+
+type HasAttachedPlatformMCPOnboardingDistributionForProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) HasAttachedPlatformMCPOnboardingDistributionForProject(ctx context.Context, arg HasAttachedPlatformMCPOnboardingDistributionForProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasAttachedPlatformMCPOnboardingDistributionForProject, arg.OrganizationID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasPlatformMCPOnboardingCatalogExplored = `-- name: HasPlatformMCPOnboardingCatalogExplored :one
 SELECT EXISTS (
     SELECT 1

@@ -17,10 +17,10 @@ func TestInMemoryGitHubPublisherStoresDefensiveCopies(t *testing.T) {
 	files["platform-mcp/.mcp.json"][0] = 'x'
 	stored, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main")
 	require.NoError(t, err)
-	require.Equal(t, []byte(`{"mcpServers":{}}`), stored["platform-mcp/.mcp.json"])
+	require.JSONEq(t, `{"mcpServers":{}}`, string(stored["platform-mcp/.mcp.json"]))
 
 	stored["platform-mcp/.mcp.json"][0] = 'x'
 	content, err := publisher.GetFileContent(t.Context(), 1, "local", "fixture", "main", "platform-mcp/.mcp.json")
 	require.NoError(t, err)
-	require.Equal(t, []byte(`{"mcpServers":{}}`), content)
+	require.JSONEq(t, `{"mcpServers":{}}`, string(content))
 }

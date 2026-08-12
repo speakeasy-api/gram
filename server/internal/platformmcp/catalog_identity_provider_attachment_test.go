@@ -20,6 +20,15 @@ func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
 	require.False(t, validDynamicClientRegistrationEndpoint("https://user:password@identity.example/register"))
 }
 
+func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
+	t.Parallel()
+
+	service := &CatalogIdentityProviderAttachmentService{}
+	_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{"", "  "})
+
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
 func TestValidBrowserCatalogDynamicClientRequiresConfidentialClient(t *testing.T) {
 	t.Parallel()
 

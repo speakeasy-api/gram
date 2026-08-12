@@ -312,7 +312,7 @@ export function SetupWizard(): JSX.Element {
             }
           />
         );
-      default:
+      case undefined:
         return null;
     }
   };

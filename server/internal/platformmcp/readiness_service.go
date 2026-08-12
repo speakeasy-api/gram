@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Readiness projections intentionally omit documented optional fields.
 package platformmcp
 
 import (

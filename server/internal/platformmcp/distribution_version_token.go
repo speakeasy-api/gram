@@ -45,7 +45,9 @@ func (c *distributionVersionTokenCodec) Encode(principal Principal, projectSlug 
 	}
 	mac := hmac.New(sha256.New, c.key)
 	_, _ = mac.Write(payload)
-	token := append(payload, mac.Sum(nil)...)
+	token := make([]byte, 0, len(payload)+sha256.Size)
+	token = append(token, payload...)
+	token = append(token, mac.Sum(nil)...)
 	return base64.RawURLEncoding.EncodeToString(token), nil
 }
 

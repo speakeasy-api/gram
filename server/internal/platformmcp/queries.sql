@@ -1298,6 +1298,26 @@ WHERE workflow.organization_id = @organization_id
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
 
+-- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS distribution
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = distribution.registration_id
+     AND registration.organization_id = distribution.organization_id
+     AND registration.project_id = distribution.project_id
+     AND registration.deleted IS FALSE
+    JOIN projects AS project
+      ON project.id = distribution.project_id
+     AND project.organization_id = distribution.organization_id
+     AND project.deleted IS FALSE
+    WHERE distribution.organization_id = @organization_id
+      AND distribution.project_id = @project_id
+      AND distribution.state = 'attached'
+      AND registration.status = 'registered'
+      AND registration.mcp_server_id IS NOT NULL
+);
+
 -- name: LockPlatformMCPOnboardingWorkflow :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(

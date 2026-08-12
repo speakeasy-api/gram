@@ -8,7 +8,6 @@ import { platformMcpGetOnboarding } from "../funcs/platformMcpGetOnboarding.js";
 import { platformMcpRecheckOnboardingReadiness } from "../funcs/platformMcpRecheckOnboardingReadiness.js";
 import { platformMcpRecordAgentConfigurationCopied } from "../funcs/platformMcpRecordAgentConfigurationCopied.js";
 import { platformMcpRecordInstallIntent } from "../funcs/platformMcpRecordInstallIntent.js";
-import { platformMcpRegisterOnboardingCandidate } from "../funcs/platformMcpRegisterOnboardingCandidate.js";
 import { platformMcpRemoveOnboardingDistribution } from "../funcs/platformMcpRemoveOnboardingDistribution.js";
 import { platformMcpRepairOnboardingPublication } from "../funcs/platformMcpRepairOnboardingPublication.js";
 import { platformMcpStartOnboarding } from "../funcs/platformMcpStartOnboarding.js";
@@ -40,10 +39,6 @@ import {
   RecordPlatformMCPInstallIntentRequest,
   RecordPlatformMCPInstallIntentSecurity,
 } from "../models/operations/recordplatformmcpinstallintent.js";
-import {
-  RegisterPlatformMCPOnboardingCandidateRequest,
-  RegisterPlatformMCPOnboardingCandidateSecurity,
-} from "../models/operations/registerplatformmcponboardingcandidate.js";
 import {
   RemovePlatformMCPOnboardingDistributionRequest,
   RemovePlatformMCPOnboardingDistributionSecurity,
@@ -170,25 +165,6 @@ export class PlatformMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PlatformMCPOnboardingState> {
     return unwrapAsync(platformMcpRecordInstallIntent(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * registerOnboardingCandidate platformMcp
-   *
-   * @remarks
-   * Register the server-configured local onboarding candidate for one exact project slug. The browser cannot select provider, catalog, remote URL, registration, workflow, or connection identity.
-   */
-  async registerOnboardingCandidate(
-    request: RegisterPlatformMCPOnboardingCandidateRequest,
-    security?: RegisterPlatformMCPOnboardingCandidateSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<PlatformMCPOnboardingState> {
-    return unwrapAsync(platformMcpRegisterOnboardingCandidate(
       this,
       request,
       security,

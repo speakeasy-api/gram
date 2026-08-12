@@ -68,7 +68,16 @@ func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, reques
 		if !validFixtureClient(client) {
 			return fmt.Errorf("%w: local fixture client is incompatible", platformmcp.ErrProviderAdapterUnavailable)
 		}
-		if err := c.restoreClient(client.ClientID); err != nil {
+		if !c.oauthClientRegistered(client.ClientID) {
+			registration, err := c.registerClient(ctx)
+			if err != nil {
+				return err
+			}
+			client, err = c.rotateClient(ctx, client, registration.clientID)
+			if err != nil {
+				return err
+			}
+		} else if err := c.restoreClient(client.ClientID); err != nil {
 			return err
 		}
 		return c.attachClient(ctx, request, client.ID, issuer.ID)
