@@ -14,19 +14,28 @@ import (
 
 // safely wait for polar rate limits
 const (
-	refreshBillingUsageBatchSize                   = 5
-	billingUsagePauseEveryBatches                  = 2
-	refreshBillingUsageActivityStartToCloseTimeout = 60 * time.Second
+	refreshBillingUsageBatchSize  = 5
+	billingUsagePauseEveryBatches = 2
+	// Polar serializes /quantities meter queries per-meter on their side, so
+	// during degraded periods a batch of refreshes can take well over a
+	// minute. Sized to match the Polar HTTP client timeout.
+	refreshBillingUsageActivityStartToCloseTimeout = 2 * time.Minute
 	// The snapshot activity gets its own, wider deadline: a first-run backfill
 	// issues up to 12 cycles × 5 orgs of serial ClickHouse aggregate queries
 	// per attempt — far more work than the Polar refresh.
 	snapshotBillingCycleUsageStartToCloseTimeout = 5 * time.Minute
-	refreshBillingUsageActivityMaximumAttempts   = 3
+	// The PostHog forward only reads durable snapshots and posts events, so
+	// it keeps a short deadline of its own; letting it ride the wider Polar
+	// refresh deadline would inflate the batch worst-case window enough to
+	// force a continue-as-new after nearly every batch, which skips the
+	// deterministic pauses that protect Polar's rate limits.
+	forwardTokenUsageToPostHogStartToCloseTimeout = 60 * time.Second
+	refreshBillingUsageActivityMaximumAttempts    = 3
 	// Reserve more than the worst-case retry path for one batch: the Polar
-	// refresh (3 attempts × 60s), the cycle snapshot (3 attempts × 5m), and
+	// refresh (3 attempts × 2m), the cycle snapshot (3 attempts × 5m), and
 	// the PostHog usage forward (3 attempts × 60s), each with 10s/15s retry
 	// backoffs and Temporal jitter.
-	refreshBillingUsageBatchWorstCaseRetryWindow = 24 * time.Minute
+	refreshBillingUsageBatchWorstCaseRetryWindow = 27 * time.Minute
 	refreshBillingUsageWorkflowRunTimeout        = 30 * time.Minute
 	refreshBillingUsagesWaitInterval             = 10 * time.Second
 )
@@ -75,8 +84,10 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 
 	var a *Activities
 	orgIDs := input.OrgIDs
+	didLookupOrgs := false
 	// Initial call to workflow - no orgs yet, need to fetch them
 	if len(orgIDs) == 0 {
+		didLookupOrgs = true
 		err := workflow.ExecuteActivity(ctx, a.GetAllOrganizations).Get(ctx, &orgIDs)
 		if err != nil {
 			logger.Error("Failed to get all organizations", "error", err)
@@ -115,6 +126,20 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 		return workflow.NewContinueAsNewError(ctx, RefreshBillingUsageWorkflow, nextInput)
 	}
 
+	// The initial organization lookup can burn several minutes of the run
+	// when it retries, and the in-loop guard below only runs after a batch
+	// completes — so check the budget once before the first batch too, or a
+	// slow lookup could start a batch that cannot finish within the run
+	// timeout. Only runs that performed the lookup are checked: a continued
+	// run starts with orgs in hand and near-zero elapsed time, so letting it
+	// continue as new here would repeat the same start index forever if the
+	// run timeout were ever configured at or below the worst-case window.
+	// Skipping the check instead guarantees every continued run processes at
+	// least one batch before the in-loop guard can trigger.
+	if didLookupOrgs && startIndex < len(orgIDs) && shouldContinueRefreshBillingUsageAsNew(ctx) {
+		return continueAsNew(startIndex)
+	}
+
 	for i := startIndex; i < len(orgIDs); i += refreshBillingUsageBatchSize {
 		end := min(i+refreshBillingUsageBatchSize, len(orgIDs))
 		batch := orgIDs[i:end]
@@ -140,7 +165,8 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 		// pricing analysis (AGE-2289). Reads only the durable snapshots, so
 		// it is cheap and safe even when the snapshot batch above partially
 		// failed — stale rows just re-forward the last known usage.
-		if err := workflow.ExecuteActivity(ctx, a.ForwardTokenUsageToPostHog, batch).Get(ctx, nil); err != nil {
+		forwardCtx := workflow.WithStartToCloseTimeout(ctx, forwardTokenUsageToPostHogStartToCloseTimeout)
+		if err := workflow.ExecuteActivity(forwardCtx, a.ForwardTokenUsageToPostHog, batch).Get(ctx, nil); err != nil {
 			logger.Error("Failed to forward token usage batch to posthog", "error", err, "batch_start", i)
 			failedBatchCount++
 			failedOrgCount += len(batch)
