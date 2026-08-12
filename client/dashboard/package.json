@@ -26,7 +26,7 @@
     "@ai-sdk/mcp": "^2.0.17",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
-    "@assistant-ui/react-ai-sdk": "~1.4.1",
+    "@assistant-ui/react-ai-sdk": "~1.4.4",
     "@assistant-ui/react-markdown": "^0.14.8",
     "@calcom/embed-react": "^1.5.3",
     "@datadog/browser-rum": "^7.7.0",
