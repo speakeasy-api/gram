@@ -92,8 +92,8 @@ const (
 // PostHog outage can never strip the managed assistant's tools.
 const (
 	// VariantAssistantToolsLegacy serves the managed assistant the
-	// "managed-assistant" platform toolset (insights, chats, risk, skills,
-	// plugins, docs).
+	// "managed-assistant" platform toolset (logs, chats, users, risk,
+	// deployments, skills, plugins, docs, changelog).
 	VariantAssistantToolsLegacy Variant = "legacy"
 	// VariantAssistantToolsPlatformMCP serves the managed assistant the
 	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
