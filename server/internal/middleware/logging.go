@@ -76,12 +76,30 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
 }
 
+// redactedQueryParams names the query parameters whose values are stripped
+// before a URL reaches application logs or the observability context.
+// Credentials and personal data are both redacted, for different reasons: a
+// logged credential stays replayable by anyone who can read the log, while
+// logged personal data is an exposure that log access control does not undo.
+//
+// Matching is exact and case-sensitive, the same matching Goa applies when
+// binding a query parameter to a payload attribute.
+var redactedQueryParams = map[string]bool{
+	// Live capability token on public share and signed-asset URLs.
+	"token": true,
+
+	// Email address on auth.login and agent.getPlugins.
+	"email": true,
+
+	// Chat search terms, which are user-typed free text.
+	"search": true,
+}
+
 // logSafeURL renders a request URL for logs and observability context with
-// secret-bearing parts redacted. Several public capability-URL endpoints
-// carry a live credential in a "token" query parameter (e.g. skills.getShared,
-// assets.serveChatAttachmentSigned, chatSessions.revoke), and the public SPA
-// page /shared/skills/<token> carries one as a path segment; logging either
-// verbatim would leak reusable secrets into application logs.
+// credentials and personal data redacted. Query parameters named in
+// redactedQueryParams are replaced with a placeholder. The public SPA page
+// /shared/skills/<token> carries a live credential as a path segment rather
+// than a parameter, so it is redacted separately.
 func logSafeURL(u *url.URL) string {
 	safe := *u
 	changed := false
@@ -97,10 +115,23 @@ func logSafeURL(u *url.URL) string {
 		changed = true
 	}
 
-	if q := safe.Query(); q.Has("token") {
-		q.Set("token", "REDACTED")
-		safe.RawQuery = q.Encode()
-		changed = true
+	if q := safe.Query(); len(q) > 0 {
+		redacted := false
+		// Iterating the denylist rather than the parsed query bounds this by
+		// the handful of names above instead of by caller-chosen parameter
+		// count. Set collapses a repeated parameter to one value, so
+		// ?email=a&email=b cannot leak through its second occurrence.
+		for param := range redactedQueryParams {
+			if q.Has(param) {
+				q.Set(param, "REDACTED")
+				redacted = true
+			}
+		}
+
+		if redacted {
+			safe.RawQuery = q.Encode()
+			changed = true
+		}
 	}
 
 	if !changed {
