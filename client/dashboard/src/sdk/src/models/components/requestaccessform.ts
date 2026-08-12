@@ -21,6 +21,7 @@ export const RequestAccessFormScope = {
   EnvironmentWrite: "environment:write",
   SkillRead: "skill:read",
   SkillWrite: "skill:write",
+  RiskPolicyRead: "risk_policy:read",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
