@@ -51,7 +51,6 @@ func TestResolveKey_DefaultSlotCoversEverySlot(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
@@ -68,7 +67,6 @@ func TestResolveKey_SlotOverrideBeatsDefault(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
@@ -88,7 +86,6 @@ func TestResolveKey_InternalKeyTypeStaysOnPlatform(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
@@ -105,7 +102,6 @@ func TestResolveKey_JudgeSlotsResolveIndependently(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
@@ -129,7 +125,6 @@ func TestResolveKey_JudgeSlotsWithoutKeysStayOnPlatform(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	resolved, err := resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourcePromptInjection, openrouter.KeyTypeInternal)
@@ -142,7 +137,6 @@ func TestResolveKey_DisabledKeyIsIgnored(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
@@ -160,7 +154,6 @@ func TestResolveKey_DisabledSlotOverrideFallsBackToProjectDefault(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
@@ -187,7 +180,6 @@ func TestResolveKey_DeletedKeyIsIgnored(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
@@ -205,7 +197,6 @@ func TestResolveKey_NoProjectFallsBackToPlatform(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 	resolver, orgID, _ := newResolverUnderTest(t, ctx, ti)
 
 	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")

@@ -87,7 +87,9 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	}
 
 	orgID := authCtx.ActiveOrganizationID
-	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
+	// Skills and custom model keys are generally available; disabling them is
+	// a no-op, mirroring how IsFeatureEnabled short-circuits them to true.
+	if !payload.Enabled && (payload.FeatureName == string(FeatureSkills) || payload.FeatureName == string(FeatureCustomModelKeys)) {
 		return nil
 	}
 
@@ -335,7 +337,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ScimEnabled:                             isEnabled(FeatureSCIM),
 		HooksBrowserLoginEnabled:                isEnabled(FeatureHooksBrowserLogin),
 		HooksFailOpenEnabled:                    isEnabled(FeatureHooksFailOpen),
-		CustomModelKeysEnabled:                  isEnabled(FeatureCustomModelKeys),
+		CustomModelKeysEnabled:                  true,
 		SkillsEnabled:                           true,
 		SkillCaptureMetadataOnly:                isEnabled(FeatureSkillCaptureMetadataOnly),
 		AiPlatformPushIntegrationsEnabled:       isEnabled(FeatureAIPlatformPushIntegrations),

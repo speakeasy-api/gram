@@ -19,7 +19,6 @@ func TestDeleteKey_RemovesKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	key, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)
@@ -59,7 +58,6 @@ func TestDeleteKey_RequiresProjectWriteScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	key, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)

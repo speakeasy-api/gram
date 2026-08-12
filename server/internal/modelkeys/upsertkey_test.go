@@ -38,7 +38,6 @@ func TestUpsertKey_CreatesKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionModelProviderKeyUpsert)
 	require.NoError(t, err)
@@ -63,7 +62,6 @@ func TestUpsertKey_ReplacesExistingSlotKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	first, err := ti.service.UpsertKey(ctx, newUpsertPayload("assistants", nil))
 	require.NoError(t, err)
@@ -90,7 +88,6 @@ func TestUpsertKey_RejectsUnknownSlot(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	_, err := ti.service.UpsertKey(ctx, newUpsertPayload("not-a-slot", nil))
 	requireOopsCode(t, err, oops.CodeInvalid)
@@ -100,7 +97,6 @@ func TestUpsertKey_RejectsRiskAnalysisSlot(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	// Risk-policy analysis stays on the platform's internal key until the
 	// dedicated risk/PI BYOK slots ship.
@@ -112,7 +108,6 @@ func TestUpsertKey_RejectsUnknownProvider(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
 		p.Provider = "anthropic"
@@ -124,7 +119,6 @@ func TestUpsertKey_RejectsKeyTheProviderRejects(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	ti.provisioner.usageErr = errors.New("401 unauthorized")
 
@@ -132,20 +126,22 @@ func TestUpsertKey_RejectsKeyTheProviderRejects(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestUpsertKey_RequiresProductFeature(t *testing.T) {
+func TestUpsertKey_NoProductFeatureRowRequired(t *testing.T) {
 	t.Parallel()
 
+	// Custom model keys are generally available: upsert succeeds without an
+	// organization_features row.
 	ctx, ti := newTestServiceWithRedisDB(t, 1)
 
-	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
-	requireOopsCode(t, err, oops.CodeForbidden)
+	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
+	require.NoError(t, err)
+	require.NotEmpty(t, created.ID)
 }
 
 func TestUpsertKey_RequiresProjectWriteScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

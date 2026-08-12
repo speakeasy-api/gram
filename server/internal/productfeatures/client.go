@@ -37,8 +37,9 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 }
 
 func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, feature Feature) (bool, error) {
-	// Skills is generally available; the feature remains in the API for compatibility.
-	if feature == FeatureSkills {
+	// Skills and custom model keys are generally available; the features
+	// remain in the API for compatibility.
+	if feature == FeatureSkills || feature == FeatureCustomModelKeys {
 		return true, nil
 	}
 
@@ -151,11 +152,11 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 // receives at signup. A trial gates only on the time window, so identity (SSO,
 // SCIM) is included rather than held back as a conversion lever.
 //
-// FeatureSkills is absent because Skills is generally available. The bundle
-// still calls EnableSkillsTx, which provisions the Skills role grants that the
-// entitlement cannot work without. FeatureHooksFailOpen and
-// FeatureSkillCaptureMetadataOnly are absent because they change how an
-// entitlement behaves rather than granting one.
+// FeatureSkills and FeatureCustomModelKeys are absent because both are
+// generally available. The bundle still calls EnableSkillsTx, which provisions
+// the Skills role grants that the entitlement cannot work without.
+// FeatureHooksFailOpen and FeatureSkillCaptureMetadataOnly are absent because
+// they change how an entitlement behaves rather than granting one.
 var EnterpriseTrialBundle = []Feature{
 	FeatureLogs,
 	FeatureToolIOLogs,
@@ -164,7 +165,6 @@ var EnterpriseTrialBundle = []Feature{
 	FeatureSSO,
 	FeatureSCIM,
 	FeatureHooksBrowserLogin,
-	FeatureCustomModelKeys,
 	FeatureAIPlatformPushIntegrations,
 	FeaturePlatformMCP,
 	FeatureCustomerManagedEncryptionKeys,

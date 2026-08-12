@@ -30,7 +30,6 @@ func TestSetKeyEnabled_DisablesKeyInPlaceAndAuditsChange(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)
@@ -67,7 +66,6 @@ func TestSetKeyEnabled_ReenablesKeyInPlace(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(payload *gen.UpsertKeyPayload) {
 		payload.Enabled = false
@@ -81,22 +79,23 @@ func TestSetKeyEnabled_ReenablesKeyInPlace(t *testing.T) {
 	require.Equal(t, 1, ti.provisioner.usageCalls)
 }
 
-func TestSetKeyEnabled_DisableAllowedWithoutProductFeature(t *testing.T) {
+func TestSetKeyEnabled_ToggleAllowedWithoutProductFeature(t *testing.T) {
 	t.Parallel()
 
+	// Custom model keys are generally available: keys toggle freely without an
+	// organization_features row.
 	ctx, ti := newTestServiceWithRedisDB(t, 2)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)
-	disableCustomModelKeys(t, ctx, ti)
 
 	updated, err := ti.service.SetKeyEnabled(ctx, newSetKeyEnabledPayload(created.ID, false))
 	require.NoError(t, err)
 	require.False(t, updated.Enabled)
 
-	_, err = ti.service.SetKeyEnabled(ctx, newSetKeyEnabledPayload(created.ID, true))
-	requireOopsCode(t, err, oops.CodeForbidden)
+	reenabled, err := ti.service.SetKeyEnabled(ctx, newSetKeyEnabledPayload(created.ID, true))
+	require.NoError(t, err)
+	require.True(t, reenabled.Enabled)
 }
 
 func TestSetKeyEnabled_UnknownKeyReturnsNotFound(t *testing.T) {
@@ -112,12 +111,10 @@ func TestSetKeyEnabled_DeletedKeyReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestServiceWithRedisDB(t, 4)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteKey(ctx, &gen.DeleteKeyPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}))
-	disableCustomModelKeys(t, ctx, ti)
 
 	_, err = ti.service.SetKeyEnabled(ctx, newSetKeyEnabledPayload(created.ID, true))
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -127,7 +124,6 @@ func TestSetKeyEnabled_UnchangedStateIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(payload *gen.UpsertKeyPayload) {
 		payload.Enabled = false
@@ -158,7 +154,6 @@ func TestSetKeyEnabled_RequiresProjectWriteScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	created, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)

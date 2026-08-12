@@ -60,7 +60,6 @@ const PRODUCT_FEATURES: {
   enabledKey:
     | "authzChallengeLoggingEnabled"
     | "customerManagedEncryptionKeysEnabled"
-    | "customModelKeysEnabled"
     | "remoteSessionAutoRefreshEnabled"
     | "ssoEnabled"
     | "scimEnabled";
@@ -78,13 +77,6 @@ const PRODUCT_FEATURES: {
     description:
       "Unlocks encryption key management for an organization, enabling external service credential, external encryption key, and asymmetric signing functionality.",
     enabledKey: "customerManagedEncryptionKeysEnabled",
-  },
-  {
-    featureName: FeatureName.CustomModelKeys,
-    label: "Custom Model Provider Keys",
-    description:
-      "Allows projects in this organization to store OpenRouter API keys for model completions.",
-    enabledKey: "customModelKeysEnabled",
   },
   {
     featureName: FeatureName.RemoteSessionAutoRefresh,
