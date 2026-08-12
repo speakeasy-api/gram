@@ -67,16 +67,18 @@ vi.mock("@/components/ui/Stack", () => ({
 
 vi.mock("@/components/ui/Textarea", () => ({
   TextArea: ({
+    id,
     value,
     onChange,
     placeholder,
   }: {
+    id?: string;
     value: string;
     onChange: (value: string) => void;
     placeholder?: string;
   }) => (
     <textarea
-      aria-label="note"
+      id={id}
       placeholder={placeholder}
       value={value}
       onChange={(event) => onChange(event.target.value)}
@@ -94,10 +96,16 @@ function renderPage(initialPath: string) {
   );
 }
 
+// Resolved through the page's own <label for>, so the tests fail if that
+// wiring — the field's only accessible name — is dropped.
+function noteField() {
+  return screen.getByLabelText("Why do you need this server?");
+}
+
 // The page asks for a justification before it will send anything, so every
 // submit-path test types one and clicks.
 function sendWithNote(note = "Blocked from the docs workflow.") {
-  fireEvent.change(screen.getByLabelText("note"), { target: { value: note } });
+  fireEvent.change(noteField(), { target: { value: note } });
   fireEvent.click(screen.getByText("Send request"));
 }
 
@@ -202,7 +210,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
     expect(screen.getByText("Request access")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("note"), {
+    fireEvent.change(noteField(), {
       target: { value: "  Docs team lives in Notion.  " },
     });
     fireEvent.click(screen.getByText("Send request"));
@@ -219,6 +227,31 @@ describe("ShadowMCPRequestAccessContent", () => {
     });
   });
 
+  it("refuses a note longer than the endpoint accepts, before sending it", () => {
+    sessionStorage.setItem("riskPolicyBypassRequestToken", "rpbr1.long-note");
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+
+    renderPage("/risk-policy-bypass/request");
+
+    fireEvent.change(noteField(), { target: { value: "a".repeat(4001) } });
+
+    expect(screen.getByText("Send request").closest("button")?.disabled).toBe(
+      true,
+    );
+    expect(
+      screen.getByText(/1 characters over the 4,000 character limit/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Send request"));
+    expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
+
+    // Trimmed back under the limit, it sends.
+    fireEvent.change(noteField(), { target: { value: "a".repeat(4000) } });
+    expect(screen.getByText("Send request").closest("button")?.disabled).toBe(
+      false,
+    );
+  });
+
   it("will not send an empty justification", async () => {
     sessionStorage.setItem("riskPolicyBypassRequestToken", "rpbr1.empty-note");
     mocks.useSession.mockReturnValue({ session: "session_123" });
@@ -228,7 +261,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     const send = screen.getByText("Send request").closest("button");
     expect(send?.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText("note"), {
+    fireEvent.change(noteField(), {
       target: { value: "   " },
     });
     expect(screen.getByText("Send request").closest("button")?.disabled).toBe(
@@ -300,7 +333,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     fireEvent.click(screen.getByText("Try again"));
 
     // The typed note survives the failure, so retrying is one click.
-    expect(screen.getByLabelText("note")).toHaveProperty(
+    expect(noteField()).toHaveProperty(
       "value",
       "Blocked from the docs workflow.",
     );

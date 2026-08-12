@@ -10,6 +10,16 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useEffect, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
+const NOTE_FIELD_ID = "request-access-note";
+/**
+ * What the endpoint accepts, counted the way it counts: Goa's MaxLength on a
+ * string is runes, not UTF-16 units, so an emoji costs one here and one there.
+ */
+const NOTE_MAX_CHARACTERS = 4000;
+
+function noteLength(note: string): number {
+  return Array.from(note.trim()).length;
+}
 const LEGACY_REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
 
 type RequestAccessState =
@@ -72,7 +82,13 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   // point of this page, and a page that files the request as it loads never
   // gives the requester anywhere to say what they need the server for.
   const submit = async () => {
-    if (!storedRequestToken || note.trim() === "") return;
+    if (
+      !storedRequestToken ||
+      note.trim() === "" ||
+      noteLength(note) > NOTE_MAX_CHARACTERS
+    ) {
+      return;
+    }
 
     setSubmissionResult("submitting");
     try {
@@ -154,6 +170,7 @@ function RequestAccessMessage({
 }) {
   if (state === "prompting" || state === "submitting") {
     const pending = state === "submitting";
+    const tooLong = noteLength(note) > NOTE_MAX_CHARACTERS;
 
     return (
       <Stack gap={4} className="w-full max-w-md">
@@ -165,14 +182,33 @@ function RequestAccessMessage({
             the server.
           </Text>
         </Stack>
-        <TextArea
-          value={note}
-          onChange={onNoteChange}
-          rows={4}
-          placeholder="e.g. The docs team works in Notion and I need meeting notes searchable from the editor."
-          className="resize-none text-sm"
-        />
-        <Button onClick={onSubmit} disabled={pending || note.trim() === ""}>
+        <Stack gap={1}>
+          <label htmlFor={NOTE_FIELD_ID} className="text-sm font-medium">
+            Why do you need this server?
+          </label>
+          <TextArea
+            id={NOTE_FIELD_ID}
+            value={note}
+            onChange={onNoteChange}
+            rows={4}
+            placeholder="e.g. The docs team works in Notion and I need meeting notes searchable from the editor."
+            className="resize-none text-sm"
+          />
+          {/* Said before the request is refused rather than after: the server
+              rejects an over-long note with a generic failure, and the note is
+              the one thing here that cannot be recovered from the link. */}
+          {tooLong && (
+            <Text muted small>
+              {(noteLength(note) - NOTE_MAX_CHARACTERS).toLocaleString()}{" "}
+              characters over the {NOTE_MAX_CHARACTERS.toLocaleString()}{" "}
+              character limit.
+            </Text>
+          )}
+        </Stack>
+        <Button
+          onClick={onSubmit}
+          disabled={pending || note.trim() === "" || tooLong}
+        >
           {pending && (
             <Button.LeftIcon>
               <Icon name="loader-circle" className="h-4 w-4 animate-spin" />
