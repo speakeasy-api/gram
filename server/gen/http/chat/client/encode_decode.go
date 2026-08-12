@@ -2455,6 +2455,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		AssistantName:        v.AssistantName,
 		NumMessages:          *v.NumMessages,
 		Source:               v.Source,
+		OriginatingClient:    v.OriginatingClient,
 		CreatedAt:            *v.CreatedAt,
 		UpdatedAt:            *v.UpdatedAt,
 		TotalInputTokens:     v.TotalInputTokens,
