@@ -1783,7 +1783,7 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 const listChatAttachmentAssets = `-- name: ListChatAttachmentAssets :many
 SELECT id, name, url, content_type, content_length
 FROM assets
-WHERE project_id = $1
+WHERE project_id = $1::uuid
   AND id = ANY($2::uuid[])
   AND kind = 'chat_attachment'
   AND deleted IS FALSE

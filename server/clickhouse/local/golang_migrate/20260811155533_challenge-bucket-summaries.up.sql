@@ -22,34 +22,6 @@ CREATE TABLE `authz_challenge_bucket_summaries` (
   `first_seen` SimpleAggregateFunction(min, DateTime64(9)),
   `last_seen` SimpleAggregateFunction(max, DateTime64(9))
 ) ENGINE = AggregatingMergeTree
-PRIMARY KEY (`organization_id`, `outcome`, `project_id`, `scope`, `challenge_date`, `principal_urn`, `user_id_filter`, `resource_kind`, `resource_id`) ORDER BY (`organization_id`, `outcome`, `project_id`, `scope`, `challenge_date`, `principal_urn`, `user_id_filter`, `resource_kind`, `resource_id`) PARTITION BY (toYYYYMM(challenge_date)) TTL challenge_date + toIntervalDay(90) SETTINGS index_granularity = 8192 COMMENT 'Daily pre-aggregated authz challenge buckets for the Challenge UI';
+PRIMARY KEY (`organization_id`, `project_id`, `outcome`, `scope`, `challenge_date`, `principal_urn`, `user_id_filter`, `resource_kind`, `resource_id`) ORDER BY (`organization_id`, `project_id`, `outcome`, `scope`, `challenge_date`, `principal_urn`, `user_id_filter`, `resource_kind`, `resource_id`) PARTITION BY (toYYYYMM(challenge_date)) TTL challenge_date + toIntervalDay(90) SETTINGS index_granularity = 8192 COMMENT 'Daily pre-aggregated authz challenge buckets for the Challenge UI';
 -- create "authz_challenge_bucket_summaries_mv" view
 CREATE MATERIALIZED VIEW `authz_challenge_bucket_summaries_mv` TO `authz_challenge_bucket_summaries` AS SELECT toDate(timestamp, 'UTC') AS challenge_date, organization_id, project_id, outcome, scope, principal_urn, ifNull(authz_challenges.user_id, '') AS user_id_filter, resource_kind, resource_id, argMaxState(id, timestamp) AS representative_id, argMaxState(toString(principal_type), timestamp) AS principal_type, argMaxState(authz_challenges.user_id, timestamp) AS user_id, argMaxState(authz_challenges.user_email, timestamp) AS user_email, argMaxState(toString(operation), timestamp) AS operation, argMaxState(toString(reason), timestamp) AS reason, argMaxState(arrayMap(x -> toString(x), role_slugs), timestamp) AS role_slugs, argMaxState(evaluated_grant_count, timestamp) AS evaluated_grant_count, max(toUInt64(length(matched_grants.scope))) AS matched_grant_count, groupUniqArrayState(id) AS challenge_ids, min(timestamp) AS first_seen, max(timestamp) AS last_seen FROM authz_challenges WHERE (scope != '') AND (resource_kind != '') AND (resource_id != '') GROUP BY challenge_date, organization_id, project_id, outcome, scope, principal_urn, user_id_filter, resource_kind, resource_id;
--- Backfill rows that predate the materialized view. Exact aggregate states make
--- overlap with concurrent view inserts idempotent when the states merge.
-INSERT INTO authz_challenge_bucket_summaries
-SELECT
-    toDate(timestamp, 'UTC') AS challenge_date,
-    organization_id,
-    project_id,
-    outcome,
-    scope,
-    principal_urn,
-    ifNull(authz_challenges.user_id, '') AS user_id_filter,
-    resource_kind,
-    resource_id,
-    argMaxState(id, timestamp) AS representative_id,
-    argMaxState(toString(principal_type), timestamp) AS principal_type,
-    argMaxState(authz_challenges.user_id, timestamp) AS user_id,
-    argMaxState(authz_challenges.user_email, timestamp) AS user_email,
-    argMaxState(toString(operation), timestamp) AS operation,
-    argMaxState(toString(reason), timestamp) AS reason,
-    argMaxState(arrayMap(x -> toString(x), role_slugs), timestamp) AS role_slugs,
-    argMaxState(evaluated_grant_count, timestamp) AS evaluated_grant_count,
-    max(toUInt64(length(matched_grants.scope))) AS matched_grant_count,
-    groupUniqArrayState(id) AS challenge_ids,
-    min(timestamp) AS first_seen,
-    max(timestamp) AS last_seen
-FROM authz_challenges
-WHERE scope != '' AND resource_kind != '' AND resource_id != ''
-GROUP BY challenge_date, organization_id, project_id, outcome, scope, principal_urn, user_id_filter, resource_kind, resource_id;

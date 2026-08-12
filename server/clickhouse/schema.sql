@@ -1279,7 +1279,7 @@ CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     last_seen SimpleAggregateFunction(max, DateTime64(9))
 ) ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMM(challenge_date)
-ORDER BY (organization_id, outcome, project_id, scope, challenge_date, principal_urn, user_id_filter, resource_kind, resource_id)
+ORDER BY (organization_id, project_id, outcome, scope, challenge_date, principal_urn, user_id_filter, resource_kind, resource_id)
 TTL challenge_date + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Daily pre-aggregated authz challenge buckets for the Challenge UI';

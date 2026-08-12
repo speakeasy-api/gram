@@ -7,21 +7,42 @@
 # under emulation on every stack — on Apple Silicon an emulated Postgres
 # backend segfaults under load (exit code 2 → crash recovery → every daemon
 # fails its DB ping mid-boot). Warn-only: emulation mostly works, and a hard
-# fail would strand hosts that have no native variant. Digest-pinned images are
-# skipped because a re-pull cannot change what a digest points at.
+# fail would strand hosts that have no native variant.
+#
+# Digest-pinned images are checked too. A pin is usually the digest of a
+# multi-arch INDEX, not of one platform's manifest, so the cached copy behind it
+# can still be the wrong architecture -- which is exactly how the pubsub
+# emulator ended up running under emulation on every worktree stack while this
+# check stayed silent.
 host_arch="$(docker version --format '{{.Server.Arch}}' 2>/dev/null)"
 if [ -n "$host_arch" ]; then
-    # Keep this advisory check to two daemon round-trips no matter how many
-    # images the stack declares: list local tags once, intersect with the
-    # compose images, then inspect the cached subset in a single call (its
-    # output lines map back to the input by position). A per-image inspect
-    # would add a slow serial round-trip per image on Docker Desktop.
+    # Keep this advisory check to a constant number of daemon round-trips no
+    # matter how many images the stack declares: list local tags and digests
+    # once, intersect with the compose images, then inspect the cached subset in
+    # a single call (its output lines map back to the input by position). A
+    # per-image inspect would add a slow serial round-trip per image on Docker
+    # Desktop.
     local_tags="$(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)"
+    local_digests="$(docker image ls --digests --format '{{.Repository}}@{{.Digest}}' 2>/dev/null)"
     cached_imgs=()
     while IFS= read -r img; do
-        case "$img" in *@sha256:*) continue ;; esac
-        case "$img" in *:*) tag="$img" ;; *) tag="$img:latest" ;; esac
-        if grep -qxF "$tag" <<< "$local_tags"; then
+        case "$img" in
+            *@sha256:*)
+                # `repo:tag@sha256:...` and `repo@sha256:...` both reduce to the
+                # `repo@sha256:...` form that `docker image ls --digests` prints.
+                # Only the final path component can carry a tag, so look for the
+                # separating colon there — stripping from the whole reference
+                # would eat a registry port instead (`host:5000/img@sha256:...`).
+                repo="${img%@*}"
+                case "${repo##*/}" in
+                    *:*) repo="${repo%:*}" ;;
+                esac
+                key="${repo}@${img#*@}"
+                ;;
+            *:*) key="$img" ;;
+            *) key="$img:latest" ;;
+        esac
+        if grep -qxF "$key" <<< "$local_tags"$'\n'"$local_digests"; then
             cached_imgs+=("$img")
         fi
     done < <(docker compose config --images 2>/dev/null | sort -u)
@@ -38,7 +59,22 @@ if [ -n "$host_arch" ]; then
             img="${cached_imgs[$i]}"
             i=$((i + 1))
             if [ -n "$img_arch" ] && [ "$img_arch" != "$host_arch" ]; then
-                echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: ${fix_prefix}docker pull $img" >&2
+                # A digest-pinned ref cannot simply be re-pulled: the daemon
+                # refuses to rebind a digest it already has ("cannot overwrite
+                # digest"), so the local copy has to be evicted first — and
+                # `docker rmi` refuses while ANY container still references it,
+                # including sibling worktrees'. Scoping the eviction to this
+                # compose project would therefore just make the remedy fail, so
+                # it stays repo-wide and the caveat is stated instead. The
+                # containers it removes come back with the next `infra:start`.
+                case "$img" in
+                    *@sha256:*)
+                        fix="${fix_prefix}docker rm -f \$(docker ps -aq --filter ancestor=$img) 2>/dev/null; docker rmi $img && docker pull --platform linux/$host_arch $img"
+                        fix="$fix (removes this image's containers in every worktree stack; each is recreated by its next \`mise infra:start\`)"
+                        ;;
+                    *) fix="${fix_prefix}docker pull --platform linux/$host_arch $img" ;;
+                esac
+                echo "⚠️  Cached image $img is $img_arch but this Docker host is $host_arch — it runs emulated and can crash under load. Fix: $fix" >&2
             fi
         done < <(docker image inspect "${cached_imgs[@]}" --format '{{.Architecture}}' 2>/dev/null)
     fi
