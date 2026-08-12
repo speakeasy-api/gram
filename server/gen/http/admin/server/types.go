@@ -135,6 +135,20 @@ type ListOrganizationsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListPricingTrackerResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body.
+type ListPricingTrackerResponseBody struct {
+	// One row per organization, ordered by inference spend descending.
+	Rows []*AdminPricingTrackerRowResponseBody `form:"rows" json:"rows" xml:"rows"`
+	// Inclusive start of the tracker window.
+	WindowStart string `form:"window_start" json:"window_start" xml:"window_start"`
+	// Exclusive end of the tracker window.
+	WindowEnd string `form:"window_end" json:"window_end" xml:"window_end"`
+	// False when the analytics store is not wired into the admin service, in which
+	// case inference spend and TUM-derived PAYG figures are reported as zero.
+	InferenceSpendAvailable bool `form:"inference_spend_available" json:"inference_spend_available" xml:"inference_spend_available"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -1784,6 +1798,190 @@ type ListOrganizationsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListPricingTrackerUnauthorizedResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPricingTrackerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerForbiddenResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "forbidden" error.
+type ListPricingTrackerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerBadRequestResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "bad_request" error.
+type ListPricingTrackerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerNotFoundResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "not_found" error.
+type ListPricingTrackerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerConflictResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "conflict" error.
+type ListPricingTrackerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerUnsupportedMediaResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListPricingTrackerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerInvalidResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "invalid" error.
+type ListPricingTrackerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerInvariantViolationResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPricingTrackerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerUnexpectedResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "unexpected" error.
+type ListPricingTrackerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPricingTrackerGatewayErrorResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPricingTrackerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -1840,6 +2038,29 @@ type AdminOrganizationResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the organization.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AdminPricingTrackerRowResponseBody is used to define fields on response body
+// types.
+type AdminPricingTrackerRowResponseBody struct {
+	// The ID of the organization.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The name of the organization (customer name).
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Gram account type (e.g. free, pro, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// Observed tokens under management over the window, used as the PAYG pricing
+	// input.
+	MonthlyTumTokens int64 `form:"monthly_tum_tokens" json:"monthly_tum_tokens" xml:"monthly_tum_tokens"`
+	// Pay-as-you-go price in USD for the window's volume at the current rate card.
+	PaygMonthlyPrice float64 `form:"payg_monthly_price" json:"payg_monthly_price" xml:"payg_monthly_price"`
+	// Blended PAYG rate in USD per million tokens at the window's volume.
+	PaygEffectiveRatePerMillion float64 `form:"payg_effective_rate_per_million" json:"payg_effective_rate_per_million" xml:"payg_effective_rate_per_million"`
+	// Gram-hosted inference spend in USD over the window (playground, elements,
+	// risk analysis, assistants, and other platform-run completions).
+	InferenceSpend float64 `form:"inference_spend" json:"inference_spend" xml:"inference_spend"`
 }
 
 // NewGetProjectResponseBody builds the HTTP response body from the result of
@@ -1959,6 +2180,29 @@ func NewListOrganizationsResponseBody(res *admin.AdminListOrganizationsResult) *
 		}
 	} else {
 		body.Organizations = []*AdminOrganizationResponseBody{}
+	}
+	return body
+}
+
+// NewListPricingTrackerResponseBody builds the HTTP response body from the
+// result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerResponseBody(res *admin.AdminListPricingTrackerResult) *ListPricingTrackerResponseBody {
+	body := &ListPricingTrackerResponseBody{
+		WindowStart:             res.WindowStart,
+		WindowEnd:               res.WindowEnd,
+		InferenceSpendAvailable: res.InferenceSpendAvailable,
+	}
+	if res.Rows != nil {
+		body.Rows = make([]*AdminPricingTrackerRowResponseBody, len(res.Rows))
+		for i, val := range res.Rows {
+			if val == nil {
+				body.Rows[i] = nil
+				continue
+			}
+			body.Rows[i] = marshalAdminAdminPricingTrackerRowToAdminPricingTrackerRowResponseBody(val)
+		}
+	} else {
+		body.Rows = []*AdminPricingTrackerRowResponseBody{}
 	}
 	return body
 }
@@ -3248,6 +3492,148 @@ func NewListOrganizationsGatewayErrorResponseBody(res *goa.ServiceError) *ListOr
 	return body
 }
 
+// NewListPricingTrackerUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerUnauthorizedResponseBody(res *goa.ServiceError) *ListPricingTrackerUnauthorizedResponseBody {
+	body := &ListPricingTrackerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerForbiddenResponseBody builds the HTTP response body
+// from the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerForbiddenResponseBody(res *goa.ServiceError) *ListPricingTrackerForbiddenResponseBody {
+	body := &ListPricingTrackerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerBadRequestResponseBody builds the HTTP response body
+// from the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerBadRequestResponseBody(res *goa.ServiceError) *ListPricingTrackerBadRequestResponseBody {
+	body := &ListPricingTrackerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerNotFoundResponseBody builds the HTTP response body from
+// the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerNotFoundResponseBody(res *goa.ServiceError) *ListPricingTrackerNotFoundResponseBody {
+	body := &ListPricingTrackerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerConflictResponseBody builds the HTTP response body from
+// the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerConflictResponseBody(res *goa.ServiceError) *ListPricingTrackerConflictResponseBody {
+	body := &ListPricingTrackerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listPricingTracker" endpoint of the "admin"
+// service.
+func NewListPricingTrackerUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPricingTrackerUnsupportedMediaResponseBody {
+	body := &ListPricingTrackerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerInvalidResponseBody builds the HTTP response body from
+// the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerInvalidResponseBody(res *goa.ServiceError) *ListPricingTrackerInvalidResponseBody {
+	body := &ListPricingTrackerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listPricingTracker" endpoint of the "admin"
+// service.
+func NewListPricingTrackerInvariantViolationResponseBody(res *goa.ServiceError) *ListPricingTrackerInvariantViolationResponseBody {
+	body := &ListPricingTrackerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerUnexpectedResponseBody(res *goa.ServiceError) *ListPricingTrackerUnexpectedResponseBody {
+	body := &ListPricingTrackerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPricingTrackerGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listPricingTracker" endpoint of the "admin" service.
+func NewListPricingTrackerGatewayErrorResponseBody(res *goa.ServiceError) *ListPricingTrackerGatewayErrorResponseBody {
+	body := &ListPricingTrackerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -3337,6 +3723,19 @@ func NewListOrganizationsPayload(q *string, accountType *string, includeDisabled
 	v.AccountType = accountType
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListPricingTrackerPayload builds a admin service listPricingTracker
+// endpoint payload.
+func NewListPricingTrackerPayload(accountType *string, includeFree *bool, windowDays *int, limit *int, adminSessionToken *string) *admin.ListPricingTrackerPayload {
+	v := &admin.ListPricingTrackerPayload{}
+	v.AccountType = accountType
+	v.IncludeFree = includeFree
+	v.WindowDays = windowDays
 	v.Limit = limit
 	v.AdminSessionToken = adminSessionToken
 

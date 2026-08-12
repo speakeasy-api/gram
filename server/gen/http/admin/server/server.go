@@ -28,6 +28,7 @@ type Server struct {
 	ListOrganizationMembers  http.Handler
 	ListOrganizationProjects http.Handler
 	ListOrganizations        http.Handler
+	ListPricingTracker       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -66,6 +67,7 @@ func New(
 			{"ListOrganizationMembers", "GET", "/admin/organization.members"},
 			{"ListOrganizationProjects", "GET", "/admin/organization.projects"},
 			{"ListOrganizations", "GET", "/admin/organizations.list"},
+			{"ListPricingTracker", "GET", "/admin/organizations.pricingTracker"},
 		},
 		Login:                    NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                 NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -76,6 +78,7 @@ func New(
 		ListOrganizationMembers:  NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationProjects: NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizations:        NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
+		ListPricingTracker:       NewListPricingTrackerHandler(e.ListPricingTracker, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -93,6 +96,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListOrganizationMembers = m(s.ListOrganizationMembers)
 	s.ListOrganizationProjects = m(s.ListOrganizationProjects)
 	s.ListOrganizations = m(s.ListOrganizations)
+	s.ListPricingTracker = m(s.ListPricingTracker)
 }
 
 // MethodNames returns the methods served.
@@ -109,6 +113,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListOrganizationMembersHandler(mux, h.ListOrganizationMembers)
 	MountListOrganizationProjectsHandler(mux, h.ListOrganizationProjects)
 	MountListOrganizationsHandler(mux, h.ListOrganizations)
+	MountListPricingTrackerHandler(mux, h.ListPricingTracker)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -572,6 +577,59 @@ func NewListOrganizationsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listOrganizations")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPricingTrackerHandler configures the mux to serve the "admin"
+// service "listPricingTracker" endpoint.
+func MountListPricingTrackerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organizations.pricingTracker", f)
+}
+
+// NewListPricingTrackerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listPricingTracker" endpoint.
+func NewListPricingTrackerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPricingTrackerRequest(mux, decoder)
+		encodeResponse = EncodeListPricingTrackerResponse(encoder)
+		encodeError    = EncodeListPricingTrackerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPricingTracker")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -186,6 +186,12 @@ INSERT INTO organization_metadata (
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
 
+-- name: CreateProjectFixture :exec
+-- Test-only fixture that seeds a project with an explicit id so callers can
+-- correlate it with analytics rows keyed on gram_project_id.
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES (@id, @name, @slug, @organization_id);
+
 -- name: ForceSoftDeleteUserSessionIssuer :exec
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers

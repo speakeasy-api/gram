@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -170,6 +171,12 @@ func newAdminCommand() *cli.Command {
 		},
 	}
 
+	// ClickHouse powers the pricing tracker's inference-spend and
+	// tokens-under-management reads. It is best-effort: if the connection
+	// can't be established the admin server still starts and the tracker
+	// reports those figures as zero.
+	flags = append(flags, clickHouseFlags()...)
+
 	return &cli.Command{
 		Name:  "admin",
 		Usage: "Start the Gram admin server",
@@ -247,6 +254,17 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to create admin OIDC client: %w", err)
 			}
 
+			// Best-effort ClickHouse connection for the pricing tracker. A
+			// failure here must not stop the admin server from serving the
+			// rest of its endpoints, so log and continue with a nil client.
+			var chConn clickhouse.Conn
+			if chDB, chShutdown, chErr := newClickhouseClient(ctx, logger, c); chErr != nil {
+				logger.WarnContext(ctx, "clickhouse unavailable; pricing tracker inference spend disabled", attr.SlogError(chErr))
+			} else {
+				chConn = chDB
+				shutdownFuncs = append(shutdownFuncs, chShutdown)
+			}
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +291,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(middleware.AdminCookieAttributes(adminCrossOriginCookies, adminCookieDomain))
 			mux.Use(admin.SessionMiddleware)
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, chConn))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

@@ -51,3 +51,8 @@ func ListOrganizationProjectsAdminPath() string {
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
 }
+
+// ListPricingTrackerAdminPath returns the URL path to the admin service listPricingTracker HTTP endpoint.
+func ListPricingTrackerAdminPath() string {
+	return "/admin/organizations.pricingTracker"
+}

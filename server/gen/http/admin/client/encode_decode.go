@@ -2166,6 +2166,250 @@ func DecodeListOrganizationsResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildListPricingTrackerRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listPricingTracker" endpoint
+func (c *Client) BuildListPricingTrackerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPricingTrackerAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listPricingTracker", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPricingTrackerRequest returns an encoder for requests sent to the
+// admin listPricingTracker server.
+func EncodeListPricingTrackerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListPricingTrackerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listPricingTracker", "*admin.ListPricingTrackerPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.AccountType != nil {
+			values.Add("account_type", *p.AccountType)
+		}
+		if p.IncludeFree != nil {
+			values.Add("include_free", fmt.Sprintf("%v", *p.IncludeFree))
+		}
+		if p.WindowDays != nil {
+			values.Add("window_days", fmt.Sprintf("%v", *p.WindowDays))
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListPricingTrackerResponse returns a decoder for responses returned by
+// the admin listPricingTracker endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListPricingTrackerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPricingTrackerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPricingTrackerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			res := NewListPricingTrackerAdminListPricingTrackerResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPricingTrackerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPricingTrackerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPricingTrackerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPricingTrackerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPricingTrackerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPricingTrackerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPricingTrackerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPricingTrackerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+				}
+				err = ValidateListPricingTrackerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+				}
+				return nil, NewListPricingTrackerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPricingTrackerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+				}
+				err = ValidateListPricingTrackerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+				}
+				return nil, NewListPricingTrackerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listPricingTracker", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPricingTrackerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPricingTracker", err)
+			}
+			err = ValidateListPricingTrackerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPricingTracker", err)
+			}
+			return nil, NewListPricingTrackerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listPricingTracker", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -2213,6 +2457,24 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		MemberCount:        *v.MemberCount,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminPricingTrackerRowResponseBodyToAdminAdminPricingTrackerRow
+// builds a value of type *admin.AdminPricingTrackerRow from a value of type
+// *AdminPricingTrackerRowResponseBody.
+func unmarshalAdminPricingTrackerRowResponseBodyToAdminAdminPricingTrackerRow(v *AdminPricingTrackerRowResponseBody) *admin.AdminPricingTrackerRow {
+	res := &admin.AdminPricingTrackerRow{
+		OrganizationID:              *v.OrganizationID,
+		Name:                        *v.Name,
+		Slug:                        *v.Slug,
+		AccountType:                 *v.AccountType,
+		MonthlyTumTokens:            *v.MonthlyTumTokens,
+		PaygMonthlyPrice:            *v.PaygMonthlyPrice,
+		PaygEffectiveRatePerMillion: *v.PaygEffectiveRatePerMillion,
+		InferenceSpend:              *v.InferenceSpend,
 	}
 
 	return res

@@ -25,6 +25,7 @@ type Endpoints struct {
 	ListOrganizationMembers  goa.Endpoint
 	ListOrganizationProjects goa.Endpoint
 	ListOrganizations        goa.Endpoint
+	ListPricingTracker       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListOrganizationMembers:  NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationProjects: NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:        NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		ListPricingTracker:       NewListPricingTrackerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -55,6 +57,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
 	e.ListOrganizations = m(e.ListOrganizations)
+	e.ListPricingTracker = m(e.ListPricingTracker)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -219,5 +222,28 @@ func NewListOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.ListOrganizations(ctx, p)
+	}
+}
+
+// NewListPricingTrackerEndpoint returns an endpoint function that calls the
+// method "listPricingTracker" of service "admin".
+func NewListPricingTrackerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPricingTrackerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPricingTracker(ctx, p)
 	}
 }

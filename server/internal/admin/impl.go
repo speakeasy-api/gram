@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,16 +18,21 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
+
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/pricing"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 type Service struct {
@@ -38,6 +44,11 @@ type Service struct {
 	oidc           *OIDCClient
 	sessions       *SessionStore
 	allowedOrigins []string
+	// telemetry is the ClickHouse analytics repo used by the pricing tracker.
+	// It is nil when the admin service was started without a ClickHouse
+	// connection; the pricing tracker then reports inference spend and
+	// TUM-derived figures as zero rather than failing.
+	telemetry *telemetryrepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,6 +62,7 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
+	chConn clickhouse.Conn,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -63,6 +75,11 @@ func NewService(
 		encryptionClient,
 	)
 
+	var telemetry *telemetryrepo.Queries
+	if chConn != nil {
+		telemetry = telemetryrepo.New(chConn)
+	}
+
 	return &Service{
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
@@ -71,6 +88,7 @@ func NewService(
 		sessions:       sessionStore,
 		verifier:       NewVerifier(logger, sessionStore, oidcClient),
 		allowedOrigins: allowedOrigins,
+		telemetry:      telemetry,
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -347,6 +365,167 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	return &gen.AdminListOrganizationsResult{
 		Organizations: orgs,
 		NextCursor:    nextCursor,
+	}, nil
+}
+
+const (
+	pricingTrackerDefaultLimit  = 100
+	pricingTrackerMaxLimit      = 500
+	pricingTrackerDefaultWindow = 30
+	pricingTrackerMaxWindow     = 90
+	// pricingMonthDays normalizes window volume to a nominal 30-day month so
+	// the PAYG rate card (which is keyed on absolute monthly token volume) is
+	// quoted consistently regardless of the requested window length.
+	pricingMonthDays = 30.0
+)
+
+// orgPricingAgg accumulates the projects belonging to one organization while
+// the tracker rolls per-project analytics up to the owning customer.
+type orgPricingAgg struct {
+	id          string
+	name        string
+	slug        string
+	accountType string
+	projectIDs  []string
+}
+
+// ListPricingTracker returns, per organization, the PAYG price at the current
+// rate card (derived from observed tokens under management) alongside the
+// Gram-hosted inference spend over a trailing window — the internal tracker
+// used to watch customer pricing exposure when adjusting spend limits.
+func (s *Service) ListPricingTracker(ctx context.Context, payload *gen.ListPricingTrackerPayload) (*gen.AdminListPricingTrackerResult, error) {
+	windowDays := pricingTrackerDefaultWindow
+	if payload.WindowDays != nil {
+		windowDays = *payload.WindowDays
+		if windowDays < 1 {
+			windowDays = pricingTrackerDefaultWindow
+		}
+		if windowDays > pricingTrackerMaxWindow {
+			windowDays = pricingTrackerMaxWindow
+		}
+	}
+
+	limit := pricingTrackerDefaultLimit
+	if payload.Limit != nil {
+		limit = *payload.Limit
+		if limit < 1 {
+			limit = pricingTrackerDefaultLimit
+		}
+		if limit > pricingTrackerMaxLimit {
+			limit = pricingTrackerMaxLimit
+		}
+	}
+
+	windowEnd := time.Now().UTC()
+	windowStart := windowEnd.AddDate(0, 0, -windowDays)
+
+	rows, err := repo.New(s.db).AdminListProjectsWithOrganization(ctx, repo.AdminListProjectsWithOrganizationParams{
+		AccountType: conv.PtrToPGText(payload.AccountType),
+		IncludeFree: conv.PtrValOr(payload.IncludeFree, false),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list projects for pricing tracker").LogError(ctx, s.logger)
+	}
+
+	orgs := make(map[string]*orgPricingAgg)
+	order := make([]string, 0)
+	allProjectIDs := make([]string, 0, len(rows))
+	for _, r := range rows {
+		agg, ok := orgs[r.OrganizationID]
+		if !ok {
+			agg = &orgPricingAgg{
+				id:          r.OrganizationID,
+				name:        r.OrganizationName,
+				slug:        r.OrganizationSlug,
+				accountType: r.AccountType,
+				projectIDs:  nil,
+			}
+			orgs[r.OrganizationID] = agg
+			order = append(order, r.OrganizationID)
+		}
+		pid := r.ProjectID.String()
+		agg.projectIDs = append(agg.projectIDs, pid)
+		allProjectIDs = append(allProjectIDs, pid)
+	}
+
+	tumByProject := make(map[string]int64)
+	spendByProject := make(map[string]float64)
+	inferenceAvailable := s.telemetry != nil
+	if inferenceAvailable && len(allProjectIDs) > 0 {
+		tokenBuckets, err := s.telemetry.GetTumTokensByProject(ctx, telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:          allProjectIDs,
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			ExcludedHookSources: billing.GramHostedHookSourceStrings(),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "compute tokens under management for pricing tracker").LogError(ctx, s.logger)
+		}
+		for _, b := range tokenBuckets {
+			tumByProject[b.ProjectID] = b.Tokens
+		}
+
+		spendBuckets, err := s.telemetry.GetInferenceSpendByProject(ctx, telemetryrepo.InferenceSpendByProjectParams{
+			ProjectIDs:          allProjectIDs,
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			IncludedHookSources: billing.GramHostedInferenceSources(),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "compute inference spend for pricing tracker").LogError(ctx, s.logger)
+		}
+		for _, b := range spendBuckets {
+			spendByProject[b.ProjectID] = b.Cost
+		}
+	}
+
+	result := make([]*gen.AdminPricingTrackerRow, 0, len(order))
+	for _, oid := range order {
+		agg := orgs[oid]
+		var windowTokens int64
+		var spend float64
+		for _, pid := range agg.projectIDs {
+			windowTokens += tumByProject[pid]
+			spend += spendByProject[pid]
+		}
+
+		// Normalize observed volume to a nominal month so the rate card reads
+		// consistently across window lengths.
+		monthlyTokens := int64(float64(windowTokens) * pricingMonthDays / float64(windowDays))
+
+		result = append(result, &gen.AdminPricingTrackerRow{
+			OrganizationID:              agg.id,
+			Name:                        agg.name,
+			Slug:                        agg.slug,
+			AccountType:                 agg.accountType,
+			MonthlyTumTokens:            monthlyTokens,
+			PaygMonthlyPrice:            pricing.PaygMonthlyPrice(monthlyTokens),
+			PaygEffectiveRatePerMillion: pricing.PaygEffectiveRatePerMillion(monthlyTokens),
+			InferenceSpend:              spend,
+		})
+	}
+
+	// Highest inference spend first — that is the exposure the tracker exists
+	// to surface. Ties break on volume then name for a stable ordering.
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].InferenceSpend != result[j].InferenceSpend {
+			return result[i].InferenceSpend > result[j].InferenceSpend
+		}
+		if result[i].MonthlyTumTokens != result[j].MonthlyTumTokens {
+			return result[i].MonthlyTumTokens > result[j].MonthlyTumTokens
+		}
+		return result[i].Name < result[j].Name
+	})
+
+	if len(result) > limit {
+		result = result[:limit]
+	}
+
+	return &gen.AdminListPricingTrackerResult{
+		Rows:                    result,
+		WindowStart:             windowStart.Format(time.RFC3339),
+		WindowEnd:               windowEnd.Format(time.RFC3339),
+		InferenceSpendAvailable: inferenceAvailable,
 	}, nil
 }
 

@@ -36,6 +36,10 @@ type Service interface {
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
+	// Internal tracker of customer pricing exposure: per organization, the PAYG
+	// price at the current rate card (off observed tokens under management) and
+	// the Gram-hosted inference spend, both over a trailing window.
+	ListPricingTracker(context.Context, *ListPricingTrackerPayload) (res *AdminListPricingTrackerResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -58,7 +62,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [10]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "listPricingTracker"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -81,6 +85,20 @@ type AdminListOrganizationsResult struct {
 	Organizations []*AdminOrganization
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// AdminListPricingTrackerResult is the result type of the admin service
+// listPricingTracker method.
+type AdminListPricingTrackerResult struct {
+	// One row per organization, ordered by inference spend descending.
+	Rows []*AdminPricingTrackerRow
+	// Inclusive start of the tracker window.
+	WindowStart string
+	// Exclusive end of the tracker window.
+	WindowEnd string
+	// False when the analytics store is not wired into the admin service, in which
+	// case inference spend and TUM-derived PAYG figures are reported as zero.
+	InferenceSpendAvailable bool
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -124,6 +142,29 @@ type AdminOrganizationMember struct {
 	LastLogin *string
 	CreatedAt string
 	UpdatedAt string
+}
+
+// One organization's pricing exposure: PAYG price at the current rate card and
+// Gram-hosted inference spend over the tracker window.
+type AdminPricingTrackerRow struct {
+	// The ID of the organization.
+	OrganizationID string
+	// The name of the organization (customer name).
+	Name string
+	// The slug of the organization.
+	Slug string
+	// Gram account type (e.g. free, pro, enterprise).
+	AccountType string
+	// Observed tokens under management over the window, used as the PAYG pricing
+	// input.
+	MonthlyTumTokens int64
+	// Pay-as-you-go price in USD for the window's volume at the current rate card.
+	PaygMonthlyPrice float64
+	// Blended PAYG rate in USD per million tokens at the window's volume.
+	PaygEffectiveRatePerMillion float64
+	// Gram-hosted inference spend in USD over the window (playground, elements,
+	// risk analysis, assistants, and other platform-run completions).
+	InferenceSpend float64
 }
 
 // Project summary surfaced to admin operators.
@@ -238,6 +279,22 @@ type ListOrganizationsPayload struct {
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
+	Limit *int
+}
+
+// ListPricingTrackerPayload is the payload type of the admin service
+// listPricingTracker method.
+type ListPricingTrackerPayload struct {
+	AdminSessionToken *string
+	// Filter to a single gram_account_type (e.g. enterprise). When omitted, paying
+	// tiers (pro and enterprise) are included.
+	AccountType *string
+	// Include free-tier organizations. Defaults to false so the tracker stays
+	// focused on paying customers.
+	IncludeFree *bool
+	// Length of the trailing window in days. Defaults to 30, max 90.
+	WindowDays *int
+	// Maximum number of rows to return (default 100, max 500).
 	Limit *int
 }
 
