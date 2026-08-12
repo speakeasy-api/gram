@@ -1,0 +1,27 @@
+server/clickhouse/local/golang_migrate/20260811155533_challenge-bucket-summaries.up.sql
+  s_62bf807f9fa23e::t_94ac6ddf7ec279 25
+server/clickhouse/schema.sql
+  s_62bf807f9fa23e::t_94ac6ddf7ec279 1282
+server/clickhouse/migrations/20260811155529_challenge-bucket-summaries.sql
+  s_62bf807f9fa23e::t_94ac6ddf7ec279 25
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_62bf807f9fa23e::t_9ef3ad9306dbc1 1,89
+server/clickhouse/migrations/atlas.sum
+  s_62bf807f9fa23e::t_ae9c4b2fa1a820 1,94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f2dcd711d71c5b5f5fa970769977e13ead61c577",
+  "prompts": {},
+  "sessions": {
+    "s_62bf807f9fa23e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff163-7dd5-7302-81f9-6276dfd2ce9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
