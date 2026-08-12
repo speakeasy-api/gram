@@ -115,29 +115,71 @@ func logSafeURL(u *url.URL) string {
 		changed = true
 	}
 
-	if q := safe.Query(); len(q) > 0 {
-		redacted := false
-		// Iterating the denylist rather than the parsed query bounds this by
-		// the handful of names above instead of by caller-chosen parameter
-		// count. Set collapses a repeated parameter to one value, so
-		// ?email=a&email=b cannot leak through its second occurrence.
-		for param := range redactedQueryParams {
-			if q.Has(param) {
-				q.Set(param, "REDACTED")
-				redacted = true
-			}
-		}
-
-		if redacted {
-			safe.RawQuery = q.Encode()
-			changed = true
-		}
+	if q, redacted := redactRawQuery(safe.RawQuery); redacted {
+		safe.RawQuery = q
+		changed = true
 	}
 
 	if !changed {
 		return u.String()
 	}
 	return safe.String()
+}
+
+// redactRawQuery replaces the value of every parameter named in
+// redactedQueryParams and reports whether it changed anything, leaving the
+// rest of the query byte for byte as it arrived.
+//
+// It works on the raw string rather than url.Values on purpose. ParseQuery
+// silently discards any pair holding a semicolon or an invalid percent escape,
+// which would hide the very parameter that needs redacting and let the caller
+// fall back to logging the untouched original. Round-tripping through
+// Values.Encode also reorders keys, rewrites the escaping of untouched values,
+// and drops the malformed pairs outright, so a logged URL stops matching the
+// request it describes.
+//
+// Both "&" and ";" end a pair here. Go stopped accepting ";" as a separator,
+// so treating it as one is deliberately stricter than the parser: it keeps a
+// value from smuggling a second parameter past the check.
+func redactRawQuery(raw string) (string, bool) {
+	var b strings.Builder
+	changed := false
+
+	for start := 0; start <= len(raw); {
+		end := start
+		for end < len(raw) && raw[end] != '&' && raw[end] != ';' {
+			end++
+		}
+
+		pair := raw[start:end]
+		key, _, hasValue := strings.Cut(pair, "=")
+		name, err := url.QueryUnescape(key)
+		if err != nil {
+			// An unescapable key cannot match a denylist entry by its decoded
+			// name, so compare the raw spelling rather than skipping the pair.
+			name = key
+		}
+
+		switch {
+		case hasValue && redactedQueryParams[name]:
+			b.WriteString(key)
+			b.WriteString("=REDACTED")
+			changed = true
+		default:
+			b.WriteString(pair)
+		}
+
+		if end < len(raw) {
+			b.WriteByte(raw[end])
+		}
+		start = end + 1
+	}
+
+	if !changed {
+		return raw, false
+	}
+
+	return b.String(), true
 }
 
 func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {

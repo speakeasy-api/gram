@@ -82,14 +82,14 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/agent.getPlugins?email=REDACTED&org_name=acme",
 		},
 		{
-			name: "repeated email query parameter collapses to one redaction",
+			name: "every occurrence of a repeated email parameter redacted",
 			in:   "/rpc/auth.login?email=first%40acme.corp&email=second%40acme.corp",
-			want: "/rpc/auth.login?email=REDACTED",
+			want: "/rpc/auth.login?email=REDACTED&email=REDACTED",
 		},
 		{
 			name: "chat search query parameter redacted",
 			in:   "/rpc/chat.listChats?search=dev%40acme.corp&limit=10",
-			want: "/rpc/chat.listChats?limit=10&search=REDACTED",
+			want: "/rpc/chat.listChats?search=REDACTED&limit=10",
 		},
 		{
 			name: "credential and personal data redacted together",
@@ -105,6 +105,31 @@ func TestLogSafeURL(t *testing.T) {
 			name: "unlisted parameter carrying an address untouched",
 			in:   "/rpc/organizations.listMembers?user_id=abc123",
 			want: "/rpc/organizations.listMembers?user_id=abc123",
+		},
+		{
+			name: "semicolon inside a redacted value still redacted",
+			in:   "/rpc/auth.login?email=dev%40acme.corp;x=1",
+			want: "/rpc/auth.login?email=REDACTED;x=1",
+		},
+		{
+			name: "semicolon used as a separator still redacted",
+			in:   "/rpc/auth.login?a=1;email=dev%40acme.corp",
+			want: "/rpc/auth.login?a=1;email=REDACTED",
+		},
+		{
+			name: "invalid percent escape in a redacted value still redacted",
+			in:   "/rpc/auth.login?email=%zz-dev%40acme.corp",
+			want: "/rpc/auth.login?email=REDACTED",
+		},
+		{
+			name: "invalid percent escape elsewhere does not defeat redaction",
+			in:   "/rpc/auth.login?broken=%zz&email=dev%40acme.corp",
+			want: "/rpc/auth.login?broken=%zz&email=REDACTED",
+		},
+		{
+			name: "unrelated parameters keep their order and encoding",
+			in:   "/rpc/auth.login?redirect=%2Fhome&email=dev%40acme.corp&org_name=acme+corp",
+			want: "/rpc/auth.login?redirect=%2Fhome&email=REDACTED&org_name=acme+corp",
 		},
 	}
 
