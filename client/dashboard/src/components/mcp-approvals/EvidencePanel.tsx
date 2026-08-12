@@ -1,3 +1,4 @@
+import { authorityModeLabel } from "@/components/mcp-approvals/evidence";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -266,19 +267,6 @@ function TrustSection({
       )}
     </EvidenceGroup>
   );
-}
-
-function authorityModeLabel(mode: string): string {
-  switch (mode) {
-    case "oauth":
-      return "OAuth — delegated, scoped, revocable";
-    case "api_key":
-      return "Static secret pasted at install";
-    case "none":
-      return "No credential requirement published";
-    default:
-      return "Undeclared";
-  }
 }
 
 function AuthoritySection({

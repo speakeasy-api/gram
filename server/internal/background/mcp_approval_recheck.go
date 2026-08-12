@@ -21,6 +21,18 @@ const (
 	mcpApprovalRecheckWorkflowID       = mcpApprovalRecheckScheduleID + "/scheduled"
 	mcpApprovalRecheckInterval         = 24 * time.Hour
 	mcpApprovalRecheckPageSize   int32 = 50
+
+	// mcpApprovalRecheckRunTimeout bounds one run of the sweep.
+	mcpApprovalRecheckRunTimeout = 4 * time.Hour
+
+	// mcpApprovalRecheckBudget is how long a run keeps starting new pages.
+	// A page of 50 targets that all time out and retry can occupy most of a
+	// run on its own, so a large enough scan set would otherwise let the run
+	// timeout kill the workflow mid-page — and the next scheduled run starts
+	// at the beginning of the id space, re-checking the same prefix forever
+	// while the tail is never reached. Continuing as new before the ceiling
+	// carries the cursor instead.
+	mcpApprovalRecheckBudget = mcpApprovalRecheckRunTimeout - 45*time.Minute
 )
 
 // McpApprovalRecheckParams carries the sweep's keyset cursor across
@@ -65,8 +77,17 @@ func McpApprovalRecheckWorkflow(ctx workflow.Context, params McpApprovalRecheckP
 	var a *Activities
 	logger := workflow.GetLogger(ctx)
 	afterID := params.AfterID
+	deadline := workflow.Now(ctx).Add(mcpApprovalRecheckBudget)
 
 	for {
+		// Checked before each page rather than each target: a page is the
+		// unit the cursor can resume from, so stopping mid-page would repeat
+		// its targets anyway.
+		if workflow.Now(ctx).After(deadline) {
+			logger.Info("mcp approval recheck sweep continuing as new", "after_id", afterID.String())
+			return workflow.NewContinueAsNewError(ctx, McpApprovalRecheckWorkflow, McpApprovalRecheckParams{AfterID: afterID})
+		}
+
 		var targets []activities.McpApprovalRecheckTarget
 		if err := workflow.ExecuteActivity(listCtx, a.ListMcpApprovalRecheckPage, activities.McpApprovalRecheckPageArgs{
 			AfterID:  afterID,
@@ -105,7 +126,7 @@ func AddMcpApprovalRecheckSchedule(ctx context.Context, temporalEnv *tenv.Enviro
 		Workflow:           McpApprovalRecheckWorkflow,
 		Args:               []any{McpApprovalRecheckParams{AfterID: uuid.Nil}},
 		TaskQueue:          string(temporalEnv.Queue()),
-		WorkflowRunTimeout: 4 * time.Hour,
+		WorkflowRunTimeout: mcpApprovalRecheckRunTimeout,
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{

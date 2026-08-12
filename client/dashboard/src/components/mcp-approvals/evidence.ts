@@ -435,3 +435,21 @@ function credentials(value: unknown): EvidenceCredential[] {
   }
   return out;
 }
+
+/**
+ * The words the review surfaces use for an authority mode. Shared so the
+ * evidence panel and the drift banner cannot describe the same mode
+ * differently, and so an empty mode reads as a state rather than a blank.
+ */
+export function authorityModeLabel(mode: string): string {
+  switch (mode) {
+    case "oauth":
+      return "OAuth — delegated, scoped, revocable";
+    case "api_key":
+      return "Static secret pasted at install";
+    case "none":
+      return "No credential requirement published";
+    default:
+      return "Undeclared";
+  }
+}

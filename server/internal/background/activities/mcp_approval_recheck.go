@@ -136,12 +136,12 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 		return fmt.Errorf("decode recheck gather: %w", err)
 	}
 
-	stored, storedErr := evidence.DecodeDocument(request.CurrentEvidence, int(request.EvidenceVersion))
+	storedDocument, storedErr := evidence.DecodeDocument(request.CurrentEvidence, int(request.EvidenceVersion))
 	// A gather that failed on every remote source has learned nothing, and
 	// storing it would replace a document that did better with a page of
 	// failures — the same refusal the manual refresh path makes. Comparing it
 	// is equally pointless: every section it could speak to is gapped.
-	if current.GappedOnAllRemoteSources() && (storedErr != nil || !stored.GappedOnAllRemoteSources()) {
+	if current.GappedOnAllRemoteSources() && (storedErr != nil || !storedDocument.GappedOnAllRemoteSources()) {
 		m.logger.WarnContext(ctx, "skipping recheck whose gather failed on every remote source",
 			attr.SlogProjectID(target.ProjectID.String()),
 		)
@@ -150,16 +150,25 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 
 	// The store is a compare-and-set against the gather this activity just
 	// read: a manual refresh landing in between wins, and this gather is
-	// discarded rather than clobbering the newer document. Drift detection
-	// still runs — a detection from a discarded gather is still a detection.
-	if _, err := queries.SetApprovalRequestEvidenceIfUnchanged(ctx, approvalrepo.SetApprovalRequestEvidenceIfUnchangedParams{
+	// discarded rather than clobbering the newer document.
+	stored, err := queries.SetApprovalRequestEvidenceIfUnchanged(ctx, approvalrepo.SetApprovalRequestEvidenceIfUnchangedParams{
 		CurrentEvidence:     document,
 		EvidenceVersion:     evidence.Version,
 		ID:                  target.ID,
 		ProjectID:           target.ProjectID,
 		PreviousCollectedAt: request.EvidenceCollectedAt,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("store recheck gather: %w", err)
+	}
+	if stored == 0 {
+		// A concurrent refresh won, so this gather is not what the request
+		// holds. Flagging on it would announce a drift the page cannot show —
+		// the banner reads the stored document — and would stamp the winner's
+		// evidence with a fingerprint describing a different gather. The
+		// winning document is compared on the next sweep, and the read-path
+		// diff already shows any drift it carries.
+		return nil
 	}
 
 	snapshot, err := evidence.DecodeDocument(request.DecisionEvidenceSnapshot, int(request.DecisionEvidenceVersion))

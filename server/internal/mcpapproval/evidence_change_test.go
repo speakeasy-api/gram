@@ -15,8 +15,24 @@ import (
 
 const driftEvidence = `{"identity": {"kind": "server_url"}, "authority": {"mode": "oauth", "scopes": ["read:messages"]}}`
 
-func pgNow(offset time.Duration) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: time.Now().Add(offset), Valid: true, InfinityModifier: pgtype.Finite}
+// latestDecisionAt is the decided_at a recheck would carry into its flag
+// write. Read from the database rather than taken from the Go clock, which
+// can sit either side of Postgres's clock_timestamp().
+func latestDecisionAt(t *testing.T, ctx context.Context, ti *testInstance, requestID uuid.UUID) pgtype.Timestamptz {
+	t.Helper()
+
+	decisions, err := ti.repo.ListDecisionsForApprovalRequest(ctx, repo.ListDecisionsForApprovalRequestParams{
+		McpApprovalRequestID: requestID,
+		ProjectID:            ti.projectID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, decisions)
+
+	return decisions[0].DecidedAt
+}
+
+func shiftedBy(at pgtype.Timestamptz, offset time.Duration) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: at.Time.Add(offset), Valid: true, InfinityModifier: pgtype.Finite}
 }
 
 // approveSeededRequest raises a request, decides it, and returns its id — the
@@ -49,7 +65,7 @@ func TestRecordDecision_ClearsEvidenceChangeFlag(t *testing.T) {
 		ID:                 requestID,
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-drift-1"),
-		ComparedDecisionAt: pgNow(0),
+		ComparedDecisionAt: latestDecisionAt(t, ctx, ti, requestID),
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), flagged)
@@ -85,7 +101,7 @@ func TestMarkEvidenceChanged_IsIdempotentPerFingerprint(t *testing.T) {
 		ID:                 requestID,
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-same"),
-		ComparedDecisionAt: pgNow(0),
+		ComparedDecisionAt: latestDecisionAt(t, ctx, ti, requestID),
 	}
 
 	first, err := ti.repo.MarkApprovalRequestEvidenceChanged(ctx, params)
@@ -120,8 +136,8 @@ func TestMarkEvidenceChanged_RefusesAfterANewerDecision(t *testing.T) {
 	ctx, ti := newTestService(t)
 	requestID := approveSeededRequest(t, ctx, ti, driftEvidence)
 
-	// The sweep read its snapshot an hour ago; the admin decided since.
-	comparedAt := pgNow(-time.Hour)
+	// The sweep read its snapshot an hour before the decision landed.
+	comparedAt := shiftedBy(latestDecisionAt(t, ctx, ti, requestID), -time.Hour)
 
 	flagged, err := ti.repo.MarkApprovalRequestEvidenceChanged(ctx, repo.MarkApprovalRequestEvidenceChangedParams{
 		ID:                 requestID,
@@ -152,7 +168,7 @@ func TestMarkEvidenceChanged_RefusesUnapprovedRequests(t *testing.T) {
 		ID:                 requestID,
 		ProjectID:          ti.projectID,
 		Fingerprint:        conv.ToPGText("fp-pending"),
-		ComparedDecisionAt: pgNow(0),
+		ComparedDecisionAt: pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: pgtype.Finite},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), flagged)

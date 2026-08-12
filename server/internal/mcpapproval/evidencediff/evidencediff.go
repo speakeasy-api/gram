@@ -112,7 +112,7 @@ func project(document evidence.Document) subset {
 		Scopes:              []string{},
 		DynamicRegistration: false,
 		DemandedSecrets:     []string{},
-		AdvisoriesGathered:  true,
+		AdvisoriesGathered:  false,
 		KnownAdvisories:     0,
 		AdvisoryIDs:         []string{},
 	}
@@ -132,9 +132,13 @@ func project(document evidence.Document) subset {
 		slices.Sort(s.DemandedSecrets)
 	}
 
-	// A clean advisory query with zero results also lands a section, so the
-	// only ungathered state is a recorded lookup failure.
-	s.AdvisoriesGathered = !slices.Contains(document.Gaps, evidence.GapAdvisoryLookup)
+	// Advisories take the opposite rule to authority, because their absences
+	// mean opposite things. A clean query with zero results still lands a
+	// section, so a missing section is never "checked and clean": it means
+	// the lookup failed (a gap) or the vulnerability database does not cover
+	// this registry at all, which is not-consulted rather than zero.
+	s.AdvisoriesGathered = document.Advisories != nil &&
+		!slices.Contains(document.Gaps, evidence.GapAdvisoryLookup)
 	if advisories := document.Advisories; advisories != nil && s.AdvisoriesGathered {
 		s.KnownAdvisories = advisories.KnownCount
 		for _, advisory := range advisories.Advisories {
@@ -211,7 +215,7 @@ func Compare(before, after evidence.Document) Diff {
 		for _, id := range beforeSubset.AdvisoryIDs {
 			known[id] = struct{}{}
 		}
-		if after.Advisories != nil && afterSubset.AdvisoriesGathered {
+		if after.Advisories != nil {
 			for _, advisory := range after.Advisories.Advisories {
 				if _, seen := known[advisory.ID]; seen {
 					continue

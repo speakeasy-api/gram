@@ -1,3 +1,4 @@
+import { authorityModeLabel } from "@/components/mcp-approvals/evidence";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { EvidenceDiff } from "@gram/client/models/components/evidencediff.js";
@@ -12,6 +13,22 @@ const EVIDENCE_FIELD_LABELS: Record<string, string> = {
 
 function evidenceFieldLabel(change: EvidenceFieldChange): string {
   return EVIDENCE_FIELD_LABELS[change.field] ?? change.field;
+}
+
+/**
+ * Renders one side of a scalar change. Authority modes get the same words
+ * the evidence panel uses, and an empty mode — a server that publishes no
+ * authority metadata at all, which is exactly the change worth seeing —
+ * must read as a state rather than as a blank chip.
+ */
+function evidenceFieldValue(
+  change: EvidenceFieldChange,
+  value: string,
+): string {
+  if (change.field !== "authority_mode") {
+    return value;
+  }
+  return authorityModeLabel(value);
 }
 
 /**
@@ -82,7 +99,10 @@ export function EvidenceChangedNotice({
   const advisories = diff.advisoriesAdded ?? [];
 
   return (
-    <section className="border-warning-default bg-warning/10 border-l-warning-default space-y-2.5 border border-l-4 p-4 text-xs">
+    <section
+      role="alert"
+      className="border-warning-default bg-warning/10 border-l-warning-default space-y-2.5 border border-l-4 p-4 text-xs"
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="text-default-warning flex items-center gap-2">
           <TriangleAlert className="size-4 shrink-0" />
@@ -132,8 +152,13 @@ export function EvidenceChangedNotice({
               {evidenceFieldLabel(change)}
             </span>
             <span className="flex items-baseline gap-1">
-              <DiffChip tone="removed">{change.before}</DiffChip>→
-              <DiffChip tone="added">{change.after}</DiffChip>
+              <DiffChip tone="removed">
+                {evidenceFieldValue(change, change.before)}
+              </DiffChip>
+              →
+              <DiffChip tone="added">
+                {evidenceFieldValue(change, change.after)}
+              </DiffChip>
             </span>
           </div>
         ))}

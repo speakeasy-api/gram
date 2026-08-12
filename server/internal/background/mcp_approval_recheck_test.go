@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
@@ -138,6 +141,41 @@ func TestMcpApprovalRecheckWorkflow_ContinuesPastAFailedTarget(t *testing.T) {
 	}
 	// The failing target burns its one retry before the sweep gives up on it.
 	require.Len(t, run.rechecked, len(page)+1)
+}
+
+// A sweep that runs out of run budget carries its cursor into the next run
+// rather than dying on the run timeout — which would restart the next day at
+// the beginning of the id space and never reach the tail.
+func TestMcpApprovalRecheckWorkflow_ContinuesAsNewOnTheRunBudget(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	full := recheckTargets(int(mcpApprovalRecheckPageSize))
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.McpApprovalRecheckPageArgs) ([]activities.McpApprovalRecheckTarget, error) {
+			return full, nil
+		},
+		activity.RegisterOptions{Name: "ListMcpApprovalRecheckPage"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.McpApprovalRecheckTarget) error { return nil },
+		activity.RegisterOptions{Name: "RecheckMcpApprovalRequest"},
+	)
+	// Each recheck takes a minute of the run's budget, so a scan set this
+	// size exhausts it before the id space runs out.
+	env.OnActivity("RecheckMcpApprovalRequest", mock.Anything, mock.Anything).
+		After(time.Minute).Return(nil)
+
+	env.ExecuteWorkflow(McpApprovalRecheckWorkflow, McpApprovalRecheckParams{AfterID: uuid.Nil})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var continueAsNew *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNew, "the sweep resumes rather than restarting at the beginning")
 }
 
 // A failing scan is fatal: continuing would silently recheck nothing while

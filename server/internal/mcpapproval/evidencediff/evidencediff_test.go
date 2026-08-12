@@ -196,3 +196,33 @@ func TestCompare_AdvisorySampleRotation(t *testing.T) {
 	require.Len(t, diff.AdvisoriesAdded, 1)
 	require.Equal(t, "GHSA-2222", diff.AdvisoriesAdded[0].ID)
 }
+
+// A vulnerability database that does not cover the registry leaves the
+// section absent with no gap. That is not-consulted, not a clean zero — so a
+// snapshot with advisories must not read as "the count dropped to zero".
+func TestCompare_UncoveredRegistryIsNotAZeroCount(t *testing.T) {
+	t.Parallel()
+
+	before := baseDocument()
+	after := baseDocument()
+	after.Advisories = nil
+
+	require.False(t, evidencediff.Compare(before, after).Changed)
+	require.False(t, evidencediff.Compare(after, before).Changed)
+}
+
+// A clean query that found nothing still lands a section, and dropping from
+// a known advisory to none is a real change worth reporting.
+func TestCompare_CheckedAndCleanStillCompares(t *testing.T) {
+	t.Parallel()
+
+	before := baseDocument()
+	after := baseDocument()
+	after.Advisories = &evidence.AdvisoriesSection{Ecosystem: "npm", Package: "@scope/mcp", KnownCount: 0, Advisories: nil}
+
+	diff := evidencediff.Compare(before, after)
+	require.True(t, diff.Changed)
+	require.Len(t, diff.Fields, 1)
+	require.Equal(t, evidencediff.FieldKnownAdvisories, diff.Fields[0].Field)
+	require.Equal(t, "0", diff.Fields[0].After)
+}
