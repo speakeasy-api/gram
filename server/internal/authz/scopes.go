@@ -229,7 +229,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedRead:        "",
 	ScopeSkillWrite:              ScopeSkillBlockedWrite,
 	ScopeSkillBlockedWrite:       "",
-	ScopeRiskPolicyRead:          "",
+	ScopeRiskPolicyRead:          ScopeOrgBlockedAdmin,
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
