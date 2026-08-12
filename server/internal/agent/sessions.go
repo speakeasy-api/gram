@@ -141,6 +141,12 @@ func (s *Service) ReportSessionMoved(ctx context.Context, payload *gen.ReportSes
 	if sessionID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "session_id is required")
 	}
+	// Goa's Required only guarantees the field is present, so a blank value
+	// would otherwise land as an audit entry with no move destination.
+	targetHarness := strings.TrimSpace(payload.TargetHarness)
+	if targetHarness == "" {
+		return oops.E(oops.CodeBadRequest, nil, "target_harness is required")
+	}
 	chatID := chat.SessionIDToChatID(sessionID)
 
 	// Best-effort display enrichment; a not-yet-captured session still gets
@@ -173,7 +179,7 @@ func (s *Service) ReportSessionMoved(ctx context.Context, payload *gen.ReportSes
 		ChatSessionURN:   urn.NewChatSession(chatID),
 		ChatTitle:        chatTitle,
 		OwnerUserID:      ownerUserID,
-		TargetHarness:    strings.TrimSpace(payload.TargetHarness),
+		TargetHarness:    targetHarness,
 		SourceSurface:    strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, "")),
 		DeviceSerial:     normalizeSerial(payload.SerialNumber),
 		DeviceHostname:   strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),

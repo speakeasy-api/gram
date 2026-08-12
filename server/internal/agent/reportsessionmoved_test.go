@@ -124,6 +124,34 @@ func TestReportSessionMoved_UncapturedSessionStillRecorded(t *testing.T) {
 	require.Empty(t, rec.SubjectDisplay, "no title yet — the chat has not been captured")
 }
 
+// A blank target harness is rejected before anything is written: Goa's
+// Required only checks presence, and a move record with no destination is
+// useless for governance.
+func TestReportSessionMoved_BlankTargetHarnessRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAgentService(t)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionChatSessionMove)
+	require.NoError(t, err)
+
+	userCtx := withPerUserKeyAuth(t, ctx, "dev@acme.corp")
+	err = ti.service.ReportSessionMoved(userCtx, &gen.ReportSessionMovedPayload{
+		SessionID:     uuid.NewString(),
+		TargetHarness: "   ",
+		SourceSurface: nil,
+		SerialNumber:  nil,
+		Hostname:      nil,
+		Email:         nil,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "target_harness is required")
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionChatSessionMove)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
 // Flag off: no audit rows, no metadata — the surface is dark.
 func TestReportSessionMoved_FeatureDisabled(t *testing.T) {
 	t.Parallel()

@@ -88,11 +88,13 @@ type LogChatSessionMoveEvent struct {
 	DeviceHostname string
 }
 
-// LogChatSessionMove records that a captured agent session was moved to
-// another harness on a device (session portability). The move itself happens
-// client-side — this entry is the governance record, deliberately free of
-// session content. Like LogChatSessionAccess there is no surrounding mutation
-// to be atomic with, so callers pass the pool directly as dbtx.
+// LogChatSessionMove records that an agent session was moved to another
+// harness on a device (session portability). Sessions that have not been
+// captured yet are recorded too, so callers never gate reporting on capture.
+// The move itself happens client-side — this entry is the governance record,
+// deliberately free of session content. Like LogChatSessionAccess there is no
+// surrounding mutation to be atomic with, so callers pass the pool directly as
+// dbtx.
 func (l *Logger) LogChatSessionMove(ctx context.Context, dbtx repo.DBTX, event LogChatSessionMoveEvent) error {
 	action := ActionChatSessionMove
 
