@@ -280,18 +280,7 @@ func followableCitations(citations []Citation) []Citation {
 	kept := make([]Citation, 0, len(citations))
 	for _, citation := range citations {
 		citation.URL = strings.TrimSpace(citation.URL)
-		if citation.URL == "" {
-			continue
-		}
-
-		parsed, err := url.Parse(citation.URL)
-		if err != nil {
-			continue
-		}
-		if parsed.Scheme != "http" && parsed.Scheme != "https" {
-			continue
-		}
-		if parsed.Host == "" {
+		if !followableURL(citation.URL) {
 			continue
 		}
 
@@ -299,4 +288,20 @@ func followableCitations(citations []Citation) []Citation {
 	}
 
 	return kept
+}
+
+// followableURL reports whether a URL is one an admin can open: http(s) with
+// a host. Everything stored by a research run that ends up rendered as a link
+// goes through this, because all of it was written while reading pages the
+// run treats as hostile.
+func followableURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+
+	return parsed.Host != ""
 }
