@@ -27,6 +27,7 @@ type Server struct {
 	DeleteChat        http.Handler
 	SetPinned         http.Handler
 	Summarize         http.Handler
+	SummarizeToolCall http.Handler
 	SubmitFeedback    http.Handler
 	ListSources       http.Handler
 }
@@ -66,6 +67,7 @@ func New(
 			{"DeleteChat", "DELETE", "/rpc/chat.delete"},
 			{"SetPinned", "POST", "/rpc/chat.setPinned"},
 			{"Summarize", "POST", "/rpc/chat.summarize"},
+			{"SummarizeToolCall", "POST", "/rpc/chat.summarizeToolCall"},
 			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
 			{"ListSources", "GET", "/rpc/chat.listSources"},
 		},
@@ -77,6 +79,7 @@ func New(
 		DeleteChat:        NewDeleteChatHandler(e.DeleteChat, mux, decoder, encoder, errhandler, formatter),
 		SetPinned:         NewSetPinnedHandler(e.SetPinned, mux, decoder, encoder, errhandler, formatter),
 		Summarize:         NewSummarizeHandler(e.Summarize, mux, decoder, encoder, errhandler, formatter),
+		SummarizeToolCall: NewSummarizeToolCallHandler(e.SummarizeToolCall, mux, decoder, encoder, errhandler, formatter),
 		SubmitFeedback:    NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
 		ListSources:       NewListSourcesHandler(e.ListSources, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -95,6 +98,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteChat = m(s.DeleteChat)
 	s.SetPinned = m(s.SetPinned)
 	s.Summarize = m(s.Summarize)
+	s.SummarizeToolCall = m(s.SummarizeToolCall)
 	s.SubmitFeedback = m(s.SubmitFeedback)
 	s.ListSources = m(s.ListSources)
 }
@@ -112,6 +116,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteChatHandler(mux, h.DeleteChat)
 	MountSetPinnedHandler(mux, h.SetPinned)
 	MountSummarizeHandler(mux, h.Summarize)
+	MountSummarizeToolCallHandler(mux, h.SummarizeToolCall)
 	MountSubmitFeedbackHandler(mux, h.SubmitFeedback)
 	MountListSourcesHandler(mux, h.ListSources)
 }
@@ -522,6 +527,59 @@ func NewSummarizeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "summarize")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSummarizeToolCallHandler configures the mux to serve the "chat" service
+// "summarizeToolCall" endpoint.
+func MountSummarizeToolCallHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/chat.summarizeToolCall", f)
+}
+
+// NewSummarizeToolCallHandler creates a HTTP handler which loads the HTTP
+// request and calls the "chat" service "summarizeToolCall" endpoint.
+func NewSummarizeToolCallHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSummarizeToolCallRequest(mux, decoder)
+		encodeResponse = EncodeSummarizeToolCallResponse(encoder)
+		encodeError    = EncodeSummarizeToolCallError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "summarizeToolCall")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

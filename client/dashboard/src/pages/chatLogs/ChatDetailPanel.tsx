@@ -8,15 +8,12 @@ import {
   Loader2,
   Pin,
   Search,
-  Sparkles,
   SlidersHorizontal,
+  Sparkles,
   TriangleAlert,
-  User,
-  Wrench,
   X,
 } from "lucide-react";
 import {
-  type ComponentType,
   type ReactNode,
   useCallback,
   useEffect,
@@ -87,8 +84,6 @@ import {
   buildTranscript,
   displayItemContainsMessage,
   displayItemRows,
-  type MessageCategory,
-  rowCategory,
   rowHasRiskFlag,
   rowIsFlagged,
   rowSearchFields,
@@ -106,6 +101,7 @@ import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
+import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
@@ -133,7 +129,7 @@ interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
   chatId: string | null;
 }
 
-type ViewMode = "chat" | "tools" | "exclusion";
+type ViewMode = "chat" | "effects" | "tools" | "exclusion";
 
 /** One navigable search hit: a single query occurrence within one field of one
  * display row. `key` is stable across pagination (built from the row id, not its
@@ -451,70 +447,31 @@ function ChatDetailMetadataBadges({
   );
 }
 
-const MESSAGE_TYPES: ReadonlyArray<{
-  key: MessageCategory;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-}> = [
-  { key: "user", label: "User", icon: User },
-  { key: "assistant", label: "Assistant", icon: Sparkles },
-  { key: "tool", label: "Tool calls", icon: Wrench },
-];
-
-const ALL_CATEGORIES: ReadonlySet<MessageCategory> = new Set(
-  MESSAGE_TYPES.map((t) => t.key),
-);
-
-/** A single toggle in the header filter bar. */
-/** Header filter bar: a multi-select segmented control over message types and a
- * "Risky only" switch, separated by a hairline. Right-aligned on its own row. */
+/** Header filter bar: condensed-view toggle + optional "Risky only" switch. */
 function MessageFilterBar({
-  typeFilter,
-  onTypeFilterChange,
+  condensed,
+  onCondensedChange,
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
 }: {
-  typeFilter: ReadonlySet<MessageCategory>;
-  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  condensed: boolean;
+  onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
-  /** The "Risky only" view is driven by risk findings, which are an org-admin
-   * resource (risk.results.list). Hide the toggle for everyone else. */
   showRiskyOnly: boolean;
 }) {
-  const toggleType = (key: MessageCategory) => {
-    const next = new Set(typeFilter);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    // Never leave the transcript fully empty — clearing the last type resets.
-    if (next.size === 0) for (const t of MESSAGE_TYPES) next.add(t.key);
-    onTypeFilterChange(next);
-  };
-
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="border-border bg-card divide-border inline-flex items-center divide-x border">
-        {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
-          const on = typeFilter.has(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggleType(key)}
-              className={cn(
-                "inline-flex items-center gap-2 px-3 py-1.5 font-mono text-xs tracking-[0.08em] uppercase transition-colors",
-                on
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Glyph className="size-3.5" />
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={condensed}
+          onCheckedChange={onCondensedChange}
+          aria-label="Condensed view"
+        />
+        <span className="text-muted-foreground text-xs font-medium">
+          Condensed
+        </span>
       </div>
       {showRiskyOnly && (
         <>
@@ -660,8 +617,8 @@ function ChatDetailHeader({
   canManageChat,
   compactMetadata,
   showFilter,
-  typeFilter,
-  onTypeFilterChange,
+  condensed,
+  onCondensedChange,
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
@@ -682,8 +639,8 @@ function ChatDetailHeader({
   canManageChat: boolean;
   compactMetadata: boolean;
   showFilter: boolean;
-  typeFilter: ReadonlySet<MessageCategory>;
-  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  condensed: boolean;
+  onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
   showRiskyOnly: boolean;
@@ -800,8 +757,8 @@ function ChatDetailHeader({
           <div className="min-w-0 flex-1">{searchBar}</div>
           <div className="shrink-0">
             <MessageFilterBar
-              typeFilter={typeFilter}
-              onTypeFilterChange={onTypeFilterChange}
+              condensed={condensed}
+              onCondensedChange={onCondensedChange}
               riskyOnly={riskyOnly}
               onRiskyOnlyChange={onRiskyOnlyChange}
               showRiskyOnly={showRiskyOnly}
@@ -966,11 +923,6 @@ function ChatDetailPanel({
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
-  // Header transcript filter — which message types to show (all on by default)
-  // plus an optional "risky only" toggle.
-  const [typeFilter, setTypeFilter] = useState<ReadonlySet<MessageCategory>>(
-    () => new Set(ALL_CATEGORIES),
-  );
   const [riskyOnly, setRiskyOnly] = useState(false);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
@@ -1135,7 +1087,6 @@ function ChatDetailPanel({
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
     setView("chat");
-    setTypeFilter(new Set(ALL_CATEGORIES));
     setRiskyOnly(false);
     setExclusionState(null);
     setPendingExclusionKey(null);
@@ -1196,26 +1147,18 @@ function ChatDetailPanel({
     () => buildTranscript(chatMessages, chat?.contentParts ?? []),
     [chatMessages, chat?.contentParts],
   );
-  // Apply the header filters at the row level so generation dividers and risk
-  // gaps recompute against exactly what's shown (no orphaned dividers).
-  const filterActive = typeFilter.size < ALL_CATEGORIES.size || riskyOnly;
+  const filterActive = riskyOnly;
   const visibleRows = useMemo(() => {
-    let rows = transcriptRows;
-    if (typeFilter.size < ALL_CATEGORIES.size) {
-      rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
-    }
-    if (riskyOnly) {
-      // `is_risk` on each windowed message is the authorized "which messages are
-      // risky" signal — it rides chat.load (no internal seq exposed), so the
-      // filter works even when the org-admin-only risk.results.list (which powers
-      // the match-detail badges) is forbidden. Fall back to per-message risk
-      // results for safety.
-      rows = rows.filter(
-        (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
-      );
-    }
-    return rows;
-  }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
+    if (!riskyOnly) return transcriptRows;
+    // `is_risk` on each windowed message is the authorized "which messages are
+    // risky" signal — it rides chat.load (no internal seq exposed), so the
+    // filter works even when the org-admin-only risk.results.list (which powers
+    // the match-detail badges) is forbidden. Fall back to per-message risk
+    // results for safety.
+    return transcriptRows.filter(
+      (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
+    );
+  }, [transcriptRows, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
   const windowGaps = windowed?.gaps;
@@ -1498,9 +1441,9 @@ function ChatDetailPanel({
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
         compactMetadata={riskFocus}
-        showFilter={view === "chat"}
-        typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
+        showFilter={view === "chat" || view === "effects"}
+        condensed={view === "effects"}
+        onCondensedChange={(on) => setView(on ? "effects" : "chat")}
         riskyOnly={riskyOnly}
         onRiskyOnlyChange={setRiskyOnly}
         showRiskyOnly={canViewRisk}
@@ -1620,6 +1563,21 @@ function ChatDetailPanel({
             }
           />
         </CreateExclusionContext.Provider>
+
+        {view === "effects" && (
+          <div className="bg-background absolute inset-0 z-10 flex flex-col">
+            <EffectsView
+              chatId={chatId}
+              rows={transcriptRows}
+              riskResultsByMessage={riskResultsByMessage}
+              claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
+              claudeTurnByPromptId={claudeTurnByPromptId}
+              userLabel={chat?.externalUserId}
+              userLabelOverride={userLabelOverride}
+              isLoading={chatLoading}
+            />
+          </div>
+        )}
 
         {view === "tools" && (
           <div className="bg-background absolute inset-0 z-10 flex flex-col">
