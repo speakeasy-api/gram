@@ -148,11 +148,10 @@ func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctI
 // not exist, or it is a boolean flag (no variant). Callers map "" to their own
 // fail-safe default.
 func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Variant, error) {
-	if p == nil || p.client == nil {
-		return "", nil
-	}
-	if p.disabled {
-		p.logger.InfoContext(ctx, "posthog is disabled, returning no variant")
+	// No disabled-log here, unlike IsFlagEnabled: New already logs the reason
+	// once at startup, and this sits on the managed assistant's per-request
+	// path, where a line per call is noise rather than a diagnostic.
+	if p == nil || p.disabled || p.client == nil {
 		return "", nil
 	}
 
