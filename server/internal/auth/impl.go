@@ -338,6 +338,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, orgProvisionOptions{
 				Whitelisted:    true,
 				ProvisionTrial: true,
+				ActorEmail:     userInfo.Email,
 			})
 			if err != nil {
 				return s.redirectSignupError(ctx, err)
@@ -933,6 +934,12 @@ type orgProvisionOptions struct {
 	// ProvisionTrial arms a 14-day enterprise trial in the same transaction
 	// that creates the organization.
 	ProvisionTrial bool
+
+	// ActorEmail names the human this provisioning is attributed to in the
+	// audit log. It travels explicitly because the signup path runs on the
+	// unauthenticated callback, which has no auth context to read it from.
+	// Empty stores no display name, leaving the entry showing a bare actor id.
+	ActorEmail string
 }
 
 // provisionOrgForUser creates an organization and attaches a user to it as the
@@ -989,6 +996,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, orgProvisionOptions{
 		Whitelisted:    true,
 		ProvisionTrial: true,
+		ActorEmail:     conv.PtrValOr(authCtx.Email, ""),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
@@ -1014,6 +1022,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, orgProvisionOptions{
 		Whitelisted:    true,
 		ProvisionTrial: false,
+		ActorEmail:     userInfo.Email,
 	})
 	if err != nil {
 		return "", err
@@ -1106,7 +1115,7 @@ func (s *Service) persistProvisionedOrganization(
 	}
 
 	if opts.ProvisionTrial {
-		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID); err != nil {
+		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID, opts.ActorEmail); err != nil {
 			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("arm enterprise trial: %w", err)
 		}
 	}
