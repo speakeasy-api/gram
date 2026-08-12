@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"strings"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	platformmcprepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -2335,9 +2337,173 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 	require.NotContains(t, mcpConfig.MCPServers, "Server_codex-disabled")
 }
 
-// PublishProject with SkipIfUnchanged set re-publishes the first time (no
-// stored fingerprint), skips when nothing changed, and re-publishes again once
-// the plugin set changes.
+func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "selected-project")
+	selectedProjectSlug := "selected-project"
+	authCtx.ProjectSlug = &selectedProjectSlug
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	defaultPlugin, err := pluginsrepo.New(ti.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Platform MCP distribution", mcpservers.VisibilityPublic)
+	platformRepo := platformmcprepo.New(ti.conn)
+	oauthClient, err := platformRepo.CreatePlatformMCPOAuthClient(ctx, platformmcprepo.CreatePlatformMCPOAuthClientParams{
+		ClientID:   "client-" + uuid.NewString(),
+		ClientName: "Platform MCP publish test client",
+	})
+	require.NoError(t, err)
+	connectionID := uuid.New()
+	connectionGeneration := uuid.New()
+	_, err = platformRepo.CreatePlatformMCPConnection(ctx, platformmcprepo.CreatePlatformMCPConnectionParams{
+		ID:               connectionID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		SubjectUrn:       "urn:gram:user:platform-mcp-publish-test",
+		OauthClientID:    oauthClient.ID,
+		ActiveGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+	registration, err := platformRepo.CreatePlatformMCPCatalogRegistration(ctx, platformmcprepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		SourceKind:           "catalog",
+		CatalogProvider:      "fixture",
+		CatalogReference:     "platform-mcp-publish-test",
+		Status:               "pending",
+		ConnectionID:         connectionID,
+		ConnectionGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+	registration, err = platformRepo.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformmcprepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		Status:         "registered",
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.id, Valid: true},
+		ID:             registration.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = platformRepo.CreatePlatformMCPDistribution(ctx, platformmcprepo.CreatePlatformMCPDistributionParams{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		RegistrationID:       registration.ID,
+		DefaultPluginID:      defaultPlugin.ID,
+		PluginServerID:       uuid.NullUUID{},
+		State:                "attached",
+		Version:              1,
+		AttachmentWasCreated: true,
+		ConnectionID:         connectionID,
+		ConnectionGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform admission transition",
+		SkipIfUnchanged: true,
+	}
+	_, err = ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var fingerprints map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
+	require.Contains(t, fingerprints, "__platform_mcp__")
+	platformFilesBefore := map[string][]byte{
+		"platform-mcp/.claude-plugin/plugin.json": mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
+		"platform-mcp/.mcp.json":                  mock.lastPushedFiles["platform-mcp/.mcp.json"],
+	}
+
+	// An indeterminate result preserves the prior package and fingerprint. It
+	// must inspect the repository even when fingerprints would otherwise skip.
+	publisher := newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionIndeterminate})
+	mock.getRepoFilesCalled = false
+	mock.pushFilesCalled = false
+	result, err := publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.True(t, mock.getRepoFilesCalled)
+	require.False(t, mock.pushFilesCalled)
+	require.Equal(t, platformFilesBefore["platform-mcp/.claude-plugin/plugin.json"], mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"])
+	require.Equal(t, platformFilesBefore["platform-mcp/.mcp.json"], mock.lastPushedFiles["platform-mcp/.mcp.json"])
+
+	// Indeterminate admission repairs a missing shared marketplace file rather
+	// than reporting the incomplete repository as current.
+	mock.repoFiles = maps.Clone(mock.lastPushedFiles)
+	delete(mock.repoFiles, ".claude-plugin/marketplace.json")
+	mock.pushFilesCalled = false
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
+	require.Contains(t, mock.lastPushedFiles, ".claude-plugin/marketplace.json")
+	mock.repoFiles = nil
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var afterIndeterminate map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterIndeterminate))
+	require.Equal(t, fingerprints["__platform_mcp__"], afterIndeterminate["__platform_mcp__"])
+
+	// A deleted repository is reconstructed even while admission is unavailable.
+	const stalePlatformFingerprint = "sha256:stale-platform-fingerprint"
+	afterIndeterminate["__platform_mcp__"] = stalePlatformFingerprint
+	staleFingerprints, err := json.Marshal(afterIndeterminate)
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                connection.ProjectID,
+		InstallationID:           connection.InstallationID,
+		RepoOwner:                connection.RepoOwner,
+		RepoName:                 connection.RepoName,
+		MarketplaceToken:         connection.MarketplaceToken,
+		PublishedMcpFingerprints: staleFingerprints,
+		PublishedHooksVersion:    connection.PublishedHooksVersion,
+		PublishedHooksConfig:     connection.PublishedHooksConfig,
+	})
+	require.NoError(t, err)
+	mock.repoFiles = nil
+	mock.lastPushedFiles = nil
+	mock.pushFilesCalled = false
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var afterReconstruction map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterReconstruction))
+	require.NotEqual(t, stalePlatformFingerprint, afterReconstruction["__platform_mcp__"])
+	require.Equal(t, fingerprints["__platform_mcp__"], afterReconstruction["__platform_mcp__"])
+
+	// A confirmed disable removes only the Platform package.
+	publisher = newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionDisabled})
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var afterDisabled map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterDisabled))
+	require.NotContains(t, afterDisabled, "__platform_mcp__")
+}
+
 func TestPluginsService_PublishProject_PlatformMCPRequiresSelectedProjectAttachment(t *testing.T) {
 	t.Parallel()
 
