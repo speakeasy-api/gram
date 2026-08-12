@@ -120,8 +120,15 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	if session.ActiveOrganizationID == "" {
-		// Populate IsAdmin from cached user info. A cache miss leaves it false
-		// (safe default). No org membership check needed for org-less sessions.
+		// Org-less sessions still need the actor email so audit entries written
+		// on this path (e.g. self-signup enterprise trial arming) record an
+		// actor display name rather than a bare actor id. GetUserInfo warms the
+		// user-info cache on a miss, so the subsequent IsAdmin read — which
+		// leaves IsAdmin false on a cache miss (safe default) — resolves against
+		// a warm cache. No org membership check is needed for org-less sessions.
+		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
+			authCtx.Email = &userInfo.Email
+		}
 		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
