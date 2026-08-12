@@ -116,6 +116,7 @@ function EvidenceRow({
       <div className="bg-foreground px-3 py-4">
         <MaskedMatch
           tone="contrast"
+          wrap
           resultId={result.id}
           matchRedacted={result.matchRedacted}
         />
