@@ -770,6 +770,9 @@ var _ = Service("risk", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
+			Attribute("note", String, "The requester's own justification for needing this, shown to whoever decides. Optional: an older client that sends none falls back to the policy's block reason.", func() {
+				MaxLength(4000)
+			})
 			Required("request_token")
 		})
 

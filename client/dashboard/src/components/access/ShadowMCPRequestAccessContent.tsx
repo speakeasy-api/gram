@@ -6,27 +6,28 @@ import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-que
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
+import { TextArea } from "@/components/ui/Textarea";
 import { useEffect, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
 const LEGACY_REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
-const inFlightSubmissions = new Map<string, Promise<void>>();
 
 type RequestAccessState =
   | "missing-token"
   | "authenticating"
+  | "prompting"
   | "submitting"
   | "complete"
   | "error";
 
-type SubmissionResult = "idle" | "complete" | "error";
+type SubmissionResult = "idle" | "submitting" | "complete" | "error";
 
 export function ShadowMCPRequestAccessContent(): JSX.Element {
   const session = useSession();
   const requestToken = getRequestToken();
   const [submissionResult, setSubmissionResult] =
     useState<SubmissionResult>("idle");
-  const [retryCount, setRetryCount] = useState(0);
+  const [note, setNote] = useState("");
   const { mutateAsync: createApprovalRequest } =
     useRiskCreatePolicyBypassRequestMutation();
 
@@ -67,42 +68,31 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     window.location.href = buildLoginRedirectURL(window.location.pathname);
   }, [session.session, storedRequestToken]);
 
-  useEffect(() => {
-    if (!storedRequestToken || !session.session) return;
+  // The ask is submitted from the button, not on arrival: the note is the
+  // point of this page, and a page that files the request as it loads never
+  // gives the requester anywhere to say what they need the server for.
+  const submit = async () => {
+    if (!storedRequestToken || note.trim() === "") return;
 
-    let submission = inFlightSubmissions.get(storedRequestToken);
-    if (!submission) {
-      submission = createApprovalRequest({
+    setSubmissionResult("submitting");
+    try {
+      await createApprovalRequest({
         request: {
           createRiskPolicyBypassRequestRequestBody: {
             requestToken: storedRequestToken,
+            note: note.trim(),
           },
         },
-      })
-        .then(() => undefined)
-        .finally(() => {
-          inFlightSubmissions.delete(storedRequestToken);
-        });
-      inFlightSubmissions.set(storedRequestToken, submission);
+      });
+    } catch {
+      setSubmissionResult("error");
+      return;
     }
 
-    let active = true;
-    submission
-      .then(() => {
-        if (!active) return;
-        setSubmissionResult("complete");
-        sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
-        sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
-      })
-      .catch(() => {
-        if (!active) return;
-        setSubmissionResult("error");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [createApprovalRequest, retryCount, session.session, storedRequestToken]);
+    setSubmissionResult("complete");
+    sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
+  };
 
   const state = getRequestAccessState({
     hasSession: !!session.session,
@@ -114,11 +104,12 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     <FullScreenPage>
       <RequestAccessMessage
         state={state}
-        isPending={state === "submitting"}
-        onRetry={() => {
-          setSubmissionResult("idle");
-          setRetryCount((count) => count + 1);
-        }}
+        note={note}
+        onNoteChange={setNote}
+        onSubmit={() => void submit()}
+        // A failed submit keeps what was typed: the note is the one thing
+        // here the requester cannot get back from the link.
+        onRetry={() => setSubmissionResult("idle")}
       />
     </FullScreenPage>
   );
@@ -137,7 +128,8 @@ function getRequestAccessState({
   if (submissionResult === "error") return "error";
   if (!hasToken) return "missing-token";
   if (!hasSession) return "authenticating";
-  return "submitting";
+  if (submissionResult === "submitting") return "submitting";
+  return "prompting";
 }
 
 function getRequestToken(): string | null {
@@ -149,13 +141,49 @@ function getRequestToken(): string | null {
 
 function RequestAccessMessage({
   state,
-  isPending,
+  note,
+  onNoteChange,
+  onSubmit,
   onRetry,
 }: {
   state: RequestAccessState;
-  isPending: boolean;
+  note: string;
+  onNoteChange: (value: string) => void;
+  onSubmit: () => void;
   onRetry: () => void;
 }) {
+  if (state === "prompting" || state === "submitting") {
+    const pending = state === "submitting";
+
+    return (
+      <Stack gap={4} className="w-full max-w-md">
+        <Stack gap={1}>
+          <Text variant="subheading">Request access</Text>
+          <Text muted small>
+            An admin decides whether this server is allowed. Tell them what you
+            need it for — they see this alongside the evidence gathered about
+            the server.
+          </Text>
+        </Stack>
+        <TextArea
+          value={note}
+          onChange={onNoteChange}
+          rows={4}
+          placeholder="e.g. The docs team works in Notion and I need meeting notes searchable from the editor."
+          className="resize-none text-sm"
+        />
+        <Button onClick={onSubmit} disabled={pending || note.trim() === ""}>
+          {pending && (
+            <Button.LeftIcon>
+              <Icon name="loader-circle" className="h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{pending ? "Sending" : "Send request"}</Button.Text>
+        </Button>
+      </Stack>
+    );
+  }
+
   if (state === "complete") {
     return (
       <Stack gap={3} align="center">
@@ -229,7 +257,7 @@ function RequestAccessMessage({
         className="text-muted-foreground h-6 w-6 animate-spin"
       />
       <Text muted small className="text-center">
-        {isPending ? "Submitting request..." : "Preparing request..."}
+        Preparing request...
       </Text>
     </Stack>
   );

@@ -56930,6 +56930,10 @@ components:
     CreateRiskPolicyBypassRequestRequestBody:
       type: object
       properties:
+        note:
+          type: string
+          description: 'The requester''s own justification for needing this, shown to whoever decides. Optional: an older client that sends none falls back to the policy''s block reason.'
+          maxLength: 4000
         request_token:
           type: string
           description: Signed request token generated when a risk policy blocks an action.

@@ -195,6 +195,10 @@ type UnmarkRiskResultsFalsePositiveRequestBody struct {
 type CreateRiskPolicyBypassRequestRequestBody struct {
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken *string `form:"request_token,omitempty" json:"request_token,omitempty" xml:"request_token,omitempty"`
+	// The requester's own justification for needing this, shown to whoever
+	// decides. Optional: an older client that sends none falls back to the
+	// policy's block reason.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
 // AcknowledgeRiskPolicyChallengeRequestBody is the type of the "risk" service
@@ -19110,6 +19114,7 @@ func NewGetRiskPolicyStatusPayload(id string, apikeyToken *string, sessionToken 
 func NewCreateRiskPolicyBypassRequestPayload(body *CreateRiskPolicyBypassRequestRequestBody, sessionToken *string) *risk.CreateRiskPolicyBypassRequestPayload {
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: *body.RequestToken,
+		Note:         body.Note,
 	}
 	v.SessionToken = sessionToken
 
@@ -19691,6 +19696,11 @@ func ValidateUnmarkRiskResultsFalsePositiveRequestBody(body *UnmarkRiskResultsFa
 func ValidateCreateRiskPolicyBypassRequestRequestBody(body *CreateRiskPolicyBypassRequestRequestBody) (err error) {
 	if body.RequestToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request_token", "body"))
+	}
+	if body.Note != nil {
+		if utf8.RuneCountInString(*body.Note) > 4000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 4000, false))
+		}
 	}
 	return
 }

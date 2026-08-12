@@ -17152,7 +17152,7 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"note\": \"aaa\",\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func riskAcknowledgeRiskPolicyChallengeUsage() {

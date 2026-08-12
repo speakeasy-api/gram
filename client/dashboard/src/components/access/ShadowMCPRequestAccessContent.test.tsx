@@ -35,8 +35,18 @@ vi.mock("@gram/client/react-query/riskCreatePolicyBypassRequest.js", () => ({
 
 vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
-    ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
-      <button onClick={onClick}>{children}</button>
+    ({
+      children,
+      onClick,
+      disabled,
+    }: {
+      children: ReactNode;
+      onClick?: () => void;
+      disabled?: boolean;
+    }) => (
+      <button onClick={onClick} disabled={disabled}>
+        {children}
+      </button>
     ),
     {
       LeftIcon: ({ children }: { children: ReactNode }) => (
@@ -55,6 +65,25 @@ vi.mock("@/components/ui/Stack", () => ({
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+vi.mock("@/components/ui/Textarea", () => ({
+  TextArea: ({
+    value,
+    onChange,
+    placeholder,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+  }) => (
+    <textarea
+      aria-label="note"
+      placeholder={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
 import { ShadowMCPRequestAccessContent } from "./ShadowMCPRequestAccessContent";
 
 function renderPage(initialPath: string) {
@@ -63,6 +92,13 @@ function renderPage(initialPath: string) {
       <ShadowMCPRequestAccessContent />
     </MemoryRouter>,
   );
+}
+
+// The page asks for a justification before it will send anything, so every
+// submit-path test types one and clicks.
+function sendWithNote(note = "Blocked from the docs workflow.") {
+  fireEvent.change(screen.getByLabelText("note"), { target: { value: note } });
+  fireEvent.click(screen.getByText("Send request"));
 }
 
 function renderPageStrict(initialPath: string) {
@@ -153,7 +189,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
   });
 
-  it("submits the stored request token after authentication", async () => {
+  it("asks why before sending, and carries the answer with the token", async () => {
     sessionStorage.setItem(
       "riskPolicyBypassRequestToken",
       "rpbr1.stored-token",
@@ -162,15 +198,43 @@ describe("ShadowMCPRequestAccessContent", () => {
 
     renderPage("/risk-policy-bypass/request");
 
+    // Arriving on the page must not file anything: the note is the point.
+    expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
+    expect(screen.getByText("Request access")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("note"), {
+      target: { value: "  Docs team lives in Notion.  " },
+    });
+    fireEvent.click(screen.getByText("Send request"));
+
     await waitFor(() => {
       expect(mocks.createApprovalRequest).toHaveBeenCalledWith({
         request: {
           createRiskPolicyBypassRequestRequestBody: {
             requestToken: "rpbr1.stored-token",
+            note: "Docs team lives in Notion.",
           },
         },
       });
     });
+  });
+
+  it("will not send an empty justification", async () => {
+    sessionStorage.setItem("riskPolicyBypassRequestToken", "rpbr1.empty-note");
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+
+    renderPage("/risk-policy-bypass/request");
+
+    const send = screen.getByText("Send request").closest("button");
+    expect(send?.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("note"), {
+      target: { value: "   " },
+    });
+    expect(screen.getByText("Send request").closest("button")?.disabled).toBe(
+      true,
+    );
+    expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
   });
 
   it("shows success after submitting even after clearing the stored token", async () => {
@@ -181,6 +245,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     mocks.useSession.mockReturnValue({ session: "session_123" });
 
     renderPage("/risk-policy-bypass/request");
+    sendWithNote();
 
     await waitFor(() => {
       expect(mocks.createApprovalRequest).toHaveBeenCalled();
@@ -201,6 +266,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     mocks.useSession.mockReturnValue({ session: "session_123" });
 
     renderPageStrict("/risk-policy-bypass/request");
+    sendWithNote();
 
     await waitFor(() => {
       expect(sessionStorage.getItem("riskPolicyBypassRequestToken")).toBeNull();
@@ -217,6 +283,7 @@ describe("ShadowMCPRequestAccessContent", () => {
       .mockResolvedValueOnce({});
 
     renderPage("/risk-policy-bypass/request");
+    sendWithNote();
 
     await waitFor(() => {
       expect(screen.getByText("Request failed")).toBeTruthy();
@@ -231,6 +298,13 @@ describe("ShadowMCPRequestAccessContent", () => {
     );
 
     fireEvent.click(screen.getByText("Try again"));
+
+    // The typed note survives the failure, so retrying is one click.
+    expect(screen.getByLabelText("note")).toHaveProperty(
+      "value",
+      "Blocked from the docs workflow.",
+    );
+    fireEvent.click(screen.getByText("Send request"));
 
     await waitFor(() => {
       expect(screen.getByText("Request sent")).toBeTruthy();

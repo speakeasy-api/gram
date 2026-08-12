@@ -700,6 +700,29 @@ func riskPolicyBypassRequestToken(t *testing.T, ti *testInstance, authCtx *conte
 	return token
 }
 
+// riskPolicyBypassRequestTokenWithBlockReason mints a link that carries the
+// policy's block reason, which is what the note falls back to.
+func riskPolicyBypassRequestTokenWithBlockReason(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, policyID string, fullURL string, blockReason string) string {
+	t.Helper()
+
+	token, _, err := risk.GeneratePolicyBypassRequestToken(t.Context(), ti.cacheAdapter, risk.PolicyBypassRequestTokenInput{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              authCtx.ProjectID.String(),
+		RequesterUserID:        authCtx.UserID,
+		ObservedName:           nil,
+		ObservedFullURL:        &fullURL,
+		ObservedURLHost:        nil,
+		ObservedServerIdentity: nil,
+		ToolName:               nil,
+		ToolCall:               nil,
+		BlockReason:            &blockReason,
+		RiskPolicyID:           policyID,
+		RiskResultID:           nil,
+	}, 5*time.Minute)
+	require.NoError(t, err)
+	return token
+}
+
 func riskPolicyBypassRequestTokenForServerIdentity(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, policyID string, serverIdentity string) string {
 	t.Helper()
 
@@ -988,6 +1011,73 @@ func TestCreatePolicyBypassRequest_RedeemsIntoApprovalWorkflow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, list.Requests)
+}
+
+// The requester's own words are what a reviewer needs, so they travel with
+// the redemption rather than being replaced by the policy's block reason —
+// which is the same sentence for everyone the policy stopped.
+func TestCreatePolicyBypassRequest_CarriesTheRequestersNote(t *testing.T) {
+	t.Parallel()
+
+	intake := &fakeApprovalIntake{
+		err: nil, requestID: "0195c1f1-0000-7000-8000-00000000cafe", status: "requested",
+		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
+	}
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.approvalIntake = intake
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Requester Note"),
+	})
+	require.NoError(t, err)
+
+	note := "  The docs team works here and I need meeting notes searchable.  "
+	_, err = redeemWithNote(ctx, ti, riskPolicyBypassRequestTokenWithBlockReason(
+		t, ti, authCtx, policy.ID, "https://mcp.example.com/noted", "Blocked by policy: unreviewed MCP server",
+	), note)
+	require.NoError(t, err)
+
+	require.Equal(t, "The docs team works here and I need meeting notes searchable.", intake.gotNote)
+}
+
+// A client that sends no note keeps the old behaviour rather than recording
+// silence: the block reason is a worse answer than the requester's own, and a
+// better one than nothing.
+func TestCreatePolicyBypassRequest_FallsBackToTheBlockReasonWithoutANote(t *testing.T) {
+	t.Parallel()
+
+	intake := &fakeApprovalIntake{
+		err: nil, requestID: "0195c1f1-0000-7000-8000-00000000beef", status: "requested",
+		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
+	}
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.approvalIntake = intake
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("No Note"),
+	})
+	require.NoError(t, err)
+
+	_, err = redeemWithNote(ctx, ti, riskPolicyBypassRequestTokenWithBlockReason(
+		t, ti, authCtx, policy.ID, "https://mcp.example.com/unnoted", "Blocked by policy: unreviewed MCP server",
+	), "   ")
+	require.NoError(t, err)
+
+	require.Equal(t, "Blocked by policy: unreviewed MCP server", intake.gotNote)
 }
 
 // An intake that reports the approval feature is unavailable falls back to
