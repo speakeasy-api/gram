@@ -15,7 +15,7 @@ export const MAX_ORG_NAME_LENGTH = 100;
  * Floor on letters and digits, keeping out names made only of punctuation or
  * symbols. Two rather than one so a name is a name rather than an initial.
  */
-export const MIN_ORG_NAME_LETTERS_OR_DIGITS = 2;
+const MIN_ORG_NAME_LETTERS_OR_DIGITS = 2;
 
 export const ORG_NAME_REQUIRED_MESSAGE = "Company name is required";
 export const ORG_NAME_TOO_LONG_MESSAGE = `Company name must be ${MAX_ORG_NAME_LENGTH} characters or fewer`;
