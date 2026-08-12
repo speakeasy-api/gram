@@ -253,16 +253,11 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 	}
 	// The review is authoritative for its own row whether or not the batched
 	// join saw it (the join only covers server_url targets).
-	var evidenceChangedAt *string
-	if request.EvidenceChangedAt.Valid {
-		formatted := request.EvidenceChangedAt.Time.Format(time.RFC3339)
-		evidenceChangedAt = &formatted
-	}
 	rowState.ApprovalRequest = &gen.ShadowMCPInventoryApprovalRequest{
 		ID:                request.ID.String(),
 		Status:            request.Status,
 		RequesterCount:    int(request.RequesterCount),
-		EvidenceChangedAt: evidenceChangedAt,
+		EvidenceChangedAt: conv.PtrEmpty(conv.FromPGTimestamptz(request.EvidenceChangedAt)),
 	}
 
 	row := telemetryrepo.ShadowMCPInventoryURLRow{
@@ -903,16 +898,11 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		return state, fmt.Errorf("listing approval requests for shadow mcp inventory: %w", err)
 	}
 	for _, row := range approvalRows {
-		var evidenceChangedAt *string
-		if row.EvidenceChangedAt.Valid {
-			formatted := row.EvidenceChangedAt.Time.Format(time.RFC3339)
-			evidenceChangedAt = &formatted
-		}
 		state.approvalsByURL[row.TargetKey] = &gen.ShadowMCPInventoryApprovalRequest{
 			ID:                row.ID.String(),
 			Status:            row.Status,
 			RequesterCount:    int(row.RequesterCount),
-			EvidenceChangedAt: evidenceChangedAt,
+			EvidenceChangedAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.EvidenceChangedAt)),
 		}
 	}
 

@@ -2,6 +2,7 @@ import {
   EvidencePanel,
   StatusBadge,
 } from "@/components/mcp-approvals/EvidencePanel";
+import { EvidenceChangedNotice } from "@/components/mcp-approvals/EvidenceChangedNotice";
 import { parseEvidenceDocument } from "@/components/mcp-approvals/evidence";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -10,8 +11,6 @@ import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
-import type { EvidenceDiff } from "@gram/client/models/components/evidencediff.js";
-import type { EvidenceFieldChange } from "@gram/client/models/components/evidencefieldchange.js";
 import type { ResearchReport } from "@gram/client/models/components/researchreport.js";
 import {
   invalidateGetMcpApprovalRequest,
@@ -22,13 +21,7 @@ import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/
 import { useStartMcpResearchMutation } from "@gram/client/react-query/startMcpResearch.js";
 import { RequireScope } from "@/components/require-scope";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  RefreshCw,
-  TriangleAlert,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -178,153 +171,6 @@ export function RefreshEvidenceButton({
         {refresh.isPending ? "Refreshing" : "Refresh Data"}
       </Button.Text>
     </Button>
-  );
-}
-
-const EVIDENCE_FIELD_LABELS: Record<string, string> = {
-  authority_mode: "Authentication mode",
-  dynamic_registration: "Dynamic client registration",
-  known_advisories: "Published advisories",
-};
-
-function evidenceFieldLabel(change: EvidenceFieldChange): string {
-  return EVIDENCE_FIELD_LABELS[change.field] ?? change.field;
-}
-
-function DiffTermList({
-  label,
-  terms,
-  tone,
-}: {
-  label: string;
-  terms: string[];
-  tone: "added" | "removed";
-}): JSX.Element | null {
-  if (terms.length === 0) {
-    return null;
-  }
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span className="text-muted-foreground">{label}</span>
-      {terms.map((term) => (
-        <code
-          key={term}
-          className={
-            tone === "added"
-              ? "bg-warning/10 border-warning/40 border px-1 py-0.5 text-[11px]"
-              : "border-border border px-1 py-0.5 text-[11px] line-through opacity-70"
-          }
-        >
-          {term}
-        </code>
-      ))}
-    </div>
-  );
-}
-
-/**
- * The re-review banner: the permission-relevant evidence no longer matches
- * what the standing approval rested on. Deliberately framed as a reason to
- * look again, never as a detection — a server whose published interface is
- * unchanged can still change its behavior, so the absence of this banner
- * guarantees nothing.
- */
-function EvidenceChangedNotice({
-  diff,
-  changedAt,
-}: {
-  diff: EvidenceDiff;
-  changedAt?: Date | undefined;
-}): JSX.Element {
-  const fields = diff.fields ?? [];
-  const advisories = diff.advisoriesAdded ?? [];
-
-  return (
-    <section className="border-warning-default bg-warning/10 border-l-warning-default space-y-2.5 border border-l-4 p-4 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-default-warning flex items-center gap-2">
-          <TriangleAlert className="size-4 shrink-0" />
-          <p className="text-sm font-semibold tracking-wide uppercase">
-            Changed since approval
-          </p>
-        </div>
-        {changedAt && (
-          <span className="text-muted-foreground shrink-0">
-            first noticed{" "}
-            <HumanizeDateTime date={changedAt} includeTime={false} />
-          </span>
-        )}
-      </div>
-      <p>
-        This server's permission-relevant evidence no longer matches what the
-        standing approval rested on. Look again and re-decide — a new decision
-        accepts or revokes the change.
-      </p>
-      <div className="space-y-1.5">
-        <DiffTermList
-          label="Scopes added"
-          terms={diff.scopesAdded ?? []}
-          tone="added"
-        />
-        <DiffTermList
-          label="Scopes removed"
-          terms={diff.scopesRemoved ?? []}
-          tone="removed"
-        />
-        <DiffTermList
-          label="Credentials now demanded"
-          terms={diff.secretsAdded ?? []}
-          tone="added"
-        />
-        <DiffTermList
-          label="Credentials no longer demanded"
-          terms={diff.secretsRemoved ?? []}
-          tone="removed"
-        />
-        {fields.map((change) => (
-          <div
-            key={change.field}
-            className="flex flex-wrap items-baseline gap-x-2"
-          >
-            <span className="text-muted-foreground">
-              {evidenceFieldLabel(change)}
-            </span>
-            <span>
-              <code className="text-[11px] line-through opacity-70">
-                {change.before}
-              </code>{" "}
-              → <code className="text-[11px]">{change.after}</code>
-            </span>
-          </div>
-        ))}
-        {advisories.length > 0 && (
-          <div className="space-y-1">
-            <span className="text-muted-foreground">New advisories</span>
-            <ul className="space-y-1">
-              {advisories.map((advisory) => (
-                <li
-                  key={advisory.id}
-                  className="border-warning/40 border px-2 py-1"
-                >
-                  <span className="font-medium">{advisory.id}</span>
-                  {advisory.severity && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · {advisory.severity}
-                    </span>
-                  )}
-                  {advisory.summary && (
-                    <p className="text-muted-foreground mt-0.5">
-                      {advisory.summary}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </section>
   );
 }
 

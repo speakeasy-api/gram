@@ -13,11 +13,19 @@
 // team churn.
 //
 // A section is compared only when both gathers actually consulted its
-// source. Gathers record failures as gaps rather than absences, so a flaky
-// registry or a failed OAuth probe leaves the section nil on one side; a
-// comparison that treated nil as empty would report every scope as removed
-// one day and restored the next. Silence on an un-gathered section is the
-// right bias for a loop whose output is an alert.
+// source, and that is decided by the document's Gaps rather than by the
+// section being nil. The distinction matters: a nil section means either
+// "the source could not be reached" (recorded as a gap) or "the source
+// answered, and there is nothing" — and for authority the second case is
+// the whole point. A server that publishes no OAuth metadata gathers a nil
+// AuthoritySection with no gap, so treating nil as un-gathered would make
+// dropping OAuth entirely — the single largest widening of a standing
+// approval — the one change this package cannot see.
+//
+// Comparing against a genuinely un-gathered section is the failure in the
+// other direction: a flaky registry would report every scope as removed one
+// day and restored the next, and silence is the right bias for a loop whose
+// output is an alert.
 package evidencediff
 
 import (
@@ -82,9 +90,9 @@ type Diff struct {
 	AdvisoriesAdded []AdvisoryChange `json:"advisories_added,omitempty"`
 }
 
-// subset is the canonical projection a fingerprint hashes. Gathered flags
-// keep "source not consulted" distinct from "source answered with nothing",
-// mirroring the compare-only-when-both-gathered rule.
+// subset is the canonical projection of a document's permission surface.
+// Gathered flags keep "source not consulted" distinct from "source answered
+// with nothing", mirroring the compare-only-when-both-gathered rule.
 type subset struct {
 	AuthorityGathered   bool     `json:"authority_gathered"`
 	AuthorityMode       string   `json:"authority_mode"`
@@ -99,18 +107,21 @@ type subset struct {
 
 func project(document evidence.Document) subset {
 	s := subset{
-		AuthorityGathered:   false,
+		AuthorityGathered:   true,
 		AuthorityMode:       "",
 		Scopes:              []string{},
 		DynamicRegistration: false,
 		DemandedSecrets:     []string{},
-		AdvisoriesGathered:  false,
+		AdvisoriesGathered:  true,
 		KnownAdvisories:     0,
 		AdvisoryIDs:         []string{},
 	}
 
-	if authority := document.Authority; authority != nil {
-		s.AuthorityGathered = true
+	// Gathered-ness comes from the gap list, not from the section being
+	// present: a server that publishes no OAuth metadata gathers cleanly to a
+	// nil section, and that absence is itself the finding.
+	s.AuthorityGathered = !slices.Contains(document.Gaps, evidence.GapAuthorityProbe)
+	if authority := document.Authority; authority != nil && s.AuthorityGathered {
 		s.AuthorityMode = authority.Mode
 		s.Scopes = append(s.Scopes, authority.Scopes...)
 		slices.Sort(s.Scopes)
@@ -121,8 +132,10 @@ func project(document evidence.Document) subset {
 		slices.Sort(s.DemandedSecrets)
 	}
 
-	if advisories := document.Advisories; advisories != nil {
-		s.AdvisoriesGathered = true
+	// A clean advisory query with zero results also lands a section, so the
+	// only ungathered state is a recorded lookup failure.
+	s.AdvisoriesGathered = !slices.Contains(document.Gaps, evidence.GapAdvisoryLookup)
+	if advisories := document.Advisories; advisories != nil && s.AdvisoriesGathered {
 		s.KnownAdvisories = advisories.KnownCount
 		for _, advisory := range advisories.Advisories {
 			s.AdvisoryIDs = append(s.AdvisoryIDs, advisory.ID)
@@ -133,15 +146,16 @@ func project(document evidence.Document) subset {
 	return s
 }
 
-// Fingerprint hashes the permission-relevant projection of a document. Two
-// documents with the same fingerprint would produce an empty Compare, so it
-// serves as the announce-once key for change notifications.
-func Fingerprint(document evidence.Document) string {
-	encoded, err := json.Marshal(project(document))
+// Fingerprint hashes a diff, keying the announce-once check on exactly what
+// an announcement would say. Hashing the gather instead would let a source
+// that flaps between reachable and gapped change the key while the reported
+// drift stayed byte-identical, re-announcing the same news on every flap.
+func Fingerprint(diff Diff) string {
+	encoded, err := json.Marshal(diff)
 	if err != nil {
 		// A struct of strings, bools, ints, and string slices cannot fail to
 		// marshal; the error path exists to satisfy the signature.
-		panic(fmt.Sprintf("marshal evidence fingerprint subset: %v", err))
+		panic(fmt.Sprintf("marshal evidence diff fingerprint: %v", err))
 	}
 
 	digest := sha256.Sum256(encoded)
@@ -197,7 +211,7 @@ func Compare(before, after evidence.Document) Diff {
 		for _, id := range beforeSubset.AdvisoryIDs {
 			known[id] = struct{}{}
 		}
-		if after.Advisories != nil {
+		if after.Advisories != nil && afterSubset.AdvisoriesGathered {
 			for _, advisory := range after.Advisories.Advisories {
 				if _, seen := known[advisory.ID]; seen {
 					continue

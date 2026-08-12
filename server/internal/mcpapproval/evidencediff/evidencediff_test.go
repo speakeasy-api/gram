@@ -52,7 +52,6 @@ func TestCompare_NoDrift(t *testing.T) {
 	second := baseDocument()
 	diff := evidencediff.Compare(first, second)
 	require.False(t, diff.Changed)
-	require.Equal(t, evidencediff.Fingerprint(first), evidencediff.Fingerprint(second))
 }
 
 func TestCompare_PermissionDrift(t *testing.T) {
@@ -84,8 +83,6 @@ func TestCompare_PermissionDrift(t *testing.T) {
 	}
 	require.Equal(t, [2]string{"oauth", "oauth_dcr"}, fields[evidencediff.FieldAuthorityMode])
 	require.Equal(t, [2]string{"1", "2"}, fields[evidencediff.FieldKnownAdvisories])
-
-	require.NotEqual(t, evidencediff.Fingerprint(before), evidencediff.Fingerprint(after))
 }
 
 // Tool declarations, versions, traffic, and repository statistics move
@@ -104,23 +101,85 @@ func TestCompare_IgnoresNonPermissionChurn(t *testing.T) {
 
 	diff := evidencediff.Compare(before, after)
 	require.False(t, diff.Changed)
-	require.Equal(t, evidencediff.Fingerprint(before), evidencediff.Fingerprint(after))
 }
 
-// A section missing on one side means its source was not consulted that
-// gather (the gap machinery records why); comparing against it would report
-// every scope as removed one sweep and restored the next.
-func TestCompare_SkipsUngatheredSections(t *testing.T) {
+// A gather that recorded a gap did not consult that source; comparing
+// against it would report every scope as removed one sweep and restored the
+// next.
+func TestCompare_SkipsGappedSections(t *testing.T) {
 	t.Parallel()
 
 	before := baseDocument()
 	after := baseDocument()
 	after.Authority = nil
 	after.Advisories = nil
-	after.Package = nil
+	after.Gaps = []string{evidence.GapAuthorityProbe, evidence.GapAdvisoryLookup}
 
 	require.False(t, evidencediff.Compare(before, after).Changed)
 	require.False(t, evidencediff.Compare(after, before).Changed)
+}
+
+// A server that publishes no OAuth metadata gathers cleanly to a nil
+// authority section with no gap. That is checked-and-absent, not unknown —
+// and a vendor dropping OAuth for a static long-lived key is the largest
+// widening of a standing approval there is, so it must fire.
+func TestCompare_DroppingOAuthEntirelyFires(t *testing.T) {
+	t.Parallel()
+
+	before := baseDocument()
+	after := baseDocument()
+	after.Authority = nil
+
+	diff := evidencediff.Compare(before, after)
+	require.True(t, diff.Changed, "losing published OAuth metadata is drift, not silence")
+	require.Equal(t, []string{"read:messages", "read:profile"}, diff.ScopesRemoved)
+	require.Equal(t, []string{"API_KEY"}, diff.SecretsRemoved)
+
+	// And the mirror: a server that published nothing at approval time and
+	// now advertises OAuth.
+	mirror := evidencediff.Compare(after, before)
+	require.True(t, mirror.Changed)
+	require.Equal(t, []string{"read:messages", "read:profile"}, mirror.ScopesAdded)
+}
+
+// The announce-once key is a hash of what an announcement would say. A
+// source that flaps between reachable and gapped must not re-key an
+// otherwise identical drift, or every flap re-notifies the same news.
+func TestFingerprint_StableAcrossUnrelatedGaps(t *testing.T) {
+	t.Parallel()
+
+	before := baseDocument()
+
+	reachable := baseDocument()
+	reachable.Authority.Scopes = []string{"read:messages", "read:profile", "write:messages"}
+
+	gapped := baseDocument()
+	gapped.Authority.Scopes = []string{"read:messages", "read:profile", "write:messages"}
+	gapped.Advisories = nil
+	gapped.Gaps = []string{evidence.GapAdvisoryLookup}
+
+	first := evidencediff.Compare(before, reachable)
+	second := evidencediff.Compare(before, gapped)
+	require.True(t, first.Changed)
+	require.Equal(t, first, second, "the advisory gap does not change what is reported")
+	require.Equal(t, evidencediff.Fingerprint(first), evidencediff.Fingerprint(second))
+}
+
+// A materially different drift is news again.
+func TestFingerprint_ChangesWithTheDrift(t *testing.T) {
+	t.Parallel()
+
+	before := baseDocument()
+
+	one := baseDocument()
+	one.Authority.Scopes = append(one.Authority.Scopes, "write:messages")
+
+	two := baseDocument()
+	two.Authority.Scopes = append(two.Authority.Scopes, "write:messages", "admin:write")
+
+	require.NotEqual(t,
+		evidencediff.Fingerprint(evidencediff.Compare(before, one)),
+		evidencediff.Fingerprint(evidencediff.Compare(before, two)))
 }
 
 // An advisory id dropping out of the most-recent sample is not a withdrawal

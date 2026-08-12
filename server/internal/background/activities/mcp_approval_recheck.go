@@ -3,12 +3,12 @@ package activities
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,18 +29,17 @@ type McpApprovalRecheckPageArgs struct {
 	PageSize int32
 }
 
-// McpApprovalRecheckTarget is one approved request the sweep re-gathers,
-// carrying both comparison sides: the request's identity for the fresh
-// gather and the latest decision's frozen snapshot.
+// McpApprovalRecheckTarget names one approved request for the sweep to
+// recheck. Deliberately only identity: both sides of the comparison are
+// loaded when the recheck runs. Carrying evidence documents here instead
+// would put a page of them through the workflow twice — once as the scan's
+// result and once as each activity's input, both recorded in history — and
+// would freeze the decision snapshot at scan time, minutes to hours before
+// the recheck that reads it.
 type McpApprovalRecheckTarget struct {
-	ID                        uuid.UUID
-	ProjectID                 uuid.UUID
-	OrganizationID            string
-	TargetRaw                 string
-	EvidenceCollectedAt       *time.Time
-	NotifiedChangeFingerprint string
-	DecisionEvidenceSnapshot  json.RawMessage
-	DecisionEvidenceVersion   int32
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 // McpApprovalRecheck re-gathers evidence for approved MCP servers and flags
@@ -68,8 +67,8 @@ func NewMcpApprovalRecheck(logger *slog.Logger, db *pgxpool.Pool, assembler *evi
 	}
 }
 
-// ListPage returns one page of approved requests with their latest decision
-// snapshots, ordered by id for keyset pagination.
+// ListPage returns one page of approved requests that have a decision to
+// compare against, ordered by id for keyset pagination.
 func (m *McpApprovalRecheck) ListPage(ctx context.Context, args McpApprovalRecheckPageArgs) ([]McpApprovalRecheckTarget, error) {
 	rows, err := approvalrepo.New(m.db).ListApprovedRequestsForRecheck(ctx, approvalrepo.ListApprovedRequestsForRecheckParams{
 		AfterID:  args.AfterID,
@@ -81,20 +80,10 @@ func (m *McpApprovalRecheck) ListPage(ctx context.Context, args McpApprovalReche
 
 	targets := make([]McpApprovalRecheckTarget, 0, len(rows))
 	for _, row := range rows {
-		var collectedAt *time.Time
-		if row.EvidenceCollectedAt.Valid {
-			at := row.EvidenceCollectedAt.Time
-			collectedAt = &at
-		}
 		targets = append(targets, McpApprovalRecheckTarget{
-			ID:                        row.ID,
-			ProjectID:                 row.ProjectID,
-			OrganizationID:            row.OrganizationID,
-			TargetRaw:                 row.TargetRaw,
-			EvidenceCollectedAt:       collectedAt,
-			NotifiedChangeFingerprint: conv.PtrValOr(conv.FromPGText[string](row.NotifiedChangeFingerprint), ""),
-			DecisionEvidenceSnapshot:  row.DecisionEvidenceSnapshot,
-			DecisionEvidenceVersion:   row.DecisionEvidenceVersion,
+			ID:             row.ID,
+			ProjectID:      row.ProjectID,
+			OrganizationID: row.OrganizationID,
 		})
 	}
 
@@ -120,7 +109,24 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 		return nil
 	}
 
-	document, err := m.assembler.Assemble(ctx, target.ProjectID, identity.Resolve(target.TargetRaw))
+	queries := approvalrepo.New(m.db)
+
+	// Both comparison sides are read here, not at scan time: a request
+	// decided or denied since the scan is resolved by this read rather than
+	// rechecked against what it used to be.
+	request, err := queries.GetApprovalRequestForRecheck(ctx, approvalrepo.GetApprovalRequestForRecheckParams{
+		ID:        target.ID,
+		ProjectID: target.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// No longer approved, or its decisions are gone. Nothing to compare.
+		return nil
+	case err != nil:
+		return fmt.Errorf("load approval request for recheck: %w", err)
+	}
+
+	document, err := m.assembler.Assemble(ctx, target.ProjectID, identity.Resolve(request.TargetRaw))
 	if err != nil {
 		return fmt.Errorf("assemble evidence for recheck: %w", err)
 	}
@@ -130,46 +136,46 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 		return fmt.Errorf("decode recheck gather: %w", err)
 	}
 
-	queries := approvalrepo.New(m.db)
-
-	// The store is a compare-and-set against the gather this sweep read at
-	// scan time: a manual refresh landing in between wins, and this gather is
-	// discarded rather than clobbering the newer document. Drift detection
-	// still runs — the comparison below uses this gather either way, and a
-	// detection from a discarded gather is still a detection.
-	previousCollectedAt := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
-	if target.EvidenceCollectedAt != nil {
-		previousCollectedAt = pgtype.Timestamptz{Time: *target.EvidenceCollectedAt, Valid: true, InfinityModifier: pgtype.Finite}
+	stored, storedErr := evidence.DecodeDocument(request.CurrentEvidence, int(request.EvidenceVersion))
+	// A gather that failed on every remote source has learned nothing, and
+	// storing it would replace a document that did better with a page of
+	// failures — the same refusal the manual refresh path makes. Comparing it
+	// is equally pointless: every section it could speak to is gapped.
+	if current.GappedOnAllRemoteSources() && (storedErr != nil || !stored.GappedOnAllRemoteSources()) {
+		m.logger.WarnContext(ctx, "skipping recheck whose gather failed on every remote source",
+			attr.SlogProjectID(target.ProjectID.String()),
+		)
+		return nil
 	}
+
+	// The store is a compare-and-set against the gather this activity just
+	// read: a manual refresh landing in between wins, and this gather is
+	// discarded rather than clobbering the newer document. Drift detection
+	// still runs — a detection from a discarded gather is still a detection.
 	if _, err := queries.SetApprovalRequestEvidenceIfUnchanged(ctx, approvalrepo.SetApprovalRequestEvidenceIfUnchangedParams{
 		CurrentEvidence:     document,
 		EvidenceVersion:     evidence.Version,
 		ID:                  target.ID,
 		ProjectID:           target.ProjectID,
-		PreviousCollectedAt: previousCollectedAt,
+		PreviousCollectedAt: request.EvidenceCollectedAt,
 	}); err != nil {
 		return fmt.Errorf("store recheck gather: %w", err)
 	}
 
-	snapshot, err := evidence.DecodeDocument(target.DecisionEvidenceSnapshot, int(target.DecisionEvidenceVersion))
+	snapshot, err := evidence.DecodeDocument(request.DecisionEvidenceSnapshot, int(request.DecisionEvidenceVersion))
 	if err != nil {
 		// An undecodable snapshot means the decision predates a shape change
 		// this package cannot read any more; there is nothing to compare
 		// against and nothing to flag.
 		m.logger.WarnContext(ctx, "skipping recheck comparison for undecodable decision snapshot",
-			attr.SlogError(err))
+			attr.SlogProjectID(target.ProjectID.String()),
+			attr.SlogError(err),
+		)
 		return nil
 	}
 
 	diff := evidencediff.Compare(snapshot, current)
 	if !diff.Changed {
-		return nil
-	}
-
-	fingerprint := evidencediff.Fingerprint(current)
-	if fingerprint == target.NotifiedChangeFingerprint {
-		// This exact drift was already announced; the flag is still set and
-		// stays set until a new decision clears it.
 		return nil
 	}
 
@@ -188,20 +194,34 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txQueries := queries.WithTx(dbtx)
-	if err := txQueries.MarkApprovalRequestEvidenceChanged(ctx, approvalrepo.MarkApprovalRequestEvidenceChangedParams{
-		ID:          target.ID,
-		ProjectID:   target.ProjectID,
-		Fingerprint: conv.ToPGText(fingerprint),
-	}); err != nil {
+
+	// The write is the arbiter of whether this drift is news: it declines to
+	// touch a row whose fingerprint already matches, whose request is no
+	// longer approved, or that has been decided since the snapshot compared
+	// above. Announcing only on a written row is what makes an activity retry
+	// a no-op instead of a second webhook.
+	flagged, err := txQueries.MarkApprovalRequestEvidenceChanged(ctx, approvalrepo.MarkApprovalRequestEvidenceChangedParams{
+		ID:                 target.ID,
+		ProjectID:          target.ProjectID,
+		Fingerprint:        conv.ToPGText(evidencediff.Fingerprint(diff)),
+		ComparedDecisionAt: request.DecisionDecidedAt,
+	})
+	if err != nil {
 		return fmt.Errorf("flag evidence change: %w", err)
+	}
+	if flagged == 0 {
+		return nil
 	}
 
 	if err := m.audit.LogMCPApprovalRequestEvidenceChanged(ctx, dbtx, audit.LogMCPApprovalRequestEvidenceChangedEvent{
 		OrganizationID: target.OrganizationID,
 		ProjectID:      target.ProjectID,
-		RequestURN:     urn.NewMCPApprovalRequest(target.ID),
-		TargetRaw:      target.TargetRaw,
-		DiffSummary:    diffSummary,
+		// No person acted: the sweep observed.
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+		ActorDisplayName: conv.PtrEmpty("Evidence recheck"),
+		RequestURN:       urn.NewMCPApprovalRequest(target.ID),
+		TargetRaw:        request.TargetRaw,
+		DiffSummary:      diffSummary,
 	}); err != nil {
 		return fmt.Errorf("audit evidence change: %w", err)
 	}

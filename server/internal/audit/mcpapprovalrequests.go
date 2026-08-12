@@ -125,6 +125,13 @@ type LogMCPApprovalRequestEvidenceChangedEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 
+	// Actor is who the feed credits. The recheck sweep passes the system
+	// principal — no person acted, the sweep observed — and it stays on the
+	// event so this entry is written the same way as every other one rather
+	// than by a rule hidden in the logger.
+	Actor            urn.Principal
+	ActorDisplayName *string
+
 	RequestURN urn.MCPApprovalRequest
 
 	// TargetRaw is the stored (redacted) form of the server reference,
@@ -141,18 +148,17 @@ type LogMCPApprovalRequestEvidenceChangedEvent struct {
 
 // LogMCPApprovalRequestEvidenceChanged records that the daily recheck found
 // the permission-relevant evidence for an approved server has drifted from
-// the snapshot its latest approval rested on. The actor is the system: no
-// person acted, the sweep observed. Announced once per distinct drift — the
-// notified fingerprint on the request row is what dedupes, and it is written
-// in the same transaction as this entry.
+// the snapshot its latest approval rested on. Announced once per distinct
+// drift — the guarded fingerprint write on the request row is what decides
+// that, and it runs in the same transaction as this entry.
 func (l *Logger) LogMCPApprovalRequestEvidenceChanged(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestEvidenceChangedEvent) error {
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
-		ActorID:          "system",
-		ActorType:        string(urn.PrincipalTypeUser),
-		ActorDisplayName: conv.ToPGTextEmpty("Evidence recheck"),
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
 		ActorSlug:        conv.ToPGTextEmpty(""),
 
 		Action: string(ActionMCPApprovalRequestEvidenceChanged),
