@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/ClickHouse/clickhouse-go/v2/ext"
 	"github.com/Masterminds/squirrel"
 )
 
@@ -211,6 +212,7 @@ func challengeBucketWhere(sb squirrel.SelectBuilder, f ChallengeBucketFilters) s
 }
 
 const challengeBucketRepresentativeID = "argMaxMerge(representative_id)"
+const resolvedChallengeIDsTable = "resolved_challenge_ids"
 
 // challengeBucketResolution filters grouped buckets by whether their most
 // recent challenge has a resolution record in PostgreSQL.
@@ -226,10 +228,32 @@ func challengeBucketResolution(sb squirrel.SelectBuilder, f ChallengeBucketFilte
 		return sb
 	}
 
+	predicate := challengeBucketRepresentativeID + " IN (SELECT toUUIDOrNull(challenge_id) FROM " + resolvedChallengeIDsTable + ")"
 	if *f.Resolved {
-		return sb.Having(squirrel.Eq{challengeBucketRepresentativeID: f.ResolvedChallengeIDs})
+		return sb.Having(predicate)
 	}
-	return sb.Having(squirrel.NotEq{challengeBucketRepresentativeID: f.ResolvedChallengeIDs})
+	return sb.Having("NOT (" + predicate + ")")
+}
+
+// challengeBucketResolutionContext sends resolution IDs as Native external
+// data so the query text and AST stay bounded independently of resolution
+// volume.
+func challengeBucketResolutionContext(ctx context.Context, f ChallengeBucketFilters) (context.Context, error) {
+	if f.Resolved == nil || len(f.ResolvedChallengeIDs) == 0 {
+		return ctx, nil
+	}
+
+	table, err := ext.NewTable(resolvedChallengeIDsTable, ext.Column("challenge_id", "String"))
+	if err != nil {
+		return nil, fmt.Errorf("create resolved challenge ids external table: %w", err)
+	}
+	for _, id := range f.ResolvedChallengeIDs {
+		if err := table.Append(id); err != nil {
+			return nil, fmt.Errorf("append resolved challenge id to external table: %w", err)
+		}
+	}
+
+	return clickhouse.Context(ctx, clickhouse.WithExternalTable(table)), nil
 }
 
 // challengePagination applies LIMIT/OFFSET to a squirrel SelectBuilder when not skipped.
@@ -471,8 +495,12 @@ func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeBucketFil
 	if err != nil {
 		return nil, 0, fmt.Errorf("build list challenge buckets query: %w", err)
 	}
+	queryCtx, err := challengeBucketResolutionContext(ctx, f)
+	if err != nil {
+		return nil, 0, err
+	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(queryCtx, query, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("exec list challenge buckets: %w", err)
 	}
@@ -536,6 +564,10 @@ func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeBucketFi
 	innerQuery, args, err := inner.ToSql()
 	if err != nil {
 		return 0, fmt.Errorf("build count challenge buckets query: %w", err)
+	}
+	ctx, err = challengeBucketResolutionContext(ctx, f)
+	if err != nil {
+		return 0, err
 	}
 
 	// Wrap in outer SELECT count(*) — squirrel doesn't natively support subquery counts.
