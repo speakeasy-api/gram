@@ -311,6 +311,15 @@ func TestSanitizeETag_UnquotedDropped(t *testing.T) {
 	require.Empty(t, sanitizeETag(`"`))
 }
 
+func TestSanitizeETag_InteriorSpaceDropped(t *testing.T) {
+	t.Parallel()
+
+	// etagc admits neither SP nor DQUOTE, so a spaced tag is malformed even
+	// though a space is legal elsewhere in a header value.
+	require.Empty(t, sanitizeETag(`"abc def"`))
+	require.Empty(t, sanitizeETag(`W/"abc def"`))
+}
+
 func TestSanitizeETag_ListDropped(t *testing.T) {
 	t.Parallel()
 

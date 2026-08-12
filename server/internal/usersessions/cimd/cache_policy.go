@@ -71,6 +71,13 @@ func cacheTTL(header http.Header, now time.Time) time.Duration {
 // its own Date suggests — and trusting only Age would hand a full lifetime to
 // the first case.
 //
+// It approximates rather than reproduces the RFC's current_age, which also
+// adds the request delay and the time the response has since spent resident
+// in the cache. Resident time is zero by construction here (the absolute
+// expiry is derived from this the moment the fetch returns) and the request
+// delay is bounded by fetchTimeout, so both are far below the five minute
+// floor every result is clamped to.
+//
 // An absent or malformed Age reads as zero, and a Date in the future (a
 // skewed origin clock) yields a negative apparent age that never wins the
 // comparison, so the result is never negative.
@@ -195,9 +202,12 @@ func sanitizeETag(raw string) string {
 	if len(opaque) < 2 || !strings.HasPrefix(opaque, `"`) || !strings.HasSuffix(opaque, `"`) {
 		return ""
 	}
-	// etagc excludes DQUOTE, so an interior quote means the value is a list
-	// or is otherwise malformed.
-	if strings.Contains(opaque[1:len(opaque)-1], `"`) {
+	// etagc is %x21 / %x23-7E / obs-text, so within the printable ASCII this
+	// function already requires it admits everything except SP and DQUOTE. An
+	// interior quote means the value is a list or is otherwise malformed, and
+	// a space cannot appear in a well-formed tag at all. Dropping such a
+	// validator costs an unconditional refresh, which is the safe direction.
+	if strings.ContainsAny(opaque[1:len(opaque)-1], " \"") {
 		return ""
 	}
 	return etag
