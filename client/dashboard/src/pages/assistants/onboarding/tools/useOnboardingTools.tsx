@@ -582,9 +582,10 @@ function buildAssistantTools(deps: ToolDeps) {
           }),
           15 * 60 * 1000,
           "propose_personality",
-        ).catch(
-          (): PersonalityPickResult => ({ success: false, cancelled: true }),
-        );
+        ).catch((): PersonalityPickResult => ({
+          success: false,
+          cancelled: true,
+        }));
 
         if (!userInput.success || !userInput.personality) {
           return okResult({
@@ -1543,13 +1544,11 @@ function buildAssistantTools(deps: ToolDeps) {
           }),
           15 * 60 * 1000,
           "request_environment_secrets",
-        ).catch(
-          (e): FormResult => ({
-            success: false,
-            cancelled: true,
-            error: e instanceof Error ? e.message : "timeout",
-          }),
-        );
+        ).catch((e): FormResult => ({
+          success: false,
+          cancelled: true,
+          error: e instanceof Error ? e.message : "timeout",
+        }));
 
         if (!userInput.success) {
           return okResult({
@@ -1897,13 +1896,11 @@ function buildAssistantTools(deps: ToolDeps) {
           }),
           30 * 60 * 1000,
           "show_slack_app_guide",
-        ).catch(
-          (): GuideResult => ({
-            success: false,
-            cancelled: true,
-            installed: false,
-          }),
-        );
+        ).catch((): GuideResult => ({
+          success: false,
+          cancelled: true,
+          installed: false,
+        }));
 
         if (userInput.installed) {
           return okResult({

@@ -104,13 +104,11 @@ export function BulkActionBar({
       <MoreActions
         triggerLabel="Bulk actions"
         triggerStyle={{ transitionProperty: "none" }}
-        actions={actions.map(
-          (a): Action => ({
-            label: a.label,
-            onClick: a.onClick,
-            disabled: a.disabled,
-          }),
-        )}
+        actions={actions.map((a): Action => ({
+          label: a.label,
+          onClick: a.onClick,
+          disabled: a.disabled,
+        }))}
       />
     </div>
   );
