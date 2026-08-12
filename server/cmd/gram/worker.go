@@ -195,6 +195,11 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
+		&cli.StringFlag{
+			Name:    "github-evidence-token",
+			Usage:   "GitHub API token for MCP evidence repository lookups; unset falls back to the small unauthenticated per-IP budget, after which lookups land in evidence gaps",
+			EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"},
+		},
 		&cli.StringSliceFlag{
 			Name:     "disallowed-cidr-blocks",
 			Usage:    "List of CIDR blocks to block for SSRF protection",
@@ -836,6 +841,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouter:          openRouter,
 				K8sClient:           k8sClient,
 				ExpectedTargetCNAME: c.String("custom-domain-cname"),
+				GitHubEvidenceToken: c.String("github-evidence-token"),
 				SiteURL:             siteURL,
 				BillingTracker:      billingTracker,
 				BillingRepository:   billingRepo,

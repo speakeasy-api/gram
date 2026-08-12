@@ -65,6 +65,7 @@ SELECT
   r.id
   , r.target_key
   , r.status
+  , r.evidence_changed_at
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -88,6 +89,7 @@ SELECT
   , r.target_raw
   , r.target_key
   , r.status
+  , r.evidence_changed_at
   , r.created_at
   , r.updated_at
   , (
@@ -416,3 +418,61 @@ WHERE id = @id
   AND status = 'running'
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListApprovedRequestsForRecheck :many
+-- Global scan for the daily change-detection sweep: every approved request,
+-- paired with the evidence snapshot its latest decision froze. Deliberately
+-- unscoped by project — the sweep serves every tenant. Each returned row
+-- carries its own project id and every write the sweep makes is qualified by
+-- it.
+SELECT
+    r.id
+  , r.project_id
+  , r.organization_id
+  , r.target_raw
+  , r.current_evidence
+  , r.evidence_version
+  , r.evidence_collected_at
+  , r.notified_change_fingerprint
+  , d.evidence_snapshot AS decision_evidence_snapshot
+  , d.evidence_version AS decision_evidence_version
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT evidence_snapshot, evidence_version
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    ORDER BY decided_at DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.status = 'approved'
+  AND r.deleted IS FALSE
+  AND r.id > @after_id
+ORDER BY r.id
+LIMIT @page_size;
+
+-- name: MarkApprovalRequestEvidenceChanged :exec
+-- Flags a permission-relevant drift from the latest decision's snapshot. The
+-- first detection stamps evidence_changed_at; a later, materially different
+-- drift updates only the announce-once fingerprint, so the flag keeps the
+-- original drift time until a new decision clears it.
+UPDATE mcp_approval_requests
+SET evidence_changed_at = COALESCE(evidence_changed_at, clock_timestamp())
+  , notified_change_fingerprint = @fingerprint
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: ClearApprovalRequestEvidenceChange :exec
+-- A new decision freezes a fresh snapshot, and that is the only thing that
+-- clears an outstanding drift flag — a reverted gather or a quieter sweep
+-- never un-flags what an admin has not looked at.
+UPDATE mcp_approval_requests
+SET evidence_changed_at = NULL
+  , notified_change_fingerprint = NULL
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

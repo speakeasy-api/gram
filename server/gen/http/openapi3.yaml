@@ -54207,6 +54207,8 @@ components:
                     type: string
                     description: When the evidence was last gathered.
                     format: date-time
+                evidence_diff:
+                    $ref: '#/components/schemas/EvidenceDiff'
                 evidence_version:
                     type: integer
                     description: Shape version of the evidence payload, so an older snapshot stays interpretable.
@@ -54238,6 +54240,10 @@ components:
                 created_at:
                     type: string
                     description: When the request was first raised.
+                    format: date-time
+                evidence_changed_at:
+                    type: string
+                    description: When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted. Cleared only by recording a new decision.
                     format: date-time
                 id:
                     type: string
@@ -58740,6 +58746,77 @@ components:
             required:
                 - chat_id
                 - prompt
+        EvidenceAdvisoryChange:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The advisory identifier.
+                severity:
+                    type: string
+                    description: The advisory's severity, when the database published one.
+                summary:
+                    type: string
+                    description: The advisory's summary, when the database published one.
+            description: A published advisory the decision's snapshot did not carry.
+            required:
+                - id
+        EvidenceDiff:
+            type: object
+            properties:
+                advisories_added:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EvidenceAdvisoryChange'
+                    description: Advisories in the current gather's most-recent sample that the snapshot's sample did not carry.
+                changed:
+                    type: boolean
+                    description: Whether anything below is non-empty.
+                fields:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EvidenceFieldChange'
+                    description: 'Scalar drifts: authority mode, dynamic client registration, published-advisory count.'
+                scopes_added:
+                    type: array
+                    items:
+                        type: string
+                    description: OAuth scopes the server's published authority metadata gained since the decision.
+                scopes_removed:
+                    type: array
+                    items:
+                        type: string
+                    description: OAuth scopes the published authority metadata lost since the decision.
+                secrets_added:
+                    type: array
+                    items:
+                        type: string
+                    description: Credentials the server now demands that it did not at decision time.
+                secrets_removed:
+                    type: array
+                    items:
+                        type: string
+                    description: Credentials the server demanded at decision time and no longer does.
+            description: 'What moved between the latest decision''s evidence snapshot and the current gather, restricted to the permission-relevant slice: OAuth scopes, authority mode, demanded credentials, and published advisories. A change here is a re-review trigger, never a verdict — an unchanged published interface says nothing about unchanged behavior.'
+            required:
+                - changed
+        EvidenceFieldChange:
+            type: object
+            properties:
+                after:
+                    type: string
+                    description: The value the latest gather found.
+                before:
+                    type: string
+                    description: The value the decision rested on.
+                field:
+                    type: string
+                    description: 'Which fact moved: authority_mode, dynamic_registration, or known_advisories.'
+            description: One scalar drift between the decision's evidence snapshot and the current gather.
+            required:
+                - field
+                - before
+                - after
         EvolveForm:
             type: object
             properties:
@@ -69813,6 +69890,10 @@ components:
         ShadowMCPInventoryApprovalRequest:
             type: object
             properties:
+                evidence_changed_at:
+                    type: string
+                    description: When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted; cleared only by a new decision.
+                    format: date-time
                 id:
                     type: string
                     format: uuid

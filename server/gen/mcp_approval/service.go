@@ -111,6 +111,10 @@ type ApprovalRequestDetail struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecision
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiff
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReport
 }
@@ -141,6 +145,10 @@ type ApprovalRequestSummary struct {
 	Status string
 	// How many people have asked for this server.
 	RequesterCount int
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string
 	// When the request was first raised.
 	CreatedAt string
 	// When the request last changed.
@@ -182,6 +190,52 @@ type EnsureServerReviewPayload struct {
 	ProjectSlugInput *string
 	// The server URL the dossier describes.
 	Target string
+}
+
+// A published advisory the decision's snapshot did not carry.
+type EvidenceAdvisoryChange struct {
+	// The advisory identifier.
+	ID string
+	// The advisory's summary, when the database published one.
+	Summary *string
+	// The advisory's severity, when the database published one.
+	Severity *string
+}
+
+// What moved between the latest decision's evidence snapshot and the current
+// gather, restricted to the permission-relevant slice: OAuth scopes, authority
+// mode, demanded credentials, and published advisories. A change here is a
+// re-review trigger, never a verdict — an unchanged published interface says
+// nothing about unchanged behavior.
+type EvidenceDiff struct {
+	// Whether anything below is non-empty.
+	Changed bool
+	// OAuth scopes the server's published authority metadata gained since the
+	// decision.
+	ScopesAdded []string
+	// OAuth scopes the published authority metadata lost since the decision.
+	ScopesRemoved []string
+	// Credentials the server now demands that it did not at decision time.
+	SecretsAdded []string
+	// Credentials the server demanded at decision time and no longer does.
+	SecretsRemoved []string
+	// Scalar drifts: authority mode, dynamic client registration,
+	// published-advisory count.
+	Fields []*EvidenceFieldChange
+	// Advisories in the current gather's most-recent sample that the snapshot's
+	// sample did not carry.
+	AdvisoriesAdded []*EvidenceAdvisoryChange
+}
+
+// One scalar drift between the decision's evidence snapshot and the current
+// gather.
+type EvidenceFieldChange struct {
+	// Which fact moved: authority_mode, dynamic_registration, or known_advisories.
+	Field string
+	// The value the decision rested on.
+	Before string
+	// The value the latest gather found.
+	After string
 }
 
 // GetRequestPayload is the payload type of the mcpApproval service getRequest

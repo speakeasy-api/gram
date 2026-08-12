@@ -45,6 +45,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
+	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
+	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -160,6 +167,7 @@ type Activities struct {
 	demoteExpiredTrials             *activities.DemoteExpiredTrials
 	trialEmails                     *trialemails.Service
 	mcpResearch                     *activities.McpResearch
+	mcpApprovalRecheck              *activities.McpApprovalRecheck
 }
 
 func NewActivities(
@@ -207,6 +215,7 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
+	githubEvidenceToken string,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -280,6 +289,24 @@ func NewActivities(
 			platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient)),
 			platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client())),
 		))
+	}
+
+	// The recheck sweep rebuilds the intake path's evidence assembler from the
+	// worker's own clients; workers wired without the full ingredient set
+	// (test workers) get a nil activity and no schedule.
+	var mcpApprovalRecheck *activities.McpApprovalRecheck
+	if db != nil && guardianPolicy != nil && telemetryRepo != nil && mcpRegistryClient != nil && productFeatures != nil && auditLogger != nil {
+		recheckProber := remoteprobe.New(logger, guardianPolicy)
+		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
+			packagemeta.NewClient(guardianPolicy.PooledClient()),
+			repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubEvidenceToken)),
+			mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
+			domainmeta.NewClient(guardianPolicy.PooledClient()),
+			telemetryRepo,
+			recheckProber,
+			recheckProber,
+			mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
+		), productFeatures, auditLogger)
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
@@ -372,6 +399,7 @@ func NewActivities(
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
 		mcpResearch:             mcpResearch,
+		mcpApprovalRecheck:      mcpApprovalRecheck,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -890,6 +918,31 @@ func (a *Activities) MarkMcpResearchInterrupted(ctx context.Context, input activ
 	}
 	if err := a.mcpResearch.MarkInterrupted(ctx, input); err != nil {
 		return fmt.Errorf("mark mcp research interrupted: %w", err)
+	}
+	return nil
+}
+
+// ListMcpApprovalRecheckPage returns one page of approved MCP approval
+// requests with the decision snapshots their daily recheck compares against.
+func (a *Activities) ListMcpApprovalRecheckPage(ctx context.Context, args activities.McpApprovalRecheckPageArgs) ([]activities.McpApprovalRecheckTarget, error) {
+	if a.mcpApprovalRecheck == nil {
+		return nil, fmt.Errorf("list mcp approval recheck page: recheck activity not configured on this worker")
+	}
+	targets, err := a.mcpApprovalRecheck.ListPage(ctx, args)
+	if err != nil {
+		return nil, fmt.Errorf("list mcp approval recheck page: %w", err)
+	}
+	return targets, nil
+}
+
+// RecheckMcpApprovalRequest re-gathers one approved request's evidence and
+// flags permission-relevant drift from the snapshot its approval rested on.
+func (a *Activities) RecheckMcpApprovalRequest(ctx context.Context, target activities.McpApprovalRecheckTarget) error {
+	if a.mcpApprovalRecheck == nil {
+		return fmt.Errorf("recheck mcp approval request: recheck activity not configured on this worker")
+	}
+	if err := a.mcpApprovalRecheck.Recheck(ctx, target); err != nil {
+		return fmt.Errorf("recheck mcp approval request: %w", err)
 	}
 	return nil
 }

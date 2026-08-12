@@ -756,6 +756,7 @@ var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalReq
 		Enum("unreviewed", "requested", "approved", "denied")
 	})
 	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
+	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted; cleared only by a new decision.", func() { Format(FormatDateTime) })
 })
 
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {

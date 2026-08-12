@@ -81,6 +81,10 @@ type GetRequestResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions,omitempty" json:"decisions,omitempty" xml:"decisions,omitempty"`
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiffResponseBody `form:"evidence_diff,omitempty" json:"evidence_diff,omitempty" xml:"evidence_diff,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports,omitempty" json:"research_reports,omitempty" xml:"research_reports,omitempty"`
 }
@@ -111,6 +115,10 @@ type EnsureServerReviewResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -143,6 +151,10 @@ type CreateRequestResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -175,6 +187,10 @@ type PromoteResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -200,6 +216,10 @@ type RefreshEvidenceResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions,omitempty" json:"decisions,omitempty" xml:"decisions,omitempty"`
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiffResponseBody `form:"evidence_diff,omitempty" json:"evidence_diff,omitempty" xml:"evidence_diff,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports,omitempty" json:"research_reports,omitempty" xml:"research_reports,omitempty"`
 }
@@ -1763,6 +1783,10 @@ type ApprovalRequestSummaryResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How many people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the request last changed.
@@ -1805,6 +1829,49 @@ type ApprovalDecisionResponseBody struct {
 	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
 	// When the decision was made.
 	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+}
+
+// EvidenceDiffResponseBody is used to define fields on response body types.
+type EvidenceDiffResponseBody struct {
+	// Whether anything below is non-empty.
+	Changed *bool `form:"changed,omitempty" json:"changed,omitempty" xml:"changed,omitempty"`
+	// OAuth scopes the server's published authority metadata gained since the
+	// decision.
+	ScopesAdded []string `form:"scopes_added,omitempty" json:"scopes_added,omitempty" xml:"scopes_added,omitempty"`
+	// OAuth scopes the published authority metadata lost since the decision.
+	ScopesRemoved []string `form:"scopes_removed,omitempty" json:"scopes_removed,omitempty" xml:"scopes_removed,omitempty"`
+	// Credentials the server now demands that it did not at decision time.
+	SecretsAdded []string `form:"secrets_added,omitempty" json:"secrets_added,omitempty" xml:"secrets_added,omitempty"`
+	// Credentials the server demanded at decision time and no longer does.
+	SecretsRemoved []string `form:"secrets_removed,omitempty" json:"secrets_removed,omitempty" xml:"secrets_removed,omitempty"`
+	// Scalar drifts: authority mode, dynamic client registration,
+	// published-advisory count.
+	Fields []*EvidenceFieldChangeResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Advisories in the current gather's most-recent sample that the snapshot's
+	// sample did not carry.
+	AdvisoriesAdded []*EvidenceAdvisoryChangeResponseBody `form:"advisories_added,omitempty" json:"advisories_added,omitempty" xml:"advisories_added,omitempty"`
+}
+
+// EvidenceFieldChangeResponseBody is used to define fields on response body
+// types.
+type EvidenceFieldChangeResponseBody struct {
+	// Which fact moved: authority_mode, dynamic_registration, or known_advisories.
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The value the decision rested on.
+	Before *string `form:"before,omitempty" json:"before,omitempty" xml:"before,omitempty"`
+	// The value the latest gather found.
+	After *string `form:"after,omitempty" json:"after,omitempty" xml:"after,omitempty"`
+}
+
+// EvidenceAdvisoryChangeResponseBody is used to define fields on response body
+// types.
+type EvidenceAdvisoryChangeResponseBody struct {
+	// The advisory identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The advisory's summary, when the database published one.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The advisory's severity, when the database published one.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
 
 // ResearchReportResponseBody is used to define fields on response body types.
@@ -2073,6 +2140,9 @@ func NewGetRequestApprovalRequestDetailOK(body *GetRequestResponseBody) *mcpappr
 		}
 		v.Decisions[i] = unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(val)
 	}
+	if body.EvidenceDiff != nil {
+		v.EvidenceDiff = unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff(body.EvidenceDiff)
+	}
 	v.ResearchReports = make([]*mcpapproval.ResearchReport, len(body.ResearchReports))
 	for i, val := range body.ResearchReports {
 		if val == nil {
@@ -2239,16 +2309,17 @@ func NewGetRequestGatewayError(body *GetRequestGatewayErrorResponseBody) *goa.Se
 // "ensureServerReview" endpoint result from a HTTP "OK" response.
 func NewEnsureServerReviewApprovalRequestSummaryOK(body *EnsureServerReviewResponseBody) *mcpapproval.ApprovalRequestSummary {
 	v := &mcpapproval.ApprovalRequestSummary{
-		ID:             *body.ID,
-		TargetKind:     *body.TargetKind,
-		TargetRaw:      *body.TargetRaw,
-		ServerSlug:     body.ServerSlug,
-		ArtifactRef:    body.ArtifactRef,
-		VersionPinned:  *body.VersionPinned,
-		Status:         *body.Status,
-		RequesterCount: *body.RequesterCount,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                *body.ID,
+		TargetKind:        *body.TargetKind,
+		TargetRaw:         *body.TargetRaw,
+		ServerSlug:        body.ServerSlug,
+		ArtifactRef:       body.ArtifactRef,
+		VersionPinned:     *body.VersionPinned,
+		Status:            *body.Status,
+		RequesterCount:    *body.RequesterCount,
+		EvidenceChangedAt: body.EvidenceChangedAt,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
 	}
 
 	return v
@@ -2408,16 +2479,17 @@ func NewEnsureServerReviewGatewayError(body *EnsureServerReviewGatewayErrorRespo
 // "createRequest" endpoint result from a HTTP "OK" response.
 func NewCreateRequestApprovalRequestSummaryOK(body *CreateRequestResponseBody) *mcpapproval.ApprovalRequestSummary {
 	v := &mcpapproval.ApprovalRequestSummary{
-		ID:             *body.ID,
-		TargetKind:     *body.TargetKind,
-		TargetRaw:      *body.TargetRaw,
-		ServerSlug:     body.ServerSlug,
-		ArtifactRef:    body.ArtifactRef,
-		VersionPinned:  *body.VersionPinned,
-		Status:         *body.Status,
-		RequesterCount: *body.RequesterCount,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                *body.ID,
+		TargetKind:        *body.TargetKind,
+		TargetRaw:         *body.TargetRaw,
+		ServerSlug:        body.ServerSlug,
+		ArtifactRef:       body.ArtifactRef,
+		VersionPinned:     *body.VersionPinned,
+		Status:            *body.Status,
+		RequesterCount:    *body.RequesterCount,
+		EvidenceChangedAt: body.EvidenceChangedAt,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
 	}
 
 	return v
@@ -2577,16 +2649,17 @@ func NewCreateRequestGatewayError(body *CreateRequestGatewayErrorResponseBody) *
 // endpoint result from a HTTP "OK" response.
 func NewPromoteApprovalRequestSummaryOK(body *PromoteResponseBody) *mcpapproval.ApprovalRequestSummary {
 	v := &mcpapproval.ApprovalRequestSummary{
-		ID:             *body.ID,
-		TargetKind:     *body.TargetKind,
-		TargetRaw:      *body.TargetRaw,
-		ServerSlug:     body.ServerSlug,
-		ArtifactRef:    body.ArtifactRef,
-		VersionPinned:  *body.VersionPinned,
-		Status:         *body.Status,
-		RequesterCount: *body.RequesterCount,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:                *body.ID,
+		TargetKind:        *body.TargetKind,
+		TargetRaw:         *body.TargetRaw,
+		ServerSlug:        body.ServerSlug,
+		ArtifactRef:       body.ArtifactRef,
+		VersionPinned:     *body.VersionPinned,
+		Status:            *body.Status,
+		RequesterCount:    *body.RequesterCount,
+		EvidenceChangedAt: body.EvidenceChangedAt,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
 	}
 
 	return v
@@ -2766,6 +2839,9 @@ func NewRefreshEvidenceApprovalRequestDetailOK(body *RefreshEvidenceResponseBody
 			continue
 		}
 		v.Decisions[i] = unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(val)
+	}
+	if body.EvidenceDiff != nil {
+		v.EvidenceDiff = unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff(body.EvidenceDiff)
 	}
 	v.ResearchReports = make([]*mcpapproval.ResearchReport, len(body.ResearchReports))
 	for i, val := range body.ResearchReports {
@@ -3325,6 +3401,11 @@ func ValidateGetRequestResponseBody(body *GetRequestResponseBody) (err error) {
 			}
 		}
 	}
+	if body.EvidenceDiff != nil {
+		if err2 := ValidateEvidenceDiffResponseBody(body.EvidenceDiff); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	for _, e := range body.ResearchReports {
 		if e != nil {
 			if err2 := ValidateResearchReportResponseBody(e); err2 != nil {
@@ -3362,6 +3443,9 @@ func ValidateEnsureServerReviewResponseBody(body *EnsureServerReviewResponseBody
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3398,6 +3482,9 @@ func ValidateCreateRequestResponseBody(body *CreateRequestResponseBody) (err err
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -3433,6 +3520,9 @@ func ValidatePromoteResponseBody(body *PromoteResponseBody) (err error) {
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3478,6 +3568,11 @@ func ValidateRefreshEvidenceResponseBody(body *RefreshEvidenceResponseBody) (err
 			if err2 := ValidateApprovalDecisionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.EvidenceDiff != nil {
+		if err2 := ValidateEvidenceDiffResponseBody(body.EvidenceDiff); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.ResearchReports {
@@ -5485,6 +5580,9 @@ func ValidateApprovalRequestSummaryResponseBody(body *ApprovalRequestSummaryResp
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.EvidenceChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -5526,6 +5624,53 @@ func ValidateApprovalDecisionResponseBody(body *ApprovalDecisionResponseBody) (e
 	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateEvidenceDiffResponseBody runs the validations defined on
+// EvidenceDiffResponseBody
+func ValidateEvidenceDiffResponseBody(body *EvidenceDiffResponseBody) (err error) {
+	if body.Changed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changed", "body"))
+	}
+	for _, e := range body.Fields {
+		if e != nil {
+			if err2 := ValidateEvidenceFieldChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AdvisoriesAdded {
+		if e != nil {
+			if err2 := ValidateEvidenceAdvisoryChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEvidenceFieldChangeResponseBody runs the validations defined on
+// EvidenceFieldChangeResponseBody
+func ValidateEvidenceFieldChangeResponseBody(body *EvidenceFieldChangeResponseBody) (err error) {
+	if body.Field == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("field", "body"))
+	}
+	if body.Before == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("before", "body"))
+	}
+	if body.After == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("after", "body"))
+	}
+	return
+}
+
+// ValidateEvidenceAdvisoryChangeResponseBody runs the validations defined on
+// EvidenceAdvisoryChangeResponseBody
+func ValidateEvidenceAdvisoryChangeResponseBody(body *EvidenceAdvisoryChangeResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	return
 }

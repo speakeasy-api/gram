@@ -1962,16 +1962,17 @@ func DecodeRecordDecisionResponse(decoder func(*http.Response) goahttp.Decoder, 
 // type *ApprovalRequestSummaryResponseBody.
 func unmarshalApprovalRequestSummaryResponseBodyToMcpapprovalApprovalRequestSummary(v *ApprovalRequestSummaryResponseBody) *mcpapproval.ApprovalRequestSummary {
 	res := &mcpapproval.ApprovalRequestSummary{
-		ID:             *v.ID,
-		TargetKind:     *v.TargetKind,
-		TargetRaw:      *v.TargetRaw,
-		ServerSlug:     v.ServerSlug,
-		ArtifactRef:    v.ArtifactRef,
-		VersionPinned:  *v.VersionPinned,
-		Status:         *v.Status,
-		RequesterCount: *v.RequesterCount,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:                *v.ID,
+		TargetKind:        *v.TargetKind,
+		TargetRaw:         *v.TargetRaw,
+		ServerSlug:        v.ServerSlug,
+		ArtifactRef:       v.ArtifactRef,
+		VersionPinned:     *v.VersionPinned,
+		Status:            *v.Status,
+		RequesterCount:    *v.RequesterCount,
+		EvidenceChangedAt: v.EvidenceChangedAt,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
 	}
 
 	return res
@@ -2010,6 +2011,96 @@ func unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(v *Appro
 		for i, val := range v.GrantedPrincipalUrns {
 			res.GrantedPrincipalUrns[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff builds a value of
+// type *mcpapproval.EvidenceDiff from a value of type
+// *EvidenceDiffResponseBody.
+func unmarshalEvidenceDiffResponseBodyToMcpapprovalEvidenceDiff(v *EvidenceDiffResponseBody) *mcpapproval.EvidenceDiff {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.EvidenceDiff{
+		Changed: *v.Changed,
+	}
+	if v.ScopesAdded != nil {
+		res.ScopesAdded = make([]string, len(v.ScopesAdded))
+		for i, val := range v.ScopesAdded {
+			res.ScopesAdded[i] = val
+		}
+	}
+	if v.ScopesRemoved != nil {
+		res.ScopesRemoved = make([]string, len(v.ScopesRemoved))
+		for i, val := range v.ScopesRemoved {
+			res.ScopesRemoved[i] = val
+		}
+	}
+	if v.SecretsAdded != nil {
+		res.SecretsAdded = make([]string, len(v.SecretsAdded))
+		for i, val := range v.SecretsAdded {
+			res.SecretsAdded[i] = val
+		}
+	}
+	if v.SecretsRemoved != nil {
+		res.SecretsRemoved = make([]string, len(v.SecretsRemoved))
+		for i, val := range v.SecretsRemoved {
+			res.SecretsRemoved[i] = val
+		}
+	}
+	if v.Fields != nil {
+		res.Fields = make([]*mcpapproval.EvidenceFieldChange, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = unmarshalEvidenceFieldChangeResponseBodyToMcpapprovalEvidenceFieldChange(val)
+		}
+	}
+	if v.AdvisoriesAdded != nil {
+		res.AdvisoriesAdded = make([]*mcpapproval.EvidenceAdvisoryChange, len(v.AdvisoriesAdded))
+		for i, val := range v.AdvisoriesAdded {
+			if val == nil {
+				res.AdvisoriesAdded[i] = nil
+				continue
+			}
+			res.AdvisoriesAdded[i] = unmarshalEvidenceAdvisoryChangeResponseBodyToMcpapprovalEvidenceAdvisoryChange(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalEvidenceFieldChangeResponseBodyToMcpapprovalEvidenceFieldChange
+// builds a value of type *mcpapproval.EvidenceFieldChange from a value of type
+// *EvidenceFieldChangeResponseBody.
+func unmarshalEvidenceFieldChangeResponseBodyToMcpapprovalEvidenceFieldChange(v *EvidenceFieldChangeResponseBody) *mcpapproval.EvidenceFieldChange {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.EvidenceFieldChange{
+		Field:  *v.Field,
+		Before: *v.Before,
+		After:  *v.After,
+	}
+
+	return res
+}
+
+// unmarshalEvidenceAdvisoryChangeResponseBodyToMcpapprovalEvidenceAdvisoryChange
+// builds a value of type *mcpapproval.EvidenceAdvisoryChange from a value of
+// type *EvidenceAdvisoryChangeResponseBody.
+func unmarshalEvidenceAdvisoryChangeResponseBodyToMcpapprovalEvidenceAdvisoryChange(v *EvidenceAdvisoryChangeResponseBody) *mcpapproval.EvidenceAdvisoryChange {
+	if v == nil {
+		return nil
+	}
+	res := &mcpapproval.EvidenceAdvisoryChange{
+		ID:       *v.ID,
+		Summary:  v.Summary,
+		Severity: v.Severity,
 	}
 
 	return res

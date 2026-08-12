@@ -83,6 +83,10 @@ type GetRequestResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions" json:"decisions" xml:"decisions"`
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiffResponseBody `form:"evidence_diff,omitempty" json:"evidence_diff,omitempty" xml:"evidence_diff,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports" json:"research_reports" xml:"research_reports"`
 }
@@ -113,6 +117,10 @@ type EnsureServerReviewResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the request last changed.
@@ -145,6 +153,10 @@ type CreateRequestResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the request last changed.
@@ -177,6 +189,10 @@ type PromoteResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the request last changed.
@@ -202,6 +218,10 @@ type RefreshEvidenceResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions" json:"decisions" xml:"decisions"`
+	// What moved since the latest decision, compared on read between that
+	// decision's frozen snapshot and the current evidence. Absent when the request
+	// has no decisions or either side cannot be decoded.
+	EvidenceDiff *EvidenceDiffResponseBody `form:"evidence_diff,omitempty" json:"evidence_diff,omitempty" xml:"evidence_diff,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports" json:"research_reports" xml:"research_reports"`
 }
@@ -1765,6 +1785,10 @@ type ApprovalRequestSummaryResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted. Cleared only by recording a new decision.
+	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
 	// When the request was first raised.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the request last changed.
@@ -1807,6 +1831,49 @@ type ApprovalDecisionResponseBody struct {
 	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
 	// When the decision was made.
 	DecidedAt string `form:"decided_at" json:"decided_at" xml:"decided_at"`
+}
+
+// EvidenceDiffResponseBody is used to define fields on response body types.
+type EvidenceDiffResponseBody struct {
+	// Whether anything below is non-empty.
+	Changed bool `form:"changed" json:"changed" xml:"changed"`
+	// OAuth scopes the server's published authority metadata gained since the
+	// decision.
+	ScopesAdded []string `form:"scopes_added,omitempty" json:"scopes_added,omitempty" xml:"scopes_added,omitempty"`
+	// OAuth scopes the published authority metadata lost since the decision.
+	ScopesRemoved []string `form:"scopes_removed,omitempty" json:"scopes_removed,omitempty" xml:"scopes_removed,omitempty"`
+	// Credentials the server now demands that it did not at decision time.
+	SecretsAdded []string `form:"secrets_added,omitempty" json:"secrets_added,omitempty" xml:"secrets_added,omitempty"`
+	// Credentials the server demanded at decision time and no longer does.
+	SecretsRemoved []string `form:"secrets_removed,omitempty" json:"secrets_removed,omitempty" xml:"secrets_removed,omitempty"`
+	// Scalar drifts: authority mode, dynamic client registration,
+	// published-advisory count.
+	Fields []*EvidenceFieldChangeResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Advisories in the current gather's most-recent sample that the snapshot's
+	// sample did not carry.
+	AdvisoriesAdded []*EvidenceAdvisoryChangeResponseBody `form:"advisories_added,omitempty" json:"advisories_added,omitempty" xml:"advisories_added,omitempty"`
+}
+
+// EvidenceFieldChangeResponseBody is used to define fields on response body
+// types.
+type EvidenceFieldChangeResponseBody struct {
+	// Which fact moved: authority_mode, dynamic_registration, or known_advisories.
+	Field string `form:"field" json:"field" xml:"field"`
+	// The value the decision rested on.
+	Before string `form:"before" json:"before" xml:"before"`
+	// The value the latest gather found.
+	After string `form:"after" json:"after" xml:"after"`
+}
+
+// EvidenceAdvisoryChangeResponseBody is used to define fields on response body
+// types.
+type EvidenceAdvisoryChangeResponseBody struct {
+	// The advisory identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The advisory's summary, when the database published one.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The advisory's severity, when the database published one.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
 
 // ResearchReportResponseBody is used to define fields on response body types.
@@ -1891,6 +1958,9 @@ func NewGetRequestResponseBody(res *mcpapproval.ApprovalRequestDetail) *GetReque
 	} else {
 		body.Decisions = []*ApprovalDecisionResponseBody{}
 	}
+	if res.EvidenceDiff != nil {
+		body.EvidenceDiff = marshalMcpapprovalEvidenceDiffToEvidenceDiffResponseBody(res.EvidenceDiff)
+	}
 	if res.ResearchReports != nil {
 		body.ResearchReports = make([]*ResearchReportResponseBody, len(res.ResearchReports))
 		for i, val := range res.ResearchReports {
@@ -1910,16 +1980,17 @@ func NewGetRequestResponseBody(res *mcpapproval.ApprovalRequestDetail) *GetReque
 // result of the "ensureServerReview" endpoint of the "mcpApproval" service.
 func NewEnsureServerReviewResponseBody(res *mcpapproval.ApprovalRequestSummary) *EnsureServerReviewResponseBody {
 	body := &EnsureServerReviewResponseBody{
-		ID:             res.ID,
-		TargetKind:     res.TargetKind,
-		TargetRaw:      res.TargetRaw,
-		ServerSlug:     res.ServerSlug,
-		ArtifactRef:    res.ArtifactRef,
-		VersionPinned:  res.VersionPinned,
-		Status:         res.Status,
-		RequesterCount: res.RequesterCount,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		TargetKind:        res.TargetKind,
+		TargetRaw:         res.TargetRaw,
+		ServerSlug:        res.ServerSlug,
+		ArtifactRef:       res.ArtifactRef,
+		VersionPinned:     res.VersionPinned,
+		Status:            res.Status,
+		RequesterCount:    res.RequesterCount,
+		EvidenceChangedAt: res.EvidenceChangedAt,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	return body
 }
@@ -1928,16 +1999,17 @@ func NewEnsureServerReviewResponseBody(res *mcpapproval.ApprovalRequestSummary) 
 // of the "createRequest" endpoint of the "mcpApproval" service.
 func NewCreateRequestResponseBody(res *mcpapproval.ApprovalRequestSummary) *CreateRequestResponseBody {
 	body := &CreateRequestResponseBody{
-		ID:             res.ID,
-		TargetKind:     res.TargetKind,
-		TargetRaw:      res.TargetRaw,
-		ServerSlug:     res.ServerSlug,
-		ArtifactRef:    res.ArtifactRef,
-		VersionPinned:  res.VersionPinned,
-		Status:         res.Status,
-		RequesterCount: res.RequesterCount,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		TargetKind:        res.TargetKind,
+		TargetRaw:         res.TargetRaw,
+		ServerSlug:        res.ServerSlug,
+		ArtifactRef:       res.ArtifactRef,
+		VersionPinned:     res.VersionPinned,
+		Status:            res.Status,
+		RequesterCount:    res.RequesterCount,
+		EvidenceChangedAt: res.EvidenceChangedAt,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	return body
 }
@@ -1946,16 +2018,17 @@ func NewCreateRequestResponseBody(res *mcpapproval.ApprovalRequestSummary) *Crea
 // "promote" endpoint of the "mcpApproval" service.
 func NewPromoteResponseBody(res *mcpapproval.ApprovalRequestSummary) *PromoteResponseBody {
 	body := &PromoteResponseBody{
-		ID:             res.ID,
-		TargetKind:     res.TargetKind,
-		TargetRaw:      res.TargetRaw,
-		ServerSlug:     res.ServerSlug,
-		ArtifactRef:    res.ArtifactRef,
-		VersionPinned:  res.VersionPinned,
-		Status:         res.Status,
-		RequesterCount: res.RequesterCount,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:                res.ID,
+		TargetKind:        res.TargetKind,
+		TargetRaw:         res.TargetRaw,
+		ServerSlug:        res.ServerSlug,
+		ArtifactRef:       res.ArtifactRef,
+		VersionPinned:     res.VersionPinned,
+		Status:            res.Status,
+		RequesterCount:    res.RequesterCount,
+		EvidenceChangedAt: res.EvidenceChangedAt,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	return body
 }
@@ -1994,6 +2067,9 @@ func NewRefreshEvidenceResponseBody(res *mcpapproval.ApprovalRequestDetail) *Ref
 		}
 	} else {
 		body.Decisions = []*ApprovalDecisionResponseBody{}
+	}
+	if res.EvidenceDiff != nil {
+		body.EvidenceDiff = marshalMcpapprovalEvidenceDiffToEvidenceDiffResponseBody(res.EvidenceDiff)
 	}
 	if res.ResearchReports != nil {
 		body.ResearchReports = make([]*ResearchReportResponseBody, len(res.ResearchReports))

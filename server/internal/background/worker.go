@@ -72,6 +72,10 @@ type WorkerOptions struct {
 	OpenRouter          openrouter.Provisioner
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
+
+	// GitHubEvidenceToken authenticates the recheck sweep's repository
+	// lookups; empty falls back to GitHub's small unauthenticated budget.
+	GitHubEvidenceToken string
 	SiteURL             *url.URL
 	BillingTracker      billing.Tracker
 	BillingRepository   billing.Repository
@@ -131,6 +135,7 @@ func ForDeploymentProcessing(
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		GitHubEvidenceToken: "",
 		SiteURL:             nil,
 		BillingTracker:      nil,
 		BillingRepository:   nil,
@@ -187,6 +192,7 @@ func NewTemporalWorker(
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		GitHubEvidenceToken: "",
 		SiteURL:             nil,
 		BillingTracker:      nil,
 		BillingRepository:   nil,
@@ -231,6 +237,7 @@ func NewTemporalWorker(
 			ChatClient:          conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			GitHubEvidenceToken: conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:             conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:      conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:   conv.Default(o.BillingRepository, opts.BillingRepository),
@@ -344,6 +351,7 @@ func NewTemporalWorker(
 		judgeRateLimiter,
 		opts.BuiltinPresets,
 		opts.TrialEmailsService,
+		opts.GitHubEvidenceToken,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -435,6 +443,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.RunMcpResearch)
+	temporalWorker.RegisterActivity(activities.ListMcpApprovalRecheckPage)
+	temporalWorker.RegisterActivity(activities.RecheckMcpApprovalRequest)
 	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	// Skill efficacy activities — the database steps run on the main queue and
@@ -543,6 +553,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
+	temporalWorker.RegisterWorkflow(McpApprovalRecheckWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
@@ -675,6 +686,12 @@ func NewTemporalWorker(
 	if opts.PluginPublisher != nil {
 		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
 			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
+		}
+	}
+
+	if activities.mcpApprovalRecheck != nil {
+		if err := AddMcpApprovalRecheckSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add mcp approval recheck schedule", attr.SlogError(err))
 		}
 	}
 
