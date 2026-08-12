@@ -421,6 +421,13 @@ const ROUTE_STRUCTURE = {
             title: "Skill Version History",
             url: "versions",
             component: SkillVersionHistory,
+            subPages: {
+              version: {
+                title: "Skill Version",
+                url: ":versionId",
+                component: SkillVersionHistory,
+              },
+            },
           },
           settings: {
             title: "Settings",

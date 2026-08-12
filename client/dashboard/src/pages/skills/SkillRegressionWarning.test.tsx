@@ -8,7 +8,13 @@ vi.mock("@/routes", () => ({
     skills: {
       detail: {
         href: (id: string) => `/skills/${id}`,
-        versions: { href: (id: string) => `/skills/${id}/versions` },
+        versions: {
+          href: (id: string) => `/skills/${id}/versions`,
+          version: {
+            href: (id: string, versionId: string) =>
+              `/skills/${id}/versions/${versionId}`,
+          },
+        },
       },
     },
   }),
@@ -48,6 +54,6 @@ describe("RegressionWarning", () => {
       screen
         .getByRole("link", { name: "Review version to restore" })
         .getAttribute("href"),
-    ).toBe("/skills/skill_a/versions");
+    ).toBe("/skills/skill_a/versions/version_previous");
   });
 });

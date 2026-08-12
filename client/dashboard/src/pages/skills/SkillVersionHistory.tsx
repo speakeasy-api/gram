@@ -11,7 +11,8 @@ import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { type Column, Table } from "@/components/ui/Table";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useParams } from "react-router";
 import { RestoreSkillVersionDialog } from "./RestoreSkillVersionDialog";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 import { useSkillDetailContext } from "./SkillDetailContext";
@@ -25,6 +26,7 @@ const SkillTextDiff = lazy(() => import("./SkillTextDiff"));
 
 export default function SkillVersionHistory(): JSX.Element {
   const { skillQueryData } = useSkillDetailContext();
+  const { versionId } = useParams<{ versionId?: string }>();
   const { skill, latestVersion } = skillQueryData;
   if (!latestVersion)
     return (
@@ -32,15 +34,23 @@ export default function SkillVersionHistory(): JSX.Element {
         No versions found.
       </Text>
     );
-  return <VersionHistory skillId={skill.id} currentVersion={latestVersion} />;
+  return (
+    <VersionHistory
+      skillId={skill.id}
+      currentVersion={latestVersion}
+      selectedVersionId={versionId}
+    />
+  );
 }
 
 function VersionHistory({
   skillId,
   currentVersion,
+  selectedVersionId,
 }: {
   skillId: string;
   currentVersion: SkillVersion;
+  selectedVersionId?: string;
 }): JSX.Element {
   const project = useProject();
   const versionsQuery = useSkillVersionsInfinite({ id: skillId }, undefined, {
@@ -56,6 +66,14 @@ function VersionHistory({
 
   const versions =
     versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
+
+  useEffect(() => {
+    if (!selectedVersionId || !versionsQuery.data) return;
+    const target = document.getElementById(`version-${selectedVersionId}`);
+    target?.scrollIntoView({ block: "center" });
+    target?.focus({ preventScroll: true });
+  }, [selectedVersionId, versionsQuery.data]);
+
   const diffVersions = selectDiffVersions(
     versions,
     selectedVersions,

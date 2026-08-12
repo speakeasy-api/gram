@@ -10,7 +10,6 @@ export type SkillDetailPage =
 export function pageFromLegacySkillHash(hash: string): SkillDetailPage | null {
   const value = hash.replace(/^#/, "");
   if (!value) return null;
-  if (value.startsWith("version-")) return "versions";
 
   switch (value) {
     case "adoption":

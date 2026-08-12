@@ -397,7 +397,12 @@ export function RegressionWarning({
         </p>
         {signal.predecessorVersionId && (
           <Button size="sm" variant="secondary" asChild>
-            <Link to={routes.skills.detail.versions.href(skillId)}>
+            <Link
+              to={routes.skills.detail.versions.version.href(
+                skillId,
+                signal.predecessorVersionId,
+              )}
+            >
               Review version to restore
             </Link>
           </Button>
