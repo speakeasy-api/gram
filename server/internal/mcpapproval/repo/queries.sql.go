@@ -275,7 +275,7 @@ func (q *Queries) FailResearchReport(ctx context.Context, arg FailResearchReport
 
 const getApprovalRequest = `-- name: GetApprovalRequest :one
 SELECT
-  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted
+  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.evidence_changed_at, r.notified_change_fingerprint, r.created_at, r.updated_at, r.deleted_at, r.deleted
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -308,6 +308,8 @@ type GetApprovalRequestRow struct {
 	CurrentEvidence           []byte
 	EvidenceVersion           int32
 	EvidenceCollectedAt       pgtype.Timestamptz
+	EvidenceChangedAt         pgtype.Timestamptz
+	NotifiedChangeFingerprint pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	DeletedAt                 pgtype.Timestamptz
@@ -332,6 +334,8 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequest
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,
 		&i.EvidenceCollectedAt,
+		&i.EvidenceChangedAt,
+		&i.NotifiedChangeFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -343,7 +347,7 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequest
 
 const getApprovalRequestByTarget = `-- name: GetApprovalRequestByTarget :one
 SELECT
-  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted
+  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.evidence_changed_at, r.notified_change_fingerprint, r.created_at, r.updated_at, r.deleted_at, r.deleted
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -378,6 +382,8 @@ type GetApprovalRequestByTargetRow struct {
 	CurrentEvidence           []byte
 	EvidenceVersion           int32
 	EvidenceCollectedAt       pgtype.Timestamptz
+	EvidenceChangedAt         pgtype.Timestamptz
+	NotifiedChangeFingerprint pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	DeletedAt                 pgtype.Timestamptz
@@ -406,6 +412,8 @@ func (q *Queries) GetApprovalRequestByTarget(ctx context.Context, arg GetApprova
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,
 		&i.EvidenceCollectedAt,
+		&i.EvidenceChangedAt,
+		&i.NotifiedChangeFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -705,7 +713,7 @@ func (q *Queries) ListApprovalRequestTargets(ctx context.Context, projectID uuid
 
 const listApprovalRequests = `-- name: ListApprovalRequests :many
 SELECT
-  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted
+  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.evidence_changed_at, r.notified_change_fingerprint, r.created_at, r.updated_at, r.deleted_at, r.deleted
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -744,6 +752,8 @@ type ListApprovalRequestsRow struct {
 	CurrentEvidence           []byte
 	EvidenceVersion           int32
 	EvidenceCollectedAt       pgtype.Timestamptz
+	EvidenceChangedAt         pgtype.Timestamptz
+	NotifiedChangeFingerprint pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	DeletedAt                 pgtype.Timestamptz
@@ -777,6 +787,8 @@ func (q *Queries) ListApprovalRequests(ctx context.Context, arg ListApprovalRequ
 			&i.CurrentEvidence,
 			&i.EvidenceVersion,
 			&i.EvidenceCollectedAt,
+			&i.EvidenceChangedAt,
+			&i.NotifiedChangeFingerprint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1204,7 +1216,7 @@ SET updated_at = clock_timestamp()
   -- A later promotion links its bypass request onto an existing review; a
   -- proactive re-request never clears an existing link.
   , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
-RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
+RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, evidence_changed_at, notified_change_fingerprint, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
 `
 
 type UpsertApprovalRequestParams struct {
@@ -1233,6 +1245,8 @@ type UpsertApprovalRequestRow struct {
 	CurrentEvidence           []byte
 	EvidenceVersion           int32
 	EvidenceCollectedAt       pgtype.Timestamptz
+	EvidenceChangedAt         pgtype.Timestamptz
+	NotifiedChangeFingerprint pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	DeletedAt                 pgtype.Timestamptz
@@ -1282,6 +1296,8 @@ func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalR
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,
 		&i.EvidenceCollectedAt,
+		&i.EvidenceChangedAt,
+		&i.NotifiedChangeFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

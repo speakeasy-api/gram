@@ -1101,6 +1101,8 @@ type McpApprovalRequest struct {
 	CurrentEvidence           []byte
 	EvidenceVersion           int32
 	EvidenceCollectedAt       pgtype.Timestamptz
+	EvidenceChangedAt         pgtype.Timestamptz
+	NotifiedChangeFingerprint pgtype.Text
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	DeletedAt                 pgtype.Timestamptz
