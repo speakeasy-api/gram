@@ -47,8 +47,9 @@ const (
 // being an amplifier. This is a conscious RFC 9111 deviation of the kind
 // -02 §5.2 permits.
 //
-// now is the reference instant the caller will also use to derive the
-// absolute expiry, so a slow header parse cannot shift the two apart.
+// now is the local reference instant, read when the response carries no
+// usable Date: the Expires fallback and the apparent age are both measured
+// against it then.
 func cacheTTL(header http.Header, now time.Time) time.Duration {
 	lifetime, ok := freshnessLifetime(header, now)
 	if !ok {
@@ -61,7 +62,19 @@ func cacheTTL(header http.Header, now time.Time) time.Duration {
 	// answered with max-age=86400 and Age: 86000 has minutes of freshness
 	// left, not a day — which is exactly how a rotated redirect_uris set
 	// would go unnoticed.
-	return clampCacheTTL(lifetime - responseAge(header, now))
+	//
+	// The comparison stands in for a subtraction that could wrap: the
+	// lifetime may be hugely negative (an Expires far before Date) and the
+	// age saturates at MaxInt64, so lifetime-minus-age can fall past
+	// MinInt64 and come out large and positive — the clamp would then read
+	// two "this is ancient" signals as maximum freshness. Age is never
+	// negative, so age >= lifetime is exactly "no freshness left", and
+	// otherwise the difference is positive and cannot wrap.
+	age := responseAge(header, now)
+	if age >= lifetime {
+		return minCacheTTL
+	}
+	return clampCacheTTL(lifetime - age)
 }
 
 // responseAge is RFC 9111 §4.2.3's current_age: the larger of the Age header

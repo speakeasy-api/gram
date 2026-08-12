@@ -164,6 +164,38 @@ func TestCacheTTL_OverflowingAgeReadsAsAncient(t *testing.T) {
 	require.Equal(t, minCacheTTL, ttl)
 }
 
+func TestCacheTTL_AncientExpiresWithOverflowingAgeStaysAtFloor(t *testing.T) {
+	t.Parallel()
+
+	// Two "this is ancient" signals at once: an Expires decades before Date
+	// makes the lifetime hugely negative, and the Age saturates. A plain
+	// subtraction would wrap past MinInt64 into a large positive value the
+	// clamp reads as maximum freshness — the floor is the only correct
+	// answer.
+	ttl := cacheTTL(headerWith(t,
+		"Date", cacheTTLReference.Format(http.TimeFormat),
+		"Expires", cacheTTLReference.AddDate(-32, 0, 0).Format(http.TimeFormat),
+		"Age", "99999999999999999999",
+	), cacheTTLReference)
+	require.Equal(t, minCacheTTL, ttl)
+
+	// The merely-huge spelling wraps the same subtraction without saturating
+	// anything first.
+	ttl = cacheTTL(headerWith(t,
+		"Date", cacheTTLReference.Format(http.TimeFormat),
+		"Expires", cacheTTLReference.AddDate(-32, 0, 0).Format(http.TimeFormat),
+		"Age", "8300000000",
+	), cacheTTLReference)
+	require.Equal(t, minCacheTTL, ttl)
+}
+
+func TestCacheTTL_MalformedSharedMaxAgeFallsThroughToMaxAge(t *testing.T) {
+	t.Parallel()
+
+	ttl := cacheTTL(headerWith(t, "Cache-Control", "s-maxage=abc, max-age=7200"), cacheTTLReference)
+	require.Equal(t, 2*time.Hour, ttl)
+}
+
 func TestCacheTTL_MaxAgeMalformedFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 

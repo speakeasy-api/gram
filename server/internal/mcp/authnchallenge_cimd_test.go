@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,11 +32,18 @@ import (
 )
 
 // cimdDocServer hosts a Client ID Metadata Document at
-// <TLS server>/oauth/client.json. Tests mutate doc before issuing requests.
+// <TLS server>/oauth/client.json. Tests reshape the served response through
+// set before issuing requests; mu covers every mutable field because the
+// handler runs on the server's own goroutine and a loopback round trip is
+// not a synchronization edge the race detector recognizes.
 type cimdDocServer struct {
 	srv      *httptest.Server
 	clientID string
-	doc      map[string]any
+
+	mu sync.Mutex
+
+	// doc is the document body, encoded on every 200.
+	doc map[string]any
 
 	// etag, when non-empty, is served as the document's ETag and matched
 	// against an incoming If-None-Match, which a match answers with 304.
@@ -60,12 +68,23 @@ type cimdDocServer struct {
 	conditionalRequests atomic.Int64
 }
 
+// set applies a mutation to the served response under the same lock the
+// handler reads with.
+func (ds *cimdDocServer) set(t *testing.T, mutate func(ds *cimdDocServer)) {
+	t.Helper()
+
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	mutate(ds)
+}
+
 func startCIMDDocServer(t *testing.T) *cimdDocServer {
 	t.Helper()
 
 	ds := &cimdDocServer{
 		srv:                 nil,
 		clientID:            "",
+		mu:                  sync.Mutex{},
 		doc:                 nil,
 		etag:                "",
 		cacheControl:        "",
@@ -80,6 +99,12 @@ func startCIMDDocServer(t *testing.T) *cimdDocServer {
 		if conditional != "" {
 			ds.conditionalRequests.Add(1)
 		}
+
+		// Held for the whole response so the doc map cannot change mid
+		// encode; requests in these tests are sequential, so contention is
+		// not a concern.
+		ds.mu.Lock()
+		defer ds.mu.Unlock()
 
 		// Failure injection wins over revalidation: a host that has started
 		// erroring does so whether or not the request was conditional.
@@ -311,7 +336,7 @@ func TestOAuthCIMD_ConfidentialAuthMethodRejected(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["token_endpoint_auth_method"] = "client_secret_basic"
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["token_endpoint_auth_method"] = "client_secret_basic" })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
@@ -322,7 +347,7 @@ func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json"
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
@@ -333,7 +358,7 @@ func TestOAuthCIMD_CrossOriginRedirectURIRejected(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["redirect_uris"] = []any{"https://elsewhere.example.com/callback"}
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{"https://elsewhere.example.com/callback"} })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "https://elsewhere.example.com/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_redirect_uri")
@@ -358,7 +383,7 @@ func TestOAuthCIMD_NonLoopbackPortVarianceRejected(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["redirect_uris"] = []any{ds.srv.URL + "/callback"}
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{ds.srv.URL + "/callback"} })
 
 	docURL, err := url.Parse(ds.srv.URL)
 	require.NoError(t, err)
@@ -373,9 +398,9 @@ func TestOAuthCIMD_UnknownExtensionFieldsAccepted(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["software_statement"] = "eyJhbGciOiJub25lIn0.e30."
-	ds.doc["client_id_expires_at"] = 4102444800
-	ds.doc["x_vendor_extension"] = map[string]any{"nested": true}
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["software_statement"] = "eyJhbGciOiJub25lIn0.e30." })
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_id_expires_at"] = 4102444800 })
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["x_vendor_extension"] = map[string]any{"nested": true} })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code, "documents with unrecognized extension fields must be accepted: %s", w.Body.String())
@@ -522,7 +547,7 @@ func TestOAuthCIMD_RepeatAuthorizeServesFromCache(t *testing.T) {
 	require.True(t, first.ClientIDMetadataCacheExpiresAt.Valid, "the first fetch must establish a cache expiry")
 	require.True(t, first.ClientIDMetadataCacheExpiresAt.Time.After(time.Now()), "a freshly written expiry must be in the future")
 
-	ds.doc["client_name"] = "Renamed CIMD Client"
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = "Renamed CIMD Client" })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -553,8 +578,8 @@ func TestOAuthCIMD_RepeatAuthorizeRefreshesClient(t *testing.T) {
 	first := getCIMDClientRow(t, ctx, ti, toolset, ds.clientID)
 
 	lapsed := lapseCIMDCache(t, ctx, ti, first)
-	ds.doc["client_name"] = "Renamed CIMD Client"
-	ds.doc["redirect_uris"] = []any{redirectURI, "http://localhost:3000/other"}
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = "Renamed CIMD Client" })
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{redirectURI, "http://localhost:3000/other"} })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -578,7 +603,7 @@ func TestOAuthCIMD_LapsedCacheRevalidatesWithETag(t *testing.T) {
 
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.etag = `"v1"`
+	ds.set(t, func(ds *cimdDocServer) { ds.etag = `"v1"` })
 
 	mcpSlug := toolset.McpSlug.String
 	redirectURI := "http://127.0.0.1:33418/callback"
@@ -589,7 +614,7 @@ func TestOAuthCIMD_LapsedCacheRevalidatesWithETag(t *testing.T) {
 	require.Equal(t, `"v1"`, first.ClientIDMetadataEtag.String, "the host's validator must be persisted")
 
 	lapsed := lapseCIMDCache(t, ctx, ti, first)
-	ds.doc["client_name"] = "Never Served"
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = "Never Served" })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -615,7 +640,7 @@ func TestOAuthCIMD_RevalidationPicksUpRotatedDocument(t *testing.T) {
 
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.etag = `"v1"`
+	ds.set(t, func(ds *cimdDocServer) { ds.etag = `"v1"` })
 
 	mcpSlug := toolset.McpSlug.String
 	redirectURI := "http://127.0.0.1:33418/callback"
@@ -625,9 +650,9 @@ func TestOAuthCIMD_RevalidationPicksUpRotatedDocument(t *testing.T) {
 	first := getCIMDClientRow(t, ctx, ti, toolset, ds.clientID)
 
 	lapseCIMDCache(t, ctx, ti, first)
-	ds.etag = `"v2"`
-	ds.doc["client_name"] = "Rotated CIMD Client"
-	ds.doc["redirect_uris"] = []any{redirectURI, "http://localhost:3000/other"}
+	ds.set(t, func(ds *cimdDocServer) { ds.etag = `"v2"` })
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = "Rotated CIMD Client" })
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{redirectURI, "http://localhost:3000/other"} })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -649,7 +674,7 @@ func TestOAuthCIMD_PurgeForcesUnconditionalReread(t *testing.T) {
 
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.etag = `"v1"`
+	ds.set(t, func(ds *cimdDocServer) { ds.etag = `"v1"` })
 
 	mcpSlug := toolset.McpSlug.String
 	redirectURI := "http://127.0.0.1:33418/callback"
@@ -664,7 +689,7 @@ func TestOAuthCIMD_PurgeForcesUnconditionalReread(t *testing.T) {
 	require.False(t, purged.ClientIDMetadataCacheExpiresAt.Valid)
 	require.False(t, purged.ClientIDMetadataEtag.Valid)
 
-	ds.doc["client_name"] = "Renamed After Purge"
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = "Renamed After Purge" })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -684,7 +709,7 @@ func TestOAuthCIMD_UpstreamMaxAgeClampedToFloor(t *testing.T) {
 
 	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.cacheControl = "public, max-age=120"
+	ds.set(t, func(ds *cimdDocServer) { ds.cacheControl = "public, max-age=120" })
 
 	before := time.Now()
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
@@ -713,7 +738,7 @@ func TestOAuthCIMD_RefreshFailureDoesNotPoisonCache(t *testing.T) {
 	first := getCIMDClientRow(t, ctx, ti, toolset, ds.clientID)
 
 	lapsed := lapseCIMDCache(t, ctx, ti, first)
-	ds.status = http.StatusInternalServerError
+	ds.set(t, func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusServiceUnavailable, w.Code, "a failed refresh aborts rather than serving stale")
@@ -743,7 +768,7 @@ func TestOAuthCIMD_InvalidDocumentOnRefreshDoesNotPoisonCache(t *testing.T) {
 	lapsed := lapseCIMDCache(t, ctx, ti, first)
 	// A document that no longer satisfies the spec: -02 §4.1 forbids a
 	// client_secret in a document that is public by definition.
-	ds.doc["client_secret"] = "leaked"
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_secret"] = "leaked" })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
@@ -850,7 +875,7 @@ func TestOAuthCIMD_ConsentEscapesHostileClientName(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["client_name"] = `<img src=x onerror=alert(1)> Client`
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = `<img src=x onerror=alert(1)> Client` })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -872,7 +897,7 @@ func TestOAuthCIMD_ConsentNoLoopbackWarningForSameOriginRedirect(t *testing.T) {
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
 	redirectURI := ds.srv.URL + "/callback"
-	ds.doc["redirect_uris"] = []any{redirectURI}
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{redirectURI} })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusFound, w.Code)
@@ -923,7 +948,7 @@ func TestOAuthCIMD_LoopbackEmptyFragmentRegistrationRejected(t *testing.T) {
 
 	_, ti, ds, toolset, orgID := newTestCIMDService(t)
 	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
-	ds.doc["redirect_uris"] = []any{"http://127.0.0.1:33418/callback#"}
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{"http://127.0.0.1:33418/callback#"} })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")

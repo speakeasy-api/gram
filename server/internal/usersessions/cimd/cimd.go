@@ -329,8 +329,12 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 			safeDescription: "",
 			tooLarge:        false,
 			cacheOutcome:    CacheOutcomeCached,
-			etag:            cache.ETag,
-			ttl:             0,
+			// Sanitized even though the caller persists nothing on a cache
+			// hit: every etag this package hands back must be safe to
+			// store, or a future caller trusting the field would launder a
+			// malformed stored validator back into the database.
+			etag: sanitizeETag(cache.ETag),
+			ttl:  0,
 		}
 	}
 
