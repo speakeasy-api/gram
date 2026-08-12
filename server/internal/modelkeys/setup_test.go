@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	pfrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -153,35 +152,6 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		provisioner: provisioner,
 		features:    features,
 	}
-}
-
-// enableCustomModelKeys turns on the product feature for the auth context's
-// organization, which gates the upsert endpoint.
-func enableCustomModelKeys(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	_, pfErr := pfrepo.New(conn).EnableFeature(ctx, pfrepo.EnableFeatureParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureCustomModelKeys),
-	})
-	require.NoError(t, pfErr)
-}
-
-func disableCustomModelKeys(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	_, err := pfrepo.New(ti.conn).DeleteFeature(ctx, pfrepo.DeleteFeatureParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureCustomModelKeys),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCustomModelKeys, false)
 }
 
 func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

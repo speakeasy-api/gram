@@ -23,7 +23,6 @@ func TestListKeys_ReturnsConfiguredKeys(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enableCustomModelKeys(t, ctx, ti.conn)
 
 	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, nil))
 	require.NoError(t, err)
