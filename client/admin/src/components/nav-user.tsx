@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { getSession, logout } from "@/lib/gramAdminApi";
+import { adminSessionQuery, logout } from "@/lib/gramAdminApi";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -39,11 +39,7 @@ function initials(name: string): string {
 export function NavUser(): JSX.Element {
   const { isMobile } = useSidebar();
 
-  const session = useQuery({
-    queryKey: ["adminSession"],
-    queryFn: getSession,
-    staleTime: Infinity,
-  });
+  const session = useQuery(adminSessionQuery);
 
   const logoutMutation = useMutation({ mutationFn: logout });
 
