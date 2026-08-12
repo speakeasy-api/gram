@@ -1,11 +1,14 @@
 package plugins
 
 import (
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -119,6 +122,71 @@ install_failure() {
   printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
   exit "$install_failure_exit"
 }
+
+# Codex plugin versions are disposable. When its inline command supplies a
+# stable data root, publish this script and its deployment config there before
+# doing any other work, then run the relay against the stable config. A failed
+# persistence attempt must not break a hook whose installed payload still works.
+persist_root=${SPEAKEASY_HOOKS_PERSIST_ROOT:-}
+source_script=${SPEAKEASY_HOOKS_PERSIST_SCRIPT:-$0}
+source_config=${SPEAKEASY_HOOKS_PERSIST_CONFIG:-}
+config_arg_index=0
+arg_index=0
+for arg in "$@"; do
+  case "$arg" in
+    --config=*) [ -n "$source_config" ] || source_config=${arg#--config=}; config_arg_index=$arg_index; break ;;
+  esac
+  arg_index=$((arg_index + 1))
+done
+
+persist_payload() {
+  [ -n "$persist_root" ] && [ -r "$source_script" ] && [ -r "$source_config" ] || return 1
+  hooks_dir="$persist_root/hooks"
+  stable_script="$hooks_dir/bootstrap.sh"
+  stable_config="$persist_root/speakeasy.json"
+  ready="$persist_root/.unix-ready"
+  lock="$persist_root/.persist-unix.lock"
+  umask 077
+  mkdir -p "$hooks_dir" || return 1
+  chmod 700 "$persist_root" "$hooks_dir" 2>/dev/null || true
+
+  if ! mkdir "$lock" 2>/dev/null; then
+    # Another hook publishing the same bundle wins. Existing complete output is
+    # safe to use; otherwise this invocation keeps its original config.
+    [ -r "$ready" ] && [ -r "$stable_script" ] && [ -r "$stable_config" ]
+    return
+  fi
+
+  script_tmp="$hooks_dir/.bootstrap.sh.$$"
+  config_tmp="$persist_root/.speakeasy.json.$$"
+  ready_tmp="$persist_root/.unix-ready.$$"
+  persisted=
+  if cp "$source_script" "$script_tmp" && cp "$source_config" "$config_tmp" &&
+     chmod 700 "$script_tmp" && chmod 600 "$config_tmp"; then
+    rm -f "$ready"
+    if mv "$config_tmp" "$stable_config" && mv "$script_tmp" "$stable_script" &&
+       : > "$ready_tmp" && mv "$ready_tmp" "$ready"; then
+      persisted=1
+    fi
+  fi
+  rm -f "$script_tmp" "$config_tmp" "$ready_tmp"
+  rmdir "$lock" 2>/dev/null || true
+  [ -n "$persisted" ]
+}
+
+if [ -n "$source_config" ] && persist_payload; then
+  forwarded=()
+  arg_index=0
+  for arg in "$@"; do
+    if [ "$arg_index" -eq "$config_arg_index" ]; then
+      forwarded+=("--config=$persist_root/speakeasy.json")
+    else
+      forwarded+=("$arg")
+    fi
+    arg_index=$((arg_index + 1))
+  done
+  set -- "${forwarded[@]}"
+fi
 
 case "$(uname -s)" in
   Darwin) os=darwin ;;
@@ -290,6 +358,80 @@ function Exit-InstallFailure([string]$Message) {
     exit $InstallFailureExit
 }
 
+# Codex supplies a version-independent plugin data directory. Publish this
+# launcher and its deployment config there as one ready-marked bundle, then run
+# the relay against the stable config. Persistence failure leaves the installed
+# payload usable for the current invocation.
+function Save-StablePayload {
+    if (-not $env:SPEAKEASY_HOOKS_PERSIST_ROOT) { return $null }
+
+    $ConfigIndex = -1
+    $ConfigPath = $env:SPEAKEASY_HOOKS_PERSIST_CONFIG
+    for ($Index = 0; $Index -lt $ForwardArgs.Count; $Index++) {
+        if ($ForwardArgs[$Index].StartsWith("--config=", [StringComparison]::Ordinal)) {
+            $ConfigIndex = $Index
+            if (-not $ConfigPath) { $ConfigPath = $ForwardArgs[$Index].Substring("--config=".Length) }
+            break
+        }
+    }
+    $ScriptPath = if ($env:SPEAKEASY_HOOKS_PERSIST_SCRIPT) { $env:SPEAKEASY_HOOKS_PERSIST_SCRIPT } else { $PSCommandPath }
+    if ($ConfigIndex -lt 0 -or
+        -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return $null }
+
+    $PersistRoot = $env:SPEAKEASY_HOOKS_PERSIST_ROOT
+    $HooksDir = Join-Path $PersistRoot "hooks"
+    $StableScript = Join-Path $HooksDir "bootstrap.ps1"
+    $StableConfig = Join-Path $PersistRoot "speakeasy.json"
+    $Ready = Join-Path $PersistRoot ".windows-ready"
+    $Lock = Join-Path $PersistRoot ".persist-windows.lock"
+    $OwnLock = $false
+    try {
+        New-Item -ItemType Directory -Force -Path $HooksDir | Out-Null
+        try {
+            New-Item -ItemType Directory -Path $Lock -ErrorAction Stop | Out-Null
+            $OwnLock = $true
+        } catch {
+            if ((Test-Path -LiteralPath $Ready -PathType Leaf) -and
+                (Test-Path -LiteralPath $StableScript -PathType Leaf) -and
+                (Test-Path -LiteralPath $StableConfig -PathType Leaf)) {
+                return [PSCustomObject]@{ ConfigIndex = $ConfigIndex; ConfigPath = $StableConfig }
+            }
+            return $null
+        }
+
+        $Suffix = [guid]::NewGuid().ToString("N")
+        $ScriptTmp = Join-Path $HooksDir ".bootstrap.ps1.$Suffix"
+        $ConfigTmp = Join-Path $PersistRoot ".speakeasy.json.$Suffix"
+        $ReadyTmp = Join-Path $PersistRoot ".windows-ready.$Suffix"
+        try {
+            Copy-Item -LiteralPath $ScriptPath -Destination $ScriptTmp
+            Copy-Item -LiteralPath $ConfigPath -Destination $ConfigTmp
+            Remove-Item -LiteralPath $Ready -Force -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath $ConfigTmp -Destination $StableConfig -Force
+            Move-Item -LiteralPath $ScriptTmp -Destination $StableScript -Force
+            [System.IO.File]::WriteAllText($ReadyTmp, "ready" + [char]10)
+            Move-Item -LiteralPath $ReadyTmp -Destination $Ready -Force
+            return [PSCustomObject]@{ ConfigIndex = $ConfigIndex; ConfigPath = $StableConfig }
+        } finally {
+            Remove-Item -LiteralPath $ScriptTmp -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $ConfigTmp -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $ReadyTmp -Force -ErrorAction SilentlyContinue
+        }
+    } catch {
+        return $null
+    } finally {
+        if ($OwnLock) {
+            Remove-Item -LiteralPath $Lock -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+$StablePayload = Save-StablePayload
+if ($StablePayload) {
+    $ForwardArgs[$StablePayload.ConfigIndex] = "--config=$($StablePayload.ConfigPath)"
+}
+
 $Arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
     "X64" { "amd64" }
     "Arm64" { "arm64" }
@@ -418,35 +560,53 @@ func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool
 // SessionStart and UserPromptSubmit for as long as it holds the stale plugin
 // list.
 //
-// So the command resolves the bootstrapper when the hook fires instead of
-// trusting the baked path: the substituted root first, then the most recently
-// written sibling version directory. Only when neither exists does it fail,
-// and then with a message naming the root it looked under and the org's
-// install-failure exit code rather than bash's opaque 127.
+// The command resolves the bootstrapper when the hook fires. Once a complete
+// bundle exists under Codex's version-independent plugin data directory it runs
+// from there, while treating the installed root as a refresh source. Before the
+// bundle is seeded, it uses the installed root or newest sibling as a first-run
+// migration path. Only when no complete payload exists does the command fail
+// with the org's install-failure exit code rather than bash's 127.
+const codexHooksStablePayloadSubdir = "speakeasy-hooks/runtime-v1"
+
 func codexHooksBootstrapCommand(timeoutSeconds int, async, failOpen bool) string {
 	args := fmt.Sprintf("agenthooks run --provider=codex --timeout=%ds", timeoutSeconds)
 	if async {
 		args += " --async"
 	}
 	// The script is single-quoted for `bash -c`, so it must not contain a
-	// single quote. Codex replaces ${PLUGIN_ROOT} textually before any shell
-	// sees the command; the surrounding double quotes leave the shell's own
-	// expansion of the same name as a fallback, since Codex also exports it to
-	// the hook process.
+	// single quote. $PLUGIN_ROOT and $PLUGIN_DATA deliberately omit braces:
+	// Codex exports both variables, and runtime expansion safely handles paths
+	// containing shell metacharacters without Codex substituting them textually.
 	script := fmt.Sprintf(
-		`r="%s"; s="$r/hooks/bootstrap.sh"; `+
-			`[ -f "$s" ] || s=$(ls -t "${r%%/*}"/*/hooks/bootstrap.sh 2>/dev/null | head -n 1); `+
-			`[ -n "$s" ] && [ -f "$s" ] || { printf "speakeasy-hooks: no hook payload under %%s; the Codex plugin cache moved or the plugin is not fully installed\n" "$r" >&2; exit %d; }; `+
-			`exec bash "$s" "--config=${s%%/hooks/bootstrap.sh}/speakeasy.json" %s`,
-		codexPluginRootPlaceholder, conv.Ternary(failOpen, 0, 1), args,
+		`r="$PLUGIN_ROOT"; d=; [ -z "${PLUGIN_DATA:-}" ] || d="$PLUGIN_DATA/%s"; rs="$r/hooks/bootstrap.sh"; rc="$r/speakeasy.json"; s=; c=; ps=; pc=; `+
+			`if [ -n "$d" ] && [ -f "$d/.unix-ready" ] && [ -f "$d/hooks/bootstrap.sh" ] && [ -f "$d/speakeasy.json" ]; then s="$d/hooks/bootstrap.sh"; c="$d/speakeasy.json"; [ ! -f "$rs" ] || [ ! -f "$rc" ] || { ps="$rs"; pc="$rc"; }; `+
+			`elif [ -f "$rs" ] && [ -f "$rc" ]; then s="$rs"; c="$rc"; ps="$s"; pc="$c"; `+
+			`else s=$(ls -t "${r%%/*}"/*/hooks/bootstrap.sh 2>/dev/null | head -n 1); c="${s%%/hooks/bootstrap.sh}/speakeasy.json"; ps="$s"; pc="$c"; fi; `+
+			`[ -n "$s" ] && [ -f "$s" ] && [ -f "$c" ] || { printf "speakeasy-hooks: no complete hook payload for %%s; the Codex plugin cache moved or the plugin is not fully installed\n" "$r" >&2; exit %d; }; `+
+			`SPEAKEASY_HOOKS_PERSIST_ROOT="$d" SPEAKEASY_HOOKS_PERSIST_SCRIPT="$ps" SPEAKEASY_HOOKS_PERSIST_CONFIG="$pc" exec bash "$s" "--config=$c" %s`,
+		codexHooksStablePayloadSubdir, conv.Ternary(failOpen, 0, 1), args,
 	)
 	return "bash -c '" + script + "'"
 }
 
-func hooksPowerShellCommand(root, provider string, timeoutSeconds int, async bool) string {
-	command := fmt.Sprintf(`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%s\hooks\bootstrap.ps1" --config="%s\speakeasy.json" agenthooks run --provider=%s --timeout=%ds`, root, root, provider, timeoutSeconds)
+func codexHooksPowerShellCommand(timeoutSeconds int, async, failOpen bool) string {
+	args := fmt.Sprintf("agenthooks run --provider=codex --timeout=%ds", timeoutSeconds)
 	if async {
-		command += " --async"
+		args += " --async"
 	}
-	return command
+	script := fmt.Sprintf(
+		`$r=$env:PLUGIN_ROOT; $d=Join-Path $env:PLUGIN_DATA %q; $rs=Join-Path $r "hooks/bootstrap.ps1"; $rc=Join-Path $r "speakeasy.json"; $s=$null; $c=$null; $ps=$null; $pc=$null; `+
+			`if ((Test-Path -LiteralPath (Join-Path $d ".windows-ready") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $d "hooks/bootstrap.ps1") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $d "speakeasy.json") -PathType Leaf)) { $s=Join-Path $d "hooks/bootstrap.ps1"; $c=Join-Path $d "speakeasy.json"; if ((Test-Path -LiteralPath $rs -PathType Leaf) -and (Test-Path -LiteralPath $rc -PathType Leaf)) { $ps=$rs; $pc=$rc } `+
+			`} elseif ((Test-Path -LiteralPath $rs -PathType Leaf) -and (Test-Path -LiteralPath $rc -PathType Leaf)) { $s=$rs; $c=$rc; $ps=$s; $pc=$c `+
+			`} else { $parent=Split-Path $r -Parent; $candidate=Get-ChildItem -LiteralPath $parent -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Where-Object { (Test-Path -LiteralPath (Join-Path $_.FullName "hooks/bootstrap.ps1") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $_.FullName "speakeasy.json") -PathType Leaf) } | Select-Object -First 1; if ($candidate) { $s=Join-Path $candidate.FullName "hooks/bootstrap.ps1"; $c=Join-Path $candidate.FullName "speakeasy.json"; $ps=$s; $pc=$c } }; `+
+			`if (-not $s -or -not (Test-Path -LiteralPath $s -PathType Leaf) -or -not (Test-Path -LiteralPath $c -PathType Leaf)) { [Console]::Error.WriteLine("speakeasy-hooks: no complete hook payload for $r; the Codex plugin cache moved or the plugin is not fully installed"); exit %d }; `+
+			`$env:SPEAKEASY_HOOKS_PERSIST_ROOT=$d; $env:SPEAKEASY_HOOKS_PERSIST_SCRIPT=$ps; $env:SPEAKEASY_HOOKS_PERSIST_CONFIG=$pc; & $s "--config=$c" %s; exit $LASTEXITCODE`,
+		codexHooksStablePayloadSubdir, conv.Ternary(failOpen, 0, 1), args,
+	)
+	units := utf16.Encode([]rune(script))
+	encoded := make([]byte, 2*len(units))
+	for i, unit := range units {
+		binary.LittleEndian.PutUint16(encoded[2*i:], unit)
+	}
+	return `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand ` + base64.StdEncoding.EncodeToString(encoded)
 }

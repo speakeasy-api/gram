@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -18,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -1171,14 +1174,10 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		case "SessionEnd":
 			timeoutSeconds = 3
 		}
-		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		if async {
-			expectedWindowsSuffix += " --async"
-		}
 		require.Equal(t, codexHooksBootstrapCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].Command)
 		require.Contains(t, groups[0].Hooks[0].Command, fmt.Sprintf(`agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds))
-		require.Contains(t, groups[0].Hooks[0].Command, `r="${PLUGIN_ROOT}"`, "Codex must still see the plugin-root placeholder it substitutes")
-		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		require.Contains(t, groups[0].Hooks[0].Command, `r="$PLUGIN_ROOT"`, "the shell must expand Codex's runtime environment safely")
+		require.Equal(t, codexHooksPowerShellCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].CommandWindows)
 		if event == "SessionEnd" {
 			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
 		} else {
@@ -1187,8 +1186,22 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		// The Unix command wraps the script in `bash -c '...'`, so --async is
 		// the last thing inside the quotes rather than the last thing on the line.
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async'"))
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
+		require.Equal(t, async, strings.Contains(decodePowerShellCommand(t, groups[0].Hooks[0].CommandWindows), " --async"))
 	}
+}
+
+func decodePowerShellCommand(t *testing.T, command string) string {
+	t.Helper()
+	const prefix = `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand `
+	require.True(t, strings.HasPrefix(command, prefix))
+	encoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(command, prefix))
+	require.NoError(t, err)
+	require.Zero(t, len(encoded)%2)
+	units := make([]uint16, len(encoded)/2)
+	for i := range units {
+		units[i] = binary.LittleEndian.Uint16(encoded[2*i:])
+	}
+	return string(utf16.Decode(units))
 }
 
 func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T) {
@@ -1256,9 +1269,9 @@ func TestComputeCodexHookHashDoesNotEscapeShellRedirections(t *testing.T) {
 // trusted_hash in config.toml equals the hash it recomputes from hooks.json, and
 // nothing re-approves an install whose hash drifted. These digests were verified
 // against codex-cli 0.147.0 by installing the generated plugin and confirming
-// every event reached the relay without --dangerously-bypass-hook-trust. Any
-// change to the hook commands or to the hashed identity must be re-verified the
-// same way before these expectations are updated.
+// SessionStart and UserPromptSubmit were invoked without bypassing hook trust.
+// Any change to the hook commands or hashed identity must be re-verified before
+// these expectations are updated.
 func TestComputeCodexHookApprovalsMatchHashesCodexAccepts(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Inc", ServerURL: "https://app.example.com"}
@@ -1269,13 +1282,13 @@ func TestComputeCodexHookApprovalsMatchHashesCodexAccepts(t *testing.T) {
 	require.NoError(t, err)
 
 	want := map[string]string{
-		"session_start":      "sha256:19c34f914c5882709cce1901108a2f82b8024433973c27f8a1ba75c62d514149",
-		"session_end":        "sha256:dea4cb3edab10c5b6bdc89b7772df256dcb2d92777d355664ee6761de20320e8",
-		"pre_tool_use":       "sha256:dbb01b969610436bcbc96d73cc8f90e223e35234a1d9c44ed8b2ad011bdeb5f2",
-		"permission_request": "sha256:2800fc87de1574da6e68dbeab3b57dce3a3b445dffb133d5d58183247522a32e",
-		"post_tool_use":      "sha256:87e6e659e77a925687a052b1656b67fc05b1bd55ca86f83d13b292f45d8b188e",
-		"user_prompt_submit": "sha256:52076c4b0617f19ff57bf11fde82722c14f144eb6a456d90483051a30921d87d",
-		"stop":               "sha256:ca39493a4c5bd1bd9ec5f9880fd49b36bc2a402c8e58af2e6a9cb2eda4517e3e",
+		"session_start":      "sha256:97fd1499a0458fb2edc14d885394b26353238af17e2ce6ad9fbd8f003457dff5",
+		"session_end":        "sha256:b9b35b076d1375c9f7492d22d1aa76bde7f451722a1d33f44f05760bbaf5ccdf",
+		"pre_tool_use":       "sha256:43699348b88b5b6ff7db849bd4483982c218d931911528e8232a75525f9ead6f",
+		"permission_request": "sha256:11c7123a75f447d513faf77e68129c553890033e130c5a5727f28893337b4747",
+		"post_tool_use":      "sha256:bc734beadf467b7bfe7204a4362038682868e18be8fede3dcfb4138f226469aa",
+		"user_prompt_submit": "sha256:51b8c02c25a53d3c4aa1293bb0383c41a0d76c9b3199d3adece17a439c0ce297",
+		"stop":               "sha256:30af2129bbe2d0cf860943f122415e704c64e5074c32243c83a85b5ecfaf93cf",
 	}
 	got := make(map[string]string, len(approvals))
 	for _, approval := range approvals {
@@ -1471,6 +1484,62 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 		require.NoError(t, err, string(out))
 		require.Equal(t, "args:\nstill-warm", string(out))
 	}
+}
+
+func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
+	sum := sha256.Sum256(archive)
+	var downloads atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		downloads.Add(1)
+		_, _ = w.Write(archive)
+	}))
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	base := t.TempDir()
+	root := filepath.Join(base, "plugins", "cache", "acme-speakeasy", "acme-observability-codex", "0.29.100")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hooks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), script, 0o755))
+	config := []byte("{\"deployment\":\"test\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), config, 0o600))
+	data := filepath.Join(base, "plugins", "data", "acme-observability-codex-acme-speakeasy")
+	cache := filepath.Join(base, "hooks-binary-cache")
+	command := codexHookCommandString(60, false, false)
+
+	stdout, stderr, code := codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	stable := filepath.Join(data, filepath.FromSlash(codexHooksStablePayloadSubdir))
+	stableConfig := filepath.Join(stable, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"the first relay execution must no longer depend on the disposable config")
+	require.Equal(t, script, requireFileBytes(t, filepath.Join(stable, "hooks", "bootstrap.sh")))
+	require.Equal(t, config, requireFileBytes(t, stableConfig))
+	require.Equal(t, []byte(""), requireFileBytes(t, filepath.Join(stable, ".unix-ready")))
+	configInfo, err := os.Stat(stableConfig)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), configInfo.Mode().Perm())
+
+	refreshedScript := append(append([]byte(nil), script...), []byte("# refreshed\n")...)
+	refreshedConfig := []byte("{\"deployment\":\"refreshed\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), refreshedScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), refreshedConfig, 0o600))
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"a ready bundle must execute independently while refreshing from the cache")
+	require.Equal(t, refreshedScript, requireFileBytes(t, filepath.Join(stable, "hooks", "bootstrap.sh")))
+	require.Equal(t, refreshedConfig, requireFileBytes(t, stableConfig))
+
+	require.NoError(t, os.RemoveAll(filepath.Dir(filepath.Dir(root))))
+	server.Close()
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stdout, "--config="+stableConfig)
+	require.Equal(t, int64(1), downloads.Load(), "stable fallback must reuse the verified binary cache")
 }
 
 func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {

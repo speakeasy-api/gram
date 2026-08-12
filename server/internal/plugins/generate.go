@@ -1372,7 +1372,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async, cfg.InstallFailOpen),
-			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async, cfg.InstallFailOpen),
 			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
@@ -1748,7 +1748,7 @@ func computeCodexHookApprovals(marketplace, plugin string, failOpen bool) ([]cod
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s hook: %w", event, err)
 		}
-		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async))
+		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async, failOpen))
 		if err != nil {
 			return nil, fmt.Errorf("compute windows hash for %s hook: %w", event, err)
 		}
@@ -1761,12 +1761,6 @@ func computeCodexHookApprovals(marketplace, plugin string, failOpen bool) ([]cod
 	return approvals, nil
 }
 
-// codexPluginRootPlaceholder is the plugin-root variable Codex expands in hook
-// commands. Unlike Claude and Cursor, which leave the expansion to the shell,
-// Codex substitutes it textually before running the command and also exports it
-// to the hook process.
-const codexPluginRootPlaceholder = `${PLUGIN_ROOT}`
-
 // codexHookCommandString / codexHookCommandStringWindows are the single source
 // for the command strings emitted into the Codex hooks.json (command /
 // commandWindows) AND hashed into the precomputed approvals — Codex hashes the
@@ -1776,12 +1770,11 @@ func codexHookCommandString(timeoutSeconds int, async, failOpen bool) string {
 	return codexHooksBootstrapCommand(timeoutSeconds, async, failOpen)
 }
 
-// codexHookCommandStringWindows keeps the plain -File invocation: the
-// plugin-cache staleness codexHooksBootstrapCommand recovers from applies on
-// Windows too, but a PowerShell equivalent cannot be exercised from this
-// repository's test environment, so it is not rewritten blind.
-func codexHookCommandStringWindows(timeoutSeconds int, async bool) string {
-	return hooksPowerShellCommand(codexPluginRootPlaceholder, "codex", timeoutSeconds, async)
+// codexHookCommandStringWindows carries the same cache-swap and stable-data
+// resolution policy as the Unix command, encoded as UTF-16LE so paths and
+// PowerShell syntax do not depend on the parent process's quoting rules.
+func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) string {
+	return codexHooksPowerShellCommand(timeoutSeconds, async, failOpen)
 }
 
 // GenerateCodexInstallScript produces a bash install script that:
