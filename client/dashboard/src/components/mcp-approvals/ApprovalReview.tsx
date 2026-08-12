@@ -599,6 +599,22 @@ function reportClaims(report: unknown): ReportClaim[] {
 }
 
 /**
+ * A citation becomes an href, and the model that wrote it had just read pages
+ * that are themselves untrusted — so a scheme that executes rather than
+ * navigates (javascript:, data:) never reaches the link. The runner already
+ * refuses to store one; this is the second half of that, because reports
+ * stored before it did are still on file.
+ */
+function isFollowableCitation(candidate: string): boolean {
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reads a claim's citation list. The runner stores citations as {url, title}
  * objects; bare string URLs are accepted too so older payloads keep
  * rendering.
@@ -608,13 +624,13 @@ function citationURLs(value: unknown): string[] {
 
   const out: string[] = [];
   for (const entry of value) {
-    if (typeof entry === "string" && entry !== "") {
+    if (typeof entry === "string" && isFollowableCitation(entry)) {
       out.push(entry);
       continue;
     }
     if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
       const url = (entry as Record<string, unknown>)["url"];
-      if (typeof url === "string" && url !== "") out.push(url);
+      if (typeof url === "string" && isFollowableCitation(url)) out.push(url);
     }
   }
 
