@@ -1466,10 +1466,13 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   -- this URL, so storing it as a discriminator avoids parsing client_id at
   -- runtime to tell CIMD rows from DCR rows.
   client_id_metadata_uri TEXT,
-  -- Last successful fetch of the metadata document (observability and ops).
+  -- Last successful read of the metadata document, whether that was a fresh
+  -- body or a 304 confirming the stored one (observability and ops).
   client_id_metadata_fetched_at timestamptz,
   -- Cache TTL hint derived from upstream Cache-Control / Expires headers,
-  -- bounded by application-side min/max. NULL means no cached fetch yet.
+  -- bounded by application-side min/max. NULL means no cached fetch yet, and
+  -- setting it back to NULL is the purge lever that forces the next
+  -- authorization to re-read the document.
   client_id_metadata_cache_expires_at timestamptz,
   -- ETag from the last successful fetch, used for If-None-Match conditional
   -- refresh. Optional, since not all metadata hosts emit one.

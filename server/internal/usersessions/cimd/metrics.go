@@ -15,7 +15,6 @@ const (
 	meterFetchAttempts        = "cimd.fetch.attempts"
 	meterFetchDurationSeconds = "cimd.fetch.duration_seconds"
 	meterFetchResponseSize    = "cimd.fetch.response_size"
-	meterCacheHits            = "cimd.cache.hits"
 	meterValidationFailures   = "cimd.validation.failures"
 )
 
@@ -31,13 +30,20 @@ const (
 	fetchResultParseError      fetchResult = "parse_error"
 	fetchResultValidationError fetchResult = "validation_error"
 
-	// The remaining results are PROVISIONAL: they label lifecycle stages that
-	// follow-up issues add inside this package — document caching (AIS-216:
-	// cached, conditional_not_modified) and per-origin rate limiting
-	// (AIS-215: rate_limited). They are declared now so the label vocabulary
-	// is stable for dashboards, but nothing records them yet and their exact
-	// semantics may still shift when the emitting code lands — do not build
-	// monitors on them until then.
+	// The cache results describe resolutions that did not fetch a fresh
+	// document: cached served the caller's stored row without any upstream
+	// request, conditional_not_modified made a conditional request the
+	// upstream answered 304. Most points on this instrument are cached
+	// once a client is warm, so a fetch-failure ratio must be taken against
+	// the fetch-bearing outcomes rather than against every attempt.
+	fetchResultCached                 fetchResult = "cached"
+	fetchResultConditionalNotModified fetchResult = "conditional_not_modified"
+
+	// rate_limited is PROVISIONAL: it labels the per-origin rate limiting
+	// AIS-215 adds inside this package. It is declared now so the label
+	// vocabulary is stable for dashboards, but nothing records it yet and
+	// its exact semantics may still shift when the emitting code lands — do
+	// not build monitors on it until then.
 	//
 	// An admission_denied result was formerly reserved here for AIS-371.
 	// Admission control instead records to its own cimd.admission.decisions
@@ -45,9 +51,7 @@ const (
 	// fetch ran at all, so counting it under fetch.attempts would break this
 	// instrument's one-point-per-Resolve invariant and quietly change the
 	// denominator of every fetch-success chart.
-	fetchResultCached                 fetchResult = "cached"
-	fetchResultConditionalNotModified fetchResult = "conditional_not_modified"
-	fetchResultRateLimited            fetchResult = "rate_limited"
+	fetchResultRateLimited fetchResult = "rate_limited"
 )
 
 // validationReason is the machine-readable label recorded on
@@ -82,7 +86,6 @@ type metrics struct {
 	fetchAttempts      metric.Int64Counter
 	fetchDuration      metric.Float64Histogram
 	fetchResponseSize  metric.Int64Histogram
-	cacheHits          metric.Int64Counter
 	validationFailures metric.Int64Counter
 }
 
@@ -119,15 +122,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterFetchResponseSize), attr.SlogError(err))
 	}
 
-	cacheHits, err := meter.Int64Counter(
-		meterCacheHits,
-		metric.WithDescription("Count of CIMD metadata document cache hits by origin"),
-		metric.WithUnit("{hit}"),
-	)
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterCacheHits), attr.SlogError(err))
-	}
-
 	validationFailures, err := meter.Int64Counter(
 		meterValidationFailures,
 		metric.WithDescription("Count of CIMD metadata document validation failures by reason"),
@@ -141,7 +135,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		fetchAttempts:      fetchAttempts,
 		fetchDuration:      fetchDuration,
 		fetchResponseSize:  fetchResponseSize,
-		cacheHits:          cacheHits,
 		validationFailures: validationFailures,
 	}
 }
@@ -168,15 +161,6 @@ func (m *metrics) RecordResponseSize(ctx context.Context, origin string, bytes i
 		return
 	}
 	m.fetchResponseSize.Record(ctx, bytes, metric.WithAttributes(attr.CIMDOrigin(origin)))
-}
-
-// RecordCacheHit is reserved for the document cache added by AIS-216; nothing
-// calls it in the fetch-every-time lifecycle shipped by AIS-217.
-func (m *metrics) RecordCacheHit(ctx context.Context, origin string) {
-	if m == nil || m.cacheHits == nil {
-		return
-	}
-	m.cacheHits.Add(ctx, 1, metric.WithAttributes(attr.CIMDOrigin(origin)))
 }
 
 func (m *metrics) RecordValidationFailure(ctx context.Context, reason validationReason) {
