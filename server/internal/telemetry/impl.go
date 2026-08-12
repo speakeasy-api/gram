@@ -712,22 +712,16 @@ func (s *Service) resolveSummaryOwnerIDs(ctx context.Context, orgID string, keys
 }
 
 // resolveEmployeeIdentity expands the single identifier the employee views pass
-// — a gram user id, or an email when the person has no directory row — into
-// every identity that person's telemetry rows can carry.
+// — a gram user id, or an email when the person has no directory row — into the
+// repo.UserIdentity their telemetry rows can be attributed to (that type
+// documents why the two shapes exist).
 //
-// The expansion is necessary because ingest attributes rows two ways. Hook
-// events resolve the sender's email to a gram user id and write both, but the
-// rows that carry tokens and cost (Claude and Codex OTEL, plus the Anthropic,
-// Codex and Cursor usage imports) only carry the provider account's email. A
-// filter on one identifier matches one shape and drops the other, so the
-// employee page showed sessions and tool calls with no tokens or cost
-// (DNO-827). Personal accounts are hit hardest: their provider email is often
-// not the directory email, so their usage only joins through user_accounts.
+// Personal accounts are the reason the linked-account lookup is here: their
+// provider email is usually not the directory email, so their usage only joins
+// to the employee through user_accounts.
 //
-// Ownership comes from the directory, never from telemetry row identity — the
-// same rule attachUserAccounts follows, so a stray row pairing one person's
-// email with another person's user id cannot pull a second person's usage into
-// this employee's totals (DNO-509).
+// Ownership comes from the directory, never from telemetry row identity, which
+// is the same rule attachUserAccounts follows (DNO-509).
 //
 // Best effort: a directory lookup failure falls back to the identifier alone,
 // which is the behaviour that predates this expansion.
@@ -739,26 +733,25 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 
 	users := usersRepo.New(s.db)
 	if strings.Contains(identifier, "@") {
-		email := conv.NormalizeEmail(identifier)
-		identity.Emails = append(identity.Emails, email)
+		identity.Emails = append(identity.Emails, conv.NormalizeEmail(identifier))
 
 		// Usage from someone with no directory row still aggregates by email, so
 		// an email that resolves to nobody is not an error.
 		rows, err := users.GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
-			Emails:         []string{email},
+			Emails:         identity.Emails,
 			OrganizationID: orgID,
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve employee email to org user", attr.SlogError(err))
 		}
 		for _, row := range rows {
+			// These rows already carry the directory email, so no lookup by id.
 			identity.UserIDs = append(identity.UserIDs, row.ID)
+			identity.Emails = append(identity.Emails, conv.NormalizeEmail(row.Email))
 		}
 	} else {
 		identity.UserIDs = append(identity.UserIDs, identifier)
-	}
 
-	if len(identity.UserIDs) > 0 {
 		rows, err := users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
 			Ids:            identity.UserIDs,
 			OrganizationID: orgID,
@@ -769,10 +762,9 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 		for _, row := range rows {
 			identity.Emails = append(identity.Emails, conv.NormalizeEmail(row.Email))
 		}
+	}
 
-		// Linked AI accounts (team and personal, every provider). A personal
-		// account usually signs in with a different email than the directory
-		// one, and that is the email its OTEL and usage-import rows carry.
+	if len(identity.UserIDs) > 0 {
 		accounts, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
 			OrganizationID: orgID,
 			UserIds:        identity.UserIDs,
@@ -781,9 +773,7 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 			s.logger.WarnContext(ctx, "failed to load linked accounts for employee identity", attr.SlogError(err))
 		}
 		for _, account := range accounts {
-			if email := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email)); email != "" {
-				identity.Emails = append(identity.Emails, email)
-			}
+			identity.Emails = append(identity.Emails, conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email)))
 		}
 	}
 
@@ -793,8 +783,10 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 	return identity
 }
 
-// dedupeNonEmpty drops blanks and repeats while keeping first-seen order, so an
-// identity carries each value once no matter how many directory rows supplied it.
+// dedupeNonEmpty drops blanks and repeats while keeping first-seen order.
+// Dropping blanks is the load-bearing half: a directory row with no email would
+// otherwise put "" in the identity, and matching lower(user_email) = ” would
+// sweep in every email-less row in the project — everyone else's hook rows.
 func dedupeNonEmpty(values []string) []string {
 	if len(values) == 0 {
 		return nil

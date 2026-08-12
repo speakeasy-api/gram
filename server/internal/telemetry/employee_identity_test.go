@@ -2,7 +2,6 @@ package telemetry_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,8 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,26 +29,25 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
 
-	employee := createOrgEmployee(t, ctx, ti)
+	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 	// A personal AI account signs in with its own email, so its usage rows only
 	// reach the employee through the user_accounts directory.
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
-	linkUserAccount(t, ctx, ti, employee.ID, personalEmail, "personal")
+	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
 
 	strangerEmail := "stranger-" + uuid.New().String() + "@example.com"
 
 	now := time.Now().UTC()
 
-	// Hook-shaped rows: a resolved gram user id alongside the directory email,
-	// carrying tool calls but no token usage.
-	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employee.ID, "")
+	// Attributed by gram user id, carrying a tool call but no token usage.
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employeeID, "")
 
-	// OTEL-shaped rows: tokens and cost, attributed by email only.
-	insertUsageLogForEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), uuid.New().String(), employee.Email, 100, 50, 2.5)
-	insertUsageLogForEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), uuid.New().String(), personalEmail, 400, 200, 7.5)
+	// Usage-import shaped rows: tokens and cost, attributed by email only.
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), personalEmail, 400, 200, 7.5)
 
 	// Someone else's usage must stay out of this employee's totals.
-	insertUsageLogForEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), uuid.New().String(), strangerEmail, 9000, 9000, 99)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9000, 9000, 99)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -60,7 +56,7 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
 			From:   from,
 			To:     to,
-			UserID: &employee.ID,
+			UserID: &employeeID,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -81,7 +77,7 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 		// once this query started selecting it.
 		assert.InDelta(c, 10.0, m.TotalCost, 0.001)
 
-		// The id-carrying hook row still aggregates alongside them.
+		// The id-carrying row still aggregates alongside them.
 		assert.Equal(c, int64(1), m.TotalToolCalls)
 	}, 10*time.Second, 200*time.Millisecond)
 }
@@ -98,11 +94,11 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.New().String()
 
-	employee := createOrgEmployee(t, ctx, ti)
+	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 
 	now := time.Now().UTC()
-	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employee.ID, "")
-	insertUsageLogForEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), uuid.New().String(), employee.Email, 100, 50, 2.5)
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employeeID, "")
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -111,7 +107,7 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
 			From:   from,
 			To:     to,
-			UserID: &employee.Email,
+			UserID: &employeeEmail,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -125,35 +121,45 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-type orgEmployee struct {
-	ID    string
-	Email string
-}
+// A row pairing this employee's email with somebody else's gram user id belongs
+// to that other person: attribution follows user_id whenever a row carries one,
+// so widening the filter to an identity set must not double count it (DNO-509).
+func TestGetUserMetricsSummary_IgnoresEmailRowsOwnedByAnotherUser(t *testing.T) {
+	t.Parallel()
 
-// createOrgEmployee adds a second directory user to the test org, so employee
-// identity resolution has something to resolve that is not the caller.
-func createOrgEmployee(t *testing.T, ctx context.Context, ti *testInstance) orgEmployee {
-	t.Helper()
+	ctx, ti := newTestLogsService(t)
 
-	id := "user-" + uuid.New().String()
-	email := "employee-" + uuid.New().String() + "@example.com"
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
 
-	user, err := usersRepo.New(ti.conn).UpsertUser(ctx, usersRepo.UpsertUserParams{
-		ID:          id,
-		Email:       email,
-		DisplayName: "Test Employee",
-		PhotoUrl:    conv.PtrToPGText(nil),
-		Admin:       false,
-	})
-	require.NoError(t, err)
+	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
+	otherID, _ := seedConnectedOrgUser(t, ctx, ti, "other")
 
-	_, err = orgRepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: ti.orgID,
-		UserID:         conv.ToPGText(user.ID),
-	})
-	require.NoError(t, err)
+	now := time.Now().UTC()
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
+	// Same email, but the row already names a different owner.
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), otherID, employeeEmail, 700, 300, 42)
 
-	return orgEmployee{ID: user.ID, Email: user.Email}
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+			From:   from,
+			To:     to,
+			UserID: &employeeID,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+
+		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
+		assert.InDelta(c, 2.5, res.Metrics.TotalCost, 0.001)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func linkUserAccount(t *testing.T, ctx context.Context, ti *testInstance, userID, email, accountType string) {
@@ -169,43 +175,5 @@ func linkUserAccount(t *testing.T, ctx context.Context, ti *testInstance, userID
 		Email:               conv.ToPGText(email),
 		AccountType:         conv.ToPGText(accountType),
 	})
-	require.NoError(t, err)
-}
-
-// insertUsageLogForEmail writes the row shape the OTEL and usage-import paths
-// produce: gen_ai usage attributes attributed by user.email, with no user.id.
-func insertUsageLogForEmail(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID, userEmail string, inputTokens, outputTokens int, cost float64) {
-	t.Helper()
-
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	attributes := map[string]any{
-		"gen_ai.conversation.id":     chatID,
-		"gen_ai.response.id":         uuid.New().String(),
-		"gen_ai.usage.input_tokens":  inputTokens,
-		"gen_ai.usage.output_tokens": outputTokens,
-		"gen_ai.usage.cost":          cost,
-		"gen_ai.response.model":      "claude-opus-5",
-		"gen_ai.provider.name":       "anthropic",
-		"user.email":                 userEmail,
-		"gram.resource.urn":          "chat:completion",
-	}
-
-	attrsJSON, err := json.Marshal(attributes)
-	require.NoError(t, err)
-
-	err = conn.Exec(ctx, `
-		INSERT INTO telemetry_logs (
-			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
-			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_deployment_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, "chat:completion", "gram-server")
 	require.NoError(t, err)
 }

@@ -62,17 +62,21 @@ type UserIdentity struct {
 	Emails  []string
 }
 
-// IsEmpty reports whether the identity would match no rows at all, i.e. the
-// caller is not scoping to a user.
+// IsEmpty reports whether the caller is scoping to a user at all. An empty
+// identity applies no user filter, so it matches every row rather than none.
 func (u UserIdentity) IsEmpty() bool {
 	return len(u.UserIDs) == 0 && len(u.Emails) == 0
 }
 
-// withUserIdentityFilter scopes a query to a single employee across every
-// identity their rows carry. A row matches on its user_id or on its email,
-// rather than on one precedence-collapsed identifier, so a person's email-only
-// cost rows and their id-carrying hook rows aggregate together. An empty
-// identity is a no-op.
+// withUserIdentityFilter scopes a query to one employee across every identity
+// their rows carry. An empty identity is a no-op.
+//
+// A row is attributed by its user_id whenever it has one, and only falls back to
+// its email when it does not — the same precedence userIdentifierExpr applies,
+// widened from a single identifier to the employee's whole identity set. Keeping
+// that precedence is what stops a stray row pairing this employee's email with
+// another person's user id from being counted on both people's pages (DNO-509);
+// a plain "id matches OR email matches" would count it twice.
 //
 // user_email is compared lowercased on both sides because ingest stores the
 // provider's casing verbatim while the directory emails callers resolve are
@@ -87,7 +91,10 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity) sq
 		match = append(match, squirrel.Eq{"telemetry_logs.user_id": identity.UserIDs})
 	}
 	if len(identity.Emails) > 0 {
-		match = append(match, squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails})
+		match = append(match, squirrel.And{
+			squirrel.Eq{"telemetry_logs.user_id": ""},
+			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails},
+		})
 	}
 
 	return sb.Where(match)
@@ -3188,11 +3195,8 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 
-		// Cost. MetricsSummaryRow has always carried it and the response builder
-		// always mapped it, but this query never selected it, so every employee
-		// page read cost from the grouped employees-list query instead — one
-		// identity-shaped group at a time. Selecting it here lets the page read
-		// cost from the same ungrouped, identity-folded aggregate as its tokens.
+		// Cost lives on MetricsSummaryRow but was never selected here, so callers
+		// wanting a user's cost had to read it from the grouped employees list.
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
 		// Chat request metrics
