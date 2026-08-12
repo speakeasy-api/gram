@@ -8,6 +8,11 @@ import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import {
+  openSafeExternalUrl,
+  safeExternalHttpUrl,
+} from "@/lib/safe-external-url";
+import { cn } from "@/lib/utils";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
 import type { ResearchReport } from "@gram/client/models/components/researchreport.js";
@@ -559,9 +564,9 @@ function reportInjections(report: unknown): InjectionFinding[] {
     if (typeof entry !== "object" || entry === null) continue;
     const record = entry as Record<string, unknown>;
     const url = record["url"];
-    // Same rule as a citation: this becomes an href, and it came from a page
-    // that was already judged to be hostile.
-    if (typeof url !== "string" || !isFollowableCitation(url)) continue;
+    // Same rule as a citation: this is navigable, and it came from a page
+    // already judged to be hostile.
+    if (typeof url !== "string" || safeExternalHttpUrl(url) === null) continue;
     out.push({
       url,
       rationale:
@@ -596,14 +601,7 @@ function ReportInjections({ report }: { report: unknown }): JSX.Element | null {
       <ul className="mt-1 space-y-1">
         {injections.map((injection) => (
           <li key={injection.url}>
-            <a
-              href={injection.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground underline underline-offset-2"
-            >
-              {citationHost(injection.url)}
-            </a>
+            <ExternalCitationLink url={injection.url} />
             {injection.rationale && (
               <span className="text-muted-foreground">
                 {" "}
@@ -687,22 +685,6 @@ function reportClaims(report: unknown): ReportClaim[] {
 }
 
 /**
- * A citation becomes an href, and the model that wrote it had just read pages
- * that are themselves untrusted — so a scheme that executes rather than
- * navigates (javascript:, data:) never reaches the link. The runner already
- * refuses to store one; this is the second half of that, because reports
- * stored before it did are still on file.
- */
-function isFollowableCitation(candidate: string): boolean {
-  try {
-    const parsed = new URL(candidate);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Reads a claim's citation list. The runner stores citations as {url, title}
  * objects; bare string URLs are accepted too so older payloads keep
  * rendering.
@@ -712,13 +694,15 @@ function citationURLs(value: unknown): string[] {
 
   const out: string[] = [];
   for (const entry of value) {
-    if (typeof entry === "string" && isFollowableCitation(entry)) {
+    if (typeof entry === "string" && safeExternalHttpUrl(entry) !== null) {
       out.push(entry);
       continue;
     }
     if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
       const url = (entry as Record<string, unknown>)["url"];
-      if (typeof url === "string" && isFollowableCitation(url)) out.push(url);
+      if (typeof url === "string" && safeExternalHttpUrl(url) !== null) {
+        out.push(url);
+      }
     }
   }
 
@@ -754,20 +738,45 @@ function ReportClaims({ report }: { report: unknown }): JSX.Element | null {
               </span>
             )}
             {claim.citations.map((citation) => (
-              <a
-                key={citation}
-                href={citation}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground truncate underline underline-offset-2"
-              >
-                {citationHost(citation)}
-              </a>
+              <ExternalCitationLink key={citation} url={citation} truncate />
             ))}
           </div>
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * A link out to a page the research read. Opened through the shared safe path
+ * rather than a plain anchor: these URLs come from material the runner treats
+ * as hostile, so the tab is uniquely named, disowned, and navigated without a
+ * referrer — and a popup the browser blocked is reported rather than looking
+ * like a dead control.
+ */
+function ExternalCitationLink({
+  url,
+  truncate = false,
+}: {
+  url: string;
+  truncate?: boolean;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!openSafeExternalUrl(url)) {
+          toast.error("Your browser blocked opening this link in a new tab");
+        }
+      }}
+      title={url}
+      className={cn(
+        "text-muted-foreground hover:text-foreground underline underline-offset-2",
+        truncate && "truncate",
+      )}
+    >
+      {citationHost(url)}
+    </button>
   );
 }
 

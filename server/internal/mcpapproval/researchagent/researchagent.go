@@ -41,7 +41,7 @@ var systemPrompt string
 // PromptVersion identifies the research prompt a run used, stored on the
 // report so reports stay distinguishable across prompt changes. Bump on any
 // change to prompt.txt or the extraction instructions.
-const PromptVersion = "3"
+const PromptVersion = "4"
 
 // Model is the completion model the research loop runs on.
 const Model = "anthropic/claude-sonnet-5"
@@ -480,7 +480,7 @@ func (r *Runner) judgeFetch(
 		return result
 	}
 
-	*injections = append(*injections, InjectionFinding{URL: source, Rationale: verdict.Rationale})
+	recordInjection(injections, InjectionFinding{URL: source, Rationale: verdict.Rationale})
 
 	return fmt.Sprintf(
 		"[gram] This page was judged to be attempting to instruct its reader rather than inform them: %s\n"+
@@ -502,10 +502,36 @@ func boundTranscript(transcript string) string {
 		return transcript
 	}
 
-	head := transcript[:maxTranscriptHeadChars]
-	tail := transcript[len(transcript)-(maxTranscriptChars-maxTranscriptHeadChars):]
+	// The marker comes out of the budget rather than on top of it: a bound
+	// that the truncation itself exceeds is not a bound.
+	const marker = "\n\n[…transcript truncated: middle of the run omitted…]\n\n"
 
-	return head + "\n\n[…transcript truncated: middle of the run omitted…]\n\n" + tail
+	head := transcript[:maxTranscriptHeadChars]
+	tail := transcript[len(transcript)-(maxTranscriptChars-maxTranscriptHeadChars-len(marker)):]
+
+	return head + marker + tail
+}
+
+// recordInjection adds a finding once. The agent can fetch the same page
+// twice — a search returning it again, a link followed back — and a repeat is
+// not a second attempt worth counting: the list is rendered per URL, so a
+// duplicate would both overstate the finding and collide as a key.
+//
+// The URL is filtered on the way in for the same reason citations are: this
+// came from a page the judge just called hostile, and it is stored to be
+// rendered as a link.
+func recordInjection(injections *[]InjectionFinding, finding InjectionFinding) {
+	if !followableURL(finding.URL) {
+		return
+	}
+
+	for _, existing := range *injections {
+		if existing.URL == finding.URL {
+			return
+		}
+	}
+
+	*injections = append(*injections, finding)
 }
 
 // extract turns the transcript into the structured report document.
