@@ -269,6 +269,25 @@ jobs:
           cache: true
           env: false
 
+      - name: Cache Pkl packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pkl-${{ runner.os }}-${{ runner.arch }}-pkl0.32.1-${{ hashFiles('hk.pkl') }}
+          path: ~/.pkl/cache
+
+      - name: Prefetch hk Pkl package
+        run: |
+          for attempt in 1 2 3 4; do
+            if pkl download-package "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0"; then
+              exit 0
+            fi
+            if [[ "$attempt" == 4 ]]; then
+              exit 1
+            fi
+            echo "Pkl package download failed; retrying after backoff..."
+            sleep $((attempt * 5))
+          done
+
       - name: Prepare GitHub Actions environment
         run: mise run github
 
