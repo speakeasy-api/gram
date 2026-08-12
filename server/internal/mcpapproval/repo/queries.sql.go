@@ -988,6 +988,34 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 	return items, nil
 }
 
+const lockApprovalRequestForResearch = `-- name: LockApprovalRequestForResearch :one
+SELECT id
+FROM mcp_approval_requests
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockApprovalRequestForResearchParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Serializes research starts for one request. Starting a run is a
+// check-then-insert — is one already running, if not create one — and the
+// gap between those two is a paid agent run: two clicks that both read "none
+// running" both spend. Taking this lock first makes the second caller wait
+// and then see the first caller's row. The durable form of this is a partial
+// unique index on (mcp_approval_request_id) WHERE status = 'running', which
+// needs its own migration.
+func (q *Queries) LockApprovalRequestForResearch(ctx context.Context, arg LockApprovalRequestForResearchParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockApprovalRequestForResearch, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const refreshApprovalRequestEvidence = `-- name: RefreshApprovalRequestEvidence :execrows
 UPDATE mcp_approval_requests
 SET current_evidence = $1

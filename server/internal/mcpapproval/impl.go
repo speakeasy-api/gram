@@ -822,9 +822,39 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
 	}
 
+	if s.research == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "the research runner is not available").LogError(ctx, s.logger)
+	}
+
+	requestedBy := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		requestedBy = authCtx.UserID
+	}
+
 	// At most one run per request in flight: a start while one runs returns
-	// the running report, so a double-click cannot spend twice.
-	running, err := queries.GetRunningResearchReport(ctx, repo.GetRunningResearchReportParams{
+	// the running report, so a double-click cannot spend twice. The check and
+	// the insert have to be one atomic step for that to be true — read
+	// separately, two callers both see no running run and both pay for one —
+	// so they share a transaction that opens by locking the request row.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin research start").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txQueries := queries.WithTx(dbtx)
+
+	if _, err := txQueries.LockApprovalRequestForResearch(ctx, repo.LockApprovalRequestForResearchParams{
+		ID:        requestID,
+		ProjectID: projectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock approval request for research").LogError(ctx, s.logger)
+	}
+
+	running, err := txQueries.GetRunningResearchReport(ctx, repo.GetRunningResearchReportParams{
 		McpApprovalRequestID: requestID,
 		ProjectID:            projectID,
 	})
@@ -835,16 +865,7 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading research reports").LogError(ctx, s.logger)
 	}
 
-	if s.research == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "the research runner is not available").LogError(ctx, s.logger)
-	}
-
-	requestedBy := ""
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		requestedBy = authCtx.UserID
-	}
-
-	report, err := queries.CreateResearchReport(ctx, repo.CreateResearchReportParams{
+	report, err := txQueries.CreateResearchReport(ctx, repo.CreateResearchReportParams{
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
 		McpApprovalRequestID: requestID,
@@ -860,6 +881,12 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating research report").LogError(ctx, s.logger)
+	}
+
+	// Committed before the enqueue, never inside it: the workflow reads this
+	// row, and the lock has to be released for the next caller either way.
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit research start").LogError(ctx, s.logger)
 	}
 
 	// The request's return must not cancel the enqueue.

@@ -1,6 +1,7 @@
 package mcpapproval_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -136,6 +137,47 @@ func TestStartResearch_RequiresDecideScope(t *testing.T) {
 	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
 	_, err := ti.service.StartResearch(readOnly, startResearchPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// Two clicks that land together must still buy one run. The check and the
+// insert are one transaction behind a row lock, so the second caller waits
+// for the first and then sees its report rather than paying for a second
+// agent run.
+func TestStartResearch_ConcurrentStartsBuyOneRun(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: "https://mcp.example.com/concurrent-research", status: "requested", evidence: "", version: 0,
+	})
+
+	const callers = 4
+	var wg sync.WaitGroup
+	views := make([]*gen.ResearchReport, callers)
+	errs := make([]error, callers)
+	start := make(chan struct{})
+
+	for i := range callers {
+		wg.Go(func() {
+			<-start
+			views[i], errs[i] = ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
+		})
+	}
+	close(start)
+	wg.Wait()
+
+	for i := range callers {
+		require.NoError(t, errs[i])
+		require.Equal(t, views[0].ID, views[i].ID, "every caller gets the same run")
+	}
+
+	reports, err := ti.repo.ListResearchReportsForApprovalRequest(ctx, repo.ListResearchReportsForApprovalRequestParams{
+		McpApprovalRequestID: requestID,
+		ProjectID:            ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, reports, 1, "one run was created, so one run was paid for")
+	require.Len(t, ti.research.started(), 1, "and the runner was enqueued once")
 }
 
 // A result that arrives after something else resolved the report does not

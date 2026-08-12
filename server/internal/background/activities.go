@@ -274,9 +274,13 @@ func NewActivities(
 	// without either (test workers) get a nil activity and the wrapper fails
 	// loudly if a research run is ever scheduled there.
 	var mcpResearch *activities.McpResearch
-	if db != nil && chatClient != nil && guardianPolicy != nil {
+	if db != nil && chatClient != nil && guardianPolicy != nil && piScanner != nil {
 		mcpResearch = activities.NewMcpResearch(logger, db, researchagent.New(
 			chatClient,
+			// Every page the agent fetches goes through the same judge the
+			// risk pipeline uses: a page that tries to steer the reviewer is
+			// a finding about the server, not just a hazard to the run.
+			researchagent.NewScannerJudge(piScanner),
 			platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient)),
 			platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client())),
 		))

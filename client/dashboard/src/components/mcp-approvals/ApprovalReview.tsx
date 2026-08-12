@@ -511,6 +511,7 @@ function ReportBody({ report }: { report: unknown }): JSX.Element | null {
 
   return (
     <>
+      <ReportInjections report={report} />
       {summary && <p className="mt-2">{summary}</p>}
       {(coverageLevel === "none" || coverageLevel === "thin") && (
         <p className="border-warning mt-2 border px-2.5 py-1.5">
@@ -526,6 +527,86 @@ function ReportBody({ report }: { report: unknown }): JSX.Element | null {
       )}
       <ReportClaims report={report} />
     </>
+  );
+}
+
+type InjectionFinding = {
+  url: string;
+  rationale: string;
+};
+
+/**
+ * Reads the runner's injection findings. Written by the runner from the
+ * judge's verdicts, never by the extraction model — which is the point, since
+ * the model writing the report has just read the page doing the steering.
+ */
+function reportInjections(report: unknown): InjectionFinding[] {
+  if (typeof report !== "object" || report === null || Array.isArray(report)) {
+    return [];
+  }
+  const entries = (report as Record<string, unknown>)["injections"];
+  if (!Array.isArray(entries)) return [];
+
+  const out: InjectionFinding[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const url = record["url"];
+    // Same rule as a citation: this becomes an href, and it came from a page
+    // that was already judged to be hostile.
+    if (typeof url !== "string" || !isFollowableCitation(url)) continue;
+    out.push({
+      url,
+      rationale:
+        typeof record["rationale"] === "string" ? record["rationale"] : "",
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Pages that tried to instruct the agent reading them. This is a finding
+ * about the server rather than a note about the run: a vendor page that
+ * attempts to steer a reviewer says more than any claim in the report, so it
+ * sits above the summary rather than in the run metadata.
+ */
+function ReportInjections({ report }: { report: unknown }): JSX.Element | null {
+  const injections = reportInjections(report);
+  if (injections.length === 0) return null;
+
+  return (
+    <div className="border-warning mt-2 border px-2.5 py-1.5">
+      <p className="font-medium">
+        {injections.length === 1
+          ? "A page tried to instruct the research agent."
+          : `${injections.length} pages tried to instruct the research agent.`}{" "}
+        <span className="text-muted-foreground font-normal">
+          Content written to steer whoever reviews this server is itself
+          evidence about it.
+        </span>
+      </p>
+      <ul className="mt-1 space-y-1">
+        {injections.map((injection) => (
+          <li key={injection.url}>
+            <a
+              href={injection.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              {citationHost(injection.url)}
+            </a>
+            {injection.rationale && (
+              <span className="text-muted-foreground">
+                {" "}
+                {injection.rationale}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
