@@ -44,6 +44,7 @@ import {
   useContext,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -842,8 +843,11 @@ const ComposerDictationWave: FC = () => {
   );
 };
 
+/** `max-h-64` plus the 8px offset, in px — the room an upward menu needs. */
+const SLASH_MENU_MAX_HEIGHT = 264;
+
 /**
- * Command list shown above the composer while the draft is a `/` query.
+ * Command list shown beside the composer while the draft is a `/` query.
  * Selection is owned by the composer so Enter and click resolve to the same
  * row; rows use onMouseDown-prevent so clicking one doesn't blur the input
  * (which would clear the query before the click lands).
@@ -855,11 +859,24 @@ const ComposerSlashCommandMenu: FC<{
   onSelect: (command: ComposerSlashCommand) => void;
 }> = ({ commands, activeIndex, onHover, onSelect }) => {
   const r = useRadius();
+  const ref = useRef<HTMLDivElement>(null);
+  // The menu opens upwards, which is right for a composer pinned to the bottom
+  // of a thread. On the welcome screen the composer sits high in the page, and
+  // there the same menu would open off the top edge — so measure what is
+  // actually above the composer and drop downwards when it will not fit.
+  const [dropDown, setDropDown] = useState(false);
+  useLayoutEffect(() => {
+    const composer = ref.current?.offsetParent;
+    if (!composer) return;
+    setDropDown(composer.getBoundingClientRect().top < SLASH_MENU_MAX_HEIGHT);
+  }, [commands.length]);
   return (
     <div
+      ref={ref}
       role="listbox"
       className={cn(
-        "aui-composer-slash-menu absolute bottom-full left-0 z-50 mb-2 max-h-64 w-full overflow-y-auto border border-input bg-background shadow-md",
+        "aui-composer-slash-menu absolute left-0 z-50 max-h-64 w-full overflow-y-auto border border-input bg-background shadow-md",
+        dropDown ? "top-full mt-2" : "bottom-full mb-2",
         r("lg"),
       )}
     >
