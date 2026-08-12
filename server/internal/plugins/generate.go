@@ -2524,13 +2524,11 @@ type codexMatcherGroup struct {
 
 // commandWindows is supported by Codex hook_config.rs at
 // 5bed6447998c754d154dbd796517310b8f04d4ce. On Windows it replaces command
-// before execution. Codex substitutes plugin variables only in the ${KEY}
-// textual form (discovery.rs), so commandWindows must use ${PLUGIN_ROOT},
-// never PowerShell-only $env: expansion. Trust hashing happens after that
-// replacement (discovery.rs normalizes command_windows into command before
-// hashing), so Windows machines verify against a hash of the commandWindows
-// string — precomputed approvals carry both hashes and the install script
-// selects by platform.
+// before execution. The command runs after Codex exports PLUGIN_ROOT and
+// PLUGIN_DATA, so it may read them through PowerShell's $env: syntax. Trust
+// hashing normalizes command_windows into command before hashing, so Windows
+// machines verify against a hash of this exact string; precomputed approvals
+// carry both hashes and the install script selects by platform.
 type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`

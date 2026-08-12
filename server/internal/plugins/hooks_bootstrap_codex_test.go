@@ -75,6 +75,9 @@ func TestCodexHookCommandSurvivesPluginCacheVersionSwap(t *testing.T) {
 	base := t.TempDir()
 	live := codexPluginCache(t, base, "0.28.101")
 	stale := filepath.Join(filepath.Dir(live), "0.28.100")
+	incomplete := filepath.Join(filepath.Dir(live), "0.28.102", "hooks")
+	require.NoError(t, os.MkdirAll(incomplete, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(incomplete, "bootstrap.sh"), []byte("#!/usr/bin/env bash\nexit 99\n"), 0o755))
 	data := filepath.Join(base, "plugins", "data", "acme-observability-codex-acme-speakeasy")
 
 	stdout, stderr, code := codexHookCommandProbe(t, codexHookCommandString(60, false, false), stale, data)
@@ -82,7 +85,7 @@ func TestCodexHookCommandSurvivesPluginCacheVersionSwap(t *testing.T) {
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	require.Contains(t, stdout, "script="+filepath.Join(live, "hooks", "bootstrap.sh"))
 	require.Contains(t, stdout, "--config="+filepath.Join(live, "speakeasy.json"),
-		"the recovered root must also supply the deployment identity")
+		"an incomplete newer sibling must not mask the newest complete payload")
 }
 
 func TestCodexHookCommandUsesPersistedPayloadWhenPluginCacheIsGone(t *testing.T) {
@@ -91,17 +94,18 @@ func TestCodexHookCommandUsesPersistedPayloadWhenPluginCacheIsGone(t *testing.T)
 	stale := filepath.Join(base, "plugins", "cache", "acme-speakeasy", "acme-observability-codex", "0.28.100")
 	data := filepath.Join(base, "plugins", "data", "acme-observability-codex-acme-speakeasy")
 	stable := filepath.Join(data, filepath.FromSlash(codexHooksStablePayloadSubdir))
-	require.NoError(t, os.MkdirAll(filepath.Join(stable, "hooks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(stable, "hooks", "bootstrap.sh"),
+	generation := filepath.Join(stable, "generations", "unix-test")
+	require.NoError(t, os.MkdirAll(filepath.Join(generation, "hooks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(generation, "hooks", "bootstrap.sh"),
 		[]byte("#!/usr/bin/env bash\nprintf 'script=%s args=%s\\n' \"$0\" \"$*\"\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(stable, "speakeasy.json"), []byte("{}\n"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(stable, ".unix-ready"), []byte("ready\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(generation, "speakeasy.json"), []byte("{}\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(stable, ".unix-current"), []byte("unix-test\n"), 0o600))
 
 	stdout, stderr, code := codexHookCommandProbe(t, codexHookCommandString(60, false, false), stale, data)
 
 	require.Equal(t, 0, code, "stderr: %s", stderr)
-	require.Contains(t, stdout, "script="+filepath.Join(stable, "hooks", "bootstrap.sh"))
-	require.Contains(t, stdout, "--config="+filepath.Join(stable, "speakeasy.json"))
+	require.Contains(t, stdout, "script="+filepath.Join(generation, "hooks", "bootstrap.sh"))
+	require.Contains(t, stdout, "--config="+filepath.Join(generation, "speakeasy.json"))
 }
 
 func TestCodexHookCommandReportsMissingPayloadInsteadOfExit127(t *testing.T) {
@@ -156,7 +160,7 @@ func TestCodexPowerShellCommandUsesRuntimePluginPaths(t *testing.T) {
 	script := string(utf16.Decode(units))
 	require.Contains(t, script, `$r=$env:PLUGIN_ROOT`)
 	require.Contains(t, script, `$d=Join-Path $env:PLUGIN_DATA`)
-	require.Contains(t, script, `.windows-ready`)
+	require.Contains(t, script, `.windows-current`)
 	require.Contains(t, script, `--provider=codex --timeout=60s --async`)
 }
 

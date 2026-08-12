@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 	"unicode/utf16"
 
 	"github.com/BurntSushi/toml"
@@ -1513,26 +1514,54 @@ func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T)
 	stdout, stderr, code := codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	stable := filepath.Join(data, filepath.FromSlash(codexHooksStablePayloadSubdir))
-	stableConfig := filepath.Join(stable, "speakeasy.json")
+	currentGeneration := strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration := filepath.Join(stable, "generations", currentGeneration)
+	stableConfig := filepath.Join(stableGeneration, "speakeasy.json")
 	require.Contains(t, stdout, "--config="+stableConfig,
 		"the first relay execution must no longer depend on the disposable config")
-	require.Equal(t, script, requireFileBytes(t, filepath.Join(stable, "hooks", "bootstrap.sh")))
+	require.Equal(t, script, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
 	require.Equal(t, config, requireFileBytes(t, stableConfig))
-	require.Equal(t, []byte(""), requireFileBytes(t, filepath.Join(stable, ".unix-ready")))
 	configInfo, err := os.Stat(stableConfig)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), configInfo.Mode().Perm())
 
-	refreshedScript := append(append([]byte(nil), script...), []byte("# refreshed\n")...)
+	refreshedScript := bytes.Replace(script, []byte("set -eu\n"), []byte("set -eu\nprintf 'refreshed-bootstrap\\n' >&2\n"), 1)
 	refreshedConfig := []byte("{\"deployment\":\"refreshed\"}\n")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), refreshedScript, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), refreshedConfig, 0o600))
+	persistLock := filepath.Join(stable, ".persist-unix.lock")
+	require.NoError(t, os.Mkdir(persistLock, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), fmt.Appendf(nil, "%d\n", os.Getpid()), 0o600))
+	old := time.Now().Add(-10 * time.Minute)
+	require.NoError(t, os.Chtimes(persistLock, old, old))
 	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stderr, "refreshed-bootstrap",
+		"the hook that refreshes the bundle must immediately execute the new bootstrap")
 	require.Contains(t, stdout, "--config="+stableConfig,
 		"a ready bundle must execute independently while refreshing from the cache")
-	require.Equal(t, refreshedScript, requireFileBytes(t, filepath.Join(stable, "hooks", "bootstrap.sh")))
+	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
+	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Equal(t, refreshedScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
 	require.Equal(t, refreshedConfig, requireFileBytes(t, stableConfig))
+	require.NoDirExists(t, persistLock, "an expired lock must be reclaimed even if its PID was reused")
+
+	newestScript := bytes.Replace(script, []byte("set -eu\n"), []byte("set -eu\nprintf 'newest-bootstrap\\n' >&2\n"), 1)
+	newestConfig := []byte("{\"deployment\":\"newest\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), newestScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), newestConfig, 0o600))
+	require.NoError(t, os.Mkdir(persistLock, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), []byte("99999999\n"), 0o600))
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
+	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig)
+	require.Equal(t, newestScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, newestConfig, requireFileBytes(t, stableConfig))
+	require.NoDirExists(t, persistLock, "an old ownerless persistence lock must be reclaimed")
 
 	require.NoError(t, os.RemoveAll(filepath.Dir(filepath.Dir(root))))
 	server.Close()
@@ -1589,6 +1618,14 @@ func TestHooksBootstrapBakesInstallFailurePolicy(t *testing.T) {
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{InstallFailOpen: true})), "$InstallFailureExit = 0")
 	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{})), "install_failure_exit=1")
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{})), "$InstallFailureExit = 1")
+}
+
+func TestHooksPowerShellBootstrapRecoversStalePersistenceLock(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksPowerShellBootstrap(GenerateConfig{}))
+	require.Contains(t, script, `function Enter-PersistenceLock`)
+	require.Contains(t, script, `Get-Process -Id $OwnerPID`)
+	require.Contains(t, script, `Move-Item -LiteralPath $LockPath -Destination $Reap`)
 }
 
 func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
