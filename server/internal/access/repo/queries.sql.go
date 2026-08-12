@@ -1547,14 +1547,16 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	return items, nil
 }
 
-const listResolvedChallengeIDs = `-- name: ListResolvedChallengeIDs :many
+const listRetainedResolvedChallengeIDs = `-- name: ListRetainedResolvedChallengeIDs :many
 SELECT challenge_id FROM authz_challenge_resolutions
 WHERE organization_id = $1
+  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'
 `
 
-// Returns the resolved challenge IDs used to filter ClickHouse bucket aggregates.
-func (q *Queries) ListResolvedChallengeIDs(ctx context.Context, organizationID string) ([]string, error) {
-	rows, err := q.db.Query(ctx, listResolvedChallengeIDs, organizationID)
+// Resolutions cannot predate their challenge, so records older than ClickHouse's
+// 90-day challenge retention cannot match a retained bucket.
+func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRetainedResolvedChallengeIDs, organizationID)
 	if err != nil {
 		return nil, err
 	}

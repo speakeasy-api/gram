@@ -761,17 +761,17 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}
 
 	filters := chrepo.ChallengeListFilters{
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            payload.ProjectID,
-		Outcome:              payload.Outcome,
-		PrincipalURN:         payload.PrincipalUrn,
-		Scope:                payload.Scope,
-		Resolved:             nil,
-		ResolvedChallengeIDs: nil,
-		Limit:                uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
-		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
-		SkipPagination:       skipPagination,
-		MemberUserIDs:        memberIDs,
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
+		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
+		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
+		SkipPagination: skipPagination,
 	}
 
 	var total uint64
@@ -964,35 +964,38 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		attr.UserID(authCtx.UserID),
 	)
 
+	pgQueries := repo.New(s.db)
+	var resolvedChallengeIDs []string
+	if payload.Resolved != nil {
+		ids, err := pgQueries.ListRetainedResolvedChallengeIDs(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resolved challenge ids").LogError(ctx, s.logger)
+		}
+		if *payload.Resolved && len(ids) == 0 {
+			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
+		}
+		resolvedChallengeIDs = ids
+	}
+
 	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
 	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
 
-	var resolvedChallengeIDs []string
-	if payload.Resolved != nil {
-		resolvedChallengeIDs, err = repo.New(s.db).ListResolvedChallengeIDs(ctx, authCtx.ActiveOrganizationID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list resolved challenge ids").LogError(ctx, s.logger)
-		}
-		if *payload.Resolved && len(resolvedChallengeIDs) == 0 {
-			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
-		}
-	}
-
-	filters := chrepo.ChallengeListFilters{
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            payload.ProjectID,
-		Outcome:              payload.Outcome,
-		PrincipalURN:         payload.PrincipalUrn,
-		Scope:                payload.Scope,
+	filters := chrepo.ChallengeBucketFilters{
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
 		Resolved:             payload.Resolved,
 		ResolvedChallengeIDs: resolvedChallengeIDs,
 		Limit:                uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
-		SkipPagination:       false,
-		MemberUserIDs:        memberIDs,
 	}
 
 	chQueries := chrepo.New(s.chConn)
@@ -1015,7 +1018,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		allChallengeIDs = append(allChallengeIDs, b.ChallengeIDs...)
 	}
 
-	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+	resolutions, err := pgQueries.ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeIds:   allChallengeIDs,
 	})

@@ -127,23 +127,14 @@ func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
 	return nil
 }
 
-// ChallengeListFilters controls which rows ListChallenges returns.
+// ChallengeFilters controls predicates shared by challenge row and bucket queries.
 // Nil pointer fields are omitted from the WHERE clause.
-type ChallengeListFilters struct {
+type ChallengeFilters struct {
 	OrganizationID string
 	ProjectID      *string
 	Outcome        *string
 	PrincipalURN   *string
 	Scope          *string
-	Resolved       *bool
-
-	// ResolvedChallengeIDs identifies challenge rows with a resolution record.
-	// Bucket queries compare these IDs with each bucket's representative row.
-	ResolvedChallengeIDs []string
-
-	Limit          uint64
-	Offset         uint64
-	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
 
 	// MemberUserIDs, when non-nil, suppresses challenges raised by users outside
 	// the organization (e.g. Speakeasy staff impersonating a customer org). Rows
@@ -153,8 +144,28 @@ type ChallengeListFilters struct {
 	MemberUserIDs []string
 }
 
-// challengeWhere applies ChallengeListFilters to a squirrel SelectBuilder.
-func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
+// ChallengeListFilters controls which rows ListChallenges returns.
+type ChallengeListFilters struct {
+	ChallengeFilters
+	Limit          uint64
+	Offset         uint64
+	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
+}
+
+// ChallengeBucketFilters controls which rows ListChallengeBuckets returns.
+type ChallengeBucketFilters struct {
+	ChallengeFilters
+	Resolved *bool
+
+	// ResolvedChallengeIDs identifies challenge rows with a resolution record.
+	// Bucket queries compare these IDs with each bucket's representative row.
+	ResolvedChallengeIDs []string
+
+	Limit  uint64
+	Offset uint64
+}
+
+func challengeDimensionWhere(sb squirrel.SelectBuilder, f ChallengeFilters) squirrel.SelectBuilder {
 	sb = sb.Where("organization_id = ?", f.OrganizationID)
 	if f.ProjectID != nil {
 		sb = sb.Where("project_id = ?", *f.ProjectID)
@@ -168,14 +179,16 @@ func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.
 	if f.Scope != nil {
 		sb = sb.Where("scope = ?", *f.Scope)
 	}
+	return sb
+}
+
+// challengeWhere applies ChallengeListFilters to raw challenge rows.
+func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
+	sb = challengeDimensionWhere(sb, f.ChallengeFilters)
 	if f.MemberUserIDs != nil {
 		// Keep non-user principals (user_id IS NULL) plus active org members.
 		// squirrel.Eq with an empty slice renders as a false predicate, so an
 		// empty MemberUserIDs collapses this to "user_id IS NULL".
-		//
-		// The column is qualified with the table name because the bucket query
-		// aliases argMax(user_id, timestamp) AS user_id, and ClickHouse resolves
-		// a bare user_id in WHERE to that aggregate alias (illegal in WHERE).
 		sb = sb.Where(squirrel.Or{
 			squirrel.Expr("authz_challenges.user_id IS NULL"),
 			squirrel.Eq{"authz_challenges.user_id": f.MemberUserIDs},
@@ -186,20 +199,8 @@ func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.
 
 // challengeBucketWhere applies filters to the pre-aggregated challenge bucket
 // summary. Unattributed challenge rows are excluded when the summary is built.
-func challengeBucketWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
-	sb = sb.Where("organization_id = ?", f.OrganizationID)
-	if f.ProjectID != nil {
-		sb = sb.Where("project_id = ?", *f.ProjectID)
-	}
-	if f.Outcome != nil {
-		sb = sb.Where("outcome = ?", *f.Outcome)
-	}
-	if f.PrincipalURN != nil {
-		sb = sb.Where("principal_urn = ?", *f.PrincipalURN)
-	}
-	if f.Scope != nil {
-		sb = sb.Where("scope = ?", *f.Scope)
-	}
+func challengeBucketWhere(sb squirrel.SelectBuilder, f ChallengeBucketFilters) squirrel.SelectBuilder {
+	sb = challengeDimensionWhere(sb, f.ChallengeFilters)
 	if f.MemberUserIDs != nil {
 		sb = sb.Where(squirrel.Or{
 			squirrel.Eq{"user_id_filter": ""},
@@ -209,9 +210,11 @@ func challengeBucketWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squ
 	return sb
 }
 
+const challengeBucketRepresentativeID = "argMaxMerge(representative_id)"
+
 // challengeBucketResolution filters grouped buckets by whether their most
 // recent challenge has a resolution record in PostgreSQL.
-func challengeBucketResolution(sb squirrel.SelectBuilder, f ChallengeListFilters, representativeID string) squirrel.SelectBuilder {
+func challengeBucketResolution(sb squirrel.SelectBuilder, f ChallengeBucketFilters) squirrel.SelectBuilder {
 	if f.Resolved == nil {
 		return sb
 	}
@@ -224,15 +227,15 @@ func challengeBucketResolution(sb squirrel.SelectBuilder, f ChallengeListFilters
 	}
 
 	if *f.Resolved {
-		return sb.Having(squirrel.Eq{representativeID: f.ResolvedChallengeIDs})
+		return sb.Having(squirrel.Eq{challengeBucketRepresentativeID: f.ResolvedChallengeIDs})
 	}
-	return sb.Having(squirrel.NotEq{representativeID: f.ResolvedChallengeIDs})
+	return sb.Having(squirrel.NotEq{challengeBucketRepresentativeID: f.ResolvedChallengeIDs})
 }
 
 // challengePagination applies LIMIT/OFFSET to a squirrel SelectBuilder when not skipped.
-func challengePagination(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
-	if !f.SkipPagination {
-		sb = sb.Limit(f.Limit).Offset(f.Offset)
+func challengePagination(sb squirrel.SelectBuilder, limit, offset uint64, skip bool) squirrel.SelectBuilder {
+	if !skip {
+		sb = sb.Limit(limit).Offset(offset)
 	}
 	return sb
 }
@@ -311,7 +314,7 @@ func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([
 		From("authz_challenges").
 		OrderBy("timestamp DESC")
 	sb = challengeWhere(sb, f)
-	sb = challengePagination(sb, f)
+	sb = challengePagination(sb, f.Limit, f.Offset, f.SkipPagination)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -430,7 +433,7 @@ type ChallengeBucket struct {
 }
 
 var challengeBucketColumns = []string{
-	"argMaxMerge(representative_id) AS bucket_id",
+	challengeBucketRepresentativeID + " AS bucket_id",
 	"formatDateTime(max(last_seen), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS bucket_last_seen",
 	"organization_id",
 	"project_id",
@@ -447,7 +450,6 @@ var challengeBucketColumns = []string{
 	"argMaxMerge(role_slugs) AS bucket_role_slugs",
 	"argMaxMerge(evaluated_grant_count) AS bucket_evaluated_grant_count",
 	"max(matched_grant_count) AS bucket_matched_grant_count",
-	"uniqExactMerge(challenge_count) AS bucket_challenge_count",
 	"arrayMap(x -> toString(x), groupUniqArrayMerge(challenge_ids)) AS bucket_challenge_ids",
 	"formatDateTime(min(first_seen), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS bucket_first_seen",
 	"count() OVER () AS total_count",
@@ -456,14 +458,14 @@ var challengeBucketColumns = []string{
 const challengeBucketGroupBy = "organization_id, project_id, principal_urn, scope, outcome, resource_kind, resource_id"
 
 // ListChallengeBuckets returns challenges grouped by dimensions, paginated.
-func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilters) ([]ChallengeBucket, uint64, error) {
+func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeBucketFilters) ([]ChallengeBucket, uint64, error) {
 	sb := sq.Select(challengeBucketColumns...).
 		From("authz_challenge_bucket_summaries").
 		GroupBy(challengeBucketGroupBy).
 		OrderBy("bucket_last_seen DESC")
 	sb = challengeBucketWhere(sb, f)
-	sb = challengeBucketResolution(sb, f, "argMaxMerge(representative_id)")
-	sb = challengePagination(sb, f)
+	sb = challengeBucketResolution(sb, f)
+	sb = challengePagination(sb, f.Limit, f.Offset, false)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -498,13 +500,13 @@ func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilte
 			&r.RoleSlugs,
 			&r.EvaluatedGrantCount,
 			&r.MatchedGrantCount,
-			&r.ChallengeCount,
 			&r.ChallengeIDs,
 			&r.FirstSeen,
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan challenge bucket row: %w", err)
 		}
+		r.ChallengeCount = uint64(len(r.ChallengeIDs))
 		results = append(results, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -524,12 +526,12 @@ func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilte
 }
 
 // CountChallengeBuckets returns the total number of dimension groups for pagination.
-func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeListFilters) (uint64, error) {
+func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeBucketFilters) (uint64, error) {
 	inner := sq.Select("1").
 		From("authz_challenge_bucket_summaries").
 		GroupBy(challengeBucketGroupBy)
 	inner = challengeBucketWhere(inner, f)
-	inner = challengeBucketResolution(inner, f, "argMaxMerge(representative_id)")
+	inner = challengeBucketResolution(inner, f)
 
 	innerQuery, args, err := inner.ToSql()
 	if err != nil {
