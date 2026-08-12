@@ -12,6 +12,7 @@ import {
   PencilIcon,
   Search,
   Settings2,
+  Sparkles,
   Square,
   Wrench,
 } from "lucide-react";
@@ -1075,9 +1076,49 @@ function deriveToolCategory(name: string): string {
   return "Tools";
 }
 
+// Tools are listed under their server in the rail, so repeating the
+// `<server>__` namespace in every row buys nothing and pushes the part that
+// distinguishes one tool from the next past the truncation point.
+function shortToolName(name: string): string {
+  const namespaceIdx = name.indexOf("__");
+  return namespaceIdx > 0 ? name.slice(namespaceIdx + 2) : name;
+}
+
 interface ToolCategory {
   name: string;
   tools: MentionableTool[];
+}
+
+const contextRailGroupClass =
+  "flex items-center gap-1.5 px-2 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
+
+const contextRailItemClass = (active: boolean) =>
+  cn(
+    "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors",
+    active
+      ? "bg-muted font-medium text-foreground"
+      : "text-muted-foreground hover:bg-muted/60",
+  );
+
+/** Shared eyebrow so both halves of the pane announce themselves the same way. */
+function ContextSectionHeader({
+  icon: Icon,
+  label,
+  count,
+}: {
+  icon: typeof Wrench;
+  label: string;
+  count?: number;
+}): React.ReactElement {
+  return (
+    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-popover px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      <Icon className="size-3.5 shrink-0" />
+      <span>{label}</span>
+      {count !== undefined && (
+        <span className="tabular-nums opacity-60">{count}</span>
+      )}
+    </div>
+  );
 }
 
 /** Rail entry for the skills half of the context picker. */
@@ -1250,7 +1291,7 @@ const ComposerContextPicker: FC = () => {
       <PopoverContent
         side="top"
         align="start"
-        className="aui-composer-context-popover w-[420px] overflow-hidden p-0"
+        className="aui-composer-context-popover w-[560px] max-w-[calc(100vw-2rem)] overflow-hidden p-0"
         onEscapeKeyDown={(event) => {
           if (query !== "") {
             event.preventDefault();
@@ -1258,7 +1299,7 @@ const ComposerContextPicker: FC = () => {
           }
         }}
       >
-        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-input px-3 py-2.5">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
@@ -1275,44 +1316,47 @@ const ComposerContextPicker: FC = () => {
             aria-label="Search context"
           />
         </div>
-        <div className="flex h-72">
+        <div className="flex h-80">
           {/* The rail is a browse aid only; a search reaches across both
               halves, so it is hidden while one is running. */}
           {!searching && (
-            <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
+            <div className="w-44 shrink-0 overflow-y-auto border-r border-input p-2">
               {hasSkills && (
-                <button
-                  type="button"
-                  onClick={() => setSection(CONTEXT_SKILLS_SECTION)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                    activeSection === CONTEXT_SKILLS_SECTION
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60",
-                  )}
-                >
-                  <span className="truncate">Skills</span>
-                  <span className="ml-2 shrink-0 tabular-nums opacity-60">
-                    {skillContext?.skills.length ?? 0}
-                  </span>
-                </button>
+                <>
+                  <div className={contextRailGroupClass}>
+                    <Sparkles className="size-3.5 shrink-0" />
+                    Skills
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSection(CONTEXT_SKILLS_SECTION)}
+                    className={contextRailItemClass(
+                      activeSection === CONTEXT_SKILLS_SECTION,
+                    )}
+                  >
+                    <span className="truncate">All skills</span>
+                    <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                      {skillContext?.skills.length ?? 0}
+                    </span>
+                  </button>
+                </>
               )}
               {hasTools && (
                 <>
-                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  <div
+                    className={cn(contextRailGroupClass, hasSkills && "mt-3")}
+                  >
+                    <Wrench className="size-3.5 shrink-0" />
                     Tools
                   </div>
                   <button
                     type="button"
                     onClick={() => setSection(CONTEXT_ALL_TOOLS_SECTION)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                      activeSection === CONTEXT_ALL_TOOLS_SECTION
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-muted/60",
+                    className={contextRailItemClass(
+                      activeSection === CONTEXT_ALL_TOOLS_SECTION,
                     )}
                   >
-                    <span className="truncate">All</span>
+                    <span className="truncate">All tools</span>
                     <span className="ml-2 shrink-0 tabular-nums opacity-60">
                       {tools.length}
                     </span>
@@ -1322,11 +1366,8 @@ const ComposerContextPicker: FC = () => {
                       key={category.name}
                       type="button"
                       onClick={() => setSection(category.name)}
-                      className={cn(
-                        "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                        activeSection === category.name
-                          ? "bg-muted font-medium text-foreground"
-                          : "text-muted-foreground hover:bg-muted/60",
+                      className={contextRailItemClass(
+                        activeSection === category.name,
                       )}
                     >
                       <span className="truncate">{category.name}</span>
@@ -1353,11 +1394,11 @@ const ComposerContextPicker: FC = () => {
             {showSkills &&
               (searching || activeSection === CONTEXT_SKILLS_SECTION) && (
                 <>
-                  {searching && (
-                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                      Skills
-                    </div>
-                  )}
+                  <ContextSectionHeader
+                    icon={Sparkles}
+                    label="Skills"
+                    count={matchingSkills.length}
+                  />
                   <ContextSkillResults
                     skillContext={skillContext}
                     visibleSkills={matchingSkills}
@@ -1370,11 +1411,15 @@ const ComposerContextPicker: FC = () => {
             {showTools &&
               (searching || activeSection !== CONTEXT_SKILLS_SECTION) && (
                 <>
-                  {searching && (
-                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                      Tools
-                    </div>
-                  )}
+                  <ContextSectionHeader
+                    icon={Wrench}
+                    label={
+                      searching || activeSection === CONTEXT_ALL_TOOLS_SECTION
+                        ? "Tools"
+                        : `Tools · ${activeSection}`
+                    }
+                    count={matchingTools.length}
+                  />
                   <ContextToolResults
                     tools={matchingTools}
                     loading={mcpToolsLoading}
@@ -1406,27 +1451,35 @@ function ContextToolResults({
     );
   }
   return (
-    <div className="p-2">
-      {tools.map((tool) => (
-        <button
-          key={tool.id}
-          type="button"
-          onClick={() => onSelect(tool.name)}
-          className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
-        >
-          <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">
-              {tool.name}
-            </span>
-            {tool.description && (
-              <span className="line-clamp-2 text-xs text-muted-foreground">
-                {tool.description}
+    <div className="px-2 pb-2">
+      {tools.map((tool) => {
+        const short = shortToolName(tool.name);
+        return (
+          <button
+            key={tool.id}
+            type="button"
+            onClick={() => onSelect(tool.name)}
+            className="flex w-full items-start gap-2.5 rounded px-2 py-2 text-left transition-colors hover:bg-muted"
+          >
+            <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {short}
               </span>
-            )}
-          </span>
-        </button>
-      ))}
+              {short !== tool.name && (
+                <span className="block truncate font-mono text-xs text-muted-foreground">
+                  {tool.name}
+                </span>
+              )}
+              {tool.description && (
+                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                  {tool.description}
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1506,7 +1559,7 @@ function ContextSkillResults({
 
   const atLimit = selectedIDs.size >= maxSelected;
   return (
-    <div className="max-h-72 overflow-y-auto p-2">
+    <div className="px-2 pb-2">
       {visibleSkills.map((skill) => {
         const selected = selectedIDs.has(skill.id);
         return (
@@ -1516,7 +1569,7 @@ function ContextSkillResults({
             onClick={() => onToggle(skill.id)}
             disabled={atLimit && !selected}
             aria-pressed={selected}
-            className="flex w-full items-start gap-2 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-start gap-2.5 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input">
               {selected ? <CheckIcon className="size-3" /> : null}
@@ -1525,7 +1578,7 @@ function ContextSkillResults({
               <span className="block truncate text-sm font-medium text-foreground">
                 {skill.displayName}
               </span>
-              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+              <span className="block truncate font-mono text-xs text-muted-foreground">
                 {skill.name}
               </span>
               {skill.summary ? (
