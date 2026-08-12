@@ -62452,7 +62452,6 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
-                        - risk_policy:read
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - risk_policy:block
@@ -62490,7 +62489,6 @@ components:
                             - skill:blocked_read
                             - skill:write
                             - skill:blocked_write
-                            - risk_policy:read
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - risk_policy:block
@@ -66689,7 +66687,6 @@ components:
                         - environment:write
                         - skill:read
                         - skill:write
-                        - risk_policy:read
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -68154,7 +68151,6 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
-                        - risk_policy:read
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - risk_policy:block
@@ -68318,7 +68314,6 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
-                        - risk_policy:read
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - risk_policy:block
