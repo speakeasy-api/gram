@@ -58596,6 +58596,61 @@ components:
         - header_name
         - required
         - secret
+    ExternalMCPPackage:
+      type: object
+      properties:
+        environment_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPPackageEnvironmentVariable'
+          description: Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.
+        file_sha256:
+          type: string
+          description: SHA-256 of the packaged artifact, when the registry publishes one
+        identifier:
+          type: string
+          description: Package identifier, scope included
+        registry_base_url:
+          type: string
+          description: Registry base URL when the package lives outside the default public registry
+          format: uri
+        registry_type:
+          type: string
+          description: Package registry the artifact is published to, such as npm or pypi
+        runtime_hint:
+          type: string
+          description: Launcher the publisher suggests, such as npx or uvx
+        transport_type:
+          type: string
+          description: Execution transport the package declares, such as stdio
+        version:
+          type: string
+          description: Published version
+      description: A published package that runs this server, as declared by the registry
+      required:
+        - registry_type
+        - identifier
+        - version
+    ExternalMCPPackageEnvironmentVariable:
+      type: object
+      properties:
+        description:
+          type: string
+          description: The publisher's explanation of the variable. Untrusted text.
+        is_required:
+          type: boolean
+          description: Whether an install cannot proceed without it
+        is_secret:
+          type: boolean
+          description: Whether the publisher marked the value sensitive
+        name:
+          type: string
+          description: Variable name the install must populate
+      description: An environment variable a package declares its install requires
+      required:
+        - name
+        - is_secret
+        - is_required
     ExternalMCPRemote:
       type: object
       properties:
@@ -58665,6 +58720,22 @@ components:
           type: boolean
           description: Whether this variable value should be treated as secret
       description: A URL template variable for a remote MCP server
+    ExternalMCPRepository:
+      type: object
+      properties:
+        source:
+          type: string
+          description: Hosting service the repository lives on, such as github
+        subfolder:
+          type: string
+          description: Path within the repository holding the server, for monorepos
+        url:
+          type: string
+          description: Repository URL
+          format: uri
+      description: 'The source repository a registry entry links for its server. A registry declaration: nothing verifies the endpoint runs this code.'
+      required:
+        - url
     ExternalMCPServer:
       type: object
       properties:
@@ -58742,6 +58813,11 @@ components:
           type: string
           description: ID of the internal collection registry this server came from
           format: uuid
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPPackage'
+          description: Published packages that run this server, when the registry declares any
         registry_id:
           type: string
           description: ID of the external MCP registry this server came from
@@ -58755,6 +58831,8 @@ components:
           items:
             $ref: '#/components/schemas/ExternalMCPRemote'
           description: Available remote endpoints for the server
+        repository:
+          $ref: '#/components/schemas/ExternalMCPRepository'
         supports_dcr:
           type: boolean
           description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).

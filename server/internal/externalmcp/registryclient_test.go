@@ -998,3 +998,110 @@ func TestListServers_ComputesSupportsDcr(t *testing.T) {
 	require.False(t, byName["apikey"], "api-key servers do not support DCR")
 	require.True(t, byName["dcr-secondary-remote"], "a registration endpoint on any remote slot counts")
 }
+
+func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := listResponse{
+			Servers: []serverEntry{
+				{
+					Server: serverJSON{
+						Name:        "linked-server",
+						Description: "A server whose registry entry links its source",
+						Version:     "1.0.0",
+						Repository: &serverRepositoryJSON{
+							URL:       "https://github.com/example/mcp-server",
+							Source:    "github",
+							Subfolder: "servers/thing",
+						},
+						Packages: []serverPackageJSON{
+							{
+								RegistryType: "npm",
+								Identifier:   "@example/mcp-server",
+								Version:      "1.2.3",
+								RuntimeHint:  "npx",
+								Transport: struct {
+									Type string `json:"type"`
+								}{Type: "stdio"},
+								EnvironmentVariables: []serverPackageEnvironmentVariableJSON{
+									{
+										Name:        "EXAMPLE_API_KEY",
+										Description: "API key for the example service",
+										IsSecret:    true,
+										IsRequired:  true,
+									},
+									// Nameless declarations identify nothing.
+									{Description: "orphaned", IsSecret: true, IsRequired: true},
+								},
+							},
+							// Too incomplete to identify an artifact: dropped,
+							// not surfaced as an empty declaration.
+							{RegistryType: "npm"},
+						},
+					},
+					Meta: pulseMCPServerMeta{
+						Version: serverMetaVersion{Status: "active"},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "bare-server",
+						Description: "A server whose entry links nothing",
+						Version:     "1.0.0",
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		assert.NoError(t, json.NewEncoder(w).Encode(response))
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client.httpClient = server.Client()
+	registry := Registry{ID: uuid.New(), URL: server.URL}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	linked := result.Servers[0]
+	require.NotNil(t, linked.Repository)
+	require.Equal(t, "https://github.com/example/mcp-server", linked.Repository.URL)
+	require.NotNil(t, linked.Repository.Source)
+	require.Equal(t, "github", *linked.Repository.Source)
+	require.NotNil(t, linked.Repository.Subfolder)
+	require.Equal(t, "servers/thing", *linked.Repository.Subfolder)
+
+	require.Len(t, linked.Packages, 1, "an unidentifiable package entry is dropped")
+	require.Equal(t, "npm", linked.Packages[0].RegistryType)
+	require.Equal(t, "@example/mcp-server", linked.Packages[0].Identifier)
+	require.Equal(t, "1.2.3", linked.Packages[0].Version)
+	require.NotNil(t, linked.Packages[0].RuntimeHint)
+	require.Equal(t, "npx", *linked.Packages[0].RuntimeHint)
+	require.Nil(t, linked.Packages[0].FileSha256)
+	require.NotNil(t, linked.Packages[0].TransportType)
+	require.Equal(t, "stdio", *linked.Packages[0].TransportType)
+
+	// The demanded credential rides along: a required secret named by the
+	// package is an approval signal in its own right.
+	require.Len(t, linked.Packages[0].EnvironmentVariables, 1, "a nameless declaration is dropped")
+	variable := linked.Packages[0].EnvironmentVariables[0]
+	require.Equal(t, "EXAMPLE_API_KEY", variable.Name)
+	require.True(t, variable.IsSecret)
+	require.True(t, variable.IsRequired)
+	require.NotNil(t, variable.Description)
+
+	// A registry that links nothing surfaces as absent, never as empty links.
+	bare := result.Servers[1]
+	require.Nil(t, bare.Repository)
+	require.Empty(t, bare.Packages)
+}
