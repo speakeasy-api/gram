@@ -331,26 +331,28 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		limit = int32(l)
 	}
 
+	// Over-fetch one row to learn whether a next page exists.
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
 		Q:               conv.PtrToPGText(payload.Q),
 		AccountType:     conv.PtrToPGText(payload.AccountType),
 		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
 		AfterID:         conv.PtrToPGText(payload.Cursor),
-		PageLimit:       limit,
+		PageLimit:       limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").LogError(ctx, s.logger)
 	}
 
+	var nextCursor *string
+	if len(rows) > int(limit) {
+		rows = rows[:limit]
+		id := rows[limit-1].ID
+		nextCursor = &id
+	}
+
 	orgs := make([]*gen.AdminOrganization, len(rows))
 	for i := range rows {
 		orgs[i] = adminOrganizationFromRow(rows[i])
-	}
-
-	var nextCursor *string
-	if len(rows) == int(limit) && len(rows) > 0 {
-		id := rows[len(rows)-1].ID
-		nextCursor = &id
 	}
 
 	return &gen.AdminListOrganizationsResult{
