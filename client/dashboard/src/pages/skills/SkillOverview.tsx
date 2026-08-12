@@ -15,14 +15,16 @@ import { EditSkillDetailsDialog } from "./EditSkillDetailsDialog";
 import { SkillInsightsSection } from "./SkillInsightsSection";
 import { SkillPluginBanner } from "./SkillPluginBanner";
 import { useSkillDetailContext } from "./SkillDetailContext";
+import { useSkillVersionLabels } from "./use-skill-version-labels";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { Badge } from "@/components/ui/Badge";
 
 export default function SkillOverview(): JSX.Element {
   const project = useProject();
-  const { skillQueryData, versionLabels, versionsLoading, versionsError } =
-    useSkillDetailContext();
+  const { skillQueryData } = useSkillDetailContext();
   const { skill } = skillQueryData;
+  const { versionLabels, versionsLoading, versionsError } =
+    useSkillVersionLabels(skill.id, skill.versionCount);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (

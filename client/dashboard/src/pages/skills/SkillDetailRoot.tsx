@@ -9,7 +9,6 @@ import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import { pageFromLegacySkillHash, pagePath } from "./SkillDetailRouting";
-import { useSkillVersionLabels } from "./use-skill-version-labels";
 
 export default function SkillDetailRoot(): JSX.Element {
   const { skillId } = useParams<{ skillId: string }>();
@@ -19,11 +18,6 @@ export default function SkillDetailRoot(): JSX.Element {
     throwOnError: false,
     enabled: !!skillId,
   });
-  const versionState = useSkillVersionLabels(
-    skillId ?? "",
-    skillQuery.data?.skill.versionCount ?? 0,
-  );
-
   if (skillId) {
     const legacyPage = pageFromLegacySkillHash(location.hash);
     const isBaseRoute =
@@ -83,7 +77,6 @@ export default function SkillDetailRoot(): JSX.Element {
           <Outlet
             context={{
               skillQueryData: skillQuery.data,
-              ...versionState,
             }}
           />
         </div>

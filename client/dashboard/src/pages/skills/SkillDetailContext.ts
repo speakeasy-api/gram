@@ -3,9 +3,6 @@ import { useOutletContext } from "react-router";
 
 export type SkillDetailContextValue = {
   skillQueryData: NonNullable<ReturnType<typeof useSkill>["data"]>;
-  versionLabels: Map<string, string>;
-  versionsLoading: boolean;
-  versionsError: Error | null;
 };
 
 export function useSkillDetailContext(): SkillDetailContextValue {

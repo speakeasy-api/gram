@@ -3,12 +3,16 @@ import { useParams } from "react-router";
 import { SkillActivitySections } from "./SkillActivitySections";
 import { SkillDistributionsSection } from "./SkillDistributionsSection";
 import { useSkillDetailContext } from "./SkillDetailContext";
+import { useSkillVersionLabels } from "./use-skill-version-labels";
 
 export default function SkillUsage(): JSX.Element {
   const { skillId = "" } = useParams<{ skillId: string }>();
-  const { skillQueryData, versionLabels, versionsLoading } =
-    useSkillDetailContext();
+  const { skillQueryData } = useSkillDetailContext();
   const { latestVersion, assistantCount } = skillQueryData;
+  const { versionLabels, versionsLoading } = useSkillVersionLabels(
+    skillQueryData.skill.id,
+    skillQueryData.skill.versionCount,
+  );
 
   return (
     <>
