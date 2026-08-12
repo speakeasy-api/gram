@@ -277,7 +277,7 @@ export function ChallengesTab(): JSX.Element {
   const outcomeParam = useOutcomeApiParam(outcomeFilter);
   const offset = (pageCount - 1) * PAGE_SIZE;
 
-  const { data, isLoading, isFetching } = useChallengeBuckets(
+  const { data, isFetching } = useChallengeBuckets(
     {
       ...outcomeParam,
       principalUrn: principalFilter !== "all" ? principalFilter : undefined,
@@ -408,6 +408,14 @@ export function ChallengesTab(): JSX.Element {
     wrappedActionsColumn,
   ];
 
+  // Show the skeleton whenever a first-page fetch is in flight with nothing to
+  // display yet. `isLoading` alone is insufficient: with `keepPreviousData`,
+  // switching filters resets `accumulated` to [] while `isLoading` stays false
+  // (placeholder data keeps the query out of the pending state), which would
+  // otherwise flash the "no challenges" empty state during a slow load.
+  const hasRows = accumulated.length > 0;
+  const showInitialLoading = !hasRows && isFetching;
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -467,9 +475,9 @@ export function ChallengesTab(): JSX.Element {
         </Select>
       </div>
 
-      {isLoading && accumulated.length === 0 ? (
+      {showInitialLoading ? (
         <SkeletonTable />
-      ) : accumulated.length === 0 ? (
+      ) : !hasRows ? (
         <ChallengesEmptyState outcomeFilter={outcomeFilter} />
       ) : (
         <>
