@@ -33,6 +33,7 @@ const (
 	subjectTypeMcpEndpoint                 subjectType = "mcp_endpoint"
 	subjectTypeMcpServer                   subjectType = "mcp_server"
 	subjectTypeModelProviderKey            subjectType = "model_provider_key"
+	subjectTypeOpenRouterAPIKey            subjectType = "openrouter_api_key"
 	subjectTypeOtelForwarding              subjectType = "otel_forwarding_config"
 	subjectTypeOrganizationInvite          subjectType = "organization_invitation"
 	subjectTypePlatformMcpRegistration     subjectType = "platform_mcp_registration"

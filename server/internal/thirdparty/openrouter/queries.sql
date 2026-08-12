@@ -8,12 +8,14 @@ INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
   , key
+  , key_encrypted
   , key_hash
   , monthly_credits
 ) VALUES (
     @organization_id
   , @key_type
   , @key
+  , @key_encrypted
   , @key_hash
   , @monthly_credits
 )
@@ -28,12 +30,37 @@ WHERE organization_id = @organization_id
 
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key,
+SET monthly_credits = @monthly_credits, key_hash = @key_hash,
     disabled = disabled AND NOT @reinstate::boolean
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: SetOpenRouterKeyEncrypted :one
+-- The platform-admin encrypt action: records the ciphertext and clears the
+-- plaintext column in one statement so a half-applied scrub cannot exist.
+-- Callers must hold the provisioning advisory lock and verify the ciphertext
+-- decrypts back to the plaintext before running this — the upstream API only
+-- returns key material at creation, so a bad scrub is unrecoverable.
+UPDATE openrouter_api_keys
+SET key_encrypted = @key_encrypted, key = NULL
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: BackfillOpenRouterKeyEncryption :exec
+-- Lazy read-repair for rows minted before encrypted storage existed: records
+-- the ciphertext without touching the plaintext column. The key_encrypted IS
+-- NULL guard makes concurrent repairs harmless and refuses to clobber a
+-- ciphertext written by the platform-admin encrypt action.
+UPDATE openrouter_api_keys
+SET key_encrypted = @key_encrypted
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND key_encrypted IS NULL
+  AND deleted IS FALSE;
 
 -- name: DisableOpenRouterAPIKey :exec
 -- Locks the key down without deleting it, so a reinstated organization keeps

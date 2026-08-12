@@ -95,6 +95,7 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminFeatures from "./pages/platform-admin/Features";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
+import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -1163,6 +1164,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "platform-admin/onboarding",
     icon: "mail",
     component: PlatformAdminOnboarding,
+  },
+  platformAdminOpenRouterKeys: {
+    title: "OpenRouter Keys",
+    url: "platform-admin/openrouter-keys",
+    icon: "key-round",
+    component: PlatformAdminOpenRouterKeys,
   },
   deviceAgent: {
     title: "Device Agent",
