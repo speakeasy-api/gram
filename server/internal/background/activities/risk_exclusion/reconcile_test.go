@@ -140,6 +140,7 @@ func TestReconcile_RuleIDLifecycle(t *testing.T) {
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
 		ProjectID:   tenant.projectID,
 		ExclusionID: exclusion.ID,
+		WindowDays:  0,
 	}))
 
 	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, matching.ID))
@@ -161,8 +162,55 @@ func TestReconcile_RuleIDLifecycle(t *testing.T) {
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
 		ProjectID:   tenant.projectID,
 		ExclusionID: exclusion.ID,
+		WindowDays:  0,
 	}))
 	require.Empty(t, latestExcludedBy(t, chConn, matching.ID))
+}
+
+// TestReconcile_WindowDaysBoundsClickHouseSweep pins the bounded sweep the
+// workflow's delayed second pass uses: a one-day window only touches today's
+// partition, leaving older findings for the unbounded first pass.
+func TestReconcile_WindowDaysBoundsClickHouseSweep(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := cloneDB(t)
+	tenant := seedTenant(t, conn)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	chQueries := chrepo.New(chConn)
+
+	// chFinding writes two days back, outside a one-day window.
+	older := chFinding(tenant, "secret.github_pat", "gitleaks")
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{older}))
+	testenv.FlushClickHouseAsyncInserts(t, chConn)
+
+	exclusion, err := riskrepo.New(conn).CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
+		ProjectID:      tenant.projectID,
+		OrganizationID: tenant.orgID,
+		RiskPolicyID:   uuid.NullUUID{},
+		MatchType:      "rule_id",
+		MatchValue:     "secret.github_pat",
+		RuleIDFilter:   pgtype.Text{},
+		SourceFilter:   pgtype.Text{},
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	reconcile := newReconcile(t, conn, chQueries)
+	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
+		ProjectID:   tenant.projectID,
+		ExclusionID: exclusion.ID,
+		WindowDays:  1,
+	}))
+	require.Empty(t, latestExcludedBy(t, chConn, older.ID), "a windowed sweep never scans older partitions")
+
+	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
+		ProjectID:   tenant.projectID,
+		ExclusionID: exclusion.ID,
+		WindowDays:  0,
+	}))
+	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, older.ID))
 }
 
 // TestReconcile_NilClickHouseDegrades pins the CH-less worker behavior: the

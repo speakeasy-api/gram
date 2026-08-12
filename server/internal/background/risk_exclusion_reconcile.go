@@ -23,10 +23,16 @@ const reconcileStartToCloseTimeout = 30 * time.Minute
 // writer annotates rows from an exclusion-set cache with a 60s TTL (plus a
 // ~1s async-insert flush), so rows consumed inside that window after an
 // exclusion change can land with stale flags AFTER the first sweep already
-// scanned their partition. A single delayed re-run converges them; it is
-// near-free because the reconcile's predicates only touch rows whose latest
-// state actually differs.
+// scanned their partition. A single delayed re-run converges them.
 const reconcileSecondSweepDelay = 2 * time.Minute
+
+// reconcileSecondSweepWindowDays bounds the delayed re-run's ClickHouse sweep
+// to the partition days that can hold those racing rows. They carry a
+// scan-time created_at, so they land in today's partition — or yesterday's if
+// the cache TTL, the flush, and the delay straddle a UTC midnight — and
+// re-walking the full retention window to find them would repeat 91 days of
+// ClickHouse work for nothing.
+const reconcileSecondSweepWindowDays = 2
 
 // RiskExclusionReconcileParams identifies the exclusion to reconcile.
 type RiskExclusionReconcileParams struct {
@@ -35,11 +41,12 @@ type RiskExclusionReconcileParams struct {
 }
 
 // RiskExclusionReconcileWorkflow flags/unflags stored findings to match an
-// exclusion's current state, then re-runs once after a short delay to catch
-// findings ingested with stale exclusion flags during the writer cache's TTL
-// window. The activity reads the exclusion's live state, so even if a newer
-// reconcile supersedes this one (TERMINATE_IF_RUNNING — including during the
-// sleep) the result converges.
+// exclusion's current state, then re-runs once after a short delay — over the
+// most recent ClickHouse partition days only — to catch findings ingested with
+// stale exclusion flags during the writer cache's TTL window. The activity
+// reads the exclusion's live state, so even if a newer reconcile supersedes
+// this one (TERMINATE_IF_RUNNING — including during the sleep) the result
+// converges.
 func RiskExclusionReconcileWorkflow(ctx workflow.Context, params RiskExclusionReconcileParams) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: reconcileStartToCloseTimeout,
@@ -56,6 +63,7 @@ func RiskExclusionReconcileWorkflow(ctx workflow.Context, params RiskExclusionRe
 	args := risk_exclusion.ReconcileArgs{
 		ProjectID:   params.ProjectID,
 		ExclusionID: params.ExclusionID,
+		WindowDays:  0,
 	}
 	if err := workflow.ExecuteActivity(ctx, a.ReconcileExclusion, args).Get(ctx, nil); err != nil {
 		return fmt.Errorf("reconcile exclusion: %w", err)
@@ -65,7 +73,9 @@ func RiskExclusionReconcileWorkflow(ctx workflow.Context, params RiskExclusionRe
 		return fmt.Errorf("sleep before reconcile second sweep: %w", err)
 	}
 
-	if err := workflow.ExecuteActivity(ctx, a.ReconcileExclusion, args).Get(ctx, nil); err != nil {
+	secondSweep := args
+	secondSweep.WindowDays = reconcileSecondSweepWindowDays
+	if err := workflow.ExecuteActivity(ctx, a.ReconcileExclusion, secondSweep).Get(ctx, nil); err != nil {
 		return fmt.Errorf("reconcile exclusion second sweep: %w", err)
 	}
 	return nil

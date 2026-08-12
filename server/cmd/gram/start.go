@@ -468,7 +468,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, svixFlags()...)
-	flags = append(flags, riskFlags()...)
+	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -529,17 +529,9 @@ func newStartCommand() *cli.Command {
 			}
 			clickhouseShutdown = shutdown
 
-			// Lenient, unlike streams: the keyring only powers exact-match
-			// retroactive exclusion propagation to ClickHouse, which degrades
-			// with a loud log when absent.
-			var riskFingerprinter risk.Fingerprinter
-			if raw := c.String("risk-fingerprint-pepper-keyring"); raw != "" {
-				riskFingerprinter, err = risk.ParsePepperKeyRing([]byte(raw))
-				if err != nil {
-					return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
-				}
-			} else {
-				logger.WarnContext(ctx, "risk fingerprint pepper keyring not configured; exact-match retroactive exclusion propagation to clickhouse disabled")
+			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
+			if err != nil {
+				return err
 			}
 
 			err = o11y.StartObservers(meterProvider, db)

@@ -334,7 +334,9 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 	require.Len(t, candidates, 1, "only rows with reconstructable match metadata are candidates")
 	require.Equal(t, reconstructable, candidates[0].ID)
 
-	// Reconstruct and match exactly as the reconcile activity does.
+	// Reconstruct and match exactly as the reconcile activity does: load the
+	// anchor, resolve the chat it is attributed to, hydrate, then gate the
+	// candidates on the recorded match length.
 	reveal := risk.NewRevealMatcher(testenv.NewLogger(t), pgRepo, nil)
 	c := candidates[0]
 	row := &chrepo.RiskFindingUnmaskRow{
@@ -355,7 +357,13 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 		ToolCallID:     c.ToolCallID,
 		OrganizationID: orgID,
 	}
-	match, ok := reveal.ReconstructMatch(ctx, projectID, row)
+	anchor := reveal.LoadAnchor(ctx, projectID, row)
+	resolvedChatID, attributed := risk.ResolveChatID(row, anchor)
+	require.True(t, attributed)
+	require.Equal(t, chatID, resolvedChatID)
+	reveal.HydratePartContent(ctx, &anchor)
+
+	match, ok := risk.MatchingReconstruction(row.MatchLen, reveal.Candidates(ctx, resolvedChatID, row, anchor))
 	require.True(t, ok)
 	require.Equal(t, secret, match)
 	require.True(t, regexp.MustCompile(`^AKIA[0-9A-Z]{16}$`).MatchString(match))
@@ -380,4 +388,60 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, candidates)
+}
+
+// TestRetroExclusion_RegexSkipsReparentedCandidate pins the cross-chat
+// attribution guard that the reconcile's regex evaluation shares with the
+// unmask endpoint: when the chat id stamped on a ClickHouse row disagrees with
+// the chat its anchored message actually belongs to, the candidate is refused
+// instead of matched against another chat's content.
+func TestRetroExclusion_RegexSkipsReparentedCandidate(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	secret := "AKIAIOSFODNN7EXAMPLE"
+	content := "please rotate " + secret + " before the audit"
+	start := strings.Index(content, secret)
+
+	pgRepo := riskrepo.New(ti.conn)
+	anchorChat, err := pgRepo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: projectID, OrganizationID: orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	stampedChat, err := pgRepo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: projectID, OrganizationID: orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	// The anchored message lives in one chat while the finding row claims the
+	// other — the shape a re-parented message leaves behind.
+	msgID, err := pgRepo.CreateChatMessageForTest(ctx, riskrepo.CreateChatMessageForTestParams{
+		ChatID: anchorChat, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Content: content,
+		UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	row := &chrepo.RiskFindingUnmaskRow{
+		ID:             uuid.Must(uuid.NewV7()),
+		ChatMessageID:  msgID.String(),
+		ChatID:         stampedChat.String(),
+		RuleID:         "secret.aws_access_key",
+		StartPos:       int32(start),
+		EndPos:         int32(start + len(secret)),
+		MatchLen:       uint32(len(secret)),
+		Surface:        "content",
+		OrganizationID: orgID,
+	}
+
+	reveal := risk.NewRevealMatcher(testenv.NewLogger(t), pgRepo, nil)
+	anchor := reveal.LoadAnchor(ctx, projectID, row)
+	require.Equal(t, uuid.NullUUID{UUID: anchorChat, Valid: true}, anchor.ChatID)
+
+	chatID, attributed := risk.ResolveChatID(row, anchor)
+	require.False(t, attributed, "content from another chat must not be attributed to the stamped chat")
+	require.Equal(t, uuid.Nil, chatID, "a refused attribution never yields a usable chat id")
 }

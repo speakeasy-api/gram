@@ -414,6 +414,32 @@ func (m *RevealMatcher) derivedCandidates(ctx context.Context, chatID uuid.UUID,
 	}
 }
 
+// ResolveChatID resolves the chat a finding's reconstructed content belongs
+// to: the chat id stamped on the ClickHouse row at ingest, falling back to the
+// anchored Postgres row's chat. When neither resolves (attribution never ran
+// and the anchor is gone) it yields the nil UUID, mirroring the Postgres
+// path's NULL chat_id.
+//
+// The second return is false when the stamped id and the anchor's chat are
+// both present and disagree: the anchored message was re-parented (or the
+// stamp is stale), so the anchor's content is not the stamped chat's to serve
+// and callers must refuse the reveal. The chat id is nil in that case, so a
+// caller that ignores the flag can only widen to the nil-chat gate, never to
+// the wrong chat's.
+func ResolveChatID(row *chrepo.RiskFindingUnmaskRow, anchor RevealAnchor) (uuid.UUID, bool) {
+	chatID := uuid.Nil
+	if parsed, err := uuid.Parse(row.ChatID); err == nil {
+		chatID = parsed
+	} else if anchor.ChatID.Valid {
+		chatID = anchor.ChatID.UUID
+	}
+
+	if anchor.ChatID.Valid && chatID != uuid.Nil && anchor.ChatID.UUID != chatID {
+		return uuid.Nil, false
+	}
+	return chatID, true
+}
+
 // MatchingReconstruction selects the reconstruction to trust: the first
 // candidate whose byte length equals the recorded match_len. The length gate
 // is a plain integrity check, not cryptography — a candidate of the wrong
@@ -431,23 +457,4 @@ func MatchingReconstruction(matchLen uint32, candidates [][]byte) (string, bool)
 		}
 	}
 	return "", false
-}
-
-// ReconstructMatch is the one-shot reconstruction used by unauthenticated
-// in-process consumers (the retroactive exclusion reconcile): anchor load,
-// asset hydration, candidate assembly, and the match-length gate in one call.
-// The unmask endpoint uses the granular methods instead because it interposes
-// authorization between the anchor load and the asset read.
-func (m *RevealMatcher) ReconstructMatch(ctx context.Context, projectID uuid.UUID, row *chrepo.RiskFindingUnmaskRow) (string, bool) {
-	anchor := m.LoadAnchor(ctx, projectID, row)
-
-	chatID := uuid.Nil
-	if parsed, err := uuid.Parse(row.ChatID); err == nil {
-		chatID = parsed
-	} else if anchor.ChatID.Valid {
-		chatID = anchor.ChatID.UUID
-	}
-
-	m.HydratePartContent(ctx, &anchor)
-	return MatchingReconstruction(row.MatchLen, m.Candidates(ctx, chatID, row, anchor))
 }

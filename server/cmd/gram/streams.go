@@ -202,7 +202,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
-	flags = append(flags, riskFlags()...)
+	flags = append(flags, riskIngestFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{

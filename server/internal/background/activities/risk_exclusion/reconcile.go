@@ -58,8 +58,19 @@ const (
 
 // ReconcileArgs identifies the exclusion to reconcile.
 type ReconcileArgs struct {
-	ProjectID   uuid.UUID
+	// ProjectID scopes the exclusion lookup; the applies use each row's own
+	// project so a bad argument can never touch another tenant's findings.
+	ProjectID uuid.UUID
+
+	// ExclusionID is the exclusion whose current state the stores are
+	// reconciled against.
 	ExclusionID uuid.UUID
+
+	// WindowDays bounds the ClickHouse phases to that many recent partition
+	// days (1 = today only); zero sweeps the full retention window. Used by
+	// the workflow's delayed second sweep, whose racing rows are always
+	// freshly ingested. The Postgres phases always cover the whole table.
+	WindowDays int
 }
 
 // Reconcile flags/unflags stored findings to match an exclusion's current
@@ -203,6 +214,7 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 		excludedAt:     chrepo.FormatCHTime(time.Now().UTC()),
 		insertedAtBase: time.Now().UTC(),
 		statements:     0,
+		windowDays:     args.WindowDays,
 	}
 
 	if !phaseDone(resume.Phase, phaseCHReverse) {
@@ -285,6 +297,8 @@ type chRun struct {
 	excludedAt     string
 	insertedAtBase time.Time
 	statements     int
+	// windowDays bounds the swept partition days; zero means full retention.
+	windowDays int
 }
 
 func (r *chRun) nextInsertedAt() string {
@@ -293,14 +307,19 @@ func (r *chRun) nextInsertedAt() string {
 	return s
 }
 
-// chDays yields the partition days to sweep, newest first, over the table's
-// retention window. startDay ("" = from the top) resumes a partially
-// completed sweep.
-func chDays(startDay string) []time.Time {
+// days yields the partition days to sweep, newest first, capped by the run's
+// window (zero = the table's whole retention window). startDay ("" = from the
+// top) resumes a partially completed sweep; a resume day older than the window
+// yields nothing, which is correct — the window is the sweep.
+func (r *chRun) days(startDay string) []time.Time {
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	days := make([]time.Time, 0, chRetentionDays+1)
+	oldest := chRetentionDays
+	if r.windowDays > 0 {
+		oldest = min(r.windowDays-1, chRetentionDays)
+	}
+	days := make([]time.Time, 0, oldest+1)
 	started := startDay == ""
-	for i := 0; i <= chRetentionDays; i++ {
+	for i := 0; i <= oldest; i++ {
 		day := today.AddDate(0, 0, -i)
 		if !started {
 			if day.Format(time.DateOnly) != startDay {
@@ -326,7 +345,7 @@ func (r *chRun) scope(day time.Time) chrepo.RetroExclusionScope {
 // exclusion, one partition day at a time.
 func (a *Reconcile) chReverse(ctx context.Context, run *chRun, startDay string) error {
 	var total uint64
-	for _, day := range chDays(startDay) {
+	for _, day := range run.days(startDay) {
 		bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
 		count, err := a.ch.CountRetroExclusionReversal(bctx, run.scope(day), run.exclusionID)
 		if err == nil && count > 0 {
@@ -364,7 +383,7 @@ func (a *Reconcile) chApply(ctx context.Context, run *chRun, ex repo.RiskExclusi
 	}
 
 	var total uint64
-	for _, day := range chDays(startDay) {
+	for _, day := range run.days(startDay) {
 		bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
 		count, err := a.ch.CountRetroExclusionApply(bctx, run.scope(day), predicate)
 		if err == nil && count > 0 {
@@ -469,21 +488,34 @@ func (a *Reconcile) chApplyRegex(ctx context.Context, run *chRun, ex repo.RiskEx
 
 	reveal := risk.NewRevealMatcher(a.logger, repo.New(a.db), a.assetStorage)
 	projectID := ex.ProjectID
-	// Anchors repeat across findings (several findings per message), so cache
-	// the loaded-and-hydrated anchor per anchor id for the whole run.
-	anchors := make(map[string]risk.RevealAnchor)
 
 	var total int
-	for _, day := range chDays(startDay) {
+	for _, day := range run.days(startDay) {
+		dayKey := day.Format(time.DateOnly)
 		bctx, cancel := context.WithTimeout(ctx, perBatchTimeout)
 		candidates, err := a.ch.ListRetroRegexCandidates(bctx, run.scope(day), predicate)
 		cancel()
 		if err != nil {
-			return fmt.Errorf("day %s: list candidates: %w", day.Format(time.DateOnly), err)
+			return fmt.Errorf("day %s: list candidates: %w", dayKey, err)
 		}
+
+		// Anchors repeat across findings (several findings per message), so
+		// cache the loaded-and-hydrated anchor per anchor id. The cache is
+		// per-day: one scan's findings all share its created_at day, so
+		// carrying hydrated content — up to 20 MiB per content-part asset —
+		// across a 90-day sweep would grow without bound to buy back almost
+		// no hits.
+		anchors := make(map[string]risk.RevealAnchor)
 
 		var matched []uuid.UUID
 		for _, c := range candidates {
+			// Each candidate can cost a Postgres anchor load and an asset read,
+			// so a day's worth of them easily outlives the activity's heartbeat
+			// timeout. The SDK throttles the actual heartbeat RPCs, so recording
+			// one per candidate is cheap; resume stays at day granularity
+			// because re-running the day being heartbeated is idempotent.
+			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHApply, Cursor: uuid.UUID{}, Day: dayKey})
+
 			row := &chrepo.RiskFindingUnmaskRow{
 				ID:             c.ID,
 				CreatedAt:      time.Time{},
@@ -511,11 +543,16 @@ func (a *Reconcile) chApplyRegex(ctx context.Context, run *chRun, ex repo.RiskEx
 				anchors[anchorKey] = anchor
 			}
 
-			chatID := uuid.Nil
-			if parsed, err := uuid.Parse(row.ChatID); err == nil {
-				chatID = parsed
-			} else if anchor.ChatID.Valid {
-				chatID = anchor.ChatID.UUID
+			// A stamped chat id that disagrees with the anchor's chat means the
+			// message was re-parented, so the anchor's content is not this
+			// finding's to evaluate — the same refusal the unmask endpoint makes.
+			chatID, attributed := risk.ResolveChatID(row, anchor)
+			if !attributed {
+				a.logger.DebugContext(ctx, "risk finding chat id diverges from its anchor; skipping regex candidate",
+					attr.SlogChatID(c.ChatID),
+					attr.SlogValueString(c.ID.String()),
+				)
+				continue
 			}
 
 			match, ok := risk.MatchingReconstruction(row.MatchLen, reveal.Candidates(ctx, chatID, row, anchor))
@@ -530,11 +567,11 @@ func (a *Reconcile) chApplyRegex(ctx context.Context, run *chRun, ex repo.RiskEx
 			err := a.ch.AppendRetroExclusionApplyByIDs(bctx, run.scope(day), run.exclusionID, run.excludedAt, run.nextInsertedAt(), chunk)
 			cancel()
 			if err != nil {
-				return fmt.Errorf("day %s: append regex matches: %w", day.Format(time.DateOnly), err)
+				return fmt.Errorf("day %s: append regex matches: %w", dayKey, err)
 			}
 		}
 		total += len(matched)
-		activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHApply, Cursor: uuid.UUID{}, Day: day.Format(time.DateOnly)})
+		activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phaseCHApply, Cursor: uuid.UUID{}, Day: dayKey})
 	}
 
 	if total > 0 {

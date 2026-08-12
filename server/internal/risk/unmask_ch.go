@@ -39,25 +39,18 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 	reveal := NewRevealMatcher(s.logger, s.repo, s.assetStorage)
 	anchor := reveal.LoadAnchor(ctx, projectID, row)
 
-	// The chat:read gate is identical to the Postgres path: prefer the
-	// denormalized chat id stamped at ingest, fall back to the anchored Postgres
-	// row's chat. When neither resolves (attribution never resolved and the
-	// anchor is gone) the check runs against the nil UUID — mirroring the
-	// Postgres path's NULL chat_id — and only a wildcard chat:read grant passes.
-	chatID := uuid.Nil
-	if parsed, err := uuid.Parse(row.ChatID); err == nil {
-		chatID = parsed
-	} else if anchor.ChatID.Valid {
-		chatID = anchor.ChatID.UUID
-	}
-
-	// The authorized chat and the chat the content actually comes from must be
-	// the same one. They can diverge if the ingest-stamped chat id is stale or
-	// its message was re-parented, and serving the anchor's content under the
-	// stamped chat's grant would hand a caller another chat's transcript.
-	if anchor.ChatID.Valid && chatID != uuid.Nil && anchor.ChatID.UUID != chatID {
+	// The chat:read gate is identical to the Postgres path: the resolved chat
+	// is the ingest-stamped id, falling back to the anchored Postgres row's
+	// chat. When neither resolves (attribution never resolved and the anchor is
+	// gone) the check runs against the nil UUID — mirroring the Postgres path's
+	// NULL chat_id — and only a wildcard chat:read grant passes. A stamped id
+	// that disagrees with the anchor's chat is refused outright: serving the
+	// anchor's content under the stamped chat's grant would hand a caller
+	// another chat's transcript.
+	chatID, attributed := ResolveChatID(row, anchor)
+	if !attributed {
 		s.logger.WarnContext(ctx, "risk finding chat id diverges from its anchor; refusing reveal",
-			attr.SlogChatID(chatID.String()),
+			attr.SlogChatID(row.ChatID),
 			attr.SlogValueString(row.ID.String()),
 		)
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
