@@ -123,11 +123,11 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		// Organization-less sessions still need identity attributes for
 		// request handling and audit attribution.
 		userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID)
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
+		if err == nil {
+			email := userInfo.Email
+			authCtx.Email = &email
+			authCtx.IsAdmin = userInfo.Admin
 		}
-		authCtx.Email = &userInfo.Email
-		authCtx.IsAdmin = userInfo.Admin
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}
