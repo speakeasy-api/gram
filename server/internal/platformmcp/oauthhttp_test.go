@@ -223,7 +223,8 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	require.Contains(t, selection.Body.String(), "Organization one")
 	require.Contains(t, selection.Body.String(), "Choose an organization")
 	require.Contains(t, selection.Body.String(), "auth-consent-container")
-	require.Contains(t, selection.Body.String(), "Geist+Mono")
+	require.Contains(t, selection.Body.String(), "font-diatype-mono")
+	require.NotContains(t, selection.Body.String(), "fonts.googleapis.com")
 }
 
 func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {

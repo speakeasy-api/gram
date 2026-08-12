@@ -2349,7 +2349,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	authCtx.ProjectSlug = &selectedProjectSlug
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	defaultPlugin, err := pluginsrepo.New(ti.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+	defaultPlugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 	})
