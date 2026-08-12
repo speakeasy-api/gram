@@ -80,52 +80,28 @@ func generateLegibleOrgName() string {
 	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
 }
 
-// maxOrgNameLength bounds the org name in runes, not bytes: a name in a
-// non-Latin script spends two to four bytes per character, and a byte cap would
-// give it a third of the room a Latin name gets. The signup path accepts this
-// value on an unauthenticated endpoint that writes it to Redis.
+// maxOrgNameLength is measured in Unicode code points, not bytes.
 const maxOrgNameLength = 100
 
-// minOrgNameLetterOrDigit is the floor on letters and digits in the name,
-// mirroring MIN_ORG_NAME_LETTERS_OR_DIGITS in the sign-up form. It keeps out
-// names made only of punctuation ("-----", "___", "- _ -"), which carry no
-// meaning and slugify to nothing. Two rather than one so a name is a name
-// rather than an initial.
-const minOrgNameLetterOrDigit = 2
+// minOrgNameLettersOrNumbers keeps punctuation-only values from becoming
+// organization names.
+const minOrgNameLettersOrNumbers = 2
 
-// shortOrgNameFormat matches the sign-up form's constraint and keeps the
-// server's established "organization name" terminology; the form calls it a
-// "Company name".
 const shortOrgNameFormat = "organization name must contain at least %d letters or numbers"
 
-// Zero-width joiner and non-joiner. Both are Cf, the category this rejects
-// wholesale for carrying bidi overrides, but Indic, Arabic and Persian
-// orthography needs them to render correct glyphs — an allowlist that drops
-// them mangles names in the very scripts the rest of this rule admits.
+// Zero-width joiners are allowed because they are required by several scripts.
 const (
 	zeroWidthNonJoiner = '\u200C'
 	zeroWidthJoiner    = '\u200D'
 )
 
-// validateOrgName is the single org-name rule, shared by the authenticated
-// register endpoint and the unauthenticated signup parameter on login. It
-// returns the name to store: whitespace-normalized, so a pasted non-breaking
-// space or a run of spaces does not reach the org record and the identity
-// provider verbatim.
-//
-// The rule is a denylist, and deliberately a permissive one. A display name
-// never has to be URL-safe — orgslug derives and sanitizes the slug separately —
-// so it only has to be safe to render and to log. "Acme, Inc.", "Bob's Bakery",
-// "Café Zoë" and every name written in a non-Latin script are names, not
-// attacks, and a company that has one should not have to transliterate it to
-// sign up.
+// validateOrgName returns a whitespace-normalized display name when the input
+// contains only graphic characters and permitted joiners.
 func validateOrgName(name string) (string, error) {
 	invalidChars := func() error {
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	// Invalid UTF-8 would otherwise survive as replacement characters in the
-	// org record and in every log line that prints the name.
 	if !utf8.ValidString(name) {
 		return "", invalidChars()
 	}
@@ -139,39 +115,30 @@ func validateOrgName(name string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
 	}
 
-	letterOrDigit := 0
+	lettersOrNumbers := 0
 	for _, r := range normalized {
-		// IsGraphic covers letters, marks, numbers, punctuation, symbols and
-		// space separators, and so admits every script while rejecting control
-		// characters, bidi overrides and other formatting codes, private-use
-		// and surrogate code points, and unassigned ones.
 		if !unicode.IsGraphic(r) && r != zeroWidthJoiner && r != zeroWidthNonJoiner {
 			return "", invalidChars()
 		}
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			letterOrDigit++
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			lettersOrNumbers++
 		}
 	}
 
-	if letterOrDigit < minOrgNameLetterOrDigit {
+	if lettersOrNumbers < minOrgNameLettersOrNumbers {
 		return "", oops.E(
 			oops.CodeInvalid,
-			fmt.Errorf(shortOrgNameFormat, minOrgNameLetterOrDigit),
+			fmt.Errorf(shortOrgNameFormat, minOrgNameLettersOrNumbers),
 			shortOrgNameFormat,
-			minOrgNameLetterOrDigit,
+			minOrgNameLettersOrNumbers,
 		)
 	}
 
 	return normalized, nil
 }
 
-// normalizeOrgNameSpaces maps every Unicode space separator to a plain space,
-// collapses runs of them, and trims the ends. Pasted names routinely carry a
-// non-breaking or ideographic space, and this runs on an unauthenticated
-// endpoint, so the client's own normalization is not a control.
-//
-// Tabs, newlines and other control characters are deliberately left alone here
-// for validateOrgName to reject rather than quietly absorb.
+// normalizeOrgNameSpaces converts Unicode space separators to ASCII spaces,
+// collapses runs, and trims the ends. Other whitespace remains for validation.
 func normalizeOrgNameSpaces(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))

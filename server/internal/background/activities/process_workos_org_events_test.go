@@ -199,13 +199,10 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 	require.Equal(t, "event_01HZGOOD", cursor)
 }
 
-// An organization named entirely in a non-Latin script has no slug to derive
-// from its name, and a WorkOS event is in no position to reject the name or ask
-// anyone to change it, so the organization gets a generated slug instead.
-func TestProcessWorkOSOrganizationEvents_OrganizationCreateGeneratesSlugWhenNameHasNone(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameHasNoSlug(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newOrgEventsTestConn(t, "workos_org_events_org_generated_slug")
 	logger := testenv.NewLogger(t)
 
@@ -232,7 +229,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateGeneratesSlugWhenName
 	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
 	require.NoError(t, err)
 	require.Equal(t, orgName, row.Name)
-	require.Regexp(t, `^org-[a-z1-9]{8}$`, row.Slug)
+	require.Equal(t, "org-01hznoslug", row.Slug)
 
 	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
 	require.NoError(t, err)

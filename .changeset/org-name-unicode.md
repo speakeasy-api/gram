@@ -13,5 +13,5 @@ non-Latin name gets the same room a Latin one does), must carry at least two
 letters or numbers, and may use anything that renders: control characters, bidi
 overrides and other invisible formatting are still rejected, and whitespace is
 normalized. The URL slug is unaffected in shape — it is still derived
-separately, now with accents folded ("Café Zoë" → `cafe-zoe`) and a generated
-slug for names it cannot transliterate.
+separately, with a generated fallback for names that contain fewer than two
+URL-safe characters.

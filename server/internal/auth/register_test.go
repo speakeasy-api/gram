@@ -452,77 +452,6 @@ func TestService_Register(t *testing.T) {
 		assert.Equal(t, "Unique Org Name", org.Name)
 	})
 
-	t.Run("register folds accents into the slug", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
-
-		session := sessions.Session{
-			SessionID:            "slug-accents",
-			UserID:               userInfo.UserID,
-			ActiveOrganizationID: "",
-		}
-		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
-
-		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-			SessionID:            &session.SessionID,
-			UserID:               session.UserID,
-			ActiveOrganizationID: "",
-			AccountType:          "test",
-			Email:                &userInfo.Email,
-		})
-
-		err := instance.service.Register(ctx, &gen.RegisterPayload{
-			OrgName: "Café Zoë's Grünwald",
-		})
-		require.NoError(t, err)
-
-		orgQueries := orgRepo.New(instance.conn)
-		org, err := orgQueries.GetOrganizationMetadataBySlug(ctx, "cafe-zoes-grunwald")
-		require.NoError(t, err)
-		assert.Equal(t, "Café Zoë's Grünwald", org.Name, "the display name keeps its accents")
-	})
-
-	// A name written entirely in a non-Latin script has no slug to derive from
-	// it, so the org gets a generated one rather than being turned away.
-	t.Run("register creates an org for a name with no derivable slug", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
-
-		session := sessions.Session{
-			SessionID:            "slug-non-latin",
-			UserID:               userInfo.UserID,
-			ActiveOrganizationID: "",
-		}
-		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
-
-		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-			SessionID:            &session.SessionID,
-			UserID:               session.UserID,
-			ActiveOrganizationID: "",
-			AccountType:          "test",
-			Email:                &userInfo.Email,
-		})
-
-		const orgName = "アクメ株式会社"
-		require.NoError(t, instance.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
-
-		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
-		require.NoError(t, err)
-		require.NotEmpty(t, stored.ActiveOrganizationID)
-
-		orgQueries := orgRepo.New(instance.conn)
-		org, err := orgQueries.GetOrganizationMetadata(ctx, stored.ActiveOrganizationID)
-		require.NoError(t, err)
-		assert.Equal(t, orgName, org.Name)
-		assert.Regexp(t, `^org-[a-z1-9]{8}$`, org.Slug, "slug must be generated, not empty")
-	})
-
 	t.Run("register appends random suffix on slug collision", func(t *testing.T) {
 		t.Parallel()
 
@@ -570,4 +499,39 @@ func TestService_Register(t *testing.T) {
 		assert.Contains(t, newOrg.Slug, "collide-me-", "slug should start with base and have a random suffix")
 		assert.Len(t, newOrg.Slug, len("collide-me-")+4, "suffix should be 4 hex chars")
 	})
+}
+
+func TestRegister_CreatesOrganizationForNameWithNoDerivableSlug(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = []MockOrganizationEntry{}
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	session := sessions.Session{
+		SessionID:            "slug-non-latin",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		UserID:               session.UserID,
+		ActiveOrganizationID: "",
+		AccountType:          "test",
+		Email:                &userInfo.Email,
+	})
+
+	const orgName = "アクメ株式会社"
+	require.NoError(t, instance.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
+
+	stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.NotEmpty(t, stored.ActiveOrganizationID)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, stored.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, orgName, org.Name)
+	require.Regexp(t, `^org-[a-z1-9]{8}$`, org.Slug)
 }

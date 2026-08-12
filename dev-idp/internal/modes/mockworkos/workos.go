@@ -7,8 +7,6 @@
 //	GET  /user_management/users/{id}
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
 //	GET  /organizations/{id}
-//	POST /organizations                                                      ({name, external_id})
-//	PUT  /organizations/{id}                                                 ({name, external_id})
 //	GET  /user_management/organization_memberships                           (?user_id, ?organization_id, ?after, ?limit)
 //	POST /user_management/organization_memberships                          ({user_id, organization_id, role_slug})
 //	PUT  /user_management/organization_memberships/{id}                      ({role_slug})
@@ -39,7 +37,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,13 +60,6 @@ const (
 	maxPageSize     = 100
 )
 
-// maxSlugLength keeps a derived organization slug short enough to stay
-// readable in the dev-idp dashboard.
-const maxSlugLength = 40
-
-// nonSlugChars matches every run of characters that cannot appear in a slug.
-var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
-
 // =============================================================================
 // Routes
 // =============================================================================
@@ -81,8 +71,6 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
-	mux.HandleFunc("POST /organizations", h.handleWorkosCreateOrganization)
-	mux.HandleFunc("PUT /organizations/{id}", h.handleWorkosUpdateOrganization)
 
 	mux.HandleFunc("GET /user_management/organization_memberships", h.handleWorkosListMemberships)
 	mux.HandleFunc("POST /user_management/organization_memberships", h.handleWorkosCreateMembership)
@@ -505,149 +493,6 @@ func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, workosOrganizationView(org))
-}
-
-// handleWorkosCreateOrganization implements POST /organizations, the endpoint
-// Gram calls when a user signs up or registers and needs an organization
-// provisioned. The emulated org is stamped with a WorkOS-shaped workos_id so
-// that resolveOrgID finds it again by the ID we hand back.
-//
-// external_id is accepted and echoed but not stored: the organizations table
-// has no column for it, and Gram derives its own organization ID from the
-// WorkOS ID deterministically, so nothing local depends on reading it back.
-func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var body struct {
-		Name       string `json:"name"`
-		ExternalID string `json:"external_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if body.Name == "" {
-		writeWorkosError(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	queries := repo.New(h.db)
-	org, err := h.insertOrganization(ctx, queries, body.Name)
-	if err != nil {
-		h.logger.ErrorContext(ctx, "workos create organization", slog.Any("error", err))
-		writeWorkosError(w, http.StatusInternalServerError, "failed to create organization")
-		return
-	}
-
-	// Every WorkOS environment gives a new org the same two roles, and the
-	// membership Gram creates next names one of them by slug.
-	for _, role := range []struct{ Slug, Name string }{
-		{Slug: "admin", Name: "Admin"},
-		{Slug: "member", Name: "Member"},
-	} {
-		if _, err := queries.UpsertOrganizationRole(ctx, repo.UpsertOrganizationRoleParams{
-			ID:             uuid.New(),
-			OrganizationID: org.ID,
-			Slug:           role.Slug,
-			Name:           role.Name,
-			Description:    sql.NullString{String: "", Valid: false},
-		}); err != nil {
-			h.logger.ErrorContext(ctx, "workos create organization: seed role", slog.Any("error", err), slog.String("role", role.Slug))
-			writeWorkosError(w, http.StatusInternalServerError, "failed to seed organization roles")
-			return
-		}
-	}
-
-	view := workosOrganizationView(org)
-	view.ExternalID = body.ExternalID
-	writeJSON(w, http.StatusCreated, view)
-}
-
-// handleWorkosUpdateOrganization implements PUT /organizations/{id}. Gram uses
-// it to back-fill external_id right after creating an org; see
-// handleWorkosCreateOrganization for why that field is not persisted.
-func (h *Handler) handleWorkosUpdateOrganization(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	id, err := h.resolveOrgID(ctx, r.PathValue("id"))
-	if err != nil {
-		writeWorkosError(w, http.StatusNotFound, "organization not found")
-		return
-	}
-
-	var body struct {
-		Name       string `json:"name"`
-		ExternalID string `json:"external_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	org, err := repo.New(h.db).UpdateOrganization(ctx, repo.UpdateOrganizationParams{
-		ID:          id,
-		Name:        sql.NullString{String: body.Name, Valid: body.Name != ""},
-		Slug:        sql.NullString{String: "", Valid: false},
-		AccountType: sql.NullString{String: "", Valid: false},
-		WorkosID:    sql.NullString{String: "", Valid: false},
-		Ts:          time.Now(),
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		writeWorkosError(w, http.StatusNotFound, "organization not found")
-		return
-	}
-	if err != nil {
-		h.logger.ErrorContext(ctx, "workos update organization", slog.Any("error", err))
-		writeWorkosError(w, http.StatusInternalServerError, "failed to update organization")
-		return
-	}
-
-	view := workosOrganizationView(org)
-	view.ExternalID = body.ExternalID
-	writeJSON(w, http.StatusOK, view)
-}
-
-// insertOrganization creates an organization row for a WorkOS-shaped name.
-// organizations.slug is unique and CreateOrganization is find-or-create on it,
-// so a name whose slug is taken would otherwise hand back somebody else's
-// organization; retry under a suffixed slug until the returned row is ours.
-func (h *Handler) insertOrganization(ctx context.Context, queries *repo.Queries, name string) (repo.Organization, error) {
-	base := orgSlugBase(name)
-
-	slug := base
-	for range 5 {
-		id := uuid.New()
-		org, err := queries.CreateOrganization(ctx, repo.CreateOrganizationParams{
-			ID:          id,
-			Name:        name,
-			Slug:        slug,
-			AccountType: nil,
-			WorkosID:    sql.NullString{String: "org_devidp_" + randomToken(), Valid: true},
-		})
-		if err != nil {
-			return repo.Organization{}, fmt.Errorf("insert organization: %w", err)
-		}
-		if org.ID == id {
-			return org, nil
-		}
-		slug = base + "-" + randomToken()[:6]
-	}
-
-	return repo.Organization{}, fmt.Errorf("no free slug for organization name %q", name)
-}
-
-// orgSlugBase derives the stem of a slug from a display name. A name written
-// outside the Latin alphabet reduces to nothing, so fall back to a constant
-// stem and let insertOrganization suffix it.
-func orgSlugBase(name string) string {
-	slug := strings.Trim(nonSlugChars.ReplaceAllString(strings.ToLower(name), "-"), "-")
-	if slug == "" {
-		return "org"
-	}
-	if len(slug) > maxSlugLength {
-		slug = strings.Trim(slug[:maxSlugLength], "-")
-	}
-	return slug
 }
 
 // =============================================================================

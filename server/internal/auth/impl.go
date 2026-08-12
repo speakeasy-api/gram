@@ -509,13 +509,15 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// nonce behind — and so a bad name fails before the identity-provider hop
 	// rather than after it. Only when the parameter is present: a malformed
 	// value must never be able to block an ordinary login.
-	orgName := strings.TrimSpace(conv.PtrValOr(payload.OrgName, ""))
-	if orgName != "" {
+	orgName := conv.PtrValOr(payload.OrgName, "")
+	if strings.TrimSpace(orgName) != "" {
 		validated, err := validateOrgName(orgName)
 		if err != nil {
 			return nil, err
 		}
 		orgName = validated
+	} else {
+		orgName = ""
 	}
 
 	// An email means the sign-up page collected one to pre-fill on the identity

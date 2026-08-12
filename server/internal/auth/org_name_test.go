@@ -63,6 +63,7 @@ func TestValidateOrgName_Accepts(t *testing.T) {
 		{name: "cyrillic", input: "Акме"},
 		{name: "katakana", input: "アクメ株式会社"},
 		{name: "arabic", input: "شركة أكمي"},
+		{name: "letter numbers", input: "ⅫⅡ"},
 		{name: "emoji alongside letters", input: "Acme 🚀"},
 		{name: "zero-width joiner between letters", input: "अ\u200dब"},
 		{name: "at the length limit", input: strings.Repeat("a", maxOrgNameLength)},
@@ -72,20 +73,16 @@ func TestValidateOrgName_Accepts(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			validated, err := validateOrgName(tt.input)
-			require.NoError(t, err)
-			require.Equal(t, tt.input, validated, "an already-normalized name must come back unchanged")
-		})
+		validated, err := validateOrgName(tt.input)
+		require.NoError(t, err, tt.name)
+		require.Equal(t, tt.input, validated, "%s: an already-normalized name must come back unchanged", tt.name)
 	}
 }
 
 func TestValidateOrgName_Rejects(t *testing.T) {
 	t.Parallel()
 
-	shortOrgName := fmt.Sprintf(shortOrgNameFormat, minOrgNameLetterOrDigit)
+	shortOrgName := fmt.Sprintf(shortOrgNameFormat, minOrgNameLettersOrNumbers)
 
 	tests := []struct {
 		name    string
@@ -115,14 +112,10 @@ func TestValidateOrgName_Rejects(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			validated, err := validateOrgName(tt.input)
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tt.wantErr)
-			require.Empty(t, validated, "a rejected name must not come back as something to store")
-		})
+		validated, err := validateOrgName(tt.input)
+		require.Error(t, err, tt.name)
+		require.Contains(t, err.Error(), tt.wantErr, tt.name)
+		require.Empty(t, validated, "%s: a rejected name must not come back as something to store", tt.name)
 	}
 }
 
@@ -143,18 +136,12 @@ func TestValidateOrgName_Normalizes(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			validated, err := validateOrgName(tt.input)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, validated)
-		})
+		validated, err := validateOrgName(tt.input)
+		require.NoError(t, err, tt.name)
+		require.Equal(t, tt.want, validated, tt.name)
 	}
 }
 
-// A name at the rune limit made of four-byte runes is 400 bytes, which the byte
-// cap this replaced would have rejected outright.
 func TestValidateOrgName_LengthLimitCountsRunes(t *testing.T) {
 	t.Parallel()
 

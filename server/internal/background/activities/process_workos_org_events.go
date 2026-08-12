@@ -416,12 +416,11 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		return nil
 	}
 
-	// Base rather than Slugify: an organization named entirely in a non-Latin
-	// script has no slug to derive, and a name is not something this event can
-	// reject or ask a user to change.
-	slug, err := orgslug.Base(payload.Name)
-	if err != nil {
-		return fmt.Errorf("derive slug base for workos organization %q: %w", payload.ID, err)
+	slug := orgslug.Slugify(payload.Name)
+	if slug == "" {
+		// WorkOS organization IDs are stable ASCII identifiers, so this keeps
+		// the advisory-lock key deterministic across duplicate deliveries.
+		slug = orgslug.Slugify(payload.ID)
 	}
 	if err := repo.LockOrganizationSlug(ctx, slug); err != nil {
 		return fmt.Errorf("lock organization slug %q: %w", slug, err)
