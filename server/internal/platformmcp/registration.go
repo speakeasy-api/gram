@@ -158,11 +158,11 @@ func (s *RegistrationStore) ResolveRegistrationPendingSecretFields(ctx context.C
 	}
 	configured := make(map[string]bool, len(headers))
 	for _, header := range headers {
-		configured[header.Name] = header.IsSecret && header.Value.Valid && header.Value.String != ""
+		configured[strings.ToLower(header.Name)] = header.IsSecret && header.Value.Valid && header.Value.String != ""
 	}
 	pending := make([]CatalogConfigurationField, 0, len(declared))
 	for _, field := range declared {
-		if field.Required && field.Secret && !configured[field.Name] {
+		if field.Required && field.Secret && !configured[strings.ToLower(field.Name)] {
 			pending = append(pending, field)
 		}
 	}

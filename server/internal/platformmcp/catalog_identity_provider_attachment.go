@@ -178,12 +178,15 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 }
 
 func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetadata(ctx context.Context, authorizationServers []string) (remotesessions.DiscoveredIssuerMetadata, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	for _, rawAuthorizationServer := range authorizationServers {
 		authorizationServer := strings.TrimSpace(rawAuthorizationServer)
 		if authorizationServer == "" {
 			continue
 		}
-		metadata, err := remotesessions.DiscoverIssuerMetadata(ctx, s.policy, authorizationServer)
+		metadata, err := remotesessions.DiscoverIssuerMetadata(probeCtx, s.policy, authorizationServer)
 		if err != nil || strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint) {
 			continue
 		}

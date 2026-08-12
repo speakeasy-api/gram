@@ -297,13 +297,27 @@ func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, princi
 	if err != nil {
 		return fmt.Errorf("record platform mcp %s: %w", milestone, err)
 	}
-	if rows == 0 {
-		if _, err := lifecycleRegistration(ctx, q, principal, projectID, registrationID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrUnavailable
-			}
-			return fmt.Errorf("revalidate platform mcp %s registration: %w", milestone, err)
-		}
+	if rows > 0 {
+		return nil
+	}
+
+	// The uniqueness grain deliberately excludes connection_generation. A replay
+	// for the same generation is idempotent, but a reauthorized connection must
+	// not inherit old evidence as current. Until a new generation can record its
+	// own fact, fail closed rather than report an outdated milestone as complete.
+	recorded, err := q.HasPlatformMCPOnboardingLifecycleMilestone(ctx, platformrepo.HasPlatformMCPOnboardingLifecycleMilestoneParams{
+		OrganizationID:       principal.OrganizationID,
+		Milestone:            milestone,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ProjectID:            uuid.NullUUID{UUID: projectID, Valid: true},
+		AttemptID:            uuid.NullUUID{UUID: registrationID, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("check platform mcp %s lifecycle evidence: %w", milestone, err)
+	}
+	if !recorded {
+		return ErrUnavailable
 	}
 	return nil
 }

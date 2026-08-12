@@ -873,9 +873,9 @@ function PlatformMCPSetupSheet({
                 "h-1 rounded-full transition-all",
                 index === currentStepIndex
                   ? "bg-foreground w-6"
-                  : index < currentStepIndex
+                  : index < currentStepIndex || step.complete
                     ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
-                    : "bg-border w-4",
+                    : "bg-border w-4 cursor-not-allowed",
               )}
               aria-label={`Step ${index + 1}: ${step.title}${step.complete ? ", complete" : ""}`}
             />

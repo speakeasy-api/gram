@@ -1573,6 +1573,18 @@ SELECT EXISTS (
       AND milestone.connection_generation = @connection_generation
 );
 
+-- name: HasPlatformMCPOnboardingLifecycleMilestone :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = @milestone
+      AND milestone.connection_id = @connection_id
+      AND milestone.connection_generation = @connection_generation
+      AND milestone.project_id = @project_id
+      AND milestone.attempt_id = @attempt_id
+);
+
 -- name: RecordPlatformMCPOnboardingLifecycleMilestone :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,

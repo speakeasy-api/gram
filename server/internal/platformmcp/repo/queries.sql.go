@@ -2662,6 +2662,42 @@ func (q *Queries) HasPlatformMCPOnboardingDistributionSucceeded(ctx context.Cont
 	return exists, err
 }
 
+const hasPlatformMCPOnboardingLifecycleMilestone = `-- name: HasPlatformMCPOnboardingLifecycleMilestone :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    WHERE milestone.organization_id = $1
+      AND milestone.milestone = $2
+      AND milestone.connection_id = $3
+      AND milestone.connection_generation = $4
+      AND milestone.project_id = $5
+      AND milestone.attempt_id = $6
+)
+`
+
+type HasPlatformMCPOnboardingLifecycleMilestoneParams struct {
+	OrganizationID       string
+	Milestone            string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	ProjectID            uuid.NullUUID
+	AttemptID            uuid.NullUUID
+}
+
+func (q *Queries) HasPlatformMCPOnboardingLifecycleMilestone(ctx context.Context, arg HasPlatformMCPOnboardingLifecycleMilestoneParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPlatformMCPOnboardingLifecycleMilestone,
+		arg.OrganizationID,
+		arg.Milestone,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.ProjectID,
+		arg.AttemptID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasPlatformMCPOnboardingReadinessVerified = `-- name: HasPlatformMCPOnboardingReadinessVerified :one
 SELECT EXISTS (
     SELECT 1

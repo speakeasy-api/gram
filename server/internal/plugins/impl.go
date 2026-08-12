@@ -176,6 +176,9 @@ func (s *Service) platformMCPPackageEnabled(ctx context.Context, organizationID,
 	if err != nil {
 		return false, fmt.Errorf("evaluate Platform MCP admission: %w", err)
 	}
+	if admission == platformmcp.AdmissionIndeterminate {
+		return false, errors.New("platform mcp admission indeterminate")
+	}
 	if admission != platformmcp.AdmissionEnabled {
 		return false, nil
 	}
@@ -1692,19 +1695,19 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-	platformEnabled, err := s.platformMCPPackageEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp package admission", attr.SlogError(err))
+	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
+	if admissionErr != nil {
+		s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp package admission", attr.SlogError(admissionErr))
 	}
 	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	cfg.PlatformMCPEnabled = platformEnabled || (err != nil && platformWasPublished)
+	cfg.PlatformMCPEnabled = platformEnabled || (admissionErr != nil && platformWasPublished)
 
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
 	}
-	if err != nil && platformWasPublished {
+	if admissionErr != nil && platformWasPublished {
 		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
 	}
 

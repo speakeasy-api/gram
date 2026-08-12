@@ -339,8 +339,10 @@ func TestRegistrationServiceReplayReturnsPersistedSecretSetupState(t *testing.T)
 
 	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
 	registrationID := uuid.New()
+	pendingSecretFields := []CatalogConfigurationField{{Key: "header:x-api-key", Kind: "header", Name: "X-API-Key", Required: true, Secret: true}}
 	store := &recordingRegistrationStore{
-		project: project,
+		project:             project,
+		pendingSecretFields: pendingSecretFields,
 		begin: OperationReceipt{
 			ID:             uuid.New(),
 			RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true},
@@ -366,7 +368,7 @@ func TestRegistrationServiceReplayReturnsPersistedSecretSetupState(t *testing.T)
 	})
 
 	require.NoError(t, err)
-	require.Empty(t, result.SecretFieldsPending)
+	require.Equal(t, pendingSecretFields, result.SecretFieldsPending)
 	require.Equal(t, 1, store.pendingSecretFieldsCalls)
 }
 

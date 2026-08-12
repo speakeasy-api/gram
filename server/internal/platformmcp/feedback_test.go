@@ -40,6 +40,17 @@ func TestValidateFeedbackInputRejectsSensitiveOrOutOfBoundsValues(t *testing.T) 
 	}
 }
 
+func TestFeedbackNoteSafeTextAllowsOrdinaryPunctuationAndRejectsIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	for _, note := range []string{"Note: helpful", "5/5", "Useful and/or clear", "Helpful possession details"} {
+		require.True(t, feedbackNoteSafeText(note), note)
+	}
+	for _, note := range []string{"https://unsafe.invalid", "unsafe.invalid/path", "//unsafe.invalid/path", "İCookie: value", "SessionToken copied"} {
+		require.False(t, feedbackNoteSafeText(note), note)
+	}
+}
+
 func TestFeedbackInputHashIncludesEveryAcceptedField(t *testing.T) {
 	t.Parallel()
 

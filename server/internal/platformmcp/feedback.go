@@ -240,7 +240,7 @@ func feedbackNoteSafeText(value string) bool {
 	if !feedbackSafeText(value, 500) {
 		return false
 	}
-	if strings.Contains(value, "/") || hasEmbeddedURIScheme(value) {
+	if hasEmbeddedURIScheme(value) || hasUnsafeFeedbackPath(value) {
 		return false
 	}
 	for _, word := range strings.FieldsFunc(value, func(r rune) bool {
@@ -261,7 +261,19 @@ func hasEmbeddedURIScheme(value string) bool {
 	for _, word := range strings.FieldsFunc(value, func(r rune) bool {
 		return unicode.IsSpace(r) || unicode.IsPunct(r) && r != ':' && r != '-' && r != '_'
 	}) {
-		if parsed, err := url.ParseRequestURI(word); err == nil && parsed.Scheme != "" {
+		if parsed, err := url.ParseRequestURI(word); err == nil && parsed.Scheme != "" && (parsed.Opaque != "" || parsed.Host != "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasUnsafeFeedbackPath(value string) bool {
+	for _, word := range strings.Fields(value) {
+		if strings.HasPrefix(word, "//") {
+			return true
+		}
+		if slash := strings.IndexByte(word, '/'); slash > 0 && strings.Contains(word[:slash], ".") {
 			return true
 		}
 	}
@@ -269,17 +281,26 @@ func hasEmbeddedURIScheme(value string) bool {
 }
 
 func hasSensitiveFeedbackToken(value string) bool {
-	lower := strings.ToLower(value)
+	runes := []rune(value)
 	for _, marker := range []string{"cookie", "session"} {
-		index := strings.Index(lower, marker)
-		if index < 0 {
-			continue
-		}
-		before := index == 0 || !unicode.IsLetter(rune(value[index-1])) || unicode.IsUpper(rune(value[index]))
-		afterIndex := index + len(marker)
-		after := afterIndex == len(value) || !unicode.IsLetter(rune(value[afterIndex])) || unicode.IsUpper(rune(value[afterIndex])) || index == 0
-		if before && after {
-			return true
+		markerRunes := []rune(marker)
+		for index := 0; index+len(markerRunes) <= len(runes); index++ {
+			matches := true
+			for offset, markerRune := range markerRunes {
+				if unicode.ToLower(runes[index+offset]) != markerRune {
+					matches = false
+					break
+				}
+			}
+			if !matches {
+				continue
+			}
+			before := index == 0 || !unicode.IsLetter(runes[index-1]) || unicode.IsUpper(runes[index])
+			afterIndex := index + len(markerRunes)
+			after := afterIndex == len(runes) || !unicode.IsLetter(runes[afterIndex]) || unicode.IsUpper(runes[afterIndex])
+			if before && after {
+				return true
+			}
 		}
 	}
 	return false
