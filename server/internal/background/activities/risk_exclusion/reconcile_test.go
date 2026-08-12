@@ -2,6 +2,7 @@ package risk_exclusion_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -241,8 +242,10 @@ func TestReconcile_NilClickHouseDegrades(t *testing.T) {
 }
 
 // TestReconcile_ExactWithoutFingerprinterSkipsCH pins the degradation for
-// exact-match exclusions when no pepper keyring is configured: the ClickHouse
-// apply is skipped (rows stay visible) but the activity still succeeds.
+// exact-match exclusions when no pepper keyring is configured: BOTH ClickHouse
+// phases are skipped — unmatched rows stay visible, and rows the exclusion
+// already held (annotated at ingest) stay hidden, because a reversal whose
+// apply cannot run would permanently expose them. The activity still succeeds.
 func TestReconcile_ExactWithoutFingerprinterSkipsCH(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -252,10 +255,6 @@ func TestReconcile_ExactWithoutFingerprinterSkipsCH(t *testing.T) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	chQueries := chrepo.New(chConn)
-
-	finding := chFinding(tenant, "secret.github_pat", "gitleaks")
-	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, chConn)
 
 	exclusion, err := riskrepo.New(conn).CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
 		ProjectID:      tenant.projectID,
@@ -269,10 +268,113 @@ func TestReconcile_ExactWithoutFingerprinterSkipsCH(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	visible := chFinding(tenant, "secret.github_pat", "gitleaks")
+	heldAtIngest := chFinding(tenant, "secret.github_pat", "gitleaks")
+	heldAt := time.Now().UTC().Add(-time.Hour)
+	heldAtIngest.ExcludedAt = &heldAt
+	heldAtIngest.ExclusionID = &exclusion.ID
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{visible, heldAtIngest}))
+	testenv.FlushClickHouseAsyncInserts(t, chConn)
+
 	reconcile := newReconcile(t, conn, chQueries)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
 		ProjectID:   tenant.projectID,
 		ExclusionID: exclusion.ID,
 	}))
-	require.Empty(t, latestExcludedBy(t, chConn, finding.ID))
+	require.Empty(t, latestExcludedBy(t, chConn, visible.ID), "the apply cannot run without fingerprints")
+	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, heldAtIngest.ID),
+		"held rows must not be exposed by a reversal whose apply cannot restore them")
+}
+
+// TestReconcile_RegexReversalNeverExposesUnprovableRows drives an active
+// regex exclusion through the activity and pins the reversal semantics per
+// held row: reconstructable-and-still-matching stays held,
+// reconstructable-and-non-matching reverses, and a row whose plaintext cannot
+// be reconstructed (its anchoring chat message is gone) stays held. A live
+// matching row is flagged by the apply in the same run.
+func TestReconcile_RegexReversalNeverExposesUnprovableRows(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := cloneDB(t)
+	tenant := seedTenant(t, conn)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	chQueries := chrepo.New(chConn)
+	pgRepo := riskrepo.New(conn)
+
+	secret := "AKIAIOSFODNN7EXAMPLE"
+	otherToken := "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+
+	chatID, err := pgRepo.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID: tenant.projectID, OrganizationID: tenant.orgID, UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	anchored := func(content string) uuid.UUID {
+		id, merr := pgRepo.CreateChatMessageForTest(ctx, riskrepo.CreateChatMessageForTestParams{
+			ChatID: chatID, ProjectID: uuid.NullUUID{UUID: tenant.projectID, Valid: true}, Content: content,
+			UserID: pgtype.Text{}, ExternalUserID: pgtype.Text{},
+		})
+		require.NoError(t, merr)
+		return id
+	}
+
+	regexRow := func(msgID uuid.UUID, content, match string) chrepo.RiskFindingRow {
+		row := chFinding(tenant, "secret.aws_access_key", "gitleaks")
+		row.ChatMessageID = msgID.String()
+		row.ChatID = chatID.String()
+		start := int32(strings.Index(content, match))
+		row.StartPos = start
+		row.EndPos = start + int32(len(match))
+		row.MatchLen = uint32(len(match))
+		row.Surface = "content"
+		return row
+	}
+
+	exclusion, err := pgRepo.CreateRiskExclusion(ctx, riskrepo.CreateRiskExclusionParams{
+		ProjectID:      tenant.projectID,
+		OrganizationID: tenant.orgID,
+		RiskPolicyID:   uuid.NullUUID{},
+		MatchType:      "regex",
+		MatchValue:     "AKIA[0-9A-Z]{16}",
+		RuleIDFilter:   pgtype.Text{},
+		SourceFilter:   pgtype.Text{},
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	heldAt := time.Now().UTC().Add(-time.Hour)
+	hold := func(row chrepo.RiskFindingRow) chrepo.RiskFindingRow {
+		row.ExcludedAt = &heldAt
+		row.ExclusionID = &exclusion.ID
+		return row
+	}
+
+	matchingContent := "please rotate " + secret + " before the audit"
+	staleContent := "the token " + otherToken + " was revoked"
+
+	heldMatching := hold(regexRow(anchored(matchingContent), matchingContent, secret))
+	heldStale := hold(regexRow(anchored(staleContent), staleContent, otherToken))
+	heldOrphan := hold(regexRow(uuid.Must(uuid.NewV7()), matchingContent, secret))
+	liveMatching := regexRow(anchored(matchingContent), matchingContent, secret)
+
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		heldMatching, heldStale, heldOrphan, liveMatching,
+	}))
+	testenv.FlushClickHouseAsyncInserts(t, chConn)
+
+	reconcile := newReconcile(t, conn, chQueries)
+	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
+		ProjectID:   tenant.projectID,
+		ExclusionID: exclusion.ID,
+	}))
+
+	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, heldMatching.ID),
+		"a held row whose plaintext still matches stays held")
+	require.Empty(t, latestExcludedBy(t, chConn, heldStale.ID),
+		"a held row whose plaintext provably no longer matches reverses")
+	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, heldOrphan.ID),
+		"a held row whose plaintext cannot be reconstructed is never exposed")
+	require.Equal(t, exclusion.ID.String(), latestExcludedBy(t, chConn, liveMatching.ID),
+		"the apply flags live matching rows in the same run")
 }

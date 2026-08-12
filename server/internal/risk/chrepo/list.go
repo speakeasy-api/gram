@@ -70,9 +70,14 @@ type RiskFindingListRow struct {
 	MatchRedacted     string
 }
 
-// listRiskFindingsBase applies the filters shared by the list and count reads:
-// tenancy, live findings only (no dead-letter sentinels, no excluded or
-// false-positive rows) and the enabled-policy pushdown.
+// listRiskFindingsBase applies the filters shared by the list and count reads
+// that are immutable across an id's copies: tenancy, dead-letter sentinels and
+// the enabled-policy pushdown. The exclusion / false-positive state is
+// deliberately NOT here: those flags change by appending a newer copy of the
+// row (the retroactive reconcile, the false-positive mirror), so filtering
+// them before the latest-copy-per-id dedup would drop the flagged copy and
+// let a stale live copy win — callers must gate on them AFTER dedup, the way
+// overview.go and signals.go do.
 func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel.SelectBuilder, error) {
 	if len(p.PolicyIDs) == 0 {
 		return squirrel.SelectBuilder{}, errEmptyPolicyIDs
@@ -82,11 +87,13 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("dead_letter_reason = ''").
-		Where("excluded_at IS NULL").
-		Where("false_positive_at IS NULL").
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
 	return sb, nil
 }
+
+// liveStateCond gates the latest copy of a finding to live rows only — not
+// excluded, not marked false positive. Applied after the per-id dedup.
+const liveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
 
 // ListRiskFindings returns one page of findings ordered by
 // (message_created_at, id) descending — the same sort and cursor semantics as
@@ -157,15 +164,22 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	hasCursor := p.CursorTime != nil && p.CursorID.Valid
 
 	if p.UniqueMatch {
-		// Dedup before the cursor: the inner LIMIT 1 BY runs over the full
-		// filtered set so each group resolves to its single newest occurrence,
-		// and only then does the outer query apply the cursor and page over
-		// the deduped stream — the same subquery shape as the Postgres
-		// listing's ROW_NUMBER dedup. Applying the cursor first would remove a
-		// group's newest occurrence once it fell behind the cursor and let an
-		// older occurrence win LIMIT BY, repeating the group on a later page.
-		sb = sb.Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
-		outer := sq.Select(columns...).FromSelect(sb, "deduped")
+		// Three layers, innermost first: (1) latest copy per id — the state
+		// flags on any older copy are stale; (2) live-state gate, then LIMIT 1
+		// BY the match group so each group resolves to its newest LIVE
+		// occurrence; (3) cursor + page over the deduped stream. Dedup stays
+		// before the cursor: applying the cursor first would remove a group's
+		// newest occurrence once it fell behind the cursor and let an older
+		// occurrence win LIMIT BY, repeating the group on a later page.
+		sb = sb.Column("excluded_at").Column("false_positive_at").
+			Column("fingerprint_tenant_hs256").
+			Suffix("LIMIT 1 BY id")
+		grouped := sq.Select(columns...).
+			FromSelect(sb, "latest").
+			Where(liveStateCond).
+			OrderBy("message_created_at DESC", "id DESC").
+			Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
+		outer := sq.Select(columns...).FromSelect(grouped, "deduped")
 		if hasCursor {
 			outer = outer.Where(cursorCond, *p.CursorTime, p.CursorID.UUID)
 		}
@@ -173,15 +187,23 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 			OrderBy("message_created_at DESC", "id DESC").
 			Limit(p.Limit)
 	} else {
-		// Plain id dedup can stay cursor-first: redelivered copies share both
+		// Plain id dedup can stay cursor-first: an id's copies share both
 		// message_created_at and id, so the cursor keeps or drops a whole
-		// group at once and no group can straddle a page boundary.
+		// group at once and no group can straddle a page boundary. The
+		// live-state gate comes AFTER the LIMIT 1 BY id dedup — see
+		// listRiskFindingsBase.
 		if hasCursor {
 			sb = sb.Where(cursorCond, *p.CursorTime, p.CursorID.UUID)
 		}
 		// LIMIT BY must precede LIMIT in ClickHouse; squirrel has no native
-		// support, so both render through the suffix.
-		sb = sb.Suffix(fmt.Sprintf("LIMIT 1 BY id LIMIT %d", p.Limit))
+		// support, so it renders through the suffix.
+		sb = sb.Column("excluded_at").Column("false_positive_at").
+			Suffix("LIMIT 1 BY id")
+		sb = sq.Select(columns...).
+			FromSelect(sb, "latest").
+			Where(liveStateCond).
+			OrderBy("message_created_at DESC", "id DESC").
+			Limit(p.Limit)
 	}
 
 	query, args, err := sb.ToSql()
@@ -230,13 +252,19 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 
 // CountRiskFindings mirrors the Postgres CountAllFindings semantics for the
 // listing's total count: live findings scoped to the visible policies, with no
-// time-window or per-column filters, counted as uniqExact(id) because
-// redelivered duplicate ids are expected in this table.
+// time-window or per-column filters. Each id resolves to its latest copy
+// first (redelivered duplicates and appended flag copies are expected in this
+// table) and only then is the live-state gate applied, so a finding whose
+// newest copy carries an exclusion or false-positive flag is not counted.
 func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParams) (uint64, error) {
-	sb, err := listRiskFindingsBase(p, "uniqExact(id) AS findings")
+	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at")
 	if err != nil {
 		return 0, err
 	}
+	inner = inner.OrderBy("inserted_at DESC").Suffix("LIMIT 1 BY id")
+	sb := sq.Select("count() AS findings").
+		FromSelect(inner, "latest").
+		Where(liveStateCond)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

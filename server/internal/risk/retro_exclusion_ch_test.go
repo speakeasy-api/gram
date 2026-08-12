@@ -137,13 +137,14 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 
-	// Reversal: the three applied rows plus the ingest-annotated one.
-	count, err = chQueries.CountRetroExclusionReversal(ctx, scope, exclusionID)
+	// Reversal (blanket — the disable/delete path): the three applied rows
+	// plus the ingest-annotated one.
+	count, err = chQueries.CountRetroExclusionReversal(ctx, scope, exclusionID, chrepo.BlanketReversal())
 	require.NoError(t, err)
 	require.Equal(t, uint64(4), count)
 
 	require.NoError(t, chQueries.AppendRetroExclusionReversal(ctx, scope, exclusionID,
-		chrepo.FormatCHTime(now.Add(2*time.Microsecond))))
+		chrepo.FormatCHTime(now.Add(2*time.Microsecond)), chrepo.BlanketReversal()))
 
 	for _, id := range []uuid.UUID{live1.ID, live2.ID, ingestExcluded.ID} {
 		excluded, _, _ = latestExclusionState(t, ti, id)
@@ -157,7 +158,7 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 	require.True(t, excluded)
 	require.Equal(t, otherExclusion.String(), exID, "reversal leaves other exclusions' rows alone")
 
-	count, err = chQueries.CountRetroExclusionReversal(ctx, scope, exclusionID)
+	count, err = chQueries.CountRetroExclusionReversal(ctx, scope, exclusionID, chrepo.BlanketReversal())
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -329,7 +330,7 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 		TenantFingerprints: nil,
 		RuleIDFilter:       "",
 		SourceFilter:       "",
-	})
+	}, uuid.Nil, 100)
 	require.NoError(t, err)
 	require.Len(t, candidates, 1, "only rows with reconstructable match metadata are candidates")
 	require.Equal(t, reconstructable, candidates[0].ID)
@@ -385,9 +386,123 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 		TenantFingerprints: nil,
 		RuleIDFilter:       "",
 		SourceFilter:       "",
-	})
+	}, uuid.Nil, 100)
 	require.NoError(t, err)
 	require.Empty(t, candidates)
+
+	// The flagged row is now a REVERSAL candidate for this exclusion, and a
+	// by-id reversal un-hides it again.
+	held, err := chQueries.ListRetroRegexReversalCandidates(ctx, scope, exclusionID, uuid.Nil, 100)
+	require.NoError(t, err)
+	require.Len(t, held, 1)
+	require.Equal(t, c.ID, held[0].ID)
+
+	require.NoError(t, chQueries.AppendRetroExclusionReversalByIDs(ctx, scope, exclusionID,
+		chrepo.FormatCHTime(now.Add(2*time.Microsecond)), []uuid.UUID{c.ID}))
+	excluded, _, _ = latestExclusionState(t, ti, c.ID)
+	require.False(t, excluded)
+	held, err = chQueries.ListRetroRegexReversalCandidates(ctx, scope, exclusionID, uuid.Nil, 100)
+	require.NoError(t, err)
+	require.Empty(t, held)
+}
+
+// TestRetroExclusion_KeepGuardedReversal pins the reversal semantics for an
+// ACTIVE exclusion: only held rows that provably no longer match are
+// un-flagged. Rows still matching stay held with no copy churn, and — for
+// exact matching — rows with no stored fingerprint stay held too, because
+// nothing can be proven about them and the fingerprint-based apply could
+// never re-flag them.
+func TestRetroExclusion_KeepGuardedReversal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	createdAt, scope := retroDay(orgID, projectID.String())
+
+	exclusionID := uuid.Must(uuid.NewV7())
+	chat := uuid.Must(uuid.NewV7())
+	msg := func() uuid.UUID { return uuid.Must(uuid.NewV7()) }
+	heldAt := createdAt.Add(30 * time.Minute)
+
+	hold := func(row chrepo.RiskFindingRow) chrepo.RiskFindingRow {
+		row.ExcludedAt = &heldAt
+		row.ExclusionID = &exclusionID
+		return row
+	}
+
+	stillMatching := hold(chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt, "gitleaks", "secret.github_pat", "alice@example.com"))
+	staleRule := hold(chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(time.Minute), "gitleaks", "secret.aws_access_key", "alice@example.com"))
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{stillMatching, staleRule}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	keep, err := chrepo.RetroExclusionPredicate{
+		PolicyID:           "",
+		RuleID:             "secret.github_pat",
+		Source:             "",
+		TenantFingerprints: nil,
+		RuleIDFilter:       "",
+		SourceFilter:       "",
+	}.KeepMatching()
+	require.NoError(t, err)
+
+	count, err := chQueries.CountRetroExclusionReversal(ctx, scope, exclusionID, keep)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), count, "only the row that no longer matches reverses")
+
+	now := time.Now().UTC()
+	require.NoError(t, chQueries.AppendRetroExclusionReversal(ctx, scope, exclusionID,
+		chrepo.FormatCHTime(now), keep))
+
+	excluded, exID, _ := latestExclusionState(t, ti, stillMatching.ID)
+	require.True(t, excluded, "a still-matching held row is never exposed, even transiently")
+	require.Equal(t, exclusionID.String(), exID)
+	excluded, _, _ = latestExclusionState(t, ti, staleRule.ID)
+	require.False(t, excluded)
+
+	// Exact matching: the keep guard retains held rows with no stored
+	// fingerprint alongside rows whose fingerprint is in the predicate set.
+	exactExclusion := uuid.Must(uuid.NewV7())
+	holdExact := func(row chrepo.RiskFindingRow, fp string) chrepo.RiskFindingRow {
+		row.ExcludedAt = &heldAt
+		row.ExclusionID = &exactExclusion
+		row.FingerprintTenantHS256 = fp
+		return row
+	}
+	matchingFp := holdExact(chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(2*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com"), "fp-current")
+	noFp := holdExact(chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(3*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com"), "")
+	staleFp := holdExact(chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(4*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com"), "fp-other")
+
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matchingFp, noFp, staleFp}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	exactKeep, err := chrepo.RetroExclusionPredicate{
+		PolicyID:           "",
+		RuleID:             "",
+		Source:             "",
+		TenantFingerprints: []string{"fp-current"},
+		RuleIDFilter:       "",
+		SourceFilter:       "",
+	}.KeepMatching()
+	require.NoError(t, err)
+
+	count, err = chQueries.CountRetroExclusionReversal(ctx, scope, exactExclusion, exactKeep)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), count, "only the provably non-matching fingerprint reverses")
+
+	// Fresh timestamp: the copy must sort after the rows inserted above.
+	require.NoError(t, chQueries.AppendRetroExclusionReversal(ctx, scope, exactExclusion,
+		chrepo.FormatCHTime(time.Now().UTC()), exactKeep))
+
+	excluded, _, _ = latestExclusionState(t, ti, matchingFp.ID)
+	require.True(t, excluded)
+	excluded, _, _ = latestExclusionState(t, ti, noFp.ID)
+	require.True(t, excluded, "a held row with no fingerprint cannot be proven stale and stays hidden")
+	excluded, _, _ = latestExclusionState(t, ti, staleFp.ID)
+	require.False(t, excluded)
 }
 
 // TestRetroExclusion_RegexSkipsReparentedCandidate pins the cross-chat

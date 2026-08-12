@@ -80,12 +80,15 @@ func (s RetroExclusionScope) args() []any {
 	return []any{s.OrganizationID, s.ProjectID, FormatCHTime(s.DayStart), FormatCHTime(s.DayEnd)}
 }
 
-// applyConditions renders the WHERE tail (after `rn = 1`) for an apply
-// statement and its args. Dead-letter rows never match (the Postgres
-// counterpart's `found IS TRUE`), and rows already excluded — by any
-// exclusion — are never re-flagged, which also makes re-runs append nothing.
-func (p RetroExclusionPredicate) applyConditions() (string, []any, error) {
-	conds := []string{"dead_letter_reason = ''", "excluded_at IS NULL"}
+// matchConditions renders the predicate's match-scope conditions — policy
+// scope, exactly one matcher, both filters — and their args. In keep mode
+// (the guard deciding which held rows an active exclusion's reversal must NOT
+// un-flag) the exact matcher additionally keeps rows with no stored
+// fingerprint: they cannot be proven non-matching, and they were flagged with
+// the plaintext in hand (at ingest or scan time), so un-flagging them would
+// expose findings the fingerprint-based apply can never re-flag.
+func (p RetroExclusionPredicate) matchConditions(keep bool) ([]string, []any, error) {
+	conds := []string{}
 	args := []any{}
 
 	if p.PolicyID != "" {
@@ -106,13 +109,17 @@ func (p RetroExclusionPredicate) applyConditions() (string, []any, error) {
 	}
 	if len(p.TenantFingerprints) > 0 {
 		matchers++
-		conds = append(conds, "fingerprint_tenant_hs256 IN ("+strings.TrimSuffix(strings.Repeat("?,", len(p.TenantFingerprints)), ",")+")")
+		in := "fingerprint_tenant_hs256 IN (" + strings.TrimSuffix(strings.Repeat("?,", len(p.TenantFingerprints)), ",") + ")"
+		if keep {
+			in = "(fingerprint_tenant_hs256 = '' OR " + in + ")"
+		}
+		conds = append(conds, in)
 		for _, fp := range p.TenantFingerprints {
 			args = append(args, fp)
 		}
 	}
 	if matchers != 1 {
-		return "", nil, fmt.Errorf("retro exclusion predicate needs exactly one matcher, got %d", matchers)
+		return nil, nil, fmt.Errorf("retro exclusion predicate needs exactly one matcher, got %d", matchers)
 	}
 
 	if p.RuleIDFilter != "" {
@@ -124,7 +131,88 @@ func (p RetroExclusionPredicate) applyConditions() (string, []any, error) {
 		args = append(args, p.SourceFilter)
 	}
 
+	return conds, args, nil
+}
+
+// applyConditions renders the WHERE tail (after `rn = 1`) for an apply
+// statement and its args. Dead-letter rows never match (the Postgres
+// counterpart's `found IS TRUE`), and rows already excluded — by any
+// exclusion — are never re-flagged, which also makes re-runs append nothing.
+func (p RetroExclusionPredicate) applyConditions() (string, []any, error) {
+	match, args, err := p.matchConditions(false)
+	if err != nil {
+		return "", nil, err
+	}
+	conds := append([]string{"dead_letter_reason = ''", "excluded_at IS NULL"}, match...)
 	return strings.Join(conds, " AND "), args, nil
+}
+
+// RetroReversalKeep guards an active exclusion's reversal: held rows
+// satisfying it stay held. The zero value keeps nothing — a blanket reversal,
+// correct for a disabled or deleted exclusion.
+type RetroReversalKeep struct {
+	conds string
+	args  []any
+}
+
+// KeepMatching keeps every held row that still provably matches the
+// predicate. Used for the reversal of an active exclusion whose predicate is
+// fully SQL-evaluable (everything except regex): only rows the paired apply
+// would not re-flag are un-hidden, so no correctly-held row is ever exposed —
+// even transiently, and even when the row's fingerprint cannot be recomputed.
+func (p RetroExclusionPredicate) KeepMatching() (RetroReversalKeep, error) {
+	conds, args, err := p.matchConditions(true)
+	if err != nil {
+		return RetroReversalKeep{conds: "", args: nil}, err
+	}
+	return RetroReversalKeep{conds: strings.Join(conds, " AND "), args: args}, nil
+}
+
+// KeepScope keeps every held row inside the predicate's SQL-provable scope —
+// policy binding and filters, ignoring the matcher. Used for the reversal of
+// an active regex exclusion, whose matcher is not SQL-evaluable: rows out of
+// scope are provably stale and reverse here (including rows whose plaintext
+// can no longer be reconstructed); in-scope rows are decided per row in Go.
+// With no policy binding and no filters the keep is empty conjunction-true:
+// the SQL reversal has nothing it can prove and reverses nothing.
+func (p RetroExclusionPredicate) KeepScope() RetroReversalKeep {
+	conds := []string{}
+	args := []any{}
+	if p.PolicyID != "" {
+		conds = append(conds, "risk_policy_id = ?")
+		args = append(args, p.PolicyID)
+	}
+	if p.RuleIDFilter != "" {
+		conds = append(conds, "rule_id = ?")
+		args = append(args, p.RuleIDFilter)
+	}
+	if p.SourceFilter != "" {
+		conds = append(conds, "source = ?")
+		args = append(args, p.SourceFilter)
+	}
+	return RetroReversalKeep{conds: strings.Join(conds, " AND "), args: args}
+}
+
+// Empty reports whether the keep guards nothing (a blanket reversal, or a
+// KeepScope with no provable scope).
+func (k RetroReversalKeep) Empty() bool {
+	return k.conds == ""
+}
+
+// BlanketReversal keeps nothing: every held row reverses. Correct only for a
+// disabled or deleted exclusion.
+func BlanketReversal() RetroReversalKeep {
+	return RetroReversalKeep{conds: "", args: nil}
+}
+
+// reversalWhere renders the WHERE tail selecting the held rows a reversal
+// un-flags: the exclusion's rows, minus any the keep guard retains.
+func reversalWhere(keep RetroReversalKeep) string {
+	w := "rn = 1 AND exclusion_id = ?"
+	if !keep.Empty() {
+		w += " AND NOT (" + keep.conds + ")"
+	}
+	return w
 }
 
 // copyProjection renders the INSERT ... SELECT column projection: every
@@ -239,10 +327,11 @@ func (q *Queries) AppendRetroExclusionApplyByIDs(ctx context.Context, scope Retr
 }
 
 // CountRetroExclusionReversal returns how many latest-copy rows in scope are
-// currently held by the exclusion.
-func (q *Queries) CountRetroExclusionReversal(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID) (uint64, error) {
-	query := "SELECT count() FROM " + latestRiskFindingsSubquery + " WHERE rn = 1 AND exclusion_id = ?"
+// currently held by the exclusion and not retained by the keep guard.
+func (q *Queries) CountRetroExclusionReversal(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID, keep RetroReversalKeep) (uint64, error) {
+	query := "SELECT count() FROM " + latestRiskFindingsSubquery + " WHERE " + reversalWhere(keep)
 	args := append(scope.args(), exclusionID)
+	args = append(args, keep.args...)
 
 	count, err := q.scanCount(ctx, query, args)
 	if err != nil {
@@ -252,20 +341,49 @@ func (q *Queries) CountRetroExclusionReversal(ctx context.Context, scope RetroEx
 }
 
 // AppendRetroExclusionReversal appends un-flagged copies of every latest-copy
-// row in scope held by the exclusion — including rows that were annotated at
-// ingest time, which is what finally makes deleting or disabling an
-// exclusion un-hide its findings.
-func (q *Queries) AppendRetroExclusionReversal(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID, insertedAt string) error {
+// row in scope held by the exclusion and not retained by the keep guard —
+// including rows that were annotated at ingest time, which is what finally
+// makes deleting or disabling an exclusion un-hide its findings.
+func (q *Queries) AppendRetroExclusionReversal(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID, insertedAt string, keep RetroReversalKeep) error {
 	query := "INSERT INTO risk_findings (" + strings.Join(riskFindingColumns, ", ") + ") " +
 		"SELECT " + copyProjection("NULL", "NULL") + " FROM " + latestRiskFindingsSubquery +
-		" WHERE rn = 1 AND exclusion_id = ?"
-	args := make([]any, 0, 6)
+		" WHERE " + reversalWhere(keep)
+	args := make([]any, 0, 6+len(keep.args))
 	args = append(args, insertedAt)
 	args = append(args, scope.args()...)
 	args = append(args, exclusionID)
+	args = append(args, keep.args...)
 
 	if err := q.conn.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("append retro exclusion reversal copies: %w", err)
+	}
+	return nil
+}
+
+// AppendRetroExclusionReversalByIDs is the reversal used by the regex path:
+// the caller has evaluated the reconstructed plaintext in Go and hands over
+// the ids that provably no longer match. The exclusion_id guard keeps it
+// idempotent under retries (a reversed id's latest copy no longer points at
+// the exclusion).
+func (q *Queries) AppendRetroExclusionReversalByIDs(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID, insertedAt string, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	query := "INSERT INTO risk_findings (" + strings.Join(riskFindingColumns, ", ") + ") " +
+		"SELECT " + copyProjection("NULL", "NULL") + " FROM " + latestRiskFindingsSubquery +
+		" WHERE rn = 1 AND exclusion_id = ? AND id IN (" +
+		strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + ")"
+	args := make([]any, 0, 6+len(ids))
+	args = append(args, insertedAt)
+	args = append(args, scope.args()...)
+	args = append(args, exclusionID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	if err := q.conn.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("append retro exclusion reversal copies by id: %w", err)
 	}
 	return nil
 }
@@ -291,14 +409,22 @@ type RetroRegexCandidate struct {
 	MatchRedacted string
 }
 
-// ListRetroRegexCandidates returns the rows a regex exclusion must be
-// evaluated against: latest copies in scope passing the shared filters that
-// carry reconstructable match metadata (match_len > 0 and a known surface).
-// Rows without it — judge verdicts, derived findings, pre-metadata rows —
-// carry no match content anywhere, so skipping them is parity with the
+const retroRegexCandidateColumns = `id, chat_message_id, content_part_id, chat_id, source, rule_id,
+	surface, field, path, tool_call_id, start_pos, end_pos, match_len, match_redacted`
+
+// retroRegexMetadataConds selects rows carrying reconstructable match
+// metadata. Rows without it — judge verdicts, derived findings, pre-metadata
+// rows — carry no match content anywhere, so skipping them is parity with the
 // Postgres reconcile, whose NULL match never satisfies a regex either.
-func (q *Queries) ListRetroRegexCandidates(ctx context.Context, scope RetroExclusionScope, p RetroExclusionPredicate) ([]RetroRegexCandidate, error) {
-	conds := []string{"dead_letter_reason = ''", "excluded_at IS NULL", "match_len > 0", "surface != ''"}
+var retroRegexMetadataConds = []string{"match_len > 0", "surface != ''"}
+
+// ListRetroRegexCandidates returns one keyset page of the rows a regex
+// exclusion's apply must be evaluated against: latest copies in scope passing
+// the shared filters. Pages are ordered by id (ClickHouse's UUID order —
+// opaque, but stable, which is all keyset pagination needs); pass the last
+// row's id back as afterID for the next page, uuid.Nil for the first.
+func (q *Queries) ListRetroRegexCandidates(ctx context.Context, scope RetroExclusionScope, p RetroExclusionPredicate, afterID uuid.UUID, limit int) ([]RetroRegexCandidate, error) {
+	conds := append([]string{"dead_letter_reason = ''", "excluded_at IS NULL"}, retroRegexMetadataConds...)
 	args := scope.args()
 
 	if p.PolicyID != "" {
@@ -314,9 +440,31 @@ func (q *Queries) ListRetroRegexCandidates(ctx context.Context, scope RetroExclu
 		args = append(args, p.SourceFilter)
 	}
 
-	query := `SELECT id, chat_message_id, content_part_id, chat_id, source, rule_id,
-		surface, field, path, tool_call_id, start_pos, end_pos, match_len, match_redacted
-	FROM ` + latestRiskFindingsSubquery + " WHERE rn = 1 AND " + strings.Join(conds, " AND ")
+	return q.listRetroRegexCandidates(ctx, conds, args, afterID, limit)
+}
+
+// ListRetroRegexReversalCandidates returns one keyset page of the rows an
+// active regex exclusion's reversal must be evaluated against: latest copies
+// held by the exclusion that carry reconstructable match metadata. Held rows
+// without that metadata are deliberately not listed — they stay held, since
+// nothing can be proven about them (see the reconcile activity).
+func (q *Queries) ListRetroRegexReversalCandidates(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID, afterID uuid.UUID, limit int) ([]RetroRegexCandidate, error) {
+	conds := append([]string{"exclusion_id = ?"}, retroRegexMetadataConds...)
+	args := append(scope.args(), exclusionID)
+	return q.listRetroRegexCandidates(ctx, conds, args, afterID, limit)
+}
+
+func (q *Queries) listRetroRegexCandidates(ctx context.Context, conds []string, args []any, afterID uuid.UUID, limit int) ([]RetroRegexCandidate, error) {
+	if afterID != uuid.Nil {
+		conds = append(conds, "id > ?")
+		args = append(args, afterID)
+	}
+
+	query := "SELECT " + retroRegexCandidateColumns +
+		" FROM " + latestRiskFindingsSubquery +
+		" WHERE rn = 1 AND " + strings.Join(conds, " AND ") +
+		" ORDER BY id LIMIT ?"
+	args = append(args, limit)
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {

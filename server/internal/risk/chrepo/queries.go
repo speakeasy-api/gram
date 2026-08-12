@@ -108,7 +108,10 @@ func chNullable[T any](p *T) any {
 // order InsertRiskFindings binds values. The retroactive exclusion queries
 // (retro_exclusion.go) render their INSERT ... SELECT copy projection from
 // this same list so a new column cannot land in one write path and silently
-// default in the other; a test asserts the two stay in lockstep.
+// default in the other. TestCopyProjection_LockstepWithInsertColumns pins the
+// projection's replacement set against this list; the positional Values()
+// binding in InsertRiskFindings is the one thing no test pins — when editing
+// this list, keep that argument order in lockstep by hand.
 var riskFindingColumns = []string{
 	"id",
 	"created_at",
