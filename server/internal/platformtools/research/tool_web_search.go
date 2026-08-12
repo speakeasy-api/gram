@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -16,6 +17,12 @@ import (
 // agent to read and follow up on.
 type WebSearch struct {
 	search *SearchClient
+
+	// usage accumulates what searches cost, keyed by the caller's chat id —
+	// the research runner's report id. A search is a billed completion the
+	// tool makes on the run's behalf, so the run has to be able to count it;
+	// nothing else here knows the run exists.
+	usage sync.Map
 }
 
 type webSearchInput struct {
@@ -29,7 +36,53 @@ type webSearchResult struct {
 
 // NewWebSearchTool builds the search tool over the supplied search client.
 func NewWebSearchTool(search *SearchClient) *WebSearch {
-	return &WebSearch{search: search}
+	return &WebSearch{search: search, usage: sync.Map{}}
+}
+
+// DrainUsage returns what this caller's searches have cost since the last
+// drain, and forgets it. Draining rather than reading keeps the map bounded:
+// the tool outlives every run that uses it.
+func (s *WebSearch) DrainUsage(chatID string) (promptTokens int64, completionTokens int64) {
+	recorded, ok := s.usage.LoadAndDelete(chatID)
+	if !ok {
+		return 0, 0
+	}
+
+	usage, ok := recorded.(SearchUsage)
+	if !ok {
+		return 0, 0
+	}
+
+	return usage.PromptTokens, usage.CompletionTokens
+}
+
+func (s *WebSearch) recordUsage(chatID string, usage SearchUsage) {
+	if chatID == "" {
+		return
+	}
+
+	for {
+		previous, loaded := s.usage.Load(chatID)
+		next := usage
+		if loaded {
+			if running, ok := previous.(SearchUsage); ok {
+				next = SearchUsage{
+					PromptTokens:     running.PromptTokens + usage.PromptTokens,
+					CompletionTokens: running.CompletionTokens + usage.CompletionTokens,
+				}
+			}
+		}
+
+		if !loaded {
+			if _, raced := s.usage.LoadOrStore(chatID, next); !raced {
+				return
+			}
+			continue
+		}
+		if s.usage.CompareAndSwap(chatID, previous, next) {
+			return
+		}
+	}
 }
 
 func (s *WebSearch) Descriptor() core.ToolDescriptor {
@@ -47,7 +100,7 @@ func (s *WebSearch) Descriptor() core.ToolDescriptor {
 	}
 }
 
-func (s *WebSearch) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	input := webSearchInput{Query: "", MaxResults: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -70,10 +123,11 @@ func (s *WebSearch) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	results, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)
+	results, usage, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)
 	if err != nil {
 		return fmt.Errorf("web search failed: %w", err)
 	}
+	s.recordUsage(env.GramChatID, usage)
 
 	return core.EncodeResult(wr, webSearchResult{Results: results})
 }

@@ -34,6 +34,12 @@ const (
 	// One attempt at marking the report interrupted.
 	mcpResearchCompensationAttemptTimeout = 30 * time.Second
 
+	// The whole compensation, queue time included. StartToClose bounds an
+	// attempt once a worker picks it up and bounds nothing before that, so
+	// on a saturated queue the compensation is exactly as able to outlive
+	// the workflow as the run it is compensating for.
+	mcpResearchCompensationScheduleToClose = 4 * time.Minute
+
 	mcpResearchRunTimeout = 40 * time.Minute
 )
 
@@ -121,8 +127,9 @@ func McpResearchWorkflow(ctx workflow.Context, input activities.McpResearchInput
 		// forever. Marking a row the activity already failed is a no-op: the
 		// update only touches rows still in running.
 		markCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: mcpResearchCompensationAttemptTimeout,
-			RetryPolicy:         mcpResearchCompensationRetryPolicy(),
+			StartToCloseTimeout:    mcpResearchCompensationAttemptTimeout,
+			ScheduleToCloseTimeout: mcpResearchCompensationScheduleToClose,
+			RetryPolicy:            mcpResearchCompensationRetryPolicy(),
 		})
 		if markErr := workflow.ExecuteActivity(markCtx, a.MarkMcpResearchInterrupted, input).Get(markCtx, nil); markErr != nil {
 			workflow.GetLogger(ctx).Error("mark interrupted mcp research report failed", "error", markErr)
