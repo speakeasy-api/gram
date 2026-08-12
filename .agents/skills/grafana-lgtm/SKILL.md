@@ -154,7 +154,6 @@ Every span names its parent, so "did this cross the boundary?" is answered by th
 
 ## Common mistakes
 
-- Assuming a `/api/traces?service=…` or `/api/services` style endpoint exists. Tempo serves neither and returns 404; its equivalents are in the table above.
 - Hardcoding `3000`, `3200` or `9090`. Those are container-internal; host ports are remapped per worktree.
 - Treating an empty result as proof of absence — for traces retry and widen the window, for metrics wrap in `last_over_time`.
 - Querying a metric by its Go instrument name instead of the translated series name, or without a `service_name` filter.
