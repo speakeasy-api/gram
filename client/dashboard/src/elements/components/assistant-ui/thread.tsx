@@ -626,7 +626,11 @@ export const Composer: FC<ComposerProps> = ({
 
   const isReplay = replayCtx?.isReplay ?? false;
   const isDictating = useAuiState(({ composer }) => composer.dictation != null);
-  const isComposerEmpty = useAuiState(({ composer }) => composer.text === "");
+  // A dropped file is a draft even with no text yet — the landing's cycling
+  // example prompts would otherwise keep running above the attachment chip.
+  const isComposerEmpty = useAuiState(
+    ({ composer }) => composer.text === "" && composer.attachments.length === 0,
+  );
   const composerConfig = config.composer ?? {
     placeholder: "Send a message...",
     attachments: true,
