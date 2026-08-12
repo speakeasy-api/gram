@@ -82,9 +82,8 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-// An employee identifier that is an email — the fallback the page uses for
-// someone with usage but no directory row — must still pick up the rows that
-// carry their resolved gram user id.
+// An email identifier that resolves to a directory user must still pick up the
+// rows carrying that user's gram id, which is the mirror of the fold above.
 func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) {
 	t.Parallel()
 
@@ -118,6 +117,45 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 
 		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
 		assert.Equal(c, int64(1), res.Metrics.TotalToolCalls)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// The employee page falls back to an email identifier for someone who has usage
+// but no directory row to resolve. Nothing resolves, so the identity is the
+// email alone, and their usage must still aggregate.
+func TestGetUserMetricsSummary_EmailIdentifierWithNoDirectoryRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	// Deliberately never seeded into the org directory.
+	unknownEmail := "contractor-" + uuid.New().String() + "@example.com"
+
+	now := time.Now().UTC()
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), unknownEmail, 100, 50, 2.5)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+			From:   from,
+			To:     to,
+			UserID: &unknownEmail,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+
+		assert.Equal(c, int64(100), res.Metrics.TotalInputTokens)
+		assert.InDelta(c, 2.5, res.Metrics.TotalCost, 0.001)
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
