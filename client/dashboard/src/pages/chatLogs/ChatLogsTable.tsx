@@ -4,7 +4,7 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { formatPlatform } from "@/lib/formatPlatform";
+import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
@@ -320,11 +320,7 @@ export function ChatLogsTable({
                               source={source}
                               className="size-3.5"
                             />
-                            {chat.originatingClient
-                              ? `${formatPlatform(chat.originatingClient)} via ${formatPlatform(source)}`
-                              : chat.litellmProxied && source !== "litellm"
-                                ? `${formatPlatform(source)} via ${formatPlatform("litellm")}`
-                                : formatPlatform(source)}
+                            {formatChatSource(source, chat)}
                           </span>
                         </>
                       )}

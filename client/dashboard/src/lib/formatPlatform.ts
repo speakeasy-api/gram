@@ -50,3 +50,24 @@ export function formatPlatform(value: string): string {
     .map((part) => part[0]!.toUpperCase() + part.slice(1))
     .join(" ");
 }
+
+/**
+ * Format a chat's full source label, including its LiteLLM proxy relationship.
+ * Proxy-owned transcripts name the client behind the proxy ("Claude Code via
+ * LiteLLM"); natively captured sessions the proxy also observed name the
+ * surface with the proxy appended ("Claude Code via LiteLLM" with
+ * source=claude-code) — proxied rows are suppressed for those sessions, so the
+ * source alone would hide the LiteLLM association.
+ */
+export function formatChatSource(
+  source: string,
+  chat: { originatingClient?: string; litellmProxied?: boolean },
+): string {
+  if (chat.originatingClient) {
+    return `${formatPlatform(chat.originatingClient)} via ${formatPlatform(source)}`;
+  }
+  if (chat.litellmProxied && source !== "litellm") {
+    return `${formatPlatform(source)} via ${formatPlatform("litellm")}`;
+  }
+  return formatPlatform(source);
+}
