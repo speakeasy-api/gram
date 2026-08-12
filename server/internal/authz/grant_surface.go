@@ -37,15 +37,11 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeSkillBlockedRead:        GrantSurfaceAccess,
 	ScopeSkillWrite:              GrantSurfaceAccess,
 	ScopeSkillBlockedWrite:       GrantSurfaceAccess,
-	// risk_policy:read is assigned to custom roles through the Access page, so
-	// the access surface owns its writes — unlike evaluate/bypass/block, whose
-	// grants are created by the risk policy flows themselves.
-	ScopeRiskPolicyRead:     GrantSurfaceAccess,
-	ScopeRiskPolicyEvaluate: GrantSurfaceRiskPolicy,
-	ScopeRiskPolicyBypass:   GrantSurfaceRiskPolicy,
-	ScopeRiskPolicyBlock:    GrantSurfaceRiskPolicy,
-	ScopeChatRead:           GrantSurfaceAccess,
-	ScopeChatWrite:          GrantSurfaceAccess,
+	ScopeRiskPolicyEvaluate:      GrantSurfaceRiskPolicy,
+	ScopeRiskPolicyBypass:        GrantSurfaceRiskPolicy,
+	ScopeRiskPolicyBlock:         GrantSurfaceRiskPolicy,
+	ScopeChatRead:                GrantSurfaceAccess,
+	ScopeChatWrite:               GrantSurfaceAccess,
 }
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.

@@ -431,9 +431,6 @@ func DemoScopeGrants() []Grant {
 		ScopeMCPRead,
 		ScopeSkillRead,
 		ScopeChatRead,
-		// The risk dashboard is a headline demo surface. risk_policy:read covers
-		// the read-only half only — every risk mutation checks org:admin, which
-		// this set deliberately cannot contain.
 		ScopeRiskPolicyRead,
 	}
 	grants := make([]Grant, 0, len(scopes))
