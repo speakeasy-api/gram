@@ -154,6 +154,12 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		CompletionTokens: int64(response.Usage.CompletionTokens),
 	}
 
+	// Checked before the loop, not inside it: a cap of zero has to mean zero
+	// results, and a bound tested after the append always yields one.
+	if maxResults <= 0 {
+		return nil, usage, nil
+	}
+
 	results := make([]SearchResult, 0, len(response.Annotations))
 	for _, annotation := range response.Annotations {
 		citation := annotation.URLCitation
