@@ -228,6 +228,48 @@ func TestRun_CapsClaims(t *testing.T) {
 	require.Equal(t, "claim 0", document.Claims[0].Text, "the head of the list survives the cap")
 }
 
+// A citation the admin cannot follow is not a citation. The scheme case is
+// the one that matters: the review page renders citations as links, so a
+// javascript: URL reaching storage would put attacker-authored script one
+// click away — and the model writing these has just read untrusted pages.
+func TestRun_DropsClaimsWhoseCitationsCannotBeFollowed(t *testing.T) {
+	t.Parallel()
+
+	claims := []string{
+		`{"tier": "independently_reported", "text": "script", "citations": [{"url": "javascript:alert(1)"}]}`,
+		`{"tier": "independently_reported", "text": "data", "citations": [{"url": "data:text/html,<script>alert(1)</script>"}]}`,
+		`{"tier": "independently_reported", "text": "empty", "citations": [{"url": ""}]}`,
+		`{"tier": "independently_reported", "text": "relative", "citations": [{"url": "/advisories/1"}]}`,
+		`{"tier": "independently_reported", "text": "", "citations": [{"url": "https://example.com/blank"}]}`,
+		`{"tier": "independently_reported", "text": "mixed", "citations": [{"url": "javascript:alert(1)"}, {"url": "https://example.com/real"}]}`,
+		`{"tier": "vendor_claim", "text": "kept", "citations": [{"url": "https://example.com/vendor"}]}`,
+	}
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
+	}
+
+	runner := researchagent.New(completions)
+	encoded, meta, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	var document researchagent.Document
+	require.NoError(t, json.Unmarshal(encoded, &document))
+
+	texts := make([]string, 0, len(document.Claims))
+	for _, claim := range document.Claims {
+		texts = append(texts, claim.Text)
+	}
+	require.Equal(t, []string{"mixed", "kept"}, texts)
+	require.Equal(t, 5, meta.DroppedUncitedClaims, "every unusable claim is counted, not silently lost")
+
+	// The surviving mixed claim keeps only the citation that can be opened.
+	require.Len(t, document.Claims[0].Citations, 1)
+	require.Equal(t, "https://example.com/real", document.Claims[0].Citations[0].URL)
+}
+
 // A degenerate extraction — the literal filler a schema-forced model emits
 // when it has nothing — fails the run instead of rendering as a report.
 func TestRun_RejectsDegenerateExtraction(t *testing.T) {
