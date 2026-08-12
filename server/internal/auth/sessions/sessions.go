@@ -120,16 +120,14 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	if session.ActiveOrganizationID == "" {
-		// Org-less sessions still need the actor email so audit entries written
-		// on this path (e.g. self-signup enterprise trial arming) record an
-		// actor display name rather than a bare actor id. GetUserInfo warms the
-		// user-info cache on a miss, so the subsequent IsAdmin read — which
-		// leaves IsAdmin false on a cache miss (safe default) — resolves against
-		// a warm cache. No org membership check is needed for org-less sessions.
-		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
-			authCtx.Email = &userInfo.Email
+		// Organization-less sessions still need identity attributes for
+		// request handling and audit attribution.
+		userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID)
+		if err != nil {
+			return ctx, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
 		}
-		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
+		authCtx.Email = &userInfo.Email
+		authCtx.IsAdmin = userInfo.Admin
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}

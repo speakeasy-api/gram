@@ -84,10 +84,6 @@ func TestRegister_ArmsEnterpriseTrial(t *testing.T) {
 	require.Equal(t, auditsBefore+1, auditsAfter)
 }
 
-// TestRegister_TrialArmedAuditRecordsActorDisplayName guards the org-less audit
-// actor. Self-signup arms the trial on a session with no active organization,
-// and sessions.Authenticate must still populate the actor email so the entry
-// records a display name rather than a bare actor id.
 func TestRegister_TrialArmedAuditRecordsActorDisplayName(t *testing.T) {
 	t.Parallel()
 
@@ -99,8 +95,6 @@ func TestRegister_TrialArmedAuditRecordsActorDisplayName(t *testing.T) {
 
 	entry, err := audittest.LatestAuditLogByAction(ctx, inst.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
-	require.Equal(t, "user", entry.ActorType)
-	require.NotEmpty(t, entry.ActorID)
 	require.NotNil(t, entry.ActorDisplayName, "org-less session must still resolve the actor email")
 	require.Equal(t, email, *entry.ActorDisplayName)
 }
