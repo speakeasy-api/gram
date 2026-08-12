@@ -20,7 +20,6 @@ type Endpoints struct {
 	StartOnboarding                goa.Endpoint
 	RecordInstallIntent            goa.Endpoint
 	RecordAgentConfigurationCopied goa.Endpoint
-	RegisterOnboardingCandidate    goa.Endpoint
 	StartOnboardingSetup           goa.Endpoint
 	RecheckOnboardingReadiness     goa.Endpoint
 	DistributeOnboardingCandidate  goa.Endpoint
@@ -38,7 +37,6 @@ func NewEndpoints(s Service) *Endpoints {
 		StartOnboarding:                NewStartOnboardingEndpoint(s, a.APIKeyAuth),
 		RecordInstallIntent:            NewRecordInstallIntentEndpoint(s, a.APIKeyAuth),
 		RecordAgentConfigurationCopied: NewRecordAgentConfigurationCopiedEndpoint(s, a.APIKeyAuth),
-		RegisterOnboardingCandidate:    NewRegisterOnboardingCandidateEndpoint(s, a.APIKeyAuth),
 		StartOnboardingSetup:           NewStartOnboardingSetupEndpoint(s, a.APIKeyAuth),
 		RecheckOnboardingReadiness:     NewRecheckOnboardingReadinessEndpoint(s, a.APIKeyAuth),
 		DistributeOnboardingCandidate:  NewDistributeOnboardingCandidateEndpoint(s, a.APIKeyAuth),
@@ -54,7 +52,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.StartOnboarding = m(e.StartOnboarding)
 	e.RecordInstallIntent = m(e.RecordInstallIntent)
 	e.RecordAgentConfigurationCopied = m(e.RecordAgentConfigurationCopied)
-	e.RegisterOnboardingCandidate = m(e.RegisterOnboardingCandidate)
 	e.StartOnboardingSetup = m(e.StartOnboardingSetup)
 	e.RecheckOnboardingReadiness = m(e.RecheckOnboardingReadiness)
 	e.DistributeOnboardingCandidate = m(e.DistributeOnboardingCandidate)
@@ -152,29 +149,6 @@ func NewRecordAgentConfigurationCopiedEndpoint(s Service, authAPIKeyFn security.
 			return nil, err
 		}
 		return s.RecordAgentConfigurationCopied(ctx, p)
-	}
-}
-
-// NewRegisterOnboardingCandidateEndpoint returns an endpoint function that
-// calls the method "registerOnboardingCandidate" of service "platformMcp".
-func NewRegisterOnboardingCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*RegisterOnboardingCandidatePayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.RegisterOnboardingCandidate(ctx, p)
 	}
 }
 

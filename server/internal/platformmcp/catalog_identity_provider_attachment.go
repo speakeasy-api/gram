@@ -33,6 +33,8 @@ var (
 	ErrIdentityProviderAttachmentConflict    = errors.New("platform mcp identity provider attachment conflict")
 )
 
+const browserCatalogDCRAuthMethod = string(remotesessions.TokenEndpointAuthMethodBasic)
+
 // CatalogIdentityProviderAttachmentResult contains only non-secret provider
 // context for the agent. Provider URLs are safe to return; client secrets,
 // tokens, passwords, and OAuth codes are never represented here.
@@ -82,7 +84,8 @@ func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, p
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("begin identity-provider attachment lock: %w", err)
 	}
 	defer func() { _ = lockTx.Rollback(ctx) }()
-	if err := platformrepo.New(lockTx).LockPlatformMCPOperationReceipt(ctx, platformrepo.LockPlatformMCPOperationReceiptParams{
+	lockQ := platformrepo.New(lockTx)
+	if err := lockQ.LockPlatformMCPOperationReceipt(ctx, platformrepo.LockPlatformMCPOperationReceiptParams{
 		OrganizationID: principal.OrganizationID,
 		SubjectUrn:     userSubjectURN(principal.UserID),
 		ProjectID:      project.ID.String(),
@@ -92,7 +95,7 @@ func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, p
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider attachment: %w", err)
 	}
 
-	result, err := s.attachLocked(ctx, principal, project, registrationID)
+	result, err := s.attachLocked(ctx, lockQ, principal, project, registrationID)
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
@@ -102,7 +105,7 @@ func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, p
 	return result, nil
 }
 
-func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
+func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Context, lockQ *platformrepo.Queries, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
 	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
@@ -138,11 +141,18 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("discover registered identity-provider metadata: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
 	}
-	if strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || strings.TrimSpace(metadata.RegistrationEndpoint) == "" {
+	if strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
+	if err := lockQ.LockPlatformMCPRemoteIssuerAttachment(ctx, platformrepo.LockPlatformMCPRemoteIssuerAttachmentParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+		Issuer:         strings.TrimRight(metadata.Issuer, "/"),
+	}); err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
+	}
 
-	if attached, err := s.matchingAttachment(ctx, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
+	if attached, err := s.matchingAttachment(ctx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	} else if attached {
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
@@ -152,13 +162,14 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	// until createAndAttachClient encrypts it for persistence.
 	scope := strings.Join(resourceMetadata.ScopesSupported, " ")
 	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, s.serverURL, remotesessions.ProxyRegisterRequest{
-		RegistrationEndpoint: metadata.RegistrationEndpoint,
-		Scope:                optionalString(scope),
+		RegistrationEndpoint:    metadata.RegistrationEndpoint,
+		Scope:                   optionalString(scope),
+		TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
 	})
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, identityProviderDynamicRegistrationError(err)
 	}
-	if registered.ClientID == "" {
+	if !validBrowserCatalogDynamicClient(registered) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 	issuer, err := s.ensureIssuer(ctx, principal, project, registrationID, metadata)
@@ -173,11 +184,11 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	return CatalogIdentityProviderAttachmentResult{Attached: attached, ProviderURL: metadata.Issuer}, nil
 }
 
-func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (bool, error) {
+func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (bool, error) {
 	clients, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(project.ID),
-		OrganizationID:      conv.ToPGText(""),
+		OrganizationID:      conv.ToPGText(organizationID),
 	})
 	if err != nil {
 		return false, fmt.Errorf("list registered identity providers: %w", err)
@@ -365,6 +376,26 @@ func attachmentIssuerSlug(registrationID uuid.UUID) string {
 
 func sameIssuerURL(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
+
+func validDynamicClientRegistrationEndpoint(raw string) bool {
+	endpoint, err := url.Parse(raw)
+	return err == nil && endpoint.Scheme == "https" && endpoint.Host != "" && endpoint.User == nil
+}
+
+// validBrowserCatalogDynamicClient requires a confidential client for the
+// browser-catalog flow. The local fixture deliberately registers public clients
+// through its separate configurator path and never reaches this boundary.
+func validBrowserCatalogDynamicClient(registered remotesessions.ProxyRegisterResponse) bool {
+	if registered.ClientID == "" || registered.ClientSecret == "" {
+		return false
+	}
+	switch registered.TokenEndpointAuthMethod {
+	case "", string(remotesessions.TokenEndpointAuthMethodBasic), string(remotesessions.TokenEndpointAuthMethodPost):
+		return true
+	default:
+		return false
+	}
 }
 
 func optionalString(value string) *string {

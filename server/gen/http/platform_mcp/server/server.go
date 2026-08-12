@@ -23,7 +23,6 @@ type Server struct {
 	StartOnboarding                http.Handler
 	RecordInstallIntent            http.Handler
 	RecordAgentConfigurationCopied http.Handler
-	RegisterOnboardingCandidate    http.Handler
 	StartOnboardingSetup           http.Handler
 	RecheckOnboardingReadiness     http.Handler
 	DistributeOnboardingCandidate  http.Handler
@@ -63,7 +62,6 @@ func New(
 			{"StartOnboarding", "POST", "/rpc/platformMcp.startOnboarding"},
 			{"RecordInstallIntent", "POST", "/rpc/platformMcp.recordInstallIntent"},
 			{"RecordAgentConfigurationCopied", "POST", "/rpc/platformMcp.recordAgentConfigurationCopied"},
-			{"RegisterOnboardingCandidate", "POST", "/rpc/platformMcp.registerOnboardingCandidate"},
 			{"StartOnboardingSetup", "POST", "/rpc/platformMcp.startOnboardingSetup"},
 			{"RecheckOnboardingReadiness", "POST", "/rpc/platformMcp.recheckOnboardingReadiness"},
 			{"DistributeOnboardingCandidate", "POST", "/rpc/platformMcp.distributeOnboardingCandidate"},
@@ -75,7 +73,6 @@ func New(
 		StartOnboarding:                NewStartOnboardingHandler(e.StartOnboarding, mux, decoder, encoder, errhandler, formatter),
 		RecordInstallIntent:            NewRecordInstallIntentHandler(e.RecordInstallIntent, mux, decoder, encoder, errhandler, formatter),
 		RecordAgentConfigurationCopied: NewRecordAgentConfigurationCopiedHandler(e.RecordAgentConfigurationCopied, mux, decoder, encoder, errhandler, formatter),
-		RegisterOnboardingCandidate:    NewRegisterOnboardingCandidateHandler(e.RegisterOnboardingCandidate, mux, decoder, encoder, errhandler, formatter),
 		StartOnboardingSetup:           NewStartOnboardingSetupHandler(e.StartOnboardingSetup, mux, decoder, encoder, errhandler, formatter),
 		RecheckOnboardingReadiness:     NewRecheckOnboardingReadinessHandler(e.RecheckOnboardingReadiness, mux, decoder, encoder, errhandler, formatter),
 		DistributeOnboardingCandidate:  NewDistributeOnboardingCandidateHandler(e.DistributeOnboardingCandidate, mux, decoder, encoder, errhandler, formatter),
@@ -94,7 +91,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.StartOnboarding = m(s.StartOnboarding)
 	s.RecordInstallIntent = m(s.RecordInstallIntent)
 	s.RecordAgentConfigurationCopied = m(s.RecordAgentConfigurationCopied)
-	s.RegisterOnboardingCandidate = m(s.RegisterOnboardingCandidate)
 	s.StartOnboardingSetup = m(s.StartOnboardingSetup)
 	s.RecheckOnboardingReadiness = m(s.RecheckOnboardingReadiness)
 	s.DistributeOnboardingCandidate = m(s.DistributeOnboardingCandidate)
@@ -112,7 +108,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountStartOnboardingHandler(mux, h.StartOnboarding)
 	MountRecordInstallIntentHandler(mux, h.RecordInstallIntent)
 	MountRecordAgentConfigurationCopiedHandler(mux, h.RecordAgentConfigurationCopied)
-	MountRegisterOnboardingCandidateHandler(mux, h.RegisterOnboardingCandidate)
 	MountStartOnboardingSetupHandler(mux, h.StartOnboardingSetup)
 	MountRecheckOnboardingReadinessHandler(mux, h.RecheckOnboardingReadiness)
 	MountDistributeOnboardingCandidateHandler(mux, h.DistributeOnboardingCandidate)
@@ -316,60 +311,6 @@ func NewRecordAgentConfigurationCopiedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "recordAgentConfigurationCopied")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "platformMcp")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountRegisterOnboardingCandidateHandler configures the mux to serve the
-// "platformMcp" service "registerOnboardingCandidate" endpoint.
-func MountRegisterOnboardingCandidateHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/platformMcp.registerOnboardingCandidate", f)
-}
-
-// NewRegisterOnboardingCandidateHandler creates a HTTP handler which loads the
-// HTTP request and calls the "platformMcp" service
-// "registerOnboardingCandidate" endpoint.
-func NewRegisterOnboardingCandidateHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeRegisterOnboardingCandidateRequest(mux, decoder)
-		encodeResponse = EncodeRegisterOnboardingCandidateResponse(encoder)
-		encodeError    = EncodeRegisterOnboardingCandidateError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "registerOnboardingCandidate")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "platformMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

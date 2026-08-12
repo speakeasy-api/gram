@@ -441,6 +441,19 @@ SELECT pg_advisory_xact_lock(
     )
 );
 
+-- name: LockPlatformMCPRemoteIssuerAttachment :exec
+-- Serialize browser-catalog attachment for one project/upstream issuer before
+-- checking for an existing remote-session issuer or registering a new client.
+-- The remote_session_issuers table intentionally allows multiple project rows
+-- for one issuer, so a unique constraint cannot express this narrower workflow
+-- invariant without changing existing remote-session semantics.
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-remote-issuer-attachment', @organization_id::text, @project_id::text, @issuer::text)::text,
+        0
+    )
+);
+
 -- name: GetPlatformMCPOperationReceipt :one
 SELECT receipt.*
 FROM platform_mcp_operation_receipts AS receipt
@@ -918,12 +931,16 @@ SELECT pg_advisory_xact_lock(
 );
 
 -- name: GetPlatformMCPDistribution :one
-SELECT *
-FROM platform_mcp_distributions
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND registration_id = @registration_id
-  AND default_plugin_id = @default_plugin_id;
+SELECT distribution.*
+FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
+WHERE distribution.organization_id = @organization_id
+  AND distribution.project_id = @project_id
+  AND distribution.registration_id = @registration_id
+  AND distribution.default_plugin_id = @default_plugin_id;
 
 -- name: CreatePlatformMCPDistribution :one
 INSERT INTO platform_mcp_distributions (
@@ -937,7 +954,8 @@ INSERT INTO platform_mcp_distributions (
     attachment_was_created,
     connection_id,
     connection_generation
-) VALUES (
+)
+SELECT
     @organization_id,
     @project_id,
     @registration_id,
@@ -948,6 +966,12 @@ INSERT INTO platform_mcp_distributions (
     @attachment_was_created,
     @connection_id,
     @connection_generation
+WHERE EXISTS (
+    SELECT 1
+    FROM projects AS project
+    WHERE project.id = @project_id
+      AND project.organization_id = @organization_id
+      AND project.deleted IS FALSE
 )
 RETURNING *;
 
@@ -962,11 +986,18 @@ SET plugin_server_id = @plugin_server_id,
     connection_id = @connection_id,
     connection_generation = @connection_generation,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id = @project_id
-  AND registration_id = @registration_id
-  AND default_plugin_id = @default_plugin_id
+WHERE platform_mcp_distributions.id = @id
+  AND platform_mcp_distributions.organization_id = @organization_id
+  AND platform_mcp_distributions.project_id = @project_id
+  AND platform_mcp_distributions.registration_id = @registration_id
+  AND platform_mcp_distributions.default_plugin_id = @default_plugin_id
+  AND EXISTS (
+      SELECT 1
+      FROM projects AS project
+      WHERE project.id = platform_mcp_distributions.project_id
+        AND project.organization_id = platform_mcp_distributions.organization_id
+        AND project.deleted IS FALSE
+  )
 RETURNING *;
 
 -- name: UpdatePlatformMCPDistributionPublication :one
@@ -974,12 +1005,19 @@ UPDATE platform_mcp_distributions
 SET publication_state = @publication_state,
     publication_updated_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id = @project_id
-  AND registration_id = @registration_id
-  AND default_plugin_id = @default_plugin_id
-  AND version = @version
+WHERE platform_mcp_distributions.id = @id
+  AND platform_mcp_distributions.organization_id = @organization_id
+  AND platform_mcp_distributions.project_id = @project_id
+  AND platform_mcp_distributions.registration_id = @registration_id
+  AND platform_mcp_distributions.default_plugin_id = @default_plugin_id
+  AND platform_mcp_distributions.version = @version
+  AND EXISTS (
+      SELECT 1
+      FROM projects AS project
+      WHERE project.id = platform_mcp_distributions.project_id
+        AND project.organization_id = platform_mcp_distributions.organization_id
+        AND project.deleted IS FALSE
+  )
 RETURNING *;
 
 -- name: HasPlatformMCPSelectedUseEvidence :one
@@ -992,6 +1030,10 @@ SELECT EXISTS (
      AND distribution.registration_id = evidence.registration_id
      AND distribution.version = evidence.distribution_version
      AND distribution.state = 'attached'
+    JOIN projects AS project
+      ON project.id = distribution.project_id
+     AND project.organization_id = distribution.organization_id
+     AND project.deleted IS FALSE
     JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
      AND connection.organization_id = distribution.organization_id
@@ -1013,6 +1055,10 @@ SELECT
     distribution.connection_id,
     distribution.connection_generation
 FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
 JOIN platform_mcp_catalog_registrations AS registration
   ON registration.id = distribution.registration_id
  AND registration.project_id = distribution.project_id
@@ -1020,7 +1066,8 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.deleted IS FALSE
 JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
- AND plugin_server.plugin_id = distribution.default_plugin_id
+  AND plugin_server.plugin_id = distribution.default_plugin_id
+  AND plugin_server.deleted IS FALSE
 JOIN platform_mcp_connections AS connection
   ON connection.id = distribution.connection_id
  AND connection.organization_id = distribution.organization_id
@@ -1313,11 +1360,23 @@ UPDATE platform_mcp_onboarding_workflows
 SET selected_project_id = @selected_project_id,
     selected_registration_id = @selected_registration_id,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND initiating_subject_urn = @initiating_subject_urn
-  AND status = 'active'
-  AND expires_at > clock_timestamp()
+WHERE platform_mcp_onboarding_workflows.id = @id
+  AND platform_mcp_onboarding_workflows.organization_id = @organization_id
+  AND platform_mcp_onboarding_workflows.initiating_subject_urn = @initiating_subject_urn
+  AND platform_mcp_onboarding_workflows.status = 'active'
+  AND platform_mcp_onboarding_workflows.expires_at > clock_timestamp()
+  AND EXISTS (
+      SELECT 1
+      FROM projects AS project
+      JOIN platform_mcp_catalog_registrations AS registration
+        ON registration.id = @selected_registration_id
+       AND registration.organization_id = project.organization_id
+       AND registration.project_id = project.id
+       AND registration.deleted IS FALSE
+      WHERE project.id = @selected_project_id
+        AND project.organization_id = @organization_id
+        AND project.deleted IS FALSE
+  )
 RETURNING *;
 
 -- name: GetPlatformMCPOnboardingSelectedProject :one
@@ -1446,13 +1505,20 @@ INSERT INTO platform_mcp_onboarding_milestones (
     connection_generation,
     project_id,
     attempt_id
-) VALUES (
+)
+SELECT
     @organization_id,
     @milestone,
     @connection_id,
     @connection_generation,
     @project_id,
     @attempt_id
+WHERE EXISTS (
+    SELECT 1
+    FROM projects AS project
+    WHERE project.id = @project_id
+      AND project.organization_id = @organization_id
+      AND project.deleted IS FALSE
 )
 ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
 WHERE attempt_id IS NOT NULL

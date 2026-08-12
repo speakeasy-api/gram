@@ -133,7 +133,7 @@ func NewRegistryCatalogSources(sources []RegistryCatalogSource) *RegistryCatalog
 			if (descriptor.CanonicalRef == "") != (descriptor.AllowedRemoteURL == "") {
 				continue
 			}
-			if descriptor.AllowedRemoteURL != "" && !validCatalogRemoteTemplate(descriptor.AllowedRemoteURL) {
+			if descriptor.AllowedRemoteURL != "" && (!validCatalogRemoteTemplate(descriptor.AllowedRemoteURL) || hasUnresolvedRemoteTemplate(descriptor.AllowedRemoteURL)) {
 				continue
 			}
 			// Refuse ambiguous source identities. A duplicate registry/source must
@@ -154,14 +154,10 @@ func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCa
 	}
 
 	candidates := make([]CatalogCandidate, 0, len(c.descriptors))
-	var lastErr error
 	for _, source := range c.descriptors {
 		result, err := source.client.ListServers(ctx, source.Registry, externalmcp.ListServersParams{Search: &query})
 		if err != nil {
-			// Match the browser catalogue's degraded behavior: one unavailable
-			// configured registry does not hide the remaining configured sources.
-			lastErr = err
-			continue
+			return nil, fmt.Errorf("list platform mcp catalog: %w", err)
 		}
 		for _, entry := range result.Servers {
 			if !descriptorAllowsEntry(source.CatalogDescriptor, entry) {
@@ -170,9 +166,7 @@ func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCa
 			candidates = append(candidates, catalogCandidateFromEntry(source.CatalogDescriptor, entry))
 		}
 	}
-	if len(candidates) == 0 && lastErr != nil {
-		return nil, fmt.Errorf("list platform mcp catalog: %w", lastErr)
-	}
+
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].ProviderKey == candidates[j].ProviderKey {
 			return candidates[i].CatalogRef < candidates[j].CatalogRef

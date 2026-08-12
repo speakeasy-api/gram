@@ -150,25 +150,6 @@ func (s *ManagementService) RecordAgentConfigurationCopied(ctx context.Context, 
 	return s.state(ctx, authCtx, projection, true, readiness, found), nil
 }
 
-func (s *ManagementService) RegisterOnboardingCandidate(ctx context.Context, payload *platformmcpgen.RegisterOnboardingCandidatePayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
-	if payload == nil || payload.ProjectSlug == "" {
-		return nil, oops.C(oops.CodeBadRequest)
-	}
-	authCtx, err := s.enabledContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	projection, err := s.onboarding.Start(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
-	if err != nil {
-		return nil, s.mapOnboardingError(err)
-	}
-	if projection.Workflow == nil || projection.SelectedProject == nil || projection.SelectedProject.Slug != payload.ProjectSlug || projection.Workflow.SelectedRegistrationID == uuid.Nil {
-		return nil, oops.C(oops.CodeBadRequest)
-	}
-	readiness, found := s.currentReadiness(ctx, authCtx, projection)
-	return s.state(ctx, authCtx, projection, true, readiness, found), nil
-}
-
 func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platformmcpgen.StartOnboardingSetupPayload) (*platformmcpgen.PlatformMCPOnboardingSetupHandoff, error) {
 	authCtx, err := s.enabledContext(ctx)
 	if err != nil {
@@ -459,7 +440,7 @@ func onboardingRegistrationIdempotencyKey(workflowID uuid.UUID, projectSlug, pro
 }
 func (s *ManagementService) mapOnboardingError(err error) error {
 	switch {
-	case errors.Is(err, ErrOnboardingInvalid), errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrSetupHandoffInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrDistributionInvalid), errors.Is(err, ErrDistributionVersionTokenInvalid):
+	case errors.Is(err, ErrOnboardingInvalid), errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrSetupHandoffInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrReadinessRegistrationNotFound), errors.Is(err, ErrDistributionInvalid), errors.Is(err, ErrDistributionVersionTokenInvalid):
 		return oops.C(oops.CodeBadRequest)
 	case errors.Is(err, ErrDistributionConflict), errors.Is(err, ErrDistributionDefaultAbsent), errors.Is(err, ErrDistributionNotReady):
 		return oops.C(oops.CodeConflict)

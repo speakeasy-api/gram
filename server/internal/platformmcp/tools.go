@@ -108,7 +108,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerReadinessTools(server, registrations.readiness)
 	}
-	if onboarding == nil || distributions == nil || catalog == nil {
+	if onboarding == nil || distributions == nil || catalog == nil || registrations == nil || registrations.store == nil {
 		registerUnavailableTools(server)
 	} else {
 		registerOnboardingLifecycleTools(server, onboarding, registrations, distributions)

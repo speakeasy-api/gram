@@ -55,11 +55,23 @@ UPDATE platform_mcp_onboarding_workflows
 SET selected_project_id = $1,
     selected_registration_id = $2,
     updated_at = clock_timestamp()
-WHERE id = $3
-  AND organization_id = $4
-  AND initiating_subject_urn = $5
-  AND status = 'active'
-  AND expires_at > clock_timestamp()
+WHERE platform_mcp_onboarding_workflows.id = $3
+  AND platform_mcp_onboarding_workflows.organization_id = $4
+  AND platform_mcp_onboarding_workflows.initiating_subject_urn = $5
+  AND platform_mcp_onboarding_workflows.status = 'active'
+  AND platform_mcp_onboarding_workflows.expires_at > clock_timestamp()
+  AND EXISTS (
+      SELECT 1
+      FROM projects AS project
+      JOIN platform_mcp_catalog_registrations AS registration
+        ON registration.id = $2
+       AND registration.organization_id = project.organization_id
+       AND registration.project_id = project.id
+       AND registration.deleted IS FALSE
+      WHERE project.id = $1
+        AND project.organization_id = $4
+        AND project.deleted IS FALSE
+  )
 RETURNING id, organization_id, initiating_subject_urn, source_surface, client_family, agent_configuration_copied_at, connection_id, connection_generation, selected_project_id, selected_registration_id, status, correlation_id, expires_at, closed_at, created_at, updated_at
 `
 
@@ -572,7 +584,8 @@ INSERT INTO platform_mcp_distributions (
     attachment_was_created,
     connection_id,
     connection_generation
-) VALUES (
+)
+SELECT
     $1,
     $2,
     $3,
@@ -583,6 +596,12 @@ INSERT INTO platform_mcp_distributions (
     $8,
     $9,
     $10
+WHERE EXISTS (
+    SELECT 1
+    FROM projects AS project
+    WHERE project.id = $2
+      AND project.organization_id = $1
+      AND project.deleted IS FALSE
 )
 RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
 `
@@ -1893,12 +1912,16 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 }
 
 const getPlatformMCPDistribution = `-- name: GetPlatformMCPDistribution :one
-SELECT id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
-FROM platform_mcp_distributions
-WHERE organization_id = $1
-  AND project_id = $2
-  AND registration_id = $3
-  AND default_plugin_id = $4
+SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.created_at, distribution.updated_at
+FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
+WHERE distribution.organization_id = $1
+  AND distribution.project_id = $2
+  AND distribution.registration_id = $3
+  AND distribution.default_plugin_id = $4
 `
 
 type GetPlatformMCPDistributionParams struct {
@@ -2206,6 +2229,10 @@ SELECT
     distribution.connection_id,
     distribution.connection_generation
 FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
 JOIN platform_mcp_catalog_registrations AS registration
   ON registration.id = distribution.registration_id
  AND registration.project_id = distribution.project_id
@@ -2213,7 +2240,8 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.deleted IS FALSE
 JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
- AND plugin_server.plugin_id = distribution.default_plugin_id
+  AND plugin_server.plugin_id = distribution.default_plugin_id
+  AND plugin_server.deleted IS FALSE
 JOIN platform_mcp_connections AS connection
   ON connection.id = distribution.connection_id
  AND connection.organization_id = distribution.organization_id
@@ -2669,6 +2697,10 @@ SELECT EXISTS (
      AND distribution.registration_id = evidence.registration_id
      AND distribution.version = evidence.distribution_version
      AND distribution.state = 'attached'
+    JOIN projects AS project
+      ON project.id = distribution.project_id
+     AND project.organization_id = distribution.organization_id
+     AND project.deleted IS FALSE
     JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
      AND connection.organization_id = distribution.organization_id
@@ -3213,6 +3245,31 @@ func (q *Queries) LockPlatformMCPProjectRegistrationQuota(ctx context.Context, a
 	return err
 }
 
+const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-remote-issuer-attachment', $1::text, $2::text, $3::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPRemoteIssuerAttachmentParams struct {
+	OrganizationID string
+	ProjectID      string
+	Issuer         string
+}
+
+// Serialize browser-catalog attachment for one project/upstream issuer before
+// checking for an existing remote-session issuer or registering a new client.
+// The remote_session_issuers table intentionally allows multiple project rows
+// for one issuer, so a unique constraint cannot express this narrower workflow
+// invariant without changing existing remote-session semantics.
+func (q *Queries) LockPlatformMCPRemoteIssuerAttachment(ctx context.Context, arg LockPlatformMCPRemoteIssuerAttachmentParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPRemoteIssuerAttachment, arg.OrganizationID, arg.ProjectID, arg.Issuer)
+	return err
+}
+
 const lockPlatformMCPSetupHandoff = `-- name: LockPlatformMCPSetupHandoff :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -3465,13 +3522,20 @@ INSERT INTO platform_mcp_onboarding_milestones (
     connection_generation,
     project_id,
     attempt_id
-) VALUES (
+)
+SELECT
     $1,
     $2,
     $3,
     $4,
     $5,
     $6
+WHERE EXISTS (
+    SELECT 1
+    FROM projects AS project
+    WHERE project.id = $5
+      AND project.organization_id = $1
+      AND project.deleted IS FALSE
 )
 ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
 WHERE attempt_id IS NOT NULL
@@ -3977,11 +4041,18 @@ SET plugin_server_id = $1,
     connection_id = $5,
     connection_generation = $6,
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND organization_id = $8
-  AND project_id = $9
-  AND registration_id = $10
-  AND default_plugin_id = $11
+WHERE platform_mcp_distributions.id = $7
+  AND platform_mcp_distributions.organization_id = $8
+  AND platform_mcp_distributions.project_id = $9
+  AND platform_mcp_distributions.registration_id = $10
+  AND platform_mcp_distributions.default_plugin_id = $11
+  AND EXISTS (
+      SELECT 1
+      FROM projects AS project
+      WHERE project.id = platform_mcp_distributions.project_id
+        AND project.organization_id = platform_mcp_distributions.organization_id
+        AND project.deleted IS FALSE
+  )
 RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
 `
 
@@ -4039,12 +4110,19 @@ UPDATE platform_mcp_distributions
 SET publication_state = $1,
     publication_updated_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE id = $2
-  AND organization_id = $3
-  AND project_id = $4
-  AND registration_id = $5
-  AND default_plugin_id = $6
-  AND version = $7
+WHERE platform_mcp_distributions.id = $2
+  AND platform_mcp_distributions.organization_id = $3
+  AND platform_mcp_distributions.project_id = $4
+  AND platform_mcp_distributions.registration_id = $5
+  AND platform_mcp_distributions.default_plugin_id = $6
+  AND platform_mcp_distributions.version = $7
+  AND EXISTS (
+      SELECT 1
+      FROM projects AS project
+      WHERE project.id = platform_mcp_distributions.project_id
+        AND project.organization_id = platform_mcp_distributions.organization_id
+        AND project.deleted IS FALSE
+  )
 RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, created_at, updated_at
 `
 

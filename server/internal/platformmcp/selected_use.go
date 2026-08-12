@@ -37,7 +37,7 @@ func (r *SelectedUseRecorder) RecordSuccessfulToolCall(ctx context.Context, obse
 		return
 	}
 
-	_ = r.record(context.WithoutCancel(ctx), observation)
+	_ = r.record(ctx, observation)
 }
 
 func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallobserver.SuccessObservation) error {

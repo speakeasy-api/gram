@@ -20,6 +20,8 @@ type PlatformMCPSelectedUseInterceptor struct {
 	now      func() time.Time
 }
 
+const selectedUseRecordingTimeout = 5 * time.Second
+
 var _ proxy.ToolsCallResponseInterceptor = (*PlatformMCPSelectedUseInterceptor)(nil)
 
 func NewPlatformMCPSelectedUseInterceptor(recorder toolcallobserver.SuccessRecorder, identity proxy.ServerIdentity) *PlatformMCPSelectedUseInterceptor {
@@ -42,13 +44,20 @@ func (i *PlatformMCPSelectedUseInterceptor) InterceptToolsCallResponse(ctx conte
 	if err != nil || mcpServerID == uuid.Nil {
 		return nil
 	}
-	go i.recorder.RecordSuccessfulToolCall(context.WithoutCancel(ctx), toolcallobserver.SuccessObservation{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         authCtx.UserID,
-		ProjectID:      *authCtx.ProjectID,
-		MCPServerID:    mcpServerID,
-		ToolName:       call.Request.Params.Name,
-		SucceededAt:    i.now().UTC(),
-	})
+	go func() {
+		recordingCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			selectedUseRecordingTimeout,
+		)
+		defer cancel()
+		i.recorder.RecordSuccessfulToolCall(recordingCtx, toolcallobserver.SuccessObservation{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			UserID:         authCtx.UserID,
+			ProjectID:      *authCtx.ProjectID,
+			MCPServerID:    mcpServerID,
+			ToolName:       call.Request.Params.Name,
+			SucceededAt:    i.now().UTC(),
+		})
+	}()
 	return nil
 }

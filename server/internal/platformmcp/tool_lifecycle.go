@@ -38,6 +38,12 @@ func registerSetupHandoffTool(server *mcp.Server, registrations *RegistrationSer
 		}
 		setupInput := IssueSetupHandoffInput(input)
 		if isBrowserCatalogProviderKey(input.ProviderKey) {
+			if err := registrations.budgets.Handoff.Allow(ctx, principal); err != nil {
+				if budgetResult, ok := operationBudgetToolResult(err); ok {
+					return budgetResult, GetSetupHandoffToolOutput{}, nil
+				}
+				return nil, GetSetupHandoffToolOutput{}, err
+			}
 			setupURL, err := registrations.DashboardSetupURL(ctx, principal, setupInput)
 			if err != nil {
 				return nil, GetSetupHandoffToolOutput{}, err

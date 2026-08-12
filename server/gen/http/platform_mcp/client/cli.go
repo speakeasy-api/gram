@@ -91,31 +91,6 @@ func BuildRecordAgentConfigurationCopiedPayload(platformMcpRecordAgentConfigurat
 	return v, nil
 }
 
-// BuildRegisterOnboardingCandidatePayload builds the payload for the
-// platformMcp registerOnboardingCandidate endpoint from CLI flags.
-func BuildRegisterOnboardingCandidatePayload(platformMcpRegisterOnboardingCandidateBody string, platformMcpRegisterOnboardingCandidateSessionToken string) (*platformmcp.RegisterOnboardingCandidatePayload, error) {
-	var err error
-	var body RegisterOnboardingCandidateRequestBody
-	{
-		err = json.Unmarshal([]byte(platformMcpRegisterOnboardingCandidateBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"project_slug\": \"abc123\"\n   }'")
-		}
-	}
-	var sessionToken *string
-	{
-		if platformMcpRegisterOnboardingCandidateSessionToken != "" {
-			sessionToken = &platformMcpRegisterOnboardingCandidateSessionToken
-		}
-	}
-	v := &platformmcp.RegisterOnboardingCandidatePayload{
-		ProjectSlug: body.ProjectSlug,
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
 // BuildStartOnboardingSetupPayload builds the payload for the platformMcp
 // startOnboardingSetup endpoint from CLI flags.
 func BuildStartOnboardingSetupPayload(platformMcpStartOnboardingSetupSessionToken string) (*platformmcp.StartOnboardingSetupPayload, error) {

@@ -4,13 +4,20 @@ import {
   AlertTitle,
   ErrorAlert,
 } from "@/components/ui/Alert";
-import { Check, Circle } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import {
   invalidatePlatformMCPOnboarding,
   usePlatformMCPOnboarding,
 } from "@gram/client/react-query/platformMCPOnboarding.js";
 
+import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ClientFamily } from "@gram/client/models/components/recordinstallintentrequestbody.js";
@@ -22,6 +29,7 @@ import type { PlatformMCPOnboardingState } from "@gram/client/models/components/
 import { RequireScope } from "@/components/require-scope";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useDismissPlatformMCPOnboardingMutation } from "@gram/client/react-query/dismissPlatformMCPOnboarding.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -90,6 +98,7 @@ export function PlatformMCPOnboardingContent({
   const [setupError, setSetupError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [disableConfirmationOpen, setDisableConfirmationOpen] = useState(false);
+  const [setupSheetOpen, setSetupSheetOpen] = useState(false);
   const onboarding = usePlatformMCPOnboarding(
     { gramSession: "" },
     { sessionHeaderGramSession: "" },
@@ -270,132 +279,69 @@ export function PlatformMCPOnboardingContent({
       </Page.Section>
 
       <section
-        className="rounded-xl border bg-card p-6"
+        className="border bg-card p-6"
         aria-labelledby="platform-mcp-setup"
       >
-        <div className="mb-5">
-          <Text variant="subheading" id="platform-mcp-setup">
-            {showManagement
-              ? "Set up another agent"
-              : "Set up Speakeasy AICP Platform MCP"}
-          </Text>
-          <Text muted small className="mt-2 max-w-2xl">
-            {showManagement
-              ? "Start a separate resumable checklist for another agent in this organization."
-              : "Connect an agent, choose a reviewed MCP server, complete any required setup, and add it to the selected project’s existing Default plugin."}
-          </Text>
-        </div>
-
-        {!state.workflowActive ? (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <Text variant="subheading" id="platform-mcp-setup">
+              {showManagement
+                ? "Set up another agent"
+                : "Set up Speakeasy AICP Platform MCP"}
+            </Text>
+            <Text muted small className="mt-2 max-w-2xl">
+              {showManagement
+                ? "Start a separate resumable checklist for another agent in this organization."
+                : "Connect an agent, choose a reviewed MCP server, complete any required setup, and add it to the selected project's existing Default plugin."}
+            </Text>
+          </div>
+          {!state.workflowActive ? (
             <Button
               disabled={isMutating}
-              onClick={() =>
-                start.mutate({ security: { sessionHeaderGramSession: "" } })
-              }
+              onClick={() => {
+                setSetupSheetOpen(true);
+                start.mutate({ security: { sessionHeaderGramSession: "" } });
+              }}
             >
               <Button.Text>Start setup</Button.Text>
             </Button>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            <div>
-              <Text small className="font-medium">
-                Setup progress
-              </Text>
-              <Text muted small className="mt-1">
-                Complete each step with your agent before Platform MCP
-                management becomes available.
-              </Text>
-            </div>
-            <OnboardingProgress
-              state={state}
-              currentProjectSlug={currentProjectSlug}
-            />
-            <Tabs
-              value={activeClient.id}
-              onValueChange={(value) => {
-                const client = clients.find(
-                  (candidate) => candidate.id === value,
-                );
-                if (!client || client.id === activeClient.id) return;
-                selectClient.mutate({
-                  security: { sessionHeaderGramSession: "" },
-                  request: {
-                    recordInstallIntentRequestBody: { clientFamily: client.id },
-                  },
-                });
-              }}
-              className="gap-5"
-            >
-              <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-                {clients.map((client) => (
-                  <TabsTrigger
-                    key={client.id}
-                    value={client.id}
-                    disabled={isMutating}
-                  >
-                    {client.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {clients.map((client) => (
-                <TabsContent key={client.id} value={client.id}>
-                  <ManualInstallCard
-                    client={client}
-                    state={state}
-                    currentProjectSlug={currentProjectSlug}
-                    onConfigurationCopied={() =>
-                      recordConfigurationCopied.mutate({
-                        security: { sessionHeaderGramSession: "" },
-                      })
-                    }
-                  />
-                </TabsContent>
-              ))}
-            </Tabs>
-          </div>
-        )}
+          ) : (
+            <Button onClick={() => setSetupSheetOpen(true)}>
+              <Button.Text>Open setup checklist</Button.Text>
+            </Button>
+          )}
+        </div>
       </section>
 
-      {state.registrationComplete && state.readinessState !== "ready" && (
-        <Alert>
-          <div>
-            <AlertTitle>Continue secure setup</AlertTitle>
-            <AlertDescription>
-              The agent registered the selected server privately. On the next
-              page, follow the available setup action. If no authorization
-              action is shown, attach the required identity provider first. Then
-              return to the agent to verify readiness and distribute it.
-            </AlertDescription>
-          </div>
-          <Button
-            className="self-start"
-            disabled={isMutating}
-            onClick={() => void continueSecureSetup()}
-          >
-            <Button.Text>Continue secure setup</Button.Text>
-          </Button>
-        </Alert>
-      )}
-
-      {setupError && (
-        <ErrorAlert title="Secure setup unavailable" error={setupError} />
-      )}
-
       {state.workflowActive && (
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            variant="tertiary"
-            disabled={isMutating}
-            onClick={() =>
-              dismiss.mutate({ security: { sessionHeaderGramSession: "" } })
-            }
-          >
-            <Button.Text>Dismiss setup checklist</Button.Text>
-          </Button>
-        </div>
+        <PlatformMCPSetupSheet
+          open={setupSheetOpen}
+          onOpenChange={setSetupSheetOpen}
+          state={state}
+          currentProjectSlug={currentProjectSlug}
+          activeClient={activeClient}
+          isMutating={isMutating}
+          setupError={setupError}
+          onClientChange={(client) => {
+            if (client.id === activeClient.id) return;
+            selectClient.mutate({
+              security: { sessionHeaderGramSession: "" },
+              request: {
+                recordInstallIntentRequestBody: { clientFamily: client.id },
+              },
+            });
+          }}
+          onConfigurationCopied={() => {
+            setSetupSheetOpen(true);
+            recordConfigurationCopied.mutate({
+              security: { sessionHeaderGramSession: "" },
+            });
+          }}
+          onContinueSecureSetup={() => void continueSecureSetup()}
+          onDismiss={() =>
+            dismiss.mutate({ security: { sessionHeaderGramSession: "" } })
+          }
+        />
       )}
 
       <Dialog
@@ -652,9 +598,9 @@ function ManualInstallCard({
         <div>
           <Text variant="subheading">Set up {client.label}</Text>
           <Text muted small className="mt-1 max-w-2xl">
-            Setup instructions TBD until distribution implemented. Copy this
-            complete JSON object into your client&apos;s MCP configuration, then
-            restart the client.
+            Copy this complete JSON object into your client&apos;s MCP
+            configuration, then restart the client to authenticate and continue
+            the guided reviewed-MCP setup.
           </Text>
         </div>
 
@@ -717,90 +663,250 @@ function CopyValue({
   );
 }
 
-function OnboardingProgress({
+type PlatformMCPClient = (typeof clients)[number];
+
+type PlatformMCPStep = {
+  title: string;
+  complete: boolean;
+};
+
+function PlatformMCPSetupSheet({
+  open,
+  onOpenChange,
   state,
   currentProjectSlug,
+  activeClient,
+  isMutating,
+  setupError,
+  onClientChange,
+  onConfigurationCopied,
+  onContinueSecureSetup,
+  onDismiss,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   state: PlatformMCPOnboardingState;
   currentProjectSlug?: string;
+  activeClient: PlatformMCPClient;
+  isMutating: boolean;
+  setupError: string | null;
+  onClientChange: (client: PlatformMCPClient) => void;
+  onConfigurationCopied: () => void;
+  onContinueSecureSetup: () => void;
+  onDismiss: () => void;
 }): JSX.Element {
-  return (
-    <div className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-2 2xl:grid-cols-3">
-      <VerificationRow
-        complete={state.agentConfigurationCopied}
-        label="1. Configure your agent"
-        detail="Copy the Speakeasy AICP Platform MCP configuration, add it to your agent, then restart the agent."
-      />
-      <VerificationRow
-        complete={state.connectionAuthorized}
-        label="2. Authenticate Speakeasy AICP Platform MCP"
-        detail={
-          state.connectionAuthorized
-            ? "Your agent is signed in to Speakeasy AICP Platform MCP."
-            : "Sign in when your agent opens Speakeasy, then run the suggested prompt."
-        }
-      />
-      <VerificationRow
-        complete={state.catalogExplored}
-        label="3. Explore available MCP servers in the MCP Catalogue"
-        detail={
-          currentProjectSlug
-            ? `Ask your agent to show the MCP Catalogue, then choose one server for ${currentProjectSlug}.`
-            : "Ask your agent to show the MCP Catalogue, then choose a server and project."
-        }
-      />
-      <VerificationRow
-        complete={state.registrationComplete}
-        label="4. Add it to the current project"
-        detail="After you choose an option, your agent registers it privately for the current project. It is added to the existing Default plugin only after it is ready."
-      />
-      <VerificationRow
-        complete={state.distributionAttached}
-        label="5. Add the MCP server to the Default plugin"
-        detail="After the selected server is ready, have your agent add it to this project's existing Default plugin."
-      />
-    </div>
+  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(
+    null,
   );
-}
+  const steps: PlatformMCPStep[] = [
+    { title: "Configure agent", complete: state.agentConfigurationCopied },
+    {
+      title: "Authenticate Platform MCP",
+      complete: state.connectionAuthorized,
+    },
+    { title: "Explore MCP catalog", complete: state.catalogExplored },
+    { title: "Register for project", complete: state.registrationComplete },
+    {
+      title: "Add to Default plugin",
+      complete: state.distributionAttached,
+    },
+  ];
+  const firstIncompleteStepIndex = steps.findIndex((step) => !step.complete);
+  const currentStepIndex =
+    selectedStepIndex ??
+    (firstIncompleteStepIndex === -1
+      ? steps.length - 1
+      : firstIncompleteStepIndex);
+  const currentStep = steps[currentStepIndex]!;
 
-function VerificationRow({
-  complete,
-  label,
-  detail,
-}: {
-  complete: boolean;
-  label: string;
-  detail: string;
-}): JSX.Element {
+  const showStep = (): JSX.Element => {
+    switch (currentStepIndex) {
+      case 0:
+        return (
+          <>
+            <Text muted small>
+              Copy the configuration for your agent, add it to that agent, and
+              restart it. Copying the configuration records this setup step.
+            </Text>
+            <Tabs
+              value={activeClient.id}
+              onValueChange={(value) => {
+                const client = clients.find(
+                  (candidate) => candidate.id === value,
+                );
+                if (client) onClientChange(client);
+              }}
+              className="gap-5"
+            >
+              <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                {clients.map((client) => (
+                  <TabsTrigger
+                    key={client.id}
+                    value={client.id}
+                    disabled={isMutating}
+                  >
+                    {client.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <TabsContent value={activeClient.id}>
+                <ManualInstallCard
+                  client={activeClient}
+                  state={state}
+                  currentProjectSlug={currentProjectSlug}
+                  onConfigurationCopied={onConfigurationCopied}
+                />
+              </TabsContent>
+            </Tabs>
+          </>
+        );
+      case 1:
+        return (
+          <>
+            <Text muted small>
+              Open your restarted agent and sign in when it opens Speakeasy AICP
+              Platform MCP. Then use the prompt below to continue with the
+              reviewed setup flow.
+            </Text>
+            <CopyValue
+              label="Suggested first prompt"
+              value={starterPrompt(currentProjectSlug)}
+            />
+          </>
+        );
+      case 2:
+        return (
+          <>
+            <Text muted small>
+              Ask your authenticated agent to show reviewed MCP catalog entries,
+              inspect the option you choose, and collect only its declared
+              non-secret configuration.
+            </Text>
+            <CopyValue
+              label="Suggested catalog prompt"
+              value={starterPrompt(currentProjectSlug)}
+            />
+          </>
+        );
+      case 3:
+        return (
+          <>
+            <Text muted small>
+              After you explicitly choose a reviewed entry, your agent registers
+              it privately for {currentProjectSlug ?? "the selected project"}.
+              This does not attach the server to a plugin yet.
+            </Text>
+            <CopyValue
+              label="Suggested registration prompt"
+              value={starterPrompt(currentProjectSlug)}
+            />
+          </>
+        );
+      default:
+        return (
+          <>
+            {state.readinessState !== "ready" ? (
+              <Alert>
+                <div>
+                  <AlertTitle>Continue secure setup</AlertTitle>
+                  <AlertDescription>
+                    The agent registered the selected server privately. On the
+                    next page, follow the available setup action. If no
+                    authorization action is shown, attach the required identity
+                    provider first. Then return to the agent to verify readiness
+                    and distribute it.
+                  </AlertDescription>
+                </div>
+                <Button
+                  className="self-start"
+                  disabled={isMutating}
+                  onClick={onContinueSecureSetup}
+                >
+                  <Button.Text>Continue secure setup</Button.Text>
+                </Button>
+              </Alert>
+            ) : (
+              <>
+                <Text muted small>
+                  The selected server is ready. Ask your agent to add it only to{" "}
+                  {currentProjectSlug ?? "the selected project's"} existing
+                  Default plugin.
+                </Text>
+                <CopyValue
+                  label="Suggested distribution prompt"
+                  value={starterPrompt(currentProjectSlug)}
+                />
+              </>
+            )}
+            {setupError && (
+              <ErrorAlert title="Secure setup unavailable" error={setupError} />
+            )}
+          </>
+        );
+    }
+  };
+
   return (
-    <div className="flex h-full items-start gap-2">
-      {complete ? (
-        <Check
-          className="mt-0.5 h-4 w-4 shrink-0 text-green-600"
-          aria-hidden="true"
-        />
-      ) : (
-        <Circle
-          className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-          aria-hidden="true"
-        />
-      )}
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Text small className="font-medium">
-            {label}
-          </Text>
-          {complete && (
-            <Badge variant="success" size="sm" className="shrink-0">
-              Complete
-            </Badge>
-          )}
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
+      >
+        <SheetHeader className="sr-only">
+          <SheetTitle>Set up Speakeasy AICP Platform MCP</SheetTitle>
+          <SheetDescription>
+            Complete Platform MCP setup one lifecycle step at a time.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
+          {steps.map((step, index) => (
+            <button
+              key={step.title}
+              type="button"
+              disabled={index >= currentStepIndex}
+              onClick={() => setSelectedStepIndex(index)}
+              className={cn(
+                "h-1 rounded-full transition-all",
+                index === currentStepIndex
+                  ? "bg-foreground w-6"
+                  : index < currentStepIndex
+                    ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
+                    : "bg-border w-4",
+              )}
+              aria-label={`Step ${index + 1}: ${step.title}${step.complete ? ", complete" : ""}`}
+            />
+          ))}
+          <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
+            {currentStepIndex + 1}/{steps.length}
+          </span>
         </div>
-        <Text muted small>
-          {detail}
-        </Text>
-      </div>
-    </div>
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <p className="text-eyebrow">Step {currentStepIndex + 1}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-display-xs font-thin">{currentStep.title}</h2>
+            {currentStep.complete && (
+              <Badge variant="success" size="sm">
+                Complete
+              </Badge>
+            )}
+          </div>
+          <div className="mt-5 space-y-5">{showStep()}</div>
+        </div>
+        <div className="border-t px-6 py-4">
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={isMutating}
+            onClick={onDismiss}
+          >
+            <Button.LeftIcon>
+              <ArrowLeft className="h-3 w-3" />
+            </Button.LeftIcon>
+            <Button.Text>Dismiss setup checklist</Button.Text>
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

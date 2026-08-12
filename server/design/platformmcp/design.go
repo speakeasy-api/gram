@@ -119,24 +119,6 @@ var _ = Service("platformMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RecordPlatformMCPAgentConfigurationCopied"}`)
 	})
 
-	Method("registerOnboardingCandidate", func() {
-		Description("Register the server-configured local onboarding candidate for one exact project slug. The browser cannot select provider, catalog, remote URL, registration, workflow, or connection identity.")
-		Payload(func() {
-			Attribute("project_slug", String, "Exact eligible project slug.")
-			Required("project_slug")
-			security.SessionPayload()
-		})
-		Result(OnboardingState)
-		HTTP(func() {
-			POST("/rpc/platformMcp.registerOnboardingCandidate")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "registerPlatformMCPOnboardingCandidate")
-		Meta("openapi:extension:x-speakeasy-name-override", "registerOnboardingCandidate")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RegisterPlatformMCPOnboardingCandidate"}`)
-	})
-
 	Method("startOnboardingSetup", func() {
 		Description("Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.")
 		Payload(func() { security.SessionPayload() })

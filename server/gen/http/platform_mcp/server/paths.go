@@ -27,11 +27,6 @@ func RecordAgentConfigurationCopiedPlatformMcpPath() string {
 	return "/rpc/platformMcp.recordAgentConfigurationCopied"
 }
 
-// RegisterOnboardingCandidatePlatformMcpPath returns the URL path to the platformMcp service registerOnboardingCandidate HTTP endpoint.
-func RegisterOnboardingCandidatePlatformMcpPath() string {
-	return "/rpc/platformMcp.registerOnboardingCandidate"
-}
-
 // StartOnboardingSetupPlatformMcpPath returns the URL path to the platformMcp service startOnboardingSetup HTTP endpoint.
 func StartOnboardingSetupPlatformMcpPath() string {
 	return "/rpc/platformMcp.startOnboardingSetup"

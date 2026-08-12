@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -73,7 +74,11 @@ func (d CatalogDetails) resolveConfiguration(values CatalogConfigurationValues) 
 		if len(field.Choices) > 0 && !containsString(field.Choices, value) {
 			return resolvedCatalogConfiguration{}, ErrCatalogConfigurationRejected
 		}
-		remoteURL = strings.ReplaceAll(remoteURL, "{"+field.Name+"}", url.PathEscape(value))
+		placeholder := "{" + field.Name + "}"
+		if !strings.Contains(remoteURL, placeholder) {
+			return resolvedCatalogConfiguration{}, ErrCatalogConfigurationRejected
+		}
+		remoteURL = strings.ReplaceAll(remoteURL, placeholder, url.PathEscape(value))
 	}
 	if hasUnresolvedRemoteTemplate(remoteURL) || !validCatalogRemoteTemplate(remoteURL) {
 		return resolvedCatalogConfiguration{}, ErrCatalogConfigurationRejected
@@ -102,6 +107,9 @@ func (d CatalogDetails) resolveConfiguration(values CatalogConfigurationValues) 
 		if value == "" && field.Required {
 			return resolvedCatalogConfiguration{}, ErrCatalogConfigurationRejected
 		}
+		if strings.ContainsAny(value, "\r\n") {
+			return resolvedCatalogConfiguration{}, ErrCatalogConfigurationRejected
+		}
 		if value != "" {
 			resolved.headers = append(resolved.headers, resolvedCatalogHeader{
 				name:        field.Name,
@@ -115,10 +123,5 @@ func (d CatalogDetails) resolveConfiguration(values CatalogConfigurationValues) 
 }
 
 func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, want)
 }

@@ -480,6 +480,9 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 			ConnectionID:         input.connectionID,
 			ConnectionGeneration: input.connectionGeneration,
 		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return repo.PlatformMcpDistribution{}, ErrDistributionConflict
+		}
 		if err != nil {
 			return repo.PlatformMcpDistribution{}, fmt.Errorf("create platform mcp distribution: %w", err)
 		}
@@ -498,6 +501,9 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 		RegistrationID:       input.registrationID,
 		DefaultPluginID:      input.defaultPluginID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.PlatformMcpDistribution{}, ErrDistributionConflict
+	}
 	if err != nil {
 		return repo.PlatformMcpDistribution{}, fmt.Errorf("update platform mcp distribution: %w", err)
 	}

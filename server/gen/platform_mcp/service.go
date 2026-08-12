@@ -28,10 +28,6 @@ type Service interface {
 	// Record that the user copied the displayed Platform MCP configuration or
 	// completed an equivalent supported agent-setup action.
 	RecordAgentConfigurationCopied(context.Context, *RecordAgentConfigurationCopiedPayload) (res *PlatformMCPOnboardingState, err error)
-	// Register the server-configured local onboarding candidate for one exact
-	// project slug. The browser cannot select provider, catalog, remote URL,
-	// registration, workflow, or connection identity.
-	RegisterOnboardingCandidate(context.Context, *RegisterOnboardingCandidatePayload) (res *PlatformMCPOnboardingState, err error)
 	// Return the secure setup continuation for the workflow-bound registration.
 	// Browser Catalogue registrations return their existing same-origin dashboard
 	// Inspect page; the local fixture returns a one-time handoff for its synthetic
@@ -76,7 +72,7 @@ const ServiceName = "platformMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"getOnboarding", "startOnboarding", "recordInstallIntent", "recordAgentConfigurationCopied", "registerOnboardingCandidate", "startOnboardingSetup", "recheckOnboardingReadiness", "distributeOnboardingCandidate", "removeOnboardingDistribution", "repairOnboardingPublication", "dismissOnboarding"}
+var MethodNames = [10]string{"getOnboarding", "startOnboarding", "recordInstallIntent", "recordAgentConfigurationCopied", "startOnboardingSetup", "recheckOnboardingReadiness", "distributeOnboardingCandidate", "removeOnboardingDistribution", "repairOnboardingPublication", "dismissOnboarding"}
 
 // DismissOnboardingPayload is the payload type of the platformMcp service
 // dismissOnboarding method.
@@ -191,14 +187,6 @@ type RecordAgentConfigurationCopiedPayload struct {
 type RecordInstallIntentPayload struct {
 	// Manual-install client family.
 	ClientFamily string
-	SessionToken *string
-}
-
-// RegisterOnboardingCandidatePayload is the payload type of the platformMcp
-// service registerOnboardingCandidate method.
-type RegisterOnboardingCandidatePayload struct {
-	// Exact eligible project slug.
-	ProjectSlug  string
 	SessionToken *string
 }
 

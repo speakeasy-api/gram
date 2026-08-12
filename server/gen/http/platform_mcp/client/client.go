@@ -33,10 +33,6 @@ type Client struct {
 	// to the recordAgentConfigurationCopied endpoint.
 	RecordAgentConfigurationCopiedDoer goahttp.Doer
 
-	// RegisterOnboardingCandidate Doer is the HTTP client used to make requests to
-	// the registerOnboardingCandidate endpoint.
-	RegisterOnboardingCandidateDoer goahttp.Doer
-
 	// StartOnboardingSetup Doer is the HTTP client used to make requests to the
 	// startOnboardingSetup endpoint.
 	StartOnboardingSetupDoer goahttp.Doer
@@ -85,7 +81,6 @@ func NewClient(
 		StartOnboardingDoer:                doer,
 		RecordInstallIntentDoer:            doer,
 		RecordAgentConfigurationCopiedDoer: doer,
-		RegisterOnboardingCandidateDoer:    doer,
 		StartOnboardingSetupDoer:           doer,
 		RecheckOnboardingReadinessDoer:     doer,
 		DistributeOnboardingCandidateDoer:  doer,
@@ -191,30 +186,6 @@ func (c *Client) RecordAgentConfigurationCopied() goa.Endpoint {
 		resp, err := c.RecordAgentConfigurationCopiedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("platformMcp", "recordAgentConfigurationCopied", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RegisterOnboardingCandidate returns an endpoint that makes HTTP requests to
-// the platformMcp service registerOnboardingCandidate server.
-func (c *Client) RegisterOnboardingCandidate() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRegisterOnboardingCandidateRequest(c.encoder)
-		decodeResponse = DecodeRegisterOnboardingCandidateResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRegisterOnboardingCandidateRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RegisterOnboardingCandidateDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("platformMcp", "registerOnboardingCandidate", err)
 		}
 		return decodeResponse(resp)
 	}
