@@ -83,6 +83,7 @@ import { useDensity } from "@/elements/hooks/useDensity";
 import { useDictationLevels } from "@/elements/hooks/useDictationLevels";
 import { useElements } from "@/elements/hooks/useElements";
 import { isLocalThreadId } from "@/elements/hooks/useGramThreadListAdapter";
+import { usePromptHistory } from "@/elements/hooks/usePromptHistory";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { useRecordCassette } from "@/elements/hooks/useRecordCassette";
 import { useThemeProps } from "@/elements/hooks/useThemeProps";
@@ -671,10 +672,54 @@ export const Composer: FC<ComposerProps> = ({
     setActiveSlashIndex(0);
   }, [slashQuery]);
 
+  // Terminal-style prompt recall. The draft text lives on the runtime, so the
+  // ref is what the submit handler reads: the runtime clears the composer as
+  // part of sending, and refs still hold the pre-send render's value there.
+  const promptHistory = usePromptHistory(config.projectSlug);
+  const composerTextRef = useRef(composerText);
+  composerTextRef.current = composerText;
+
   const runSlashCommand = (command: ComposerSlashCommand) => {
     const composer = aui.composer();
     composer.setText(command.prompt);
     composer.send();
+    // Sends straight through the runtime, so the form never submits and the
+    // prompt would otherwise be missing from recall.
+    promptHistory.record(command.prompt);
+  };
+
+  const recallPrompt = (
+    textarea: HTMLTextAreaElement,
+    direction: "up" | "down",
+  ) => {
+    const recalled = promptHistory.navigate(direction, textarea.value);
+    if (recalled === null) return false;
+    aui.composer().setText(recalled);
+    // The composer is controlled, so the caret can only be placed once the
+    // recalled text has actually been painted.
+    requestAnimationFrame(() => {
+      textarea.setSelectionRange(recalled.length, recalled.length);
+    });
+    return true;
+  };
+
+  /**
+   * Arrow keys belong to the textarea first: recall only takes over when the
+   * caret has nowhere left to go in that direction (first line for Up, last
+   * line for Down), or when the text on screen is one we just recalled — that
+   * keeps a multi-line prompt from trapping the walk after one step.
+   */
+  const canRecall = (
+    textarea: HTMLTextAreaElement,
+    direction: "up" | "down",
+  ) => {
+    const { value, selectionStart, selectionEnd } = textarea;
+    // A live selection is the user placing their cursor, never a recall.
+    if (selectionStart !== selectionEnd) return false;
+    if (promptHistory.isShowingRecalled(value)) return true;
+    return direction === "up"
+      ? !value.slice(0, selectionStart).includes("\n")
+      : !value.slice(selectionEnd).includes("\n");
   };
 
   if (components.Composer) {
@@ -723,6 +768,9 @@ export const Composer: FC<ComposerProps> = ({
           ref={composerRootRef}
           // Capture: the menu owns Up/Down/Enter while it is open, before the
           // textarea inserts a newline or the composer sends the raw query.
+          onSubmit={() => {
+            promptHistory.record(composerTextRef.current);
+          }}
           onKeyDownCapture={(event) => {
             if (!slashOpen) return;
             if (event.key === "ArrowDown") {
@@ -790,6 +838,31 @@ export const Composer: FC<ComposerProps> = ({
           )}
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
+            // Bubble phase, on the textarea itself: the slash menu (form,
+            // capture) and the @-mention menu (textarea, capture + stopPropagation)
+            // both get the arrow keys first, so recall only sees the ones nobody
+            // else claimed.
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+              // Modified arrows select, jump by word, or move the caret to the
+              // ends of the field — all of them the textarea's to handle.
+              if (
+                event.shiftKey ||
+                event.altKey ||
+                event.metaKey ||
+                event.ctrlKey
+              ) {
+                return;
+              }
+              // The slash menu owns the arrows while it is open. It runs in
+              // capture on the form and calls preventDefault, but the event
+              // still reaches this handler.
+              if (slashOpen || isDictating || isReplay) return;
+              const textarea = event.currentTarget;
+              const direction = event.key === "ArrowUp" ? "up" : "down";
+              if (!canRecall(textarea, direction)) return;
+              if (recallPrompt(textarea, direction)) event.preventDefault();
+            }}
             className={cn(
               "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-4 pt-0.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-0",
               d("h-input"),
