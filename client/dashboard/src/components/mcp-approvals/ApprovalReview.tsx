@@ -22,7 +22,13 @@ import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/
 import { useStartMcpResearchMutation } from "@gram/client/react-query/startMcpResearch.js";
 import { RequireScope } from "@/components/require-scope";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  RefreshCw,
+  TriangleAlert,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -234,9 +240,14 @@ function EvidenceChangedNotice({
   const advisories = diff.advisoriesAdded ?? [];
 
   return (
-    <section className="border-warning space-y-2.5 border p-3 text-xs">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-medium">Changed since approval</p>
+    <section className="border-warning-default bg-warning/10 border-l-warning-default space-y-2.5 border border-l-4 p-4 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-default-warning flex items-center gap-2">
+          <TriangleAlert className="size-4 shrink-0" />
+          <p className="text-sm font-semibold tracking-wide uppercase">
+            Changed since approval
+          </p>
+        </div>
         {changedAt && (
           <span className="text-muted-foreground shrink-0">
             first noticed{" "}
@@ -244,10 +255,10 @@ function EvidenceChangedNotice({
           </span>
         )}
       </div>
-      <p className="text-muted-foreground">
-        The permission-relevant evidence no longer matches what the standing
-        approval rested on. This is a reason to look again, not a verdict —
-        re-decide below to accept or revoke the change.
+      <p>
+        This server's permission-relevant evidence no longer matches what the
+        standing approval rested on. Look again and re-decide — a new decision
+        accepts or revokes the change.
       </p>
       <div className="space-y-1.5">
         <DiffTermList
