@@ -410,14 +410,77 @@ function AuthoritySection({
 const SCOPE_PREVIEW_COUNT = 4;
 
 /**
+ * Hiding the tail of a list: the state, the slice, and what counts as
+ * collapsible. Every list here that hides one shares this, so the rule that
+ * a list at exactly the preview count shows no toggle is decided once.
+ */
+function useCollapsedPreview<T>(
+  items: T[],
+  previewCount: number,
+): {
+  collapsible: boolean;
+  expanded: boolean;
+  toggle: () => void;
+  visible: T[];
+} {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = items.length > previewCount;
+
+  return {
+    collapsible,
+    expanded,
+    toggle: () => setExpanded((current) => !current),
+    visible: collapsible && !expanded ? items.slice(0, previewCount) : items,
+  };
+}
+
+/**
+ * The control that reveals a hidden tail. The chrome around it differs — a
+ * chip in a wrap of scopes, a footer row under a framed list — but the
+ * accessible contract and the collapse wording are the same wherever it
+ * appears, so they live here rather than in each caller.
+ */
+function MoreToggle({
+  expanded,
+  onToggle,
+  collapsedLabel,
+  className,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  /** What the control says while the tail is hidden. */
+  collapsedLabel: string;
+  className?: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className={cn(
+        "text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs",
+        className,
+      )}
+    >
+      {expanded ? "Show fewer" : collapsedLabel}
+      {expanded ? (
+        <ChevronUp className="size-3" />
+      ) : (
+        <ChevronDown className="size-3" />
+      )}
+    </button>
+  );
+}
+
+/**
  * The wrap of scope chips, with the tail collapsed behind a "+N more" toggle
  * chip once the list exceeds the preview count.
  */
 function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const collapsible = scopes.length > SCOPE_PREVIEW_COUNT;
-  const visible =
-    collapsible && !expanded ? scopes.slice(0, SCOPE_PREVIEW_COUNT) : scopes;
+  const { collapsible, expanded, toggle, visible } = useCollapsedPreview(
+    scopes,
+    SCOPE_PREVIEW_COUNT,
+  );
 
   return (
     <div className="flex flex-wrap gap-1">
@@ -430,24 +493,12 @@ function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
         </span>
       ))}
       {collapsible && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1 px-1.5 py-px text-xs"
-        >
-          {expanded ? (
-            <>
-              Show fewer
-              <ChevronUp className="size-3" />
-            </>
-          ) : (
-            <>
-              +{scopes.length - SCOPE_PREVIEW_COUNT} more
-              <ChevronDown className="size-3" />
-            </>
-          )}
-        </button>
+        <MoreToggle
+          expanded={expanded}
+          onToggle={toggle}
+          collapsedLabel={`+${scopes.length - SCOPE_PREVIEW_COUNT} more`}
+          className="px-1.5 py-px"
+        />
       )}
     </div>
   );
@@ -567,10 +618,10 @@ function CollapsibleList<T>({
   noun: string;
   previewCount?: number;
 }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const collapsible = items.length > previewCount;
-  const visible =
-    collapsible && !expanded ? items.slice(0, previewCount) : items;
+  const { collapsible, expanded, toggle, visible } = useCollapsedPreview(
+    items,
+    previewCount,
+  );
 
   return (
     <div className="border-border border">
@@ -582,24 +633,12 @@ function CollapsibleList<T>({
         ))}
       </ul>
       {collapsible && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-          className="text-muted-foreground hover:text-foreground border-border flex w-full items-center justify-center gap-1 border-t px-3 py-1 text-xs"
-        >
-          {expanded ? (
-            <>
-              Show fewer
-              <ChevronUp className="size-3" />
-            </>
-          ) : (
-            <>
-              Show all {items.length} {noun}
-              <ChevronDown className="size-3" />
-            </>
-          )}
-        </button>
+        <MoreToggle
+          expanded={expanded}
+          onToggle={toggle}
+          collapsedLabel={`Show all ${items.length} ${noun}`}
+          className="border-border w-full justify-center border-t px-3 py-1"
+        />
       )}
     </div>
   );
