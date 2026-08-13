@@ -932,9 +932,7 @@ INSERT INTO platform_mcp_onboarding_milestones (
     @mcp_key,
     @attempt_id
 )
-ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
-WHERE attempt_id IS NOT NULL
-DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- name: RecordPlatformMCPRegistrationSucceeded :exec
 INSERT INTO platform_mcp_onboarding_milestones (
@@ -954,6 +952,4 @@ INSERT INTO platform_mcp_onboarding_milestones (
     @mcp_key,
     @attempt_id
 )
-ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
-WHERE attempt_id IS NOT NULL
-DO NOTHING;
+ON CONFLICT DO NOTHING;
