@@ -231,8 +231,8 @@ type CreateRolePayload struct {
 	SessionToken *string
 	// Display name for the role.
 	Name string
-	// Description of what this role can do.
-	Description string
+	// Optional description of what this role can do.
+	Description *string
 	// Scope grants to assign.
 	Grants []*RoleGrant
 	// Optional member IDs to additionally assign to this role on creation.
