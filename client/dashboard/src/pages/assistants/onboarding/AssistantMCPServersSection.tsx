@@ -447,7 +447,8 @@ function DialogOptionsBody({
   if (isError) {
     return (
       <Text small muted>
-        Couldn't load the project's MCP servers. Close the dialog and try again.
+        Couldn't load the project's MCP servers and toolsets. Close the dialog
+        and try again.
       </Text>
     );
   }
