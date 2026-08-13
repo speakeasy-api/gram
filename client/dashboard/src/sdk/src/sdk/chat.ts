@@ -5,6 +5,7 @@
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
+import { chatGetAssistantSessionSummary } from "../funcs/chatGetAssistantSessionSummary.js";
 import { chatGetWorkUnitsTrend } from "../funcs/chatGetWorkUnitsTrend.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatListSources } from "../funcs/chatListSources.js";
@@ -14,6 +15,7 @@ import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { chatSummarize } from "../funcs/chatSummarize.js";
 import { chatSummarizeToolCall } from "../funcs/chatSummarizeToolCall.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AssistantSessionSummary } from "../models/components/assistantsessionsummary.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
 import { CreditUsageResponseBody } from "../models/components/creditusageresponsebody.js";
@@ -35,6 +37,10 @@ import {
   GenerateTitleRequest,
   GenerateTitleSecurity,
 } from "../models/operations/generatetitle.js";
+import {
+  GetAssistantSessionSummaryRequest,
+  GetAssistantSessionSummarySecurity,
+} from "../models/operations/getassistantsessionsummary.js";
 import {
   GetWorkUnitsTrendRequest,
   GetWorkUnitsTrendSecurity,
@@ -120,6 +126,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GenerateTitleResponseBody> {
     return unwrapAsync(chatGenerateTitle(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getAssistantSessionSummary chat
+   *
+   * @remarks
+   * Get assistant session activity totals for a time range.
+   */
+  async getAssistantSessionSummary(
+    request: GetAssistantSessionSummaryRequest,
+    security?: GetAssistantSessionSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AssistantSessionSummary> {
+    return unwrapAsync(chatGetAssistantSessionSummary(
       this,
       request,
       security,

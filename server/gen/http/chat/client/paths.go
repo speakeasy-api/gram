@@ -12,6 +12,11 @@ func ListChatsChatPath() string {
 	return "/rpc/chat.list"
 }
 
+// GetAssistantSessionSummaryChatPath returns the URL path to the chat service getAssistantSessionSummary HTTP endpoint.
+func GetAssistantSessionSummaryChatPath() string {
+	return "/rpc/chat.getAssistantSessionSummary"
+}
+
 // GetWorkUnitsTrendChatPath returns the URL path to the chat service getWorkUnitsTrend HTTP endpoint.
 func GetWorkUnitsTrendChatPath() string {
 	return "/rpc/chat.getWorkUnitsTrend"

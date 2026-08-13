@@ -766,3 +766,66 @@ func (q *Queries) GetChatSessionFactsByChatIDs(ctx context.Context, arg GetChatS
 	}
 	return result, nil
 }
+
+// ChatMetricsSummary is an exact range aggregate for a set of chat sessions.
+type ChatMetricsSummary struct {
+	TotalTokens int64   `ch:"total_tokens"`
+	TotalCost   float64 `ch:"total_cost"`
+}
+
+// GetChatMetricsSummaryByIDsParams scopes an activity summary to one project,
+// a set of chat ids, and an inclusive event-time range.
+type GetChatMetricsSummaryByIDsParams struct {
+	ProjectID string
+	ChatIDs   []string
+	From      time.Time
+	To        time.Time
+}
+
+// GetChatMetricsSummaryByIDs returns exact usage totals for the requested chats
+// and event-time range. Managed assistant completions are not represented in
+// chat_session_summaries, so this projection aggregates their canonical usage
+// attributes directly without loading individual log records.
+func (q *Queries) GetChatMetricsSummaryByIDs(ctx context.Context, arg GetChatMetricsSummaryByIDsParams) (ChatMetricsSummary, error) {
+	if len(arg.ChatIDs) == 0 {
+		return ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	builder := sq.Select(
+		"toInt64("+totalTokensExpr+") as total_tokens",
+		"toFloat64(sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '')) as total_cost",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.ProjectID).
+		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
+		Where("time_unix_nano >= ?", arg.From.UnixNano()).
+		Where("time_unix_nano <= ?", arg.To.UnixNano())
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("building assistant session usage summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("querying assistant session summary: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return ChatMetricsSummary{}, fmt.Errorf("reading assistant session summary: %w", err)
+		}
+		return ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	var result ChatMetricsSummary
+	if err := rows.ScanStruct(&result); err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("scanning assistant session summary: %w", err)
+	}
+	return result, nil
+}
