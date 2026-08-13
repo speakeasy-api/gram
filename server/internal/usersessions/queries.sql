@@ -549,6 +549,41 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: UpdateUserSessionClientFromCIMD :one
+-- Persists a freshly re-read metadata document onto an EXISTING CIMD row,
+-- scoped by id so it can never insert. The refresh endpoint targets one row
+-- an operator is looking at; persisting through the (issuer, client_id)
+-- upsert instead would re-insert — and thereby silently resurrect — a client
+-- revoked between the refresh's purge and this write, because the conflict
+-- target is a partial unique index that only sees live rows. The guards
+-- mirror UpdateUserSessionClientCIMDCache's; a miss surfaces as no-rows,
+-- which the refresh handler maps to not-found.
+UPDATE user_session_clients
+SET client_name = @client_name,
+    redirect_uris = @redirect_uris,
+    client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetUserSessionClientCIMDFetchedAt :one
+-- Sets client_id_metadata_fetched_at to an explicit timestamp. Every
+-- production writer stamps this column from clock_timestamp(), so a caller
+-- that needs a row whose last successful read is in the past — the refresh
+-- cooldown tests — supplies the aged value here. Guarded to CIMD rows like
+-- the other client_id_metadata_* writers; a miss surfaces as no-rows rather
+-- than silently stamping a DCR row.
+UPDATE user_session_clients
+SET client_id_metadata_fetched_at = @fetched_at
+WHERE id = @id
+  AND client_id_metadata_uri IS NOT NULL
+RETURNING *;
+
 -- name: CreateUserSession :one
 -- user_session_client_id binds the session to the DCR client that minted it.
 -- The /token refresh path requires the same client to refresh; see

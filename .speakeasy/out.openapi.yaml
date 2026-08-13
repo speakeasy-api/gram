@@ -50856,6 +50856,114 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessionClients
+  /rpc/userSessionClients.refreshCIMD:
+    post:
+      description: 'Force a CIMD client''s metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.'
+      operationId: refreshUserSessionClientCIMD
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: refreshUserSessionClientCIMD userSessionClients
+      tags:
+        - userSessionClients
+      x-speakeasy-name-override: refreshCIMD
+      x-speakeasy-react-hook:
+        name: RefreshUserSessionClientCIMD
   /rpc/userSessionClients.revoke:
     post:
       description: 'Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control''s job, not revocation''s.'
@@ -75423,6 +75531,17 @@ components:
           description: The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
         client_id_issued_at:
           type: string
+          format: date-time
+        client_id_metadata_cache_expires_at:
+          type: string
+          description: When the cached metadata document lapses and the next /authorize revalidates it against the host. Null for DCR clients, and null after a refresh purge until the re-read lands.
+          format: date-time
+        client_id_metadata_etag:
+          type: string
+          description: ETag the document host returned on the last full read; sent as If-None-Match when revalidating. Null when the host offers no validator, and null for DCR clients.
+        client_id_metadata_fetched_at:
+          type: string
+          description: When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.
           format: date-time
         client_id_metadata_uri:
           type: string

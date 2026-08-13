@@ -22,6 +22,7 @@ import {
   clientDocumentOrigin,
   userSessionClientSource,
 } from "@/lib/user-session-client-source";
+import { ClientDetailSheet } from "./ClientDetailSheet";
 import { ClientSourceBadge } from "./ClientSourceBadge";
 import { ListStateBoundary } from "./ListStateBoundary";
 import { RevokeClientDialog } from "./RevokeClientDialog";
@@ -73,6 +74,12 @@ export function UserSessionClientsList({
     null,
   );
   const [revokeOpen, setRevokeOpen] = useState(false);
+  // Same lifetime split as the revoke dialog: the target outlives the open
+  // flag so the sheet stays mounted through its close animation.
+  const [detailTarget, setDetailTarget] = useState<UserSessionClient | null>(
+    null,
+  );
+  const [detailOpen, setDetailOpen] = useState(false);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(CLIENT_FILTERS);
   const { hasScope } = useRBAC();
@@ -88,6 +95,11 @@ export function UserSessionClientsList({
   const openRevoke = (client: UserSessionClient) => {
     setRevokeTarget(client);
     setRevokeOpen(true);
+  };
+
+  const openDetail = (client: UserSessionClient) => {
+    setDetailTarget(client);
+    setDetailOpen(true);
   };
 
   const deferredSearch = useDeferredValue(search);
@@ -192,6 +204,10 @@ export function UserSessionClientsList({
           <MoreActions
             actions={[
               {
+                label: "View details",
+                onClick: () => openDetail(client),
+              },
+              {
                 label: "View sessions",
                 onClick: () => onViewSessions(client),
               },
@@ -275,6 +291,7 @@ export function UserSessionClientsList({
             columns={columns}
             data={pageClients}
             rowKey={(client) => client.id}
+            onRowClick={openDetail}
             sort={sort}
             onSortChange={(next) => {
               setSort(next);
@@ -289,6 +306,9 @@ export function UserSessionClientsList({
               <ContextMenu>
                 <ContextMenuTrigger asChild>{rowElement}</ContextMenuTrigger>
                 <ContextMenuContent>
+                  <ContextMenuItem onSelect={() => openDetail(client)}>
+                    View details
+                  </ContextMenuItem>
                   <ContextMenuItem onSelect={() => onViewSessions(client)}>
                     View sessions
                   </ContextMenuItem>
@@ -312,6 +332,15 @@ export function UserSessionClientsList({
           />
         </section>
       </ListStateBoundary>
+
+      {/* One sheet for the table rather than a closed one mounted per row. */}
+      {detailTarget && (
+        <ClientDetailSheet
+          client={detailTarget}
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+        />
+      )}
 
       {/* One dialog for the table rather than a closed one mounted per row. */}
       {revokeTarget && (

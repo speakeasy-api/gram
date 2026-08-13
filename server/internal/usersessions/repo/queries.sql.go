@@ -1518,6 +1518,50 @@ func (q *Queries) RevokeUserSessionConsent(ctx context.Context, arg RevokeUserSe
 	return i, err
 }
 
+const setUserSessionClientCIMDFetchedAt = `-- name: SetUserSessionClientCIMDFetchedAt :one
+UPDATE user_session_clients
+SET client_id_metadata_fetched_at = $1
+WHERE id = $2
+  AND client_id_metadata_uri IS NOT NULL
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+`
+
+type SetUserSessionClientCIMDFetchedAtParams struct {
+	FetchedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Sets client_id_metadata_fetched_at to an explicit timestamp. Every
+// production writer stamps this column from clock_timestamp(), so a caller
+// that needs a row whose last successful read is in the past — the refresh
+// cooldown tests — supplies the aged value here. Guarded to CIMD rows like
+// the other client_id_metadata_* writers; a miss surfaces as no-rows rather
+// than silently stamping a DCR row.
+func (q *Queries) SetUserSessionClientCIMDFetchedAt(ctx context.Context, arg SetUserSessionClientCIMDFetchedAtParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, setUserSessionClientCIMDFetchedAt, arg.FetchedAt, arg.ID)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const softDeleteUserSessionConsentsByIssuerID = `-- name: SoftDeleteUserSessionConsentsByIssuerID :many
 UPDATE user_session_consents AS c
 SET deleted_at = clock_timestamp()
@@ -1683,6 +1727,68 @@ type UpdateUserSessionClientCIMDCacheParams struct {
 // the issuer.
 func (q *Queries) UpdateUserSessionClientCIMDCache(ctx context.Context, arg UpdateUserSessionClientCIMDCacheParams) (UserSessionClient, error) {
 	row := q.db.QueryRow(ctx, updateUserSessionClientCIMDCache, arg.CacheTtlSeconds, arg.ClientIDMetadataEtag, arg.ID)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateUserSessionClientFromCIMD = `-- name: UpdateUserSessionClientFromCIMD :one
+UPDATE user_session_clients
+SET client_name = $1,
+    redirect_uris = $2,
+    client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $3::double precision),
+    client_id_metadata_etag = $4,
+    updated_at = clock_timestamp()
+WHERE id = $5
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND deleted IS FALSE
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateUserSessionClientFromCIMDParams struct {
+	ClientName           string
+	RedirectUris         []string
+	CacheTtlSeconds      float64
+	ClientIDMetadataEtag pgtype.Text
+	ID                   uuid.UUID
+}
+
+// Persists a freshly re-read metadata document onto an EXISTING CIMD row,
+// scoped by id so it can never insert. The refresh endpoint targets one row
+// an operator is looking at; persisting through the (issuer, client_id)
+// upsert instead would re-insert — and thereby silently resurrect — a client
+// revoked between the refresh's purge and this write, because the conflict
+// target is a partial unique index that only sees live rows. The guards
+// mirror UpdateUserSessionClientCIMDCache's; a miss surfaces as no-rows,
+// which the refresh handler maps to not-found.
+func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg UpdateUserSessionClientFromCIMDParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, updateUserSessionClientFromCIMD,
+		arg.ClientName,
+		arg.RedirectUris,
+		arg.CacheTtlSeconds,
+		arg.ClientIDMetadataEtag,
+		arg.ID,
+	)
 	var i UserSessionClient
 	err := row.Scan(
 		&i.ID,
