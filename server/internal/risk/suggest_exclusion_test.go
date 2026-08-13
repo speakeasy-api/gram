@@ -264,6 +264,35 @@ func TestSuggestExclusion_InvalidTwice_FallsBackToHeuristic(t *testing.T) {
 	require.Equal(t, "stop flagging sandbox account ids", result.MatchValue)
 }
 
+// TestSuggestExclusion_UnparseableResponse_NoRetry: the corrective retry
+// prompt carries only the error text, not the model's raw output, so a
+// parse-level failure has nothing to self-correct against — it must skip the
+// retry and fall back after a single call.
+func TestSuggestExclusion_UnparseableResponse_NoRetry(t *testing.T) {
+	t.Parallel()
+	fake := &suggestExclusionCompletionClient{
+		responses: []*openrouter.CompletionResponse{
+			suggestExclusionResponse("not json at all"),
+		},
+		errs:     []error{nil},
+		requests: nil,
+	}
+	ctx, ti := newTestRiskService(t, func(ti *testInstance) { ti.completionClient = fake })
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	result, err := ti.service.SuggestExclusion(ctx, &gen.SuggestExclusionPayload{
+		Prompt: new("jane.doe@acme.com"),
+	})
+	require.NoError(t, err)
+	require.Len(t, fake.requests, 1)
+	require.Equal(t, "exact", result.MatchType)
+	require.Equal(t, "jane.doe@acme.com", result.MatchValue)
+}
+
 // TestSuggestExclusion_TransportError_NoRetry: transport failures are not the
 // model's fault, so they skip the corrective retry and drop straight to the
 // heuristic fallback after a single call.

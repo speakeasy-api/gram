@@ -2848,11 +2848,14 @@ var exclusionMatchTypeAllow = map[string]bool{
 	"entity_type": true,
 }
 
-// errExclusionSuggestionInvalid marks a completion that came back but failed
-// validation (bad match_type, regex that does not compile as RE2, empty
-// value). Distinguishes "the model got it wrong" — worth one corrective
-// retry — from transport failures, which a retry with the same budget is
-// unlikely to fix.
+// errExclusionSuggestionInvalid marks a completion that parsed but failed
+// semantic validation (bad match_type, regex that does not compile as RE2,
+// empty value) — the one failure class where feeding the error back gives
+// the model something it can act on, so it is worth one corrective retry.
+// Transport failures, empty completions, and unparseable JSON stay outside
+// it: the retry prompt carries only the error text, not the model's raw
+// output, so a parse-level failure cannot self-correct and the second call
+// would be wasted.
 var errExclusionSuggestionInvalid = errors.New("invalid exclusion suggestion")
 
 func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []repo.RiskResult, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
@@ -2976,7 +2979,7 @@ func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, project
 
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return nil, fmt.Errorf("%w: empty completion content", errExclusionSuggestionInvalid)
+		return nil, fmt.Errorf("empty completion content")
 	}
 
 	var parsed struct {
@@ -2986,7 +2989,7 @@ func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, project
 		SourceFilter string `json:"source_filter"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, fmt.Errorf("%w: parse llm response: %w", errExclusionSuggestionInvalid, err)
+		return nil, fmt.Errorf("parse llm response: %w", err)
 	}
 
 	parsed.MatchType = strings.ToLower(strings.TrimSpace(parsed.MatchType))
