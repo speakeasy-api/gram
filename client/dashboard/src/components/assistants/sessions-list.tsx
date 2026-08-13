@@ -94,9 +94,15 @@ export function AssistantSessionsList({
             preset={customRange ? null : dateRange}
             customRange={customRange}
             customRangeLabel={customRangeLabel}
-            onPresetChange={setDateRangeParam}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
+            onPresetChange={(preset) =>
+              setDateRangeParam(preset, { tab: "sessions" })
+            }
+            onCustomRangeChange={(rangeFrom, rangeTo, label) =>
+              setCustomRangeParam(rangeFrom, rangeTo, label, {
+                tab: "sessions",
+              })
+            }
+            onClearCustomRange={() => clearCustomRange({ tab: "sessions" })}
           />
         </div>
 
