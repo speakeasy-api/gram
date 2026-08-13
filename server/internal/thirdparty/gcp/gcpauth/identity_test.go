@@ -133,6 +133,13 @@ func TestIdentity_ImpersonationTargetProblemRefusesUnplaceable(t *testing.T) {
 		"person@example.com",
 		"not-an-email",
 		"",
+		// Google-managed service agents live under *.iam.gserviceaccount.com too,
+		// but their domain names a Google namespace rather than a project. Left
+		// unrefused, one belonging to Gram's own project would never match Gram's
+		// project id and would slip past the same-project comparison below.
+		"service-123456789012@gcp-sa-cloudkms.iam.gserviceaccount.com",
+		"service-123456789012@compute-system.iam.gserviceaccount.com",
+		"123456789012@cloudservices.iam.gserviceaccount.com",
 	} {
 		reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), target)
 		require.NoError(t, err, "%q", target)

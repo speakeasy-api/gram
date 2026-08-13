@@ -68,8 +68,12 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid key id").LogError(ctx, logger)
 	}
 
-	// A limiter outage is not a throttle: verify is a read-only probe, so degrade
-	// to allowing rather than blocking the organization on a Redis blip.
+	// Rate limiting here is best effort, and a limiter outage degrades to allowing
+	// rather than blocking every organization's verify on a Redis blip. That is a
+	// deliberate trade rather than an oversight: the bound exists to stop casual
+	// abuse of an operation that costs the key's owner money, not to be a security
+	// boundary. The boundary is org:admin plus a key the organization already
+	// owns, and neither of those depends on the limiter being reachable.
 	switch res, limitErr := s.verifyLimiter.Allow(ctx, authCtx.ActiveOrganizationID); {
 	case limitErr != nil:
 		logger.WarnContext(ctx, "external key verify rate limiter unavailable, allowing", attr.SlogError(limitErr))

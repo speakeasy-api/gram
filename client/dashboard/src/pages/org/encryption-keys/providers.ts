@@ -47,7 +47,12 @@ export function providerSlug(provider: string): string {
 // returning undefined for a segment that names no known provider so callers can
 // treat a hand-edited URL as not-found rather than querying for nonsense.
 export function providerFromSlug(slug: string): string | undefined {
-  return PROVIDERS_BY_SLUG[slug];
+  // Own-property check: a hand-edited segment like "toString" would otherwise
+  // resolve to an inherited Object.prototype member and be treated as a
+  // provider.
+  return Object.hasOwn(PROVIDERS_BY_SLUG, slug)
+    ? PROVIDERS_BY_SLUG[slug]
+    : undefined;
 }
 
 // providerLabel maps a supertype `provider` discriminator to a display name.

@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // The externalCredentials service exposes organization-scoped CRUD over
@@ -235,6 +236,11 @@ var _ = Service("externalCredentials", func() {
 	Method("verifyGcpIamCredential", func() {
 		Description("Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
 
+		// Declared here rather than in shared.DeclareErrorResponses because only the
+		// rate-limited endpoints can return it, and putting it in the shared set
+		// would type a 429 onto every method of every service.
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to verify.", func() {
 				Format(FormatUUID)
@@ -250,6 +256,9 @@ var _ = Service("externalCredentials", func() {
 			Param("id")
 			security.SessionHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "verifyGcpIamCredential")

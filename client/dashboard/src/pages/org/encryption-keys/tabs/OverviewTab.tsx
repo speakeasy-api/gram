@@ -150,10 +150,21 @@ function BackingCredential({
     );
   }
 
-  // A credential the key names but that no longer reads back is the deleted
-  // case, which verify reports as credential_deleted. Say so here rather than
+  // A lookup that failed says nothing about whether the credential exists, so it
+  // must not be reported as deleted: an operator told the credential is gone
+  // goes looking for a cause that is not there.
+  if (isError) {
+    return (
+      <InfoField label="External credential">
+        <InfoText>Could not load this key's credential.</InfoText>
+      </InfoField>
+    );
+  }
+
+  // A credential the key names but that reads back absent is the deleted case,
+  // which verify reports as credential_deleted. Say so here rather than
   // rendering a link to a page that will bounce.
-  if (isError || !credential) {
+  if (!credential) {
     return (
       <InfoField label="External credential">
         <InfoText>

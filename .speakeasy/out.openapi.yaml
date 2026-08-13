@@ -16394,6 +16394,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
         "500":
           content:
             application/json:
@@ -17449,6 +17455,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
         "500":
           content:
             application/json:

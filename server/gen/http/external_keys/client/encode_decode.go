@@ -2153,6 +2153,7 @@ func EncodeVerifyGcpKmsKeyRequest(encoder func(*http.Request) goahttp.Encoder) f
 // the externalKeys verifyGcpKmsKey endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeVerifyGcpKmsKeyResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2194,6 +2195,20 @@ func DecodeVerifyGcpKmsKeyResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewVerifyGcpKmsKeyVerifyKmsKeyResultOK(&body)
 			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body VerifyGcpKmsKeyRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body VerifyGcpKmsKeyUnauthorizedResponseBody

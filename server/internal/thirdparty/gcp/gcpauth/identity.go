@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 
@@ -64,7 +65,13 @@ func NewIdentity(resolver Resolver) *Identity {
 func (i *Identity) ResolvePrincipal(ctx context.Context, cred Credential) (Principal, error) {
 	principal, err := i.resolver.ResolvePrincipal(ctx, cred)
 	if err != nil {
-		return Principal{Email: "", Source: ""}, fmt.Errorf("resolve gcp principal: %w", err)
+		// Passed through unwrapped, unlike TokenSource below. Callers echo this
+		// error's text into a user-facing verify detail, where the provider's own
+		// message is the entire value: it names the grant the customer is missing.
+		// A wrapper prefix naming an internal function only pushes that message
+		// further from the reader.
+		//nolint:wrapcheck // the provider's message is the product here, not context for it
+		return Principal{Email: "", Source: ""}, err
 	}
 
 	return principal, nil
@@ -164,11 +171,12 @@ func (i *Identity) ImpersonationTargetProblem(ctx context.Context, logger *slog.
 // serviceAccountProject extracts the project id from a user-managed GCP service
 // account email of the form name@PROJECT_ID.iam.gserviceaccount.com.
 //
-// Returns "" for every other address, including user accounts and Google's
-// default compute (PROJECT_NUMBER-compute@developer.gserviceaccount.com) and App
-// Engine (PROJECT_ID@appspot.gserviceaccount.com) service accounts. Callers
-// treat "" as "cannot be placed in a project" and refuse it, so a project number
-// is never compared against a project id.
+// Returns "" for every other address, including user accounts, Google's default
+// compute (PROJECT_NUMBER-compute@developer.gserviceaccount.com) and App Engine
+// (PROJECT_ID@appspot.gserviceaccount.com) service accounts, and the
+// Google-managed service agents described below. Callers treat "" as "cannot be
+// placed in a project" and refuse it, so a project number is never compared
+// against a project id.
 func serviceAccountProject(email string) string {
 	_, domain, found := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
 	if !found {
@@ -180,5 +188,30 @@ func serviceAccountProject(email string) string {
 		return ""
 	}
 
+	if !isProjectNamespace(project) {
+		return ""
+	}
+
 	return project
+}
+
+// managedAgentNamespaces are the domain components Google's own service agents
+// live under, which are namespaces rather than project ids.
+var managedAgentNamespaces = []string{"cloudservices", "container-engine-robot", "containerregistry"}
+
+// isProjectNamespace reports whether the domain component of a
+// *.iam.gserviceaccount.com address names a customer project rather than one of
+// Google's managed service-agent namespaces.
+//
+// This matters because the caller compares the extracted value against Gram's
+// own project to refuse targets inside it. A managed agent such as
+// service-NUMBER@gcp-sa-cloudkms.iam.gserviceaccount.com would otherwise yield
+// "gcp-sa-cloudkms", which never equals any project id, so an agent belonging to
+// Gram's own project would slip through the very comparison meant to catch it.
+func isProjectNamespace(project string) bool {
+	if strings.HasPrefix(project, "gcp-sa-") || strings.HasSuffix(project, "-system") {
+		return false
+	}
+
+	return !slices.Contains(managedAgentNamespaces, project)
 }

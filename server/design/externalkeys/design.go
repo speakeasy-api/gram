@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // The externalKeys service exposes organization-scoped CRUD over external_keys
@@ -238,6 +239,11 @@ var _ = Service("externalKeys", func() {
 	Method("verifyGcpKmsKey", func() {
 		Description("Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
 
+		// Declared here rather than in shared.DeclareErrorResponses because only the
+		// rate-limited endpoints can return it, and putting it in the shared set
+		// would type a 429 onto every method of every service.
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to verify.", func() {
 				Format(FormatUUID)
@@ -253,6 +259,9 @@ var _ = Service("externalKeys", func() {
 			Param("id")
 			security.SessionHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "verifyGcpKmsKey")

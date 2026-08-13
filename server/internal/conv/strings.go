@@ -32,6 +32,13 @@ const truncatedDetailNotice = "… (truncated, see Gram logs for the full error)
 // slicing a string at a byte offset can land mid-sequence and emit invalid
 // UTF-8 into the response.
 func TruncateDetail(s string, maxRunes int) string {
+	// A negative bound would slice with a negative index and panic. Callers pass a
+	// constant today, but this is a shared helper and the failure would be a panic
+	// on an error path, which is the worst place to find one.
+	if maxRunes < 0 {
+		maxRunes = 0
+	}
+
 	runes := []rune(s)
 	if len(runes) <= maxRunes {
 		return s

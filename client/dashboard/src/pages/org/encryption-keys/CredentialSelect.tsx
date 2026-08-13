@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
@@ -6,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { useListExternalCredentials } from "@gram/client/react-query/listExternalCredentials";
@@ -27,7 +29,7 @@ export function CredentialSelect({
   onChange: (value: string) => void;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const { data, isLoading } = useListExternalCredentials({
+  const { data, isLoading, isError, refetch } = useListExternalCredentials({
     provider: "gcp_iam",
   });
   const credentials = data?.credentials ?? [];
@@ -36,11 +38,34 @@ export function CredentialSelect({
   // Select would show its empty placeholder while the dead id sat in state, and
   // saving would resubmit it — so clear it once the live set is known and let
   // the caller's own "a credential is required" rule block the save.
+  //
+  // A failed request is not a live set. Clearing on one would discard a
+  // perfectly good selection because the list happened not to load, and leave
+  // the form unsavable until it does.
   const missing =
-    !isLoading && value !== "" && !credentials.some((c) => c.id === value);
+    !isLoading &&
+    !isError &&
+    value !== "" &&
+    !credentials.some((c) => c.id === value);
   useEffect(() => {
     if (missing) onChange("");
   }, [missing, onChange]);
+
+  if (isError) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Label>External credential</Label>
+        <Stack direction="horizontal" gap={2} align="center">
+          <Text small muted>
+            Failed to load external credentials.
+          </Text>
+          <Button size="sm" variant="secondary" onClick={() => void refetch()}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </Stack>
+      </div>
+    );
+  }
 
   if (!isLoading && credentials.length === 0) {
     return (

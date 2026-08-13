@@ -18,6 +18,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
 import type { ExternalKeySummary } from "@gram/client/models/components/externalkeysummary.js";
 import { useDeleteGcpKmsKeyMutation } from "@gram/client/react-query/deleteGcpKmsKey";
+import { invalidateAllGetGcpKmsKey } from "@gram/client/react-query/getGcpKmsKey";
 import {
   invalidateAllListExternalKeys,
   useListExternalKeys,
@@ -96,6 +97,7 @@ function EncryptionKeysOverview(): JSX.Element {
       <ResourceListPage
         title="Encryption Keys"
         description="The keys in your own cloud KMS that Gram signs with. Gram never holds the key material: it reaches each key through an external credential you configure and asks your KMS to sign."
+        isLoading={isLoading}
         primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -303,7 +305,12 @@ export function DeleteKeyDialog({
   const queryClient = useQueryClient();
   const deleteMutation = useDeleteGcpKmsKeyMutation({
     onSuccess: async () => {
-      await invalidateAllListExternalKeys(queryClient);
+      // The detail query too, not just the list: returning to the deleted key
+      // within the cache lifetime would otherwise render it before refetching.
+      await Promise.all([
+        invalidateAllListExternalKeys(queryClient),
+        invalidateAllGetGcpKmsKey(queryClient),
+      ]);
       toast.success("Encryption key deleted");
       onClose();
       onDeleted();

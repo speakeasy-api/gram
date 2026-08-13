@@ -255,6 +255,7 @@ func (c *Client) GetGcpKmsKey(ctx context.Context, p *GetGcpKmsKeyPayload) (res 
 // VerifyGcpKmsKey calls the "verifyGcpKmsKey" endpoint of the "externalKeys"
 // service.
 // VerifyGcpKmsKey may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
