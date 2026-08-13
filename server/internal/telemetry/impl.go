@@ -753,7 +753,7 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 
 		// Directory ownership wins. Only reverse-resolve a provider account when
 		// the email has no directory row, and only when one owner claims it.
-		if len(rows) == 0 {
+		if err == nil && len(rows) == 0 {
 			accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
 				OrganizationID: orgID,
 				Emails:         identity.Emails,
