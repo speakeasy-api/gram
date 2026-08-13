@@ -49,7 +49,7 @@ func validateFetchURL(ctx context.Context, policy *guardian.Policy, rawURL strin
 // the SSRF policy before the next request is issued. The dialer remains the
 // last line of defense: even if validation is skipped, ControlContext rejects
 // connections into blocked ranges after DNS resolution.
-func outboundFetchClient(policy *guardian.Policy, timeout time.Duration) *http.Client {
+func outboundFetchClient(policy *guardian.Policy, timeout time.Duration) *guardian.HTTPClient {
 	client := policy.Client()
 	client.Timeout = timeout
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assets"
@@ -46,7 +47,7 @@ func TestService_FetchOpenAPIv3FromURL_Success(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, http.MethodGet, r.Method)
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write([]byte(fetchOpenAPIYAML))
 	}))
