@@ -375,6 +375,20 @@ func (q *Queries) ForceSoftDeleteUserAccountsByEmail(ctx context.Context, arg Fo
 	return err
 }
 
+const forceSoftDeleteUserFixture = `-- name: ForceSoftDeleteUserFixture :exec
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Test-only fixture: soft-deletes a directory user directly. Production only
+// does this through the WorkOS sync (DisableUser), which requires a WorkOS
+// identity that seeded test users do not have.
+func (q *Queries) ForceSoftDeleteUserFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUserFixture, id)
+	return err
+}
+
 const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()

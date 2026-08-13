@@ -249,6 +249,14 @@ VALUES (@plugin_id, @organization_id, @principal_urn);
 INSERT INTO users (id, email, display_name)
 VALUES (@id, @email, @display_name);
 
+-- name: ForceSoftDeleteUserFixture :exec
+-- Test-only fixture: soft-deletes a directory user directly. Production only
+-- does this through the WorkOS sync (DisableUser), which requires a WorkOS
+-- identity that seeded test users do not have.
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES (@organization_id, @email, @seen_at, @seen_at);

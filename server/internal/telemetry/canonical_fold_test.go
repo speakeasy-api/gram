@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // seedIdentityMapEntry writes one fold entry the way the sync worker does,
@@ -304,6 +305,68 @@ func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 		require.Equal(t, int64(800), m.TotalInputTokens, "identifier %s", identifier)
 		require.InDelta(t, 44.5, m.TotalCost, 0.001, "identifier %s", identifier)
 	}
+}
+
+func TestGetObservabilityOverview_CanonicalFold_SummaryScopesToUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	employeeID, _ := seedConnectedOrgUser(t, ctx, ti, "fold-overview")
+	strangerID, _ := seedConnectedOrgUser(t, ctx, ti, "fold-overview-other")
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeID, "", 700, 300, 42)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), strangerID, "", 9000, 9000, 999)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// In fold mode the legacy User set stays empty, and with no other filters
+	// the summary used to fall through to the unfiltered MV path and count
+	// every user's rows while the rest of the overview stayed scoped.
+	res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+		From:   now.Add(-time.Hour).Format(time.RFC3339),
+		To:     now.Add(time.Hour).Format(time.RFC3339),
+		UserID: conv.PtrEmpty(employeeID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(700), res.Summary.TotalInputTokens)
+}
+
+func TestEmployeeDetail_CanonicalFold_DeletedUserEmailNotFolded(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	departedID, departedEmail := seedConnectedOrgUser(t, ctx, ti, "fold-departed")
+	departedLower := strings.ToLower(departedEmail)
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUserFixture(ctx, departedID))
+
+	// The identity map excludes deleted users, so the departed user's email
+	// can already belong to an active owner in the map.
+	activeID, activeEmail := seedConnectedOrgUser(t, ctx, ti, "fold-active")
+	seedIdentityMapEntry(t, ctx, ti, orgID, departedLower, activeID, strings.ToLower(activeEmail))
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), departedID, "", 700, 300, 42)
+	// Email-only row that folds to the active owner: the departed user's page
+	// must not sweep it in just because their directory row carries the email.
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), departedEmail, 100, 50, 2.5)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	m := userMetrics(t, ctx, ti, departedID)
+	require.Equal(t, int64(700), m.TotalInputTokens)
 }
 
 func TestSearchEmployeeAgentUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {

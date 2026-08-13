@@ -161,7 +161,11 @@ func (s *Service) resolveCanonicalUserIdentity(ctx context.Context, orgID, ident
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve canonical identity directory email", attr.SlogError(err))
 	}
-	if len(rows) == 1 {
+	// The identity map excludes deleted users, so a deleted directory row's
+	// email may already belong to a different active owner in the map; folding
+	// it would pull that owner's email-only rows onto this page. Degrade to
+	// id-only scope instead, the same fallback as a lookup failure.
+	if len(rows) == 1 && !rows[0].DeletedAt.Valid {
 		ident.EmailLower = conv.NormalizeEmail(rows[0].Email)
 	}
 	return ident
