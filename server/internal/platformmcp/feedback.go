@@ -273,11 +273,19 @@ func hasUnsafeFeedbackPath(value string) bool {
 		if strings.HasPrefix(word, "//") {
 			return true
 		}
-		if strings.Contains(word, ".") {
+		trimmed := strings.TrimRight(word, ".,;:!?)]}")
+		if slash := strings.IndexByte(trimmed, '/'); slash > 0 && strings.Contains(trimmed[:slash], ".") {
+			return true
+		}
+		if dot := strings.LastIndexByte(trimmed, '.'); dot > 0 && strings.IndexFunc(trimmed[:dot], unicode.IsLetter) >= 0 && onlyLetters(trimmed[dot+1:]) {
 			return true
 		}
 	}
 	return false
+}
+
+func onlyLetters(value string) bool {
+	return value != "" && strings.IndexFunc(value, func(r rune) bool { return !unicode.IsLetter(r) }) == -1
 }
 
 func hasSensitiveFeedbackToken(value string) bool {

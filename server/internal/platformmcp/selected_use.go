@@ -65,8 +65,16 @@ func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallob
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
-	// Revalidate the target inside the mutation transaction so a concurrent
-	// distribution removal cannot leave evidence for a stale attachment.
+	if err := q.LockPlatformMCPDistribution(ctx, repo.LockPlatformMCPDistributionParams{
+		OrganizationID:  observation.OrganizationID,
+		ProjectID:       observation.ProjectID.String(),
+		RegistrationID:  target.RegistrationID.String(),
+		DefaultPluginID: target.DefaultPluginID.String(),
+	}); err != nil {
+		return fmt.Errorf("lock platform mcp selected-use distribution: %w", err)
+	}
+	// Revalidate after taking the same lock used by distribution removal so a
+	// successful tool call cannot record evidence for a removed attachment.
 	target, err = q.GetPlatformMCPSelectedUseTarget(ctx, targetParams)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

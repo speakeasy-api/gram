@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -120,8 +119,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 }
 
 func validCatalogReadinessURL(raw string) bool {
-	parsed, err := url.Parse(raw)
-	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil
+	return validRegistrationRemoteURL(raw)
 }
 
 func (p *RemoteMCPReadinessProber) loadHeaders(ctx context.Context, remoteMCPServerID uuid.UUID) ([]remotemcprepo.RemoteMcpServerHeader, error) {

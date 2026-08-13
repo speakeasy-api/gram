@@ -2239,6 +2239,7 @@ const getPlatformMCPSelectedUseTarget = `-- name: GetPlatformMCPSelectedUseTarge
 SELECT
     distribution.id AS distribution_id,
     distribution.version AS distribution_version,
+    distribution.default_plugin_id,
     distribution.registration_id,
     (registration.catalog_provider || ':' || registration.catalog_reference)::text AS mcp_key,
     workflow.id AS workflow_id,
@@ -2300,6 +2301,7 @@ type GetPlatformMCPSelectedUseTargetParams struct {
 type GetPlatformMCPSelectedUseTargetRow struct {
 	DistributionID       uuid.UUID
 	DistributionVersion  int64
+	DefaultPluginID      uuid.UUID
 	RegistrationID       uuid.UUID
 	McpKey               string
 	WorkflowID           uuid.NullUUID
@@ -2318,6 +2320,7 @@ func (q *Queries) GetPlatformMCPSelectedUseTarget(ctx context.Context, arg GetPl
 	err := row.Scan(
 		&i.DistributionID,
 		&i.DistributionVersion,
+		&i.DefaultPluginID,
 		&i.RegistrationID,
 		&i.McpKey,
 		&i.WorkflowID,

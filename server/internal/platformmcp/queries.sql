@@ -1097,6 +1097,7 @@ SELECT EXISTS (
 SELECT
     distribution.id AS distribution_id,
     distribution.version AS distribution_version,
+    distribution.default_plugin_id,
     distribution.registration_id,
     (registration.catalog_provider || ':' || registration.catalog_reference)::text AS mcp_key,
     workflow.id AS workflow_id,
