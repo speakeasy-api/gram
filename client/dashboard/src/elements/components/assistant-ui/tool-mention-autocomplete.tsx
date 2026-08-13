@@ -3,6 +3,7 @@ import { Wrench } from "lucide-react";
 import * as m from "motion/react-m";
 
 import { cn } from "@/lib/utils";
+import { useComposerMenuOpen } from "@/elements/hooks/useComposerMenuOpen";
 import { useDensity } from "@/elements/hooks/useDensity";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
@@ -41,6 +42,7 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const d = useDensity();
   const r = useRadius();
+  useComposerMenuOpen(isVisible, containerRef);
 
   useEffect(() => {
     const context = detectMentionContext(value, cursorPosition);
