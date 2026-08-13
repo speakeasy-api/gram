@@ -317,6 +317,12 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "email-template-ids",
+			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
+			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, redisFlags()...)
@@ -461,8 +467,12 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			templateIDs, err := loadEmailTemplateIDs(c)
+			if err != nil {
+				return err
+			}
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient)
+			emailService := email.NewService(logger, loopsClient, templateIDs)
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {

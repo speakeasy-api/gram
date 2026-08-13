@@ -114,7 +114,9 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
-	emailService := email.NewService(logger, emailSender)
+	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
+		"access_request": "access-request-test-id",
+	}))
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
 	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL)

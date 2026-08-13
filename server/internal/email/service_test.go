@@ -32,7 +32,7 @@ func TestService_Send_TranslatesTemplateToLoopsInput(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender)
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}))
 
 	tmpl := TeamInvite{
 		InviteLink:       "https://app.gram.sh/invite?token=xyz",
@@ -42,7 +42,7 @@ func TestService_Send_TranslatesTemplateToLoopsInput(t *testing.T) {
 	}
 
 	expected := loops.SendTransactionalInput{
-		TransactionalID: string(transactionalIDTeamInvite),
+		TransactionalID: "team-invite-id",
 		Email:           "carol@example.com",
 		DataVariables: map[string]string{
 			"invite_link":       "https://app.gram.sh/invite?token=xyz",
@@ -63,7 +63,7 @@ func TestService_Send_EmptyRecipientReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender)
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}))
 
 	err := svc.Send(t.Context(), "", TeamInvite{
 		InviteLink:       "https://example.com",
@@ -78,7 +78,7 @@ func TestService_Send_UnregisteredTemplateReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender)
+	svc := NewService(testenv.NewLogger(t), sender, make(TemplateIDs))
 
 	err := svc.Send(t.Context(), "user@example.com", unregisteredTemplate{})
 	require.ErrorIs(t, err, ErrUnregisteredTemplate)
@@ -88,7 +88,7 @@ func TestService_Send_PropagatesSenderError(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender)
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}))
 
 	transportErr := errors.New("transport boom")
 	sender.On("SendTransactional", mock.Anything, mock.Anything).Return(transportErr).Once()
@@ -101,14 +101,14 @@ func TestService_Send_PropagatesSenderError(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, transportErr)
-	require.Contains(t, err.Error(), string(transactionalIDTeamInvite))
+	require.Contains(t, err.Error(), "team-invite-id")
 }
 
 func TestService_Send_RespectsTemplateAddToAudienceFlag(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender)
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"no-audience": "no-audience-id"}))
 
 	sender.On("SendTransactional", mock.Anything, mock.MatchedBy(func(in loops.SendTransactionalInput) bool {
 		return !in.AddToAudience && in.TransactionalID == "no-audience-id"
@@ -122,7 +122,7 @@ func TestService_Send_NilVariablesAreForwarded(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender)
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"nil-vars": "nil-vars-id"}))
 
 	sender.On("SendTransactional", mock.Anything, mock.MatchedBy(func(in loops.SendTransactionalInput) bool {
 		return in.DataVariables == nil
@@ -136,20 +136,18 @@ func TestService_Send_NilVariablesAreForwarded(t *testing.T) {
 
 type unregisteredTemplate struct{}
 
-func (unregisteredTemplate) TransactionalID() TransactionalID { return "" }
-func (unregisteredTemplate) Variables() map[string]string     { return nil }
-func (unregisteredTemplate) AddToAudience() bool              { return false }
+func (unregisteredTemplate) Key() TemplateKey             { return "unregistered" }
+func (unregisteredTemplate) Variables() map[string]string { return nil }
+func (unregisteredTemplate) AddToAudience() bool          { return false }
 
 type noAudienceTemplate struct{}
 
-func (noAudienceTemplate) TransactionalID() TransactionalID {
-	return TransactionalID("no-audience-id")
-}
+func (noAudienceTemplate) Key() TemplateKey             { return "no-audience" }
 func (noAudienceTemplate) Variables() map[string]string { return map[string]string{"a": "b"} }
 func (noAudienceTemplate) AddToAudience() bool          { return false }
 
 type nilVarsTemplate struct{}
 
-func (nilVarsTemplate) TransactionalID() TransactionalID { return TransactionalID("nil-vars-id") }
-func (nilVarsTemplate) Variables() map[string]string     { return nil }
-func (nilVarsTemplate) AddToAudience() bool              { return false }
+func (nilVarsTemplate) Key() TemplateKey             { return "nil-vars" }
+func (nilVarsTemplate) Variables() map[string]string { return nil }
+func (nilVarsTemplate) AddToAudience() bool          { return false }

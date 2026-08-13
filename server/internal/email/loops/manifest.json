@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "defaults": {
+    "from_name": "Speakeasy",
+    "from_email": "gram",
+    "reply_to_email": "gram@speakeasy.com"
+  },
+  "templates": {
+    "access_request": {
+      "managed_name": "gram.transactional.v2.access_request",
+      "subject": "Access requested for {data.organization_name}",
+      "preview_text": "{data.requester_name} requested additional access.",
+      "source": "access_request.lmx",
+      "variables": ["requester_name", "organization_name", "manage_access_link"]
+    },
+    "custom_domain_unhealthy": {
+      "managed_name": "gram.transactional.v2.custom_domain_unhealthy",
+      "subject": "Action required: {data.domain} is unhealthy",
+      "preview_text": "Review the issue affecting your custom domain.",
+      "source": "custom_domain_unhealthy.lmx",
+      "variables": ["email", "domain", "issue_message", "domain_link"]
+    },
+    "enterprise_admin_onboarding": {
+      "managed_name": "gram.transactional.v2.enterprise_admin_onboarding",
+      "subject": "Set up your Gram organization",
+      "preview_text": "Your enterprise workspace is ready to configure.",
+      "source": "enterprise_admin_onboarding.lmx",
+      "variables": ["setup_link"]
+    },
+    "openrouter_chat_credits_threshold": {
+      "managed_name": "gram.transactional.v2.openrouter_chat_credits_threshold",
+      "subject": "Chat credits at {data.threshold_percent}% for {data.organization_name}",
+      "preview_text": "Review your platform-managed chat credit usage.",
+      "source": "openrouter_chat_credits_threshold.lmx",
+      "variables": ["organization_name", "threshold_percent", "exhausted"]
+    },
+    "openrouter_internal_credits_threshold": {
+      "managed_name": "gram.transactional.v2.openrouter_internal_credits_threshold",
+      "subject": "Internal AI credits at {data.threshold_percent}% for {data.organization_name}",
+      "preview_text": "Review credits used by platform analysis.",
+      "source": "openrouter_internal_credits_threshold.lmx",
+      "variables": ["organization_name", "threshold_percent", "exhausted"]
+    },
+    "team_invite": {
+      "managed_name": "gram.transactional.v2.team_invite",
+      "subject": "Join {data.organization_name} on Gram",
+      "preview_text": "{data.inviter_name} invited you to their Gram organization.",
+      "source": "team_invite.lmx",
+      "variables": [
+        "invite_link",
+        "inviter_name",
+        "inviter_email",
+        "organization_name"
+      ]
+    },
+    "tum_usage_overage": {
+      "managed_name": "gram.transactional.v2.tum_usage_overage",
+      "subject": "{data.organization_name} has exceeded its token allowance",
+      "preview_text": "Usage is at {data.threshold_percent}% for the current billing cycle.",
+      "source": "tum_usage_overage.lmx",
+      "variables": [
+        "organization_name",
+        "threshold_percent",
+        "usage_tokens",
+        "token_limit",
+        "overage_tokens",
+        "cycle_start",
+        "cycle_end"
+      ]
+    },
+    "tum_usage_threshold": {
+      "managed_name": "gram.transactional.v2.tum_usage_threshold",
+      "subject": "{data.organization_name} is at {data.threshold_percent}% of its token allowance",
+      "preview_text": "Review current tokens-under-management usage.",
+      "source": "tum_usage_threshold.lmx",
+      "variables": [
+        "organization_name",
+        "threshold_percent",
+        "usage_tokens",
+        "token_limit",
+        "cycle_start",
+        "cycle_end"
+      ]
+    },
+    "weekly_usage_summary": {
+      "managed_name": "gram.transactional.v2.weekly_usage_summary",
+      "subject": "Weekly usage for {data.organization_name}",
+      "preview_text": "{data.total_tokens} tokens under management this cycle.",
+      "source": "weekly_usage_summary.lmx",
+      "variables": [
+        "organization_name",
+        "cycle_end_date",
+        "days_remaining",
+        "cycle_elapsed_percent",
+        "total_tokens",
+        "previous_total_tokens",
+        "total_change_percent",
+        "view_usage_url"
+      ]
+    }
+  }
+}

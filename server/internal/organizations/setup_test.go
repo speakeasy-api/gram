@@ -274,7 +274,9 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	emailService := email.NewService(logger, loopsMock)
+	emailService := email.NewService(logger, loopsMock, email.NewTemplateIDs(map[string]string{
+		"team_invite": "team-invite-test-id",
+	}))
 	trialNotifier := &fakeTrialNotifier{}
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, emailService, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 

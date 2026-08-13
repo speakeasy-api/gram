@@ -32,7 +32,9 @@ import (
 func noopEmailService(t *testing.T) *email.Service {
 	t.Helper()
 	loopsClient := loops.New(t.Context(), testenv.NewLogger(t), nil, "")
-	return email.NewService(testenv.NewLogger(t), loopsClient)
+	return email.NewService(testenv.NewLogger(t), loopsClient, email.NewTemplateIDs(map[string]string{
+		"custom_domain_unhealthy": "domain-unhealthy-test-id",
+	}))
 }
 
 type stubInfrastructureChecker struct {
@@ -289,7 +291,9 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", email.NewService(testenv.NewLogger(t), captured), siteURL, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+		"custom_domain_unhealthy": "domain-unhealthy-test-id",
+	})), siteURL, nil)
 
 	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
 		CustomDomainID: uuid.New(),

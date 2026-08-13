@@ -449,6 +449,12 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:     "email-template-ids",
+			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
+			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
+			Required: false,
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
@@ -659,8 +665,12 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
+			templateIDs, err := loadEmailTemplateIDs(c)
+			if err != nil {
+				return err
+			}
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient)
+			emailService := email.NewService(logger, loopsClient, templateIDs)
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {

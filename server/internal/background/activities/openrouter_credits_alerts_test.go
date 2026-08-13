@@ -36,7 +36,10 @@ func setupOpenRouterCreditsAlertsTest(t *testing.T, dbName string) (*activities.
 		testenv.NewLogger(t),
 		conn,
 		cacheAdapter,
-		email.NewService(testenv.NewLogger(t), captured),
+		email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+			"openrouter_chat_credits_threshold":     "chat-credits-test-id",
+			"openrouter_internal_credits_threshold": "internal-credits-test-id",
+		})),
 		testenv.NewMeterProvider(t),
 	)
 
@@ -119,8 +122,8 @@ func internalCreditsMetric(orgID string, used float64, limit int64) activities.O
 
 // Template IDs distinguish which email family a captured send used.
 var (
-	chatCreditsTemplateID     = string(email.OpenRouterChatCreditsThreshold{}.TransactionalID())
-	internalCreditsTemplateID = string(email.OpenRouterInternalCreditsThreshold{}.TransactionalID())
+	chatCreditsTemplateID     = "chat-credits-test-id"
+	internalCreditsTemplateID = "internal-credits-test-id"
 )
 
 func TestMaybeSendOpenRouterCreditsAlerts_SendsHighestCrossedThreshold(t *testing.T) {
