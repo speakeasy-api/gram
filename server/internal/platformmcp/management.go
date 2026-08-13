@@ -164,7 +164,7 @@ func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platfor
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
 	}
-	if s.catalog == nil || s.registrations == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
+	if s.catalog == nil || s.registrations == nil || s.registrations.store == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	candidate, err := s.registrations.RegistrationCatalogIdentity(ctx, principal, *projection.SelectedProject, projection.Workflow.SelectedRegistrationID)
