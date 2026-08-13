@@ -180,18 +180,10 @@ func validateLMXDirectory(dir string) error {
 }
 
 func validateXML(lmx []byte) error {
-	decoder := xml.NewDecoder(strings.NewReader("<Root>" + string(lmx) + "</Root>"))
-	for {
-		token, err := decoder.Token()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read LMX token: %w", err)
-		}
+	return walkXML(lmx, func(token xml.Token) error {
 		start, ok := token.(xml.StartElement)
 		if !ok {
-			continue
+			return nil
 		}
 		switch start.Name.Local {
 		case "Columns":
@@ -203,7 +195,8 @@ func validateXML(lmx []byte) error {
 				return err
 			}
 		}
-	}
+		return nil
+	})
 }
 
 func validateIntegerAttribute(element xml.StartElement, name string, minimum, maximum int) error {
@@ -246,15 +239,7 @@ func extractPublishedDataVariables(subject, previewText string, lmx []byte) ([]s
 	published.WriteString(previewText)
 	published.WriteByte('\n')
 
-	decoder := xml.NewDecoder(strings.NewReader("<Root>" + string(lmx) + "</Root>"))
-	for {
-		token, err := decoder.Token()
-		if errors.Is(err, io.EOF) {
-			return extractDataVariables(published.String()), nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read LMX token: %w", err)
-		}
+	err := walkXML(lmx, func(token xml.Token) error {
 		switch token := token.(type) {
 		case xml.StartElement:
 			for _, attribute := range token.Attr {
@@ -267,6 +252,27 @@ func extractPublishedDataVariables(subject, previewText string, lmx []byte) ([]s
 		case xml.CharData:
 			published.Write(token)
 			published.WriteByte('\n')
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return extractDataVariables(published.String()), nil
+}
+
+func walkXML(lmx []byte, visit func(xml.Token) error) error {
+	decoder := xml.NewDecoder(strings.NewReader("<Root>" + string(lmx) + "</Root>"))
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read LMX token: %w", err)
+		}
+		if err := visit(token); err != nil {
+			return err
 		}
 	}
 }
