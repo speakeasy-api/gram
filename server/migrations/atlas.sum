@@ -1,4 +1,4 @@
-h1:uSmFNeJM6StKnCe0GfzUiHBtSKWttOjUKNbrh/ei48k=
+h1:NY73xoA713Ato5GkM4ro44odFJxzJmXhGTciG2OtqgE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -333,4 +333,4 @@ h1:uSmFNeJM6StKnCe0GfzUiHBtSKWttOjUKNbrh/ei48k=
 20260811225943_assets-tier-dedupe-indexes.sql h1:thYfONo6SYry2Aew/GXLvIn/9WZtmZv82BfL7c5jp4A=
 20260812140226_jwks-index-external-key-tenant.sql h1:uuAVtFJtvI9Fh8P1g0lZCvFFIlUUoUraHM+HvBKT1dY=
 20260812192632_chats-add-cwd.sql h1:lXCqWY7mdeIFpGV4UZ6vd8H063XA/V10rLouSTVj8qY=
-20260813173142_session-handoff-links.sql h1:aTYlf9bCzbeY2gvmOysdwgUuzRch0mS+wgSrvns/hWo=
+20260813214351_session-handoff-links.sql h1:PHIMJqiA/M9FzPhsVDNOnlnkxF4X1bMRCMtNbugwL0o=

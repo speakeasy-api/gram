@@ -12,7 +12,8 @@ CREATE TABLE "session_handoff_links" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "session_handoff_links_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "session_handoff_links_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "session_handoff_links_organization_project_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "session_handoff_links_expires_at_idx" to table: "session_handoff_links"
 CREATE INDEX "session_handoff_links_expires_at_idx" ON "session_handoff_links" ("expires_at");

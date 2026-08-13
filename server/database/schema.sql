@@ -6658,7 +6658,13 @@ CREATE TABLE IF NOT EXISTS session_handoff_links (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT session_handoff_links_pkey PRIMARY KEY (id),
-  CONSTRAINT session_handoff_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT session_handoff_links_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite tenancy pin: the database, not the application, guarantees the
+  -- organization_id agrees with the project's real owner. Matters here because
+  -- the serving route is unauthenticated and scopes solely on these columns.
+  CONSTRAINT session_handoff_links_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_token_key ON session_handoff_links (token);
