@@ -986,8 +986,8 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 			"issuer":                                server.URL,
 			"authorization_endpoint":                server.URL + "/authorize",
 			"token_endpoint":                        server.URL + "/token",
-			"registration_endpoint":                 "https://idp.example.com/register",
-			"jwks_uri":                              "https://idp.example.com/jwks",
+			"registration_endpoint":                 server.URL + "/register",
+			"jwks_uri":                              server.URL + "/jwks",
 			"scopes_supported":                      []string{"openid"},
 			"grant_types_supported":                 []string{"authorization_code"},
 			"response_types_supported":              []string{"code"},
@@ -1213,8 +1213,8 @@ func TestFetchRemoteSessionIssuerMetadata_OpenIDConfigurationFallback(t *testing
 			"issuer":                 server.URL,
 			"authorization_endpoint": server.URL + "/authorize",
 			"token_endpoint":         server.URL + "/token",
-			"jwks_uri":               "https://idp.example.com/jwks",
-			"registration_endpoint":  "https://idp.example.com/register",
+			"jwks_uri":               server.URL + "/jwks",
+			"registration_endpoint":  server.URL + "/register",
 		})
 	}))
 	t.Cleanup(server.Close)
@@ -1256,8 +1256,8 @@ func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testi
 			"issuer":                 server.URL,
 			"authorization_endpoint": server.URL + "/authorize",
 			"token_endpoint":         server.URL + "/token",
-			"jwks_uri":               "https://idp.example.com/jwks",
-			"registration_endpoint":  "https://idp.example.com/register",
+			"jwks_uri":               server.URL + "/jwks",
+			"registration_endpoint":  server.URL + "/register",
 		})
 	}))
 	t.Cleanup(server.Close)
@@ -1297,8 +1297,8 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 				"issuer":                 server.URL,
 				"authorization_endpoint": server.URL + "/authorize",
 				"token_endpoint":         server.URL + "/token",
-				"jwks_uri":               "https://idp.example.com/jwks",
-				"registration_endpoint":  "https://idp.example.com/register",
+				"jwks_uri":               server.URL + "/jwks",
+				"registration_endpoint":  server.URL + "/register",
 			})
 			return
 		}

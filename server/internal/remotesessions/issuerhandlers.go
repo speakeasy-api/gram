@@ -1078,15 +1078,20 @@ func validIssuerDiscoveryURL(u *url.URL) bool {
 // transport guarantee after a valid metadata document has been discovered.
 // Authorization and token endpoints retain the explicit local-loopback
 // exception used by discovery. JWKs and DCR endpoints are fetched server-side,
-// so they must use HTTPS even when discovery itself used local HTTP.
+// so they require HTTPS except for an endpoint on the exact same explicit
+// loopback origin as a local HTTP issuer.
 func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
+	issuer, err := url.Parse(doc.Issuer)
+	if err != nil {
+		return errors.New("issuer metadata issuer is invalid")
+	}
 	for _, endpoint := range []struct {
 		name         string
 		raw          string
 		requireHTTPS bool
 	}{
-		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint},
-		{name: "token_endpoint", raw: doc.TokenEndpoint},
+		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint, requireHTTPS: false},
+		{name: "token_endpoint", raw: doc.TokenEndpoint, requireHTTPS: false},
 		{name: "jwks_uri", raw: doc.JwksURI, requireHTTPS: true},
 		{name: "registration_endpoint", raw: doc.RegistrationEndpoint, requireHTTPS: true},
 	} {
@@ -1094,9 +1099,9 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
 			continue
 		}
 		parsed, err := url.Parse(endpoint.raw)
-		if err != nil || !validIssuerMetadataEndpointURL(parsed, endpoint.requireHTTPS) {
+		if err != nil || !validIssuerMetadataEndpointURL(parsed, issuer, endpoint.requireHTTPS) {
 			if endpoint.requireHTTPS {
-				return fmt.Errorf("issuer metadata %s must use HTTPS", endpoint.name)
+				return fmt.Errorf("issuer metadata %s must use HTTPS or the same local loopback origin", endpoint.name)
 			}
 			return fmt.Errorf("issuer metadata %s must use HTTPS outside local loopback", endpoint.name)
 		}
@@ -1104,14 +1109,17 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
 	return nil
 }
 
-func validIssuerMetadataEndpointURL(parsed *url.URL, requireHTTPS bool) bool {
+func validIssuerMetadataEndpointURL(parsed, issuer *url.URL, requireHTTPS bool) bool {
 	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
 		return false
 	}
-	if requireHTTPS {
-		return parsed.Scheme == "https"
+	if !requireHTTPS {
+		return validIssuerDiscoveryURL(parsed)
 	}
-	return validIssuerDiscoveryURL(parsed)
+	if parsed.Scheme == "https" {
+		return true
+	}
+	return parsed.Scheme == "http" && validIssuerDiscoveryURL(parsed) && validIssuerDiscoveryURL(issuer) && parsed.Host == issuer.Host
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata
