@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -204,12 +205,23 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
+	riskFingerprinter risk.Fingerprinter,
+	disableRiskRetroReconcile bool,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
 	var spendRulesCH *spendrulesch.Queries
 	if chConn != nil {
 		spendRulesCH = spendrulesch.New(chConn)
+	}
+
+	// The exclusion reconcile propagates flag changes into ClickHouse;
+	// workers without a ClickHouse connection — or with the kill switch set —
+	// get a nil repo and the activity degrades to its Postgres phases with a
+	// loud log.
+	var riskFindingsCH *riskchrepo.Queries
+	if chConn != nil && !disableRiskRetroReconcile {
+		riskFindingsCH = riskchrepo.New(chConn)
 	}
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
@@ -318,7 +330,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
-		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
+		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage),
 		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),

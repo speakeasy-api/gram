@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -33,7 +32,11 @@ type EnterpriseTrialBundleSeeder func(ctx context.Context, tx pgx.Tx, organizati
 // A trial sits on the real enterprise tier rather than a tier of its own, so
 // every account-type lookup downstream, including the OpenRouter credit
 // ceiling, resolves against a value it already knows.
-func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRepo.OrganizationMetadatum, userID string) error {
+//
+// actorEmail is the display name recorded on the audit entry. It travels as a
+// parameter rather than an auth-context read because signup arms a trial from
+// the unauthenticated callback, where there is no auth context to read.
+func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRepo.OrganizationMetadatum, userID, actorEmail string) error {
 	if err := orgRepo.New(tx).SetAccountType(ctx, orgRepo.SetAccountTypeParams{
 		ID:              org.ID,
 		GramAccountType: string(billing.TierEnterprise),
@@ -54,15 +57,10 @@ func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRe
 		return fmt.Errorf("create enterprise trial: %w", err)
 	}
 
-	var actorDisplayName *string
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		actorDisplayName = authCtx.Email
-	}
-
 	if err := s.auditLogger.LogOrganizationEnterpriseTrialArmed(ctx, tx, audit.LogOrganizationEnterpriseTrialArmedEvent{
 		OrganizationID:   org.ID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, userID),
-		ActorDisplayName: actorDisplayName,
+		ActorDisplayName: conv.PtrEmpty(actorEmail),
 		ActorSlug:        nil,
 		OrganizationName: org.Name,
 		OrganizationSlug: org.Slug,

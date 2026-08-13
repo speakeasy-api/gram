@@ -31,6 +31,8 @@ type RemoteSessionIssuer struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI; null when not advertised.

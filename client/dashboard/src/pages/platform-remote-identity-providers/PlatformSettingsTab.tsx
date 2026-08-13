@@ -82,6 +82,7 @@ export function PlatformSettingsTab({
         issuer.tokenEndpointAuthMethodsSupported ?? [],
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
+      revocationEndpoint: issuer.revocationEndpoint ?? "",
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",

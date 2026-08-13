@@ -15,6 +15,7 @@ INSERT INTO remote_session_issuers (
     client_setup_documentation_url,
     authorization_endpoint,
     token_endpoint,
+    revocation_endpoint,
     registration_endpoint,
     jwks_uri,
     service_documentation,
@@ -38,6 +39,7 @@ VALUES (
     @client_setup_documentation_url,
     @authorization_endpoint,
     @token_endpoint,
+    @revocation_endpoint,
     @registration_endpoint,
     @jwks_uri,
     @service_documentation,
@@ -67,6 +69,7 @@ INSERT INTO remote_session_issuers (
     name,
     authorization_endpoint,
     token_endpoint,
+    revocation_endpoint,
     registration_endpoint,
     scopes_supported,
     grant_types_supported,
@@ -85,6 +88,7 @@ VALUES (
     @name,
     @authorization_endpoint,
     @token_endpoint,
+    @revocation_endpoint,
     @registration_endpoint,
     @scopes_supported,
     @grant_types_supported,
@@ -101,6 +105,7 @@ SET
     name = EXCLUDED.name,
     authorization_endpoint = EXCLUDED.authorization_endpoint,
     token_endpoint = EXCLUDED.token_endpoint,
+    revocation_endpoint = EXCLUDED.revocation_endpoint,
     registration_endpoint = EXCLUDED.registration_endpoint,
     scopes_supported = EXCLUDED.scopes_supported,
     grant_types_supported = EXCLUDED.grant_types_supported,
@@ -269,6 +274,10 @@ SET
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
     END,
+    revocation_endpoint = CASE
+        WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
+    END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
@@ -343,6 +352,7 @@ UPDATE remote_session_issuers
 SET
     authorization_endpoint = CASE WHEN @authorization_endpoint::text = '' THEN NULL ELSE @authorization_endpoint::text END,
     token_endpoint = CASE WHEN @token_endpoint::text = '' THEN NULL ELSE @token_endpoint::text END,
+    revocation_endpoint = CASE WHEN @revocation_endpoint::text = '' THEN NULL ELSE @revocation_endpoint::text END,
     registration_endpoint = CASE WHEN @registration_endpoint::text = '' THEN NULL ELSE @registration_endpoint::text END,
     jwks_uri = CASE WHEN @jwks_uri::text = '' THEN NULL ELSE @jwks_uri::text END,
     service_documentation = CASE WHEN @service_documentation::text = '' THEN NULL ELSE @service_documentation::text END,
@@ -584,10 +594,12 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: SoftDeleteRemoteSessionsByClientID :execrows
+-- name: SoftDeleteRemoteSessionsByClientID :many
+-- Returns the stored credentials of every session it tombstones.
 UPDATE remote_sessions
 SET deleted_at = clock_timestamp()
-WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
+RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
 -- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
@@ -775,6 +787,7 @@ SELECT
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
+    i.revocation_endpoint                  AS revocation_endpoint,
     i.scopes_supported                     AS scopes_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
@@ -783,6 +796,29 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
+
+-- name: GetRemoteSessionClientRevocationTargetByID :one
+-- Everything the post-commit RFC 7009 revoke needs to address one upstream:
+-- where to POST, and how to authenticate as the client the grant belongs to.
+--
+-- Deliberately does NOT filter on c.deleted / i.deleted, unlike every other
+-- client lookup. Deleting a client or an issuer cascades a soft-delete to its
+-- sessions, and telling the upstream about those tokens is exactly when
+-- revocation matters most — a predicate on deleted would make the cascade
+-- paths silently no-op. Safe because the only callers pass an id belonging to
+-- rows they themselves just tombstoned; this is never reachable from a
+-- request-supplied identifier.
+SELECT
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.revocation_endpoint                  AS revocation_endpoint
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id;
 
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the
@@ -886,11 +922,36 @@ WHERE s.subject_urn = @subject_urn
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE;
 
--- name: SoftDeleteRemoteSessionBySubjectAndClient :execrows
+-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
+-- Cascade for a revoked user session: tombstones every upstream grant the
+-- subject holds through one user session issuer and returns their stored
+-- credentials. Scoped through the issuer's project so the write cannot
+-- cross tenants.
+--
+-- A subject's grant is shared by every MCP client it authenticates, because
+-- remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
+-- user-session-client column. Revoking one client's session therefore drops
+-- the provider link for all of them, which is the intended blast radius: a
+-- revoke that left the upstream tokens alive would not be a revoke.
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = @subject_urn
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
+
+-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 -- Consent-screen disconnect: soft-deletes the subject's own binding for one
 -- upstream client. Subject, client and issuer all derived server-side from
 -- the challenge state and the endpoint's bindings, never from the form;
 -- scoped through the issuer's project so the write cannot cross tenants.
+--
+-- Returns the stored credentials it tombstones; the partial unique index on
+-- (subject_urn, remote_session_client_id) caps that at one row.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
@@ -900,7 +961,8 @@ WHERE s.subject_urn = @subject_urn
   AND usi.id = s.user_session_issuer_id
   AND usi.project_id = @project_id
   AND usi.deleted IS FALSE
-  AND s.deleted IS FALSE;
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
 
 -- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
 -- cross-project batches. Claiming stamps an independent attempt clock before
@@ -1242,6 +1304,10 @@ SET
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    revocation_endpoint = CASE
+        WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
@@ -1733,6 +1799,10 @@ SET
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    revocation_endpoint = CASE
+        WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL

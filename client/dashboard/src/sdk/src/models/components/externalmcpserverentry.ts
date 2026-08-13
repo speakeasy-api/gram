@@ -8,9 +8,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalMCPPackage,
+  ExternalMCPPackage$inboundSchema,
+} from "./externalmcppackage.js";
+import {
   ExternalMCPRemote,
   ExternalMCPRemote$inboundSchema,
 } from "./externalmcpremote.js";
+import {
+  ExternalMCPRepository,
+  ExternalMCPRepository$inboundSchema,
+} from "./externalmcprepository.js";
 
 /**
  * A summary of an MCP server from an external registry, returned by catalog listings
@@ -41,6 +49,10 @@ export type ExternalMCPServerEntry = {
    */
   organizationMcpCollectionRegistryId?: string | undefined;
   /**
+   * Published packages that run this server, when the registry declares any
+   */
+  packages?: Array<ExternalMCPPackage> | undefined;
+  /**
    * ID of the external MCP registry this server came from
    */
   registryId?: string | undefined;
@@ -52,6 +64,10 @@ export type ExternalMCPServerEntry = {
    * Available remote endpoints for the server
    */
   remotes?: Array<ExternalMCPRemote> | undefined;
+  /**
+   * The source repository a registry entry links for its server. A registry declaration: nothing verifies the endpoint runs this code.
+   */
+  repository?: ExternalMCPRepository | undefined;
   /**
    * Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
    */
@@ -86,9 +102,11 @@ export const ExternalMCPServerEntry$inboundSchema: z.ZodMiniType<
     mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
     organization_mcp_collection_registry_id: z.optional(z.string()),
+    packages: z.optional(z.array(ExternalMCPPackage$inboundSchema)),
     registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
+    repository: z.optional(ExternalMCPRepository$inboundSchema),
     supports_dcr: z.boolean(),
     title: z.optional(z.string()),
     tool_count: z.int(),

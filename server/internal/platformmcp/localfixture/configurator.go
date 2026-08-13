@@ -118,6 +118,7 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 			Name:                              conv.ToPGText(fixtureServerName),
 			AuthorizationEndpoint:             conv.ToPGText(c.config.OAuthAuthorizationURL()),
 			TokenEndpoint:                     conv.ToPGText(c.config.OAuthTokenURL()),
+			RevocationEndpoint:                conv.ToPGText(c.config.OAuthRevocationURL()),
 			RegistrationEndpoint:              conv.ToPGText(c.config.OAuthRegistrationURL()),
 			ScopesSupported:                   []string{"tools:read"},
 			GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
@@ -137,7 +138,7 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 }
 
 func (c *ClientConfigurator) validIssuer(issuer remotesessionsrepo.RemoteSessionIssuer) bool {
-	return issuer.ID == c.config.RemoteSessionIssuerID() && !issuer.ProjectID.Valid && !issuer.OrganizationID.Valid && issuer.Slug == fixtureIssuerSlug && issuer.Issuer == c.config.OAuthIssuerURL() && pgTextEquals(issuer.AuthorizationEndpoint, c.config.OAuthAuthorizationURL()) && pgTextEquals(issuer.TokenEndpoint, c.config.OAuthTokenURL()) && pgTextEquals(issuer.RegistrationEndpoint, c.config.OAuthRegistrationURL()) && slices.Equal(issuer.ScopesSupported, []string{"tools:read"}) && slices.Equal(issuer.GrantTypesSupported, []string{"authorization_code", "refresh_token"}) && slices.Equal(issuer.ResponseTypesSupported, []string{"code"}) && slices.Equal(issuer.TokenEndpointAuthMethodsSupported, []string{"none"}) && !issuer.ClientIDMetadataDocumentSupported && !issuer.Oidc && !issuer.Passthrough
+	return issuer.ID == c.config.RemoteSessionIssuerID() && !issuer.ProjectID.Valid && !issuer.OrganizationID.Valid && issuer.Slug == fixtureIssuerSlug && issuer.Issuer == c.config.OAuthIssuerURL() && pgTextEquals(issuer.AuthorizationEndpoint, c.config.OAuthAuthorizationURL()) && pgTextEquals(issuer.TokenEndpoint, c.config.OAuthTokenURL()) && pgTextEquals(issuer.RevocationEndpoint, c.config.OAuthRevocationURL()) && pgTextEquals(issuer.RegistrationEndpoint, c.config.OAuthRegistrationURL()) && slices.Equal(issuer.ScopesSupported, []string{"tools:read"}) && slices.Equal(issuer.GrantTypesSupported, []string{"authorization_code", "refresh_token"}) && slices.Equal(issuer.ResponseTypesSupported, []string{"code"}) && slices.Equal(issuer.TokenEndpointAuthMethodsSupported, []string{"none"}) && !issuer.ClientIDMetadataDocumentSupported && !issuer.Oidc && !issuer.Passthrough
 }
 
 func (c *ClientConfigurator) validateMetadata(ctx context.Context) error {

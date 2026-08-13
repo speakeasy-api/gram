@@ -66,6 +66,10 @@ export type CreateRemoteSessionIssuerForm = {
    */
   responseTypesSupported?: Array<string> | undefined;
   /**
+   * Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+   */
+  revocationEndpoint?: string | undefined;
+  /**
    * Scopes advertised by the issuer.
    */
   scopesSupported?: Array<string> | undefined;
@@ -103,6 +107,7 @@ export type CreateRemoteSessionIssuerForm$Outbound = {
   passthrough?: boolean | undefined;
   registration_endpoint?: string | undefined;
   response_types_supported?: Array<string> | undefined;
+  revocation_endpoint?: string | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug: string;
@@ -130,6 +135,7 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     passthrough: z.optional(z.boolean()),
     registrationEndpoint: z.optional(z.string()),
     responseTypesSupported: z.optional(z.array(z.string())),
+    revocationEndpoint: z.optional(z.string()),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.string(),
@@ -149,6 +155,7 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       opTosUri: "op_tos_uri",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
+      revocationEndpoint: "revocation_endpoint",
       scopesSupported: "scopes_supported",
       serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",

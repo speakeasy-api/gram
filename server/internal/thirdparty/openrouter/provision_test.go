@@ -92,6 +92,6 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-or-race-1", row.Key)
+	require.Equal(t, "sk-or-race-1", row.Key.String)
 	require.Equal(t, "hash-1", row.KeyHash)
 }

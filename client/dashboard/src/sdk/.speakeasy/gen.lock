@@ -137,6 +137,7 @@ trackedFiles:
   src/funcs/chatSetPinned.ts: {}
   src/funcs/chatSubmitFeedback.ts: {}
   src/funcs/chatSummarize.ts: {}
+  src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
   src/funcs/collectionsAttachServer.ts: {}
@@ -728,9 +729,12 @@ trackedFiles:
   src/models/components/externalcredentialsummary.ts: {}
   src/models/components/externalkeysummary.ts: {}
   src/models/components/externalmcpheaderdefinition.ts: {}
+  src/models/components/externalmcppackage.ts: {}
+  src/models/components/externalmcppackageenvironmentvariable.ts: {}
   src/models/components/externalmcpremote.ts: {}
   src/models/components/externalmcpremoteheader.ts: {}
   src/models/components/externalmcpremotevariable.ts: {}
+  src/models/components/externalmcprepository.ts: {}
   src/models/components/externalmcpserver.ts: {}
   src/models/components/externalmcpserverentry.ts: {}
   src/models/components/externalmcptool.ts: {}
@@ -1201,6 +1205,8 @@ trackedFiles:
   src/models/components/suggestexclusionresult.ts: {}
   src/models/components/summarizechatresult.ts: {}
   src/models/components/summarizerequestbody.ts: {}
+  src/models/components/summarizetoolcallrequestbody.ts: {}
+  src/models/components/summarizetoolcallresult.ts: {}
   src/models/components/syncedagentuser.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
@@ -1803,6 +1809,7 @@ trackedFiles:
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
   src/models/operations/summarizechat.ts: {}
+  src/models/operations/summarizetoolcall.ts: {}
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/testdeviceintegrationconnection.ts: {}
@@ -2524,6 +2531,7 @@ trackedFiles:
   src/react-query/spendRulesPreviewRule.ts: {}
   src/react-query/spendRulesUpdateRule.ts: {}
   src/react-query/summarizeChat.ts: {}
+  src/react-query/summarizeToolCall.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
@@ -7836,6 +7844,17 @@ examples:
       responses:
         "200":
           application/json: {"cached": false, "summary": "<value>", "summary_generated_at": "2024-06-30T11:39:49.958Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  summarizeToolCall:
+    speakeasy-default-summarize-tool-call:
+      requestBody:
+        application/json: {"id": "e2e0c321-5038-4b05-b08d-d095dec4dc49", "message_id": "92c60023-276b-4dc1-93a2-2de5f84cad1e", "tool_call_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"cached": false, "impact": "destructive", "summary": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

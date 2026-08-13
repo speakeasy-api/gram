@@ -294,6 +294,8 @@ export function AttachRemoteIdentityProviderSheet({
             // RFC 8414 documentation URLs are discovery-only — there are no form
             // inputs for them. Undefined when discovery did not run or the issuer
             // advertised nothing usable.
+            revocationEndpoint:
+              discoveredSnapshot?.revocationEndpoint || undefined,
             serviceDocumentation:
               discoveredSnapshot?.serviceDocumentation || undefined,
             opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,

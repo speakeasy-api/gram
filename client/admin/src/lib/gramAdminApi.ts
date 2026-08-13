@@ -11,6 +11,8 @@
 // SameSite=None permits a cross-site cookie; it does not defeat third-party
 // cookie blocking. Same-origin is the fix.
 
+import { queryOptions } from "@tanstack/react-query";
+
 export class GramAdminError extends Error {
   status: number;
   body: unknown;
@@ -53,8 +55,10 @@ export async function gramAdminFetch<T>(
     const returnTo = encodeURIComponent(
       window.location.pathname + window.location.search,
     );
+    redirectingToLogin = true;
     window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=none`;
-    // Caller never sees a resolved value; throw to unwind the in-flight call.
+    // Setting window.location starts the navigation but does not stop the code
+    // that follows it. Throw to unwind the in-flight call.
     throw new GramAdminError(401, null, "redirecting to admin login");
   }
 
@@ -75,6 +79,19 @@ export async function gramAdminFetch<T>(
   return (await res.json()) as T;
 }
 
+// True once gramAdminFetch has sent the browser to the login page. The document
+// is on its way out, so no caller should report the failure that caused it.
+//
+// The module records the navigation instead of reading it back off the failed
+// query, because React Query clears the error of a query that holds no data on
+// the next refetch, and a refetch on window focus would then reopen the gate
+// while the browser is still leaving.
+let redirectingToLogin = false;
+
+export function isRedirectingToLogin(): boolean {
+  return redirectingToLogin;
+}
+
 // Identity of the admin operator that owns the current session. The backend
 // reads it from the OIDC session record, so it names the identity-provider
 // account that signed in to this app, not any Gram customer account.
@@ -83,9 +100,14 @@ export type AdminSessionInfo = {
   name?: string;
 };
 
-export function getSession(): Promise<AdminSessionInfo> {
-  return gramAdminFetch<AdminSessionInfo>("/admin/session.get");
-}
+// The backend ends the session, never the client, so staleTime keeps a good
+// session from refetching. A failed check holds no data, which React Query
+// always treats as stale, so it still retries on focus and on reconnect.
+export const adminSessionQuery = queryOptions({
+  queryKey: ["adminSession"],
+  queryFn: () => gramAdminFetch<AdminSessionInfo>("/admin/session.get"),
+  staleTime: Infinity,
+});
 
 // Ends the admin session, then sends the browser into the OIDC flow.
 //

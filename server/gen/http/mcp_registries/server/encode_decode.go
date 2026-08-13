@@ -1202,6 +1202,19 @@ func marshalTypesExternalMCPServerEntryToExternalMCPServerEntryResponseBody(v *t
 			res.Remotes[i] = marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(val)
 		}
 	}
+	if v.Repository != nil {
+		res.Repository = marshalTypesExternalMCPRepositoryToExternalMCPRepositoryResponseBody(v.Repository)
+	}
+	if v.Packages != nil {
+		res.Packages = make([]*ExternalMCPPackageResponseBody, len(v.Packages))
+		for i, val := range v.Packages {
+			if val == nil {
+				res.Packages[i] = nil
+				continue
+			}
+			res.Packages[i] = marshalTypesExternalMCPPackageToExternalMCPPackageResponseBody(val)
+		}
+	}
 
 	return res
 }
@@ -1278,6 +1291,69 @@ func marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBod
 		for i, val := range v.Choices {
 			res.Choices[i] = val
 		}
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPRepositoryToExternalMCPRepositoryResponseBody builds
+// a value of type *ExternalMCPRepositoryResponseBody from a value of type
+// *types.ExternalMCPRepository.
+func marshalTypesExternalMCPRepositoryToExternalMCPRepositoryResponseBody(v *types.ExternalMCPRepository) *ExternalMCPRepositoryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPRepositoryResponseBody{
+		URL:       v.URL,
+		Source:    v.Source,
+		Subfolder: v.Subfolder,
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPPackageToExternalMCPPackageResponseBody builds a
+// value of type *ExternalMCPPackageResponseBody from a value of type
+// *types.ExternalMCPPackage.
+func marshalTypesExternalMCPPackageToExternalMCPPackageResponseBody(v *types.ExternalMCPPackage) *ExternalMCPPackageResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPPackageResponseBody{
+		RegistryType:    v.RegistryType,
+		RegistryBaseURL: v.RegistryBaseURL,
+		Identifier:      v.Identifier,
+		Version:         v.Version,
+		RuntimeHint:     v.RuntimeHint,
+		TransportType:   v.TransportType,
+		FileSha256:      v.FileSha256,
+	}
+	if v.EnvironmentVariables != nil {
+		res.EnvironmentVariables = make([]*ExternalMCPPackageEnvironmentVariableResponseBody, len(v.EnvironmentVariables))
+		for i, val := range v.EnvironmentVariables {
+			if val == nil {
+				res.EnvironmentVariables[i] = nil
+				continue
+			}
+			res.EnvironmentVariables[i] = marshalTypesExternalMCPPackageEnvironmentVariableToExternalMCPPackageEnvironmentVariableResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPPackageEnvironmentVariableToExternalMCPPackageEnvironmentVariableResponseBody
+// builds a value of type *ExternalMCPPackageEnvironmentVariableResponseBody
+// from a value of type *types.ExternalMCPPackageEnvironmentVariable.
+func marshalTypesExternalMCPPackageEnvironmentVariableToExternalMCPPackageEnvironmentVariableResponseBody(v *types.ExternalMCPPackageEnvironmentVariable) *ExternalMCPPackageEnvironmentVariableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPPackageEnvironmentVariableResponseBody{
+		Name:        v.Name,
+		Description: v.Description,
+		IsSecret:    v.IsSecret,
+		IsRequired:  v.IsRequired,
 	}
 
 	return res

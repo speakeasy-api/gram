@@ -280,7 +280,7 @@ func newChallengeManager(t *testing.T, conn *pgxpool.Pool, policy *guardian.Poli
 	require.NoError(t, err)
 	baseURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	return remotesessions.NewChallengeManager(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), policy, cache.NewRedisCacheAdapter(redisClient), baseURL)
+	return remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, cache.NewRedisCacheAdapter(redisClient), baseURL)
 }
 
 func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool) (platformmcp.Principal, platformmcp.ResolvedProject) {

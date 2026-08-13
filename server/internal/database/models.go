@@ -440,6 +440,7 @@ type ChatMessage struct {
 	ToolUrn           urn.Tool
 	ToolOutcome       pgtype.Text
 	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
 	ContentHash       []byte
 	Generation        int32
 	Replayed          bool
@@ -1318,7 +1319,8 @@ type OauthProxyServer struct {
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
-	Key            string
+	Key            pgtype.Text
+	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
 	Disabled       bool
@@ -1576,6 +1578,51 @@ type PlatformMcpConnection struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
+type PlatformMcpDistribution struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	DefaultPluginID      uuid.UUID
+	PluginServerID       uuid.NullUUID
+	State                string
+	Version              int64
+	AttachmentWasCreated bool
+	PublicationState     string
+	PublicationUpdatedAt pgtype.Timestamptz
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpFeedback struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	SubjectUrn            string
+	ConnectionID          uuid.NullUUID
+	ConnectionGeneration  uuid.NullUUID
+	ProjectID             uuid.NullUUID
+	WorkflowID            uuid.NullUUID
+	RequestReference      pgtype.Text
+	Category              string
+	IdempotencyKey        string
+	InputHash             string
+	Rating                pgtype.Int4
+	Success               pgtype.Bool
+	ToolName              pgtype.Text
+	FailureCategory       pgtype.Text
+	Note                  pgtype.Text
+	DeliveryState         string
+	DeliveryAttempts      int32
+	LastDeliveryAttemptAt pgtype.Timestamptz
+	DeliveredAt           pgtype.Timestamptz
+	DeadLetteredAt        pgtype.Timestamptz
+	ExpiresAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type PlatformMcpOauthClient struct {
 	ID                    uuid.UUID
 	ClientID              string
@@ -1600,6 +1647,25 @@ type PlatformMcpOnboardingMilestone struct {
 	AttemptID            uuid.NullUUID
 	ProductDay           pgtype.Date
 	CreatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpOnboardingWorkflow struct {
+	ID                         uuid.UUID
+	OrganizationID             string
+	InitiatingSubjectUrn       string
+	SourceSurface              string
+	ClientFamily               string
+	AgentConfigurationCopiedAt pgtype.Timestamptz
+	ConnectionID               uuid.NullUUID
+	ConnectionGeneration       uuid.NullUUID
+	SelectedProjectID          uuid.NullUUID
+	SelectedRegistrationID     uuid.NullUUID
+	Status                     string
+	CorrelationID              uuid.UUID
+	ExpiresAt                  pgtype.Timestamptz
+	ClosedAt                   pgtype.Timestamptz
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
 }
 
 type PlatformMcpOperationReceipt struct {
@@ -1633,6 +1699,21 @@ type PlatformMcpReadiness struct {
 	ExpiresAt                        pgtype.Timestamptz
 	CreatedAt                        pgtype.Timestamptz
 	UpdatedAt                        pgtype.Timestamptz
+}
+
+type PlatformMcpSelectedUseEvidence struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	RegistrationID      uuid.UUID
+	DistributionID      uuid.UUID
+	DistributionVersion int64
+	WorkflowID          uuid.NullUUID
+	ToolName            string
+	ToolCategory        string
+	RequestReference    pgtype.Text
+	SucceededAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
 }
 
 type PlatformMcpSession struct {

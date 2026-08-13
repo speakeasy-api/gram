@@ -175,6 +175,13 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		return oops.E(oops.CodeUnexpected, err, "log user session revocation").LogError(ctx, logger)
 	}
 
+	// Tombstone the subject's upstream grants in the same transaction; the
+	// RFC 7009 pushes wait until it commits.
+	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, revoked.UserSessionIssuerID, *authCtx.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -183,8 +190,18 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	// jti always corresponds to a soft-deleted row. Cache-write failure is
 	// surfaced as Unexpected — the row is gone but the access token would keep
 	// validating until expiry, which is the case the cache exists to prevent.
-	if err := s.chatSessions.RevokeToken(ctx, revoked.Jti); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "push jti into revocation cache").LogError(ctx, logger)
+	pushErr := s.chatSessions.RevokeToken(ctx, revoked.Jti)
+
+	// Strictly after the jti push, and attempted even when it failed. The
+	// upstream call is a synchronous round trip to a third party, so running it
+	// first would hold Gram's own access token valid for the length of someone
+	// else's timeout — trading a prompt local revocation for a best-effort
+	// remote one. The two are independent controls, so a cache outage must not
+	// also cost the upstream revocation.
+	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
+
+	if pushErr != nil {
+		return oops.E(oops.CodeUnexpected, pushErr, "push jti into revocation cache").LogError(ctx, logger)
 	}
 
 	return nil

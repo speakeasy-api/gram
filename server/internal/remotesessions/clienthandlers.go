@@ -822,7 +822,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		).LogError(ctx, logger)
 	}
 
-	if _, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID); err != nil {
+	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
@@ -841,6 +842,11 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Deleting the client cascaded a soft-delete to its sessions, so their
+	// upstream tokens are revoked on the same best-effort terms as an explicit
+	// revoke: post-commit, bounded, never surfaced to the caller.
+	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
 
 	return nil
 }
