@@ -3838,6 +3838,448 @@ paths:
             x-speakeasy-name-override: verifyGcpIam
             x-speakeasy-react-hook:
                 name: VerifyGcpIamPlatformCredential
+    /rpc/adminOpenRouterKeys.disableKey:
+        post:
+            description: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.
+            operationId: disableAdminOpenRouterKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DisableOpenRouterKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOpenRouterKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: disableKey adminOpenRouterKeys
+            tags:
+                - adminOpenRouterKeys
+            x-speakeasy-name-override: disableKey
+            x-speakeasy-react-hook:
+                name: DisableAdminOpenRouterKey
+    /rpc/adminOpenRouterKeys.enableKey:
+        post:
+            description: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.
+            operationId: enableAdminOpenRouterKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnableOpenRouterKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOpenRouterKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: enableKey adminOpenRouterKeys
+            tags:
+                - adminOpenRouterKeys
+            x-speakeasy-name-override: enableKey
+            x-speakeasy-react-hook:
+                name: EnableAdminOpenRouterKey
+    /rpc/adminOpenRouterKeys.encryptKey:
+        post:
+            description: 'Encrypt an organization''s stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.'
+            operationId: encryptAdminOpenRouterKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EncryptOpenRouterKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOpenRouterKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: encryptKey adminOpenRouterKeys
+            tags:
+                - adminOpenRouterKeys
+            x-speakeasy-name-override: encryptKey
+            x-speakeasy-react-hook:
+                name: EncryptAdminOpenRouterKey
+    /rpc/adminOpenRouterKeys.getKeyUsage:
+        get:
+            description: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.
+            operationId: getAdminOpenRouterKeyUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: Organization that owns the key.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Organization that owns the key.
+                    type: string
+                - allowEmptyValue: true
+                  description: Key type to inspect.
+                  in: query
+                  name: key_type
+                  required: true
+                  schema:
+                    description: Key type to inspect.
+                    enum:
+                        - chat
+                        - internal
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetKeyUsageResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getKeyUsage adminOpenRouterKeys
+            tags:
+                - adminOpenRouterKeys
+            x-speakeasy-name-override: getKeyUsage
+            x-speakeasy-react-hook:
+                name: AdminOpenRouterKeyUsage
+    /rpc/adminOpenRouterKeys.listKeys:
+        get:
+            description: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+            operationId: listAdminOpenRouterKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListKeysResponseBody2'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listKeys adminOpenRouterKeys
+            tags:
+                - adminOpenRouterKeys
+            x-speakeasy-name-override: listKeys
+            x-speakeasy-react-hook:
+                name: AdminOpenRouterKeys
     /rpc/adminRemoteSessions.createGlobalClient:
         post:
             description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -48994,6 +49436,115 @@ paths:
             x-speakeasy-name-override: listDefinitions
             x-speakeasy-react-hook:
                 name: TriggerDefinitions
+    /rpc/triggers.listEvents:
+        get:
+            description: List recent dispatch events for a trigger instance.
+            operationId: listTriggerEvents
+            parameters:
+                - allowEmptyValue: true
+                  description: The trigger instance ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The trigger instance ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of events to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of events to return.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTriggerEventsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listTriggerEvents triggers
+            tags:
+                - triggers
+            x-speakeasy-name-override: listEvents
+            x-speakeasy-react-hook:
+                name: TriggerEvents
     /rpc/triggers.pause:
         post:
             description: Pause a trigger instance.
@@ -54278,6 +54829,58 @@ components:
                     description: The page of organizations.
             required:
                 - organizations
+        AdminOpenRouterKey:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the key row was created.
+                    format: date-time
+                disabled:
+                    type: boolean
+                    description: Whether the key is locked down (refused locally and disabled upstream).
+                encryption_status:
+                    type: string
+                    description: Storage state of the key material.
+                    enum:
+                        - plaintext
+                        - encrypted_with_plaintext
+                        - encrypted
+                gram_account_type:
+                    type: string
+                    description: The organization's Gram account type (e.g. free, pro, enterprise).
+                key_type:
+                    type: string
+                    description: 'Which upstream key this row provisions: ''chat'' pays for customer-facing completions, ''internal'' pays for platform-initiated LLM usage.'
+                monthly_credits:
+                    type: integer
+                    description: Monthly credit ceiling last mirrored from OpenRouter.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: Organization that owns the key.
+                organization_name:
+                    type: string
+                    description: Display name of the owning organization.
+                organization_slug:
+                    type: string
+                    description: Slug of the owning organization.
+                updated_at:
+                    type: string
+                    description: When the key row was last updated.
+                    format: date-time
+            description: One organization's platform OpenRouter key of a given type, without its key material.
+            required:
+                - organization_id
+                - organization_name
+                - organization_slug
+                - gram_account_type
+                - key_type
+                - monthly_credits
+                - disabled
+                - encryption_status
+                - created_at
+                - updated_at
         AdminOrganization:
             type: object
             properties:
@@ -55790,6 +56393,9 @@ components:
                     type: string
                     description: When the last message in the chat was created.
                     format: date-time
+                litellm_proxied:
+                    type: boolean
+                    description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
                 match_segments:
                     type: array
                     items:
@@ -56029,6 +56635,9 @@ components:
                     type: string
                     description: When the last message in the chat was created.
                     format: date-time
+                litellm_proxied:
+                    type: boolean
+                    description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -58849,6 +59458,21 @@ components:
             description: Outcome of probing the provider with the stored credentials.
             required:
                 - ok
+        DisableOpenRouterKeyRequestBody:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: Key type to disable.
+                    enum:
+                        - chat
+                        - internal
+                organization_id:
+                    type: string
+                    description: Organization that owns the key.
+            required:
+                - organization_id
+                - key_type
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:
@@ -58957,6 +59581,36 @@ components:
                 - tier
                 - label
                 - total_calls
+        EnableOpenRouterKeyRequestBody:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: Key type to enable.
+                    enum:
+                        - chat
+                        - internal
+                organization_id:
+                    type: string
+                    description: Organization that owns the key.
+            required:
+                - organization_id
+                - key_type
+        EncryptOpenRouterKeyRequestBody:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: Key type to encrypt.
+                    enum:
+                        - chat
+                        - internal
+                organization_id:
+                    type: string
+                    description: Organization that owns the key.
+            required:
+                - organization_id
+                - key_type
         Environment:
             type: object
             properties:
@@ -60481,6 +61135,25 @@ components:
             properties:
                 integration:
                     $ref: '#/components/schemas/Integration'
+        GetKeyUsageResponseBody:
+            type: object
+            properties:
+                credits_used:
+                    type: number
+                    description: Credits spent this month, rounded to cents.
+                    format: double
+                monthly_credits:
+                    type: integer
+                    description: Monthly credit ceiling recorded locally.
+                    format: int64
+                upstream_limit:
+                    type: integer
+                    description: Monthly limit as configured upstream; absent when OpenRouter reports an unlimited key.
+                    format: int64
+            description: Live usage as reported by OpenRouter at request time.
+            required:
+                - credits_used
+                - monthly_credits
         GetLatestDeploymentResult:
             type: object
             properties:
@@ -62763,6 +63436,16 @@ components:
                     description: The model provider keys configured for the project.
             required:
                 - keys
+        ListKeysResponseBody2:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOpenRouterKey'
+                    description: Every live platform OpenRouter key, ordered by organization slug then key type.
+            required:
+                - keys
         ListKeysResult:
             type: object
             properties:
@@ -63638,6 +64321,16 @@ components:
                     description: The available trigger definitions.
             required:
                 - definitions
+        ListTriggerEventsResult:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TriggerEvent'
+                    description: The dispatch events for the trigger instance, most recent first.
+            required:
+                - events
         ListTriggerInstancesResult:
             type: object
             properties:
@@ -73829,6 +74522,50 @@ components:
             required:
                 - name
                 - required
+        TriggerEvent:
+            type: object
+            properties:
+                attempts:
+                    type: integer
+                    description: Number of processing attempts.
+                    format: int64
+                chat_id:
+                    type: string
+                    description: The conversation the event was routed to.
+                    format: uuid
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                id:
+                    type: string
+                    description: The trigger event ID.
+                    format: uuid
+                last_error:
+                    type: string
+                    description: The last processing error, if any.
+                processed_at:
+                    type: string
+                    description: Processing completion timestamp.
+                    format: date-time
+                status:
+                    type: string
+                    description: The processing status of the event.
+                    enum:
+                        - pending
+                        - processing
+                        - completed
+                        - failed
+                trigger_instance_id:
+                    type: string
+                    description: The trigger instance that dispatched the event.
+                    format: uuid
+            required:
+                - id
+                - trigger_instance_id
+                - status
+                - attempts
+                - created_at
         TriggerInstance:
             type: object
             properties:
@@ -76723,6 +77460,8 @@ tags:
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminExternalCredentials
       description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+    - name: adminOpenRouterKeys
+      description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features

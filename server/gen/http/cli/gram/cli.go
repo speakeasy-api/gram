@@ -18,6 +18,7 @@ import (
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
 	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
+	adminopenrouterkeysc "github.com/speakeasy-api/gram/server/gen/http/admin_open_router_keys/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
@@ -133,6 +134,7 @@ func UsageCommands() []string {
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
+		"admin-open-router-keys (list-keys|get-key-usage|encrypt-key|disable-key|enable-key)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -154,7 +156,7 @@ func UsageCommands() []string {
 		"token-exchange exchange",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
-		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
+		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
@@ -1549,6 +1551,28 @@ func ParseEndpoint(
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysFlags = flag.NewFlagSet("admin-open-router-keys", flag.ContinueOnError)
+
+		adminOpenRouterKeysListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		adminOpenRouterKeysListKeysSessionTokenFlag = adminOpenRouterKeysListKeysFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysGetKeyUsageFlags              = flag.NewFlagSet("get-key-usage", flag.ExitOnError)
+		adminOpenRouterKeysGetKeyUsageOrganizationIDFlag = adminOpenRouterKeysGetKeyUsageFlags.String("organization-id", "REQUIRED", "")
+		adminOpenRouterKeysGetKeyUsageKeyTypeFlag        = adminOpenRouterKeysGetKeyUsageFlags.String("key-type", "REQUIRED", "")
+		adminOpenRouterKeysGetKeyUsageSessionTokenFlag   = adminOpenRouterKeysGetKeyUsageFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysEncryptKeyFlags            = flag.NewFlagSet("encrypt-key", flag.ExitOnError)
+		adminOpenRouterKeysEncryptKeyBodyFlag         = adminOpenRouterKeysEncryptKeyFlags.String("body", "REQUIRED", "")
+		adminOpenRouterKeysEncryptKeySessionTokenFlag = adminOpenRouterKeysEncryptKeyFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysDisableKeyFlags            = flag.NewFlagSet("disable-key", flag.ExitOnError)
+		adminOpenRouterKeysDisableKeyBodyFlag         = adminOpenRouterKeysDisableKeyFlags.String("body", "REQUIRED", "")
+		adminOpenRouterKeysDisableKeySessionTokenFlag = adminOpenRouterKeysDisableKeyFlags.String("session-token", "", "")
+
+		adminOpenRouterKeysEnableKeyFlags            = flag.NewFlagSet("enable-key", flag.ExitOnError)
+		adminOpenRouterKeysEnableKeyBodyFlag         = adminOpenRouterKeysEnableKeyFlags.String("body", "REQUIRED", "")
+		adminOpenRouterKeysEnableKeySessionTokenFlag = adminOpenRouterKeysEnableKeyFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -2976,6 +3000,12 @@ func ParseEndpoint(
 		triggersListTriggerInstancesSessionTokenFlag     = triggersListTriggerInstancesFlags.String("session-token", "", "")
 		triggersListTriggerInstancesProjectSlugInputFlag = triggersListTriggerInstancesFlags.String("project-slug-input", "", "")
 
+		triggersListTriggerEventsFlags                = flag.NewFlagSet("list-trigger-events", flag.ExitOnError)
+		triggersListTriggerEventsIDFlag               = triggersListTriggerEventsFlags.String("id", "REQUIRED", "")
+		triggersListTriggerEventsLimitFlag            = triggersListTriggerEventsFlags.String("limit", "50", "")
+		triggersListTriggerEventsSessionTokenFlag     = triggersListTriggerEventsFlags.String("session-token", "", "")
+		triggersListTriggerEventsProjectSlugInputFlag = triggersListTriggerEventsFlags.String("project-slug-input", "", "")
+
 		triggersGetTriggerInstanceFlags                = flag.NewFlagSet("get-trigger-instance", flag.ExitOnError)
 		triggersGetTriggerInstanceIDFlag               = triggersGetTriggerInstanceFlags.String("id", "REQUIRED", "")
 		triggersGetTriggerInstanceSessionTokenFlag     = triggersGetTriggerInstanceFlags.String("session-token", "", "")
@@ -3606,6 +3636,13 @@ func ParseEndpoint(
 	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
 	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
 
+	adminOpenRouterKeysFlags.Usage = adminOpenRouterKeysUsage
+	adminOpenRouterKeysListKeysFlags.Usage = adminOpenRouterKeysListKeysUsage
+	adminOpenRouterKeysGetKeyUsageFlags.Usage = adminOpenRouterKeysGetKeyUsageUsage
+	adminOpenRouterKeysEncryptKeyFlags.Usage = adminOpenRouterKeysEncryptKeyUsage
+	adminOpenRouterKeysDisableKeyFlags.Usage = adminOpenRouterKeysDisableKeyUsage
+	adminOpenRouterKeysEnableKeyFlags.Usage = adminOpenRouterKeysEnableKeyUsage
+
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -3886,6 +3923,7 @@ func ParseEndpoint(
 	triggersFlags.Usage = triggersUsage
 	triggersListTriggerDefinitionsFlags.Usage = triggersListTriggerDefinitionsUsage
 	triggersListTriggerInstancesFlags.Usage = triggersListTriggerInstancesUsage
+	triggersListTriggerEventsFlags.Usage = triggersListTriggerEventsUsage
 	triggersGetTriggerInstanceFlags.Usage = triggersGetTriggerInstanceUsage
 	triggersCreateTriggerInstanceFlags.Usage = triggersCreateTriggerInstanceUsage
 	triggersUpdateTriggerInstanceFlags.Usage = triggersUpdateTriggerInstanceUsage
@@ -4050,6 +4088,8 @@ func ParseEndpoint(
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
 			svcf = adminExternalCredentialsFlags
+		case "admin-open-router-keys":
+			svcf = adminOpenRouterKeysFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -5040,6 +5080,25 @@ func ParseEndpoint(
 
 			}
 
+		case "admin-open-router-keys":
+			switch epn {
+			case "list-keys":
+				epf = adminOpenRouterKeysListKeysFlags
+
+			case "get-key-usage":
+				epf = adminOpenRouterKeysGetKeyUsageFlags
+
+			case "encrypt-key":
+				epf = adminOpenRouterKeysEncryptKeyFlags
+
+			case "disable-key":
+				epf = adminOpenRouterKeysDisableKeyFlags
+
+			case "enable-key":
+				epf = adminOpenRouterKeysEnableKeyFlags
+
+			}
+
 		case "plugins":
 			switch epn {
 			case "list-plugins":
@@ -5836,6 +5895,9 @@ func ParseEndpoint(
 
 			case "list-trigger-instances":
 				epf = triggersListTriggerInstancesFlags
+
+			case "list-trigger-events":
+				epf = triggersListTriggerEventsFlags
 
 			case "get-trigger-instance":
 				epf = triggersGetTriggerInstanceFlags
@@ -6972,6 +7034,25 @@ func ParseEndpoint(
 				endpoint = c.DeleteGcpIamPlatformCredential()
 				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
 			}
+		case "admin-open-router-keys":
+			c := adminopenrouterkeysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-keys":
+				endpoint = c.ListKeys()
+				data, err = adminopenrouterkeysc.BuildListKeysPayload(*adminOpenRouterKeysListKeysSessionTokenFlag)
+			case "get-key-usage":
+				endpoint = c.GetKeyUsage()
+				data, err = adminopenrouterkeysc.BuildGetKeyUsagePayload(*adminOpenRouterKeysGetKeyUsageOrganizationIDFlag, *adminOpenRouterKeysGetKeyUsageKeyTypeFlag, *adminOpenRouterKeysGetKeyUsageSessionTokenFlag)
+			case "encrypt-key":
+				endpoint = c.EncryptKey()
+				data, err = adminopenrouterkeysc.BuildEncryptKeyPayload(*adminOpenRouterKeysEncryptKeyBodyFlag, *adminOpenRouterKeysEncryptKeySessionTokenFlag)
+			case "disable-key":
+				endpoint = c.DisableKey()
+				data, err = adminopenrouterkeysc.BuildDisableKeyPayload(*adminOpenRouterKeysDisableKeyBodyFlag, *adminOpenRouterKeysDisableKeySessionTokenFlag)
+			case "enable-key":
+				endpoint = c.EnableKey()
+				data, err = adminopenrouterkeysc.BuildEnableKeyPayload(*adminOpenRouterKeysEnableKeyBodyFlag, *adminOpenRouterKeysEnableKeySessionTokenFlag)
+			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -7770,6 +7851,9 @@ func ParseEndpoint(
 			case "list-trigger-instances":
 				endpoint = c.ListTriggerInstances()
 				data, err = triggersc.BuildListTriggerInstancesPayload(*triggersListTriggerInstancesSessionTokenFlag, *triggersListTriggerInstancesProjectSlugInputFlag)
+			case "list-trigger-events":
+				endpoint = c.ListTriggerEvents()
+				data, err = triggersc.BuildListTriggerEventsPayload(*triggersListTriggerEventsIDFlag, *triggersListTriggerEventsLimitFlag, *triggersListTriggerEventsSessionTokenFlag, *triggersListTriggerEventsProjectSlugInputFlag)
 			case "get-trigger-instance":
 				endpoint = c.GetTriggerInstance()
 				data, err = triggersc.BuildGetTriggerInstancePayload(*triggersGetTriggerInstanceIDFlag, *triggersGetTriggerInstanceSessionTokenFlag, *triggersGetTriggerInstanceProjectSlugInputFlag)
@@ -14180,6 +14264,121 @@ func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
+// adminOpenRouterKeysUsage displays the usage of the admin-open-router-keys
+// command and its subcommands.
+func adminOpenRouterKeysUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-open-router-keys COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-key-usage: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    encrypt-key: Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    disable-key: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    enable-key: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-open-router-keys COMMAND --help\n", os.Args[0])
+}
+func adminOpenRouterKeysListKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys list-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys list-keys --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysGetKeyUsageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys get-key-usage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -key-type STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -key-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys get-key-usage --organization-id \"abc123\" --key-type \"internal\" --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysEncryptKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys encrypt-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys encrypt-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysDisableKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys disable-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys disable-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminOpenRouterKeysEnableKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys enable-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys enable-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
 // pluginsUsage displays the usage of the plugins command and its subcommands.
 func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage distributable plugin bundles of MCP servers and hooks.`)
@@ -20225,6 +20424,7 @@ func triggersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-trigger-definitions: List static trigger definitions available to a project.`)
 	fmt.Fprintln(os.Stderr, `    list-trigger-instances: List trigger instances for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-trigger-events: List recent dispatch events for a trigger instance.`)
 	fmt.Fprintln(os.Stderr, `    get-trigger-instance: Get a trigger instance by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-trigger-instance: Create a trigger instance.`)
 	fmt.Fprintln(os.Stderr, `    update-trigger-instance: Update a trigger instance.`)
@@ -20273,6 +20473,30 @@ func triggersListTriggerInstancesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersListTriggerEventsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers list-trigger-events", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List recent dispatch events for a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-events --id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersGetTriggerInstanceUsage() {

@@ -1,8 +1,6 @@
 name: Pull Request
 on:
   pull_request:
-    branches:
-      - main
     types: [opened, synchronize, reopened]
   push:
     branches:
@@ -56,19 +54,50 @@ jobs:
         id: filter
         with:
           filters: .github/filters.yaml
+      - id: stacked
+        name: Compare preview image components against main
+        if: github.event_name == 'pull_request' && github.base_ref != 'main' && !github.event.pull_request.head.repo.fork
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin main
+          check() {
+            local name=$1
+            local pathspecs=()
+            local path
+            while IFS= read -r path; do
+              pathspecs+=(":(glob)${path}")
+            done < <(python3 -c 'import sys, yaml; print("\n".join(yaml.safe_load(open(".github/filters.yaml"))[sys.argv[1]]))' "$name")
+            if [ "${#pathspecs[@]}" -eq 0 ]; then
+              echo "::error::No watched paths resolved from .github/filters.yaml for ${name}"
+              exit 1
+            fi
+            if git diff --quiet origin/main HEAD -- "${pathspecs[@]}"; then
+              echo "${name}=false" >> "$GITHUB_OUTPUT"
+              echo "${name} matches main; the preview retag fallback can cover it."
+            else
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+              echo "${name} differs from main; its jobs will run."
+            fi
+          }
+          check server
+          check client
+          check pystreams
       - id: gates
         name: Set outputs
         env:
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          STACKED_SERVER: ${{ steps.stacked.outputs.server }}
+          STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
+          STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
@@ -124,7 +153,7 @@ jobs:
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
@@ -1147,15 +1176,15 @@ jobs:
             ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
           path: ${{ env.UV_CACHE_DIR }}
 
-      - name: Fetch main branch
-        run: git fetch --depth=1 origin main
+      - name: Fetch base branch
+        run: git fetch --depth=1 origin "${{ github.base_ref || 'main' }}"
 
-      # buf breaking against main is what catches a wire-incompatible proto
-      # change (field renumbering, type change) that would corrupt already
-      # published messages — including outbox rows, which store marshaled bytes
-      # and republish them verbatim after a deploy.
+      # buf breaking against the PR base is what catches a wire-incompatible
+      # proto change (field renumbering, type change) that would corrupt
+      # already published messages. Stacked PRs compare against their feature
+      # base; that base's own PR re-checks the full stack against main.
       - name: Lint proto files
-        run: mise run lint:infra --against ".git#ref=origin/main"
+        run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
 
       - name: Install uv dependencies
         run: mise run install:uv --all-packages --locked

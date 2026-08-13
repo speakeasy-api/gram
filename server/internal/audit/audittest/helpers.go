@@ -13,16 +13,17 @@ import (
 )
 
 type LogRecord struct {
-	Action         string
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	SubjectID      string
-	SubjectType    string
-	SubjectDisplay string
-	SubjectSlug    string
-	Metadata       []byte
-	BeforeSnapshot []byte
-	AfterSnapshot  []byte
+	Action           string
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	ActorDisplayName *string
+	SubjectID        string
+	SubjectType      string
+	SubjectDisplay   string
+	SubjectSlug      string
+	Metadata         []byte
+	BeforeSnapshot   []byte
+	AfterSnapshot    []byte
 }
 
 func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (LogRecord, error) {
@@ -32,16 +33,17 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 	}
 
 	return LogRecord{
-		Action:         row.Action,
-		OrganizationID: row.OrganizationID,
-		ProjectID:      row.ProjectID,
-		SubjectID:      row.SubjectID,
-		SubjectType:    row.SubjectType,
-		SubjectDisplay: conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
-		SubjectSlug:    conv.PtrValOr(conv.FromPGText[string](row.SubjectSlug), ""),
-		Metadata:       row.Metadata,
-		BeforeSnapshot: row.BeforeSnapshot,
-		AfterSnapshot:  row.AfterSnapshot,
+		Action:           row.Action,
+		OrganizationID:   row.OrganizationID,
+		ProjectID:        row.ProjectID,
+		ActorDisplayName: conv.FromPGText[string](row.ActorDisplayName),
+		SubjectID:        row.SubjectID,
+		SubjectType:      row.SubjectType,
+		SubjectDisplay:   conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
+		SubjectSlug:      conv.PtrValOr(conv.FromPGText[string](row.SubjectSlug), ""),
+		Metadata:         row.Metadata,
+		BeforeSnapshot:   row.BeforeSnapshot,
+		AfterSnapshot:    row.AfterSnapshot,
 	}, nil
 }
 

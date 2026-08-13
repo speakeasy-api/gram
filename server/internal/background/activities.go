@@ -291,7 +291,7 @@ func NewActivities(
 	return &Activities{
 		db:                              db,
 		temporalEnv:                     temporalEnv,
-		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
+		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),

@@ -42,6 +42,7 @@ SELECT
   action,
   organization_id,
   project_id,
+  actor_display_name,
   subject_id,
   subject_type,
   subject_display_name,
@@ -59,6 +60,7 @@ type GetLatestAuditLogByActionRow struct {
 	Action             string
 	OrganizationID     string
 	ProjectID          uuid.NullUUID
+	ActorDisplayName   pgtype.Text
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName pgtype.Text
@@ -75,6 +77,7 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 		&i.Action,
 		&i.OrganizationID,
 		&i.ProjectID,
+		&i.ActorDisplayName,
 		&i.SubjectID,
 		&i.SubjectType,
 		&i.SubjectDisplayName,

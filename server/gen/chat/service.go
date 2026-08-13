@@ -148,6 +148,9 @@ type Chat struct {
 	// The supported client that originated a chat routed through the source, when
 	// known
 	OriginatingClient *string
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.
@@ -259,6 +262,9 @@ type ChatOverview struct {
 	// The supported client that originated a chat routed through the source, when
 	// known
 	OriginatingClient *string
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool
 	// When the chat was created.
 	CreatedAt string
 	// When the chat was last updated.

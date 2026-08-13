@@ -185,10 +185,11 @@ func TestService_Register(t *testing.T) {
 			name    string
 			orgName string
 		}{
-			{"with special characters", "Test@Org!"},
-			{"with brackets", "Test[Org]"},
-			{"with slashes", "Test/Org\\"},
-			{"with quotes", "Test\"Org'"},
+			{"with a newline", "Test\nOrg"},
+			{"with a tab", "Test\tOrg"},
+			{"with a bidi override", "Test\u202eOrg"},
+			{"with a zero-width space", "Test\u200bOrg"},
+			{"with invalid utf-8", "Test\xffOrg"},
 		}
 
 		for _, tc := range testCases {
@@ -211,7 +212,7 @@ func TestService_Register(t *testing.T) {
 		}
 	})
 
-	t.Run("register fails when org name slugifies to nothing", func(t *testing.T) {
+	t.Run("register fails when org name has too few letters or numbers", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -240,9 +241,8 @@ func TestService_Register(t *testing.T) {
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-		// Names built entirely from the punctuation the character rule allows
-		// (or with a single surviving alphanumeric) slugify to an empty or
-		// one-character slug and must be rejected server-side.
+		// Names built entirely from punctuation or symbols carry no meaning and
+		// must be rejected server-side, as must a lone initial.
 		testCases := []struct {
 			name    string
 			orgName string
@@ -250,7 +250,8 @@ func TestService_Register(t *testing.T) {
 			{"only hyphens", "-----"},
 			{"only underscores", "___"},
 			{"mixed punctuation", "- _ -"},
-			{"single alphanumeric", "A-"},
+			{"only symbols", "€ £ ¥"},
+			{"single letter", "A-"},
 		}
 
 		for _, tc := range testCases {
@@ -285,6 +286,10 @@ func TestService_Register(t *testing.T) {
 			{"with hyphens", "Test-Organization"},
 			{"with underscores", "Test_Organization"},
 			{"mixed valid characters", "Test-Org_123 Demo"},
+			{"with punctuation", "Test Org, Inc."},
+			{"with an apostrophe", "Test's Organization"},
+			{"with an ampersand", "Test & Organization"},
+			{"accented latin", "Tëst Örganization"},
 		}
 
 		for _, tc := range testCases {
@@ -494,4 +499,39 @@ func TestService_Register(t *testing.T) {
 		assert.Contains(t, newOrg.Slug, "collide-me-", "slug should start with base and have a random suffix")
 		assert.Len(t, newOrg.Slug, len("collide-me-")+4, "suffix should be 4 hex chars")
 	})
+}
+
+func TestRegister_CreatesOrganizationForNameWithNoDerivableSlug(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = []MockOrganizationEntry{}
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	session := sessions.Session{
+		SessionID:            "slug-non-latin",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: "",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		SessionID:            &session.SessionID,
+		UserID:               session.UserID,
+		ActiveOrganizationID: "",
+		AccountType:          "test",
+		Email:                &userInfo.Email,
+	})
+
+	const orgName = "アクメ株式会社"
+	require.NoError(t, instance.service.Register(ctx, &gen.RegisterPayload{OrgName: orgName}))
+
+	stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.NotEmpty(t, stored.ActiveOrganizationID)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, stored.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, orgName, org.Name)
+	require.Regexp(t, `^org-[a-z1-9]{8}$`, org.Slug)
 }

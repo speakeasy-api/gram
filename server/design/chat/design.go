@@ -482,6 +482,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")
+	Attribute("litellm_proxied", Boolean, "True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream")
 	Attribute("created_at", String, func() {
 		Description("When the chat was created.")
 		Format(FormatDateTime)

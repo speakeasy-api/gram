@@ -171,6 +171,10 @@ candidate_chats AS (
     )
     AND (
       coalesce(cardinality($14::text[]), 0) = 0
+      -- Proxied sessions match the LiteLLM filter even when a native hook
+      -- stream owns every transcript row (proxied rows are suppressed as
+      -- duplicates, so the message-source probe alone would miss them).
+      OR ('litellm' = ANY ($14::text[]) AND c.litellm_proxied)
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -667,7 +671,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.litellm_proxied, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -694,6 +698,7 @@ type GetChatRow struct {
 	Summary            pgtype.Text
 	SummaryGeneratedAt pgtype.Timestamptz
 	UserAccountID      uuid.NullUUID
+	LitellmProxied     bool
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -724,6 +729,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.Summary,
 		&i.SummaryGeneratedAt,
 		&i.UserAccountID,
+		&i.LitellmProxied,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1840,7 +1846,18 @@ WHERE c.project_id = $1
   AND c.deleted IS FALSE
   AND ($2::text = '' OR c.external_user_id = $2::text)
   AND ($3::text = '' OR c.user_id = $3::text)
-ORDER BY latest.source
+UNION
+SELECT 'litellm'
+WHERE EXISTS (
+  SELECT 1
+  FROM chats pc
+  WHERE pc.project_id = $1
+    AND pc.deleted IS FALSE
+    AND pc.litellm_proxied
+    AND ($2::text = '' OR pc.external_user_id = $2::text)
+    AND ($3::text = '' OR pc.user_id = $3::text)
+)
+ORDER BY source
 `
 
 type ListChatSourcesParams struct {
@@ -1858,6 +1875,9 @@ type ListChatSourcesParams struct {
 // instead of sorting the project's entire message history. The lateral join
 // drops chats with no sourced messages, matching the previous inner-join
 // semantics.
+// Natively captured proxied sessions carry no litellm message rows (they are
+// suppressed as duplicates), so the LiteLLM filter option must also be offered
+// when any visible chat carries the chat-level proxied marker.
 func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams) ([]pgtype.Text, error) {
 	rows, err := q.db.Query(ctx, listChatSources, arg.ProjectID, arg.ExternalUserID, arg.UserID)
 	if err != nil {
@@ -2005,6 +2025,7 @@ candidate_chats AS (
     c.created_at,
     c.updated_at,
     c.pinned_at,
+    c.litellm_proxied,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -2069,6 +2090,10 @@ candidate_chats AS (
     )
     AND (
       coalesce(cardinality($12::text[]), 0) = 0
+      -- Proxied sessions match the LiteLLM filter even when a native hook
+      -- stream owns every transcript row (proxied rows are suppressed as
+      -- duplicates, so the message-source probe alone would miss them).
+      OR ('litellm' = ANY ($12::text[]) AND c.litellm_proxied)
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -2106,6 +2131,7 @@ filtered_chats AS (
     cc.created_at,
     cc.updated_at,
     cc.pinned_at,
+    cc.litellm_proxied,
     cs.num_messages,
     cs.last_message_timestamp,
     cc.account_type,
@@ -2124,6 +2150,7 @@ limited_chats AS (
     fc.created_at,
     fc.updated_at,
     fc.pinned_at,
+    fc.litellm_proxied,
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
@@ -2155,7 +2182,7 @@ limited_chats AS (
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -2176,6 +2203,7 @@ SELECT
   lc.external_user_id,
   lc.source,
   lc.originating_client,
+  lc.litellm_proxied,
   lc.created_at,
   lc.updated_at,
   lc.pinned_at,
@@ -2230,6 +2258,7 @@ type ListChatsRow struct {
 	ExternalUserID       pgtype.Text
 	Source               pgtype.Text
 	OriginatingClient    string
+	LitellmProxied       bool
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	PinnedAt             pgtype.Timestamptz
@@ -2287,6 +2316,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.ExternalUserID,
 			&i.Source,
 			&i.OriginatingClient,
+			&i.LitellmProxied,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.PinnedAt,
@@ -2762,6 +2792,28 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, arg ListUserFeedb
 		return nil, err
 	}
 	return items, nil
+}
+
+const markChatLiteLLMProxied = `-- name: MarkChatLiteLLMProxied :exec
+UPDATE chats
+SET litellm_proxied = TRUE
+WHERE id = $1
+  AND project_id = $2
+  AND NOT litellm_proxied
+`
+
+type MarkChatLiteLLMProxiedParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Flags a session as observed by the LiteLLM proxy. Set on every proxied
+// ingest event rather than at chat creation because natively captured
+// sessions suppress their proxied transcript rows, leaving no message-level
+// trace of the proxy.
+func (q *Queries) MarkChatLiteLLMProxied(ctx context.Context, arg MarkChatLiteLLMProxiedParams) error {
+	_, err := q.db.Exec(ctx, markChatLiteLLMProxied, arg.ID, arg.ProjectID)
+	return err
 }
 
 const renameChat = `-- name: RenameChat :exec
