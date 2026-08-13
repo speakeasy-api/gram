@@ -125,7 +125,15 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	resp, err := policy.Client().Do(httpReq)
+	// Dynamic registration may return a client secret. Never follow a redirect:
+	// a provider-controlled redirect could resend the registration request to a
+	// different origin or downgrade transport security before the secret can be
+	// encrypted by the caller.
+	httpClient := policy.Client()
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("reach registration endpoint: %w", err)
 	}
@@ -134,6 +142,9 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, proxyRegisterMaxBodyBytes))
 	if err != nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("read DCR response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode < http.StatusMultipleChoices+100 {
+		return ProxyRegisterResponse{}, fmt.Errorf("registration endpoint redirected")
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return ProxyRegisterResponse{}, &DynamicClientRegistrationError{StatusCode: resp.StatusCode, Detail: dcrErrorDetail(respBody, resp.StatusCode)}
