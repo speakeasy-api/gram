@@ -12,9 +12,11 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -263,4 +265,137 @@ func TestCostAnalytics_CanonicalFold_ShadowServesLiteralResults(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Table, 1)
 	require.InDelta(t, 1, result.Table[0].Measures.TotalCost, 0.001)
+}
+
+func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
+	t.Parallel()
+
+	// The employee detail endpoint runs under the default test grants (the
+	// org-read-only context the aggregate tests use is not enough for it).
+	ctx, ti := newTestLogsService(t)
+	authCtx0, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx0.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	// The user-id identifier path keeps one directory lookup, so a connected
+	// directory row is required; the map supplies everything else.
+	employeeID, workEmail := seedConnectedOrgUser(t, ctx, ti, "fold-detail")
+	workLower := strings.ToLower(workEmail)
+	personalEmail := "fold-personal-" + uuid.NewString()[:8] + "@example.com"
+	seedIdentityMapEntry(t, ctx, ti, orgID, workLower, employeeID, workLower)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, employeeID, workLower)
+
+	otherID, _ := seedConnectedOrgUser(t, ctx, ti, "fold-other")
+
+	now := time.Now().UTC()
+	// Email-only row under the personal account, user-id-only hook row, and a
+	// DNO-509 trap: this employee's email on a row owned by someone else.
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 100, 50, 2.5)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), employeeID, "", 700, 300, 42)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), otherID, personalEmail, 9000, 9000, 999)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	for _, identifier := range []string{employeeID, workLower, personalEmail} {
+		m := userMetrics(t, ctx, ti, identifier)
+		require.Equal(t, int64(800), m.TotalInputTokens, "identifier %s", identifier)
+		require.InDelta(t, 44.5, m.TotalCost, 0.001, "identifier %s", identifier)
+	}
+}
+
+func TestSearchEmployeeAgentUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, orgID := foldTestContext(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	suffix := uuid.NewString()[:8]
+	workEmail := "ework-" + suffix + "@example.com"
+	personalEmail := "epersonal-" + suffix + "@example.com"
+	userID := uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	params := repo.SearchEmployeeAgentUsageParams{
+		GramProjectID:        projectID,
+		TimeStart:            now.Add(-time.Hour).UnixNano(),
+		TimeEnd:              now.Add(time.Hour).UnixNano(),
+		Limit:                50,
+		CanonicalIdentityOrg: orgID,
+	}
+	rows, err := ti.chClient.SearchEmployeeAgentUsage(ctx, params)
+	require.NoError(t, err)
+
+	byEmail := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		byEmail[row.UserEmail] = row.TotalTokens
+	}
+	require.Equal(t, int64(450), byEmail[workEmail])
+	require.NotContains(t, byEmail, personalEmail)
+	require.NotContains(t, byEmail, strings.ToUpper(personalEmail))
+
+	// Literal mode keeps the split rows — the flag-off behavior.
+	params.CanonicalIdentityOrg = ""
+	rows, err = ti.chClient.SearchEmployeeAgentUsage(ctx, params)
+	require.NoError(t, err)
+	byEmail = make(map[string]int64, len(rows))
+	for _, row := range rows {
+		byEmail[row.UserEmail] = row.TotalTokens
+	}
+	require.Equal(t, int64(150), byEmail[workEmail])
+	require.Equal(t, int64(300), byEmail[strings.ToUpper(personalEmail)])
+}
+
+func TestGetTumBreakdownDimByDay_CanonicalFold_EmailSlicesFold(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, orgID := foldTestContext(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	suffix := uuid.NewString()[:8]
+	workEmail := "twork-" + suffix + "@example.com"
+	personalEmail := "tpersonal-" + suffix + "@example.com"
+	userID := uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", personalEmail, "", nil, "main", "", "", "", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	params := repo.GetTokensUnderManagementParams{
+		ProjectIDs:          []string{projectID},
+		StartUnixNano:       now.Add(-time.Hour).UnixNano(),
+		EndUnixNano:         now.Add(time.Hour).UnixNano(),
+		ExcludedHookSources: billing.GramHostedHookSourceStrings(),
+	}
+	folded, err := ti.chClient.GetTumBreakdownDimByDay(ctx, params, "email", orgID)
+	require.NoError(t, err)
+
+	tokens := make(map[string]int64, len(folded))
+	for _, bucket := range folded {
+		tokens[bucket.Value] += bucket.Tokens
+	}
+	require.Equal(t, int64(450), tokens[workEmail])
+	require.NotContains(t, tokens, personalEmail)
+
+	literal, err := ti.chClient.GetTumBreakdownDimByDay(ctx, params, "email", "")
+	require.NoError(t, err)
+	tokens = make(map[string]int64, len(literal))
+	for _, bucket := range literal {
+		tokens[bucket.Value] += bucket.Tokens
+	}
+	require.Equal(t, int64(150), tokens[workEmail])
+	require.Equal(t, int64(300), tokens[personalEmail])
 }

@@ -525,12 +525,20 @@ func validateAgentMetricsFilter(filter *telem_gen.SearchUsersFilter) error {
 func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType string, params *searchParams) (*telem_gen.SearchUsersResult, error) {
 	var agentItems, emaillessItems []repo.UserSummary
 	g, gctx := errgroup.WithContext(ctx)
+	// Fold the enrollment list's email keys to canonical identities when the
+	// org is on the fold, matching the employee detail pages it links to.
+	canonicalOrg := ""
+	if fold, _ := s.canonicalIdentityMode(ctx, params.organizationID); fold {
+		canonicalOrg = params.organizationID
+	}
+
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
-			GramProjectID: params.projectID,
-			TimeStart:     params.timeStart,
-			TimeEnd:       params.timeEnd,
-			Limit:         agentMetricsDirectoryCap,
+			GramProjectID:        params.projectID,
+			TimeStart:            params.timeStart,
+			TimeEnd:              params.timeEnd,
+			Limit:                agentMetricsDirectoryCap,
+			CanonicalIdentityOrg: canonicalOrg,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error reading employee agent usage")
@@ -1294,11 +1302,13 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		User:           s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID),
+		User:           user,
+		CanonicalUser:  canonicalUser,
 		ExternalUserID: externalUserID,
 		EventSource:    conv.PtrValOr(payload.EventSource, ""),
 		HookSource:     conv.PtrValOr(payload.HookSource, ""),
@@ -1349,11 +1359,13 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		return nil, err
 	}
 
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	rows, err := s.chRepo.GetEmployeeDataFlowGraph(ctx, repo.GetEmployeeDataFlowGraphParams{
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		User:           s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID),
+		User:           user,
+		CanonicalUser:  canonicalUser,
 		ExternalUserID: externalUserID,
 		AccountType:    conv.PtrValOr(payload.AccountType, ""),
 		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
@@ -1833,7 +1845,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// Resolved once and shared by every query below so the summary, its
 	// comparison period, the time series and the tool breakdowns all scope to
 	// the same set of identities.
-	user := s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID)
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -1849,6 +1861,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1868,6 +1881,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         comparisonStart,
 		TimeEnd:           comparisonEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1890,6 +1904,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			TimeEnd:           timeEnd,
 			IntervalSeconds:   intervalSeconds,
 			User:              user,
+			CanonicalUser:     canonicalUser,
 			ExternalUserID:    externalUserID,
 			APIKeyID:          apiKeyID,
 			ToolsetSlug:       toolsetSlug,
@@ -1910,6 +1925,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1931,6 +1947,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,

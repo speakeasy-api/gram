@@ -10,11 +10,14 @@ package telemetry
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // shadowCompareTimeout bounds the background folded re-query so a slow shadow
@@ -120,4 +123,46 @@ func (s *Service) shadowCompareCanonicalFold(ctx context.Context, orgID string, 
 			attr.SlogIdentityFoldCostDelta(foldedCost-literalCost),
 		)
 	}()
+}
+
+// resolveUserScope resolves an employee identifier into either a canonical
+// map-backed identity (fold flag on) or the legacy Postgres-expanded set —
+// exactly one of the two is populated, and the repo's identity filter prefers
+// the canonical one when enabled.
+func (s *Service) resolveUserScope(ctx context.Context, orgID, identifier string) (repo.UserIdentity, repo.CanonicalUserIdentity) {
+	none := repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""}
+	if identifier == "" {
+		return repo.UserIdentity{UserIDs: nil, Emails: nil}, none
+	}
+	if fold, _ := s.canonicalIdentityMode(ctx, orgID); fold {
+		return repo.UserIdentity{UserIDs: nil, Emails: nil}, s.resolveCanonicalUserIdentity(ctx, orgID, identifier)
+	}
+	return s.resolveEmployeeIdentity(ctx, orgID, identifier), none
+}
+
+// resolveCanonicalUserIdentity builds the map-backed identity for one
+// identifier. An email identifier needs no lookup at all — the owning user id
+// and the folded email comparison both come from the identity_map inside the
+// query. A user-id identifier keeps one directory lookup for the email leg;
+// when it fails the scope still matches every user_id-keyed row, so a lookup
+// failure degrades coverage rather than breaking the page.
+func (s *Service) resolveCanonicalUserIdentity(ctx context.Context, orgID, identifier string) repo.CanonicalUserIdentity {
+	ident := repo.CanonicalUserIdentity{OrgID: orgID, UserID: "", EmailLower: ""}
+	if strings.Contains(identifier, "@") {
+		ident.EmailLower = conv.NormalizeEmail(identifier)
+		return ident
+	}
+
+	ident.UserID = identifier
+	rows, err := usersRepo.New(s.db).GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
+		Ids:            []string{identifier},
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve canonical identity directory email", attr.SlogError(err))
+	}
+	if len(rows) == 1 {
+		ident.EmailLower = conv.NormalizeEmail(rows[0].Email)
+	}
+	return ident
 }
