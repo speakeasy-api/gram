@@ -874,7 +874,7 @@ func newAdminOIDCClient(ctx context.Context, c *cli.Context, tracerProvider trac
 		}
 
 		return admin.NewOIDCClient(admin.OIDCClientOptions{
-			HTTPClient:   policy.PooledClient(),
+			HTTPClient:   policy.PooledClient(guardian.WithAllowedSchemes("http")),
 			Provider:     provider,
 			ClientID:     c.String("admin-oidc-client-id"),
 			ClientSecret: c.String("admin-oidc-client-secret"),

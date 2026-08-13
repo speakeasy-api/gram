@@ -63,17 +63,21 @@ func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider,
 }
 
 // WithAllowedCIDRBlocks returns a client whose registry requests may reach the
-// supplied trusted CIDR blocks. Callers must use this only for code-defined,
-// non-user-controlled registries such as the local fixture.
+// supplied trusted CIDR blocks over HTTP or HTTPS. Callers must use this only
+// for code-defined, non-user-controlled registries such as the local fixture.
 func (c *RegistryClient) WithAllowedCIDRBlocks(cidrs ...string) *RegistryClient {
 	if c == nil || c.policy == nil || len(cidrs) == 0 {
 		return c
 	}
 	return &RegistryClient{
-		policy:     c.policy,
-		httpClient: c.policy.PooledClient(guardian.WithDefaultRetryConfig(), guardian.WithAllowedCIDRBlocks(cidrs...)),
-		logger:     c.logger,
-		backend:    c.backend,
+		policy: c.policy,
+		httpClient: c.policy.PooledClient(
+			guardian.WithDefaultRetryConfig(),
+			guardian.WithAllowedCIDRBlocks(cidrs...),
+			guardian.WithAllowedSchemes("http"),
+		),
+		logger:  c.logger,
+		backend: c.backend,
 		// Cache keys include the registry URL; share cache entries while changing
 		// only the trusted fixture client's egress policy.
 		listCache:    c.listCache,

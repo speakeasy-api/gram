@@ -66,10 +66,12 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	logger.InfoContext(ctx, "connecting to external MCP server", attr.SlogURL(remoteURL))
 
 	var httpClient *guardian.HTTPClient
+	clientOptions := []guardian.ClientOption{guardian.WithAllowedSchemes("http")}
 	if opts.DisableRetries {
-		httpClient = guardianPolicy.PooledClient()
+		httpClient = guardianPolicy.PooledClient(clientOptions...)
 	} else {
-		httpClient = guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+		clientOptions = append(clientOptions, guardian.WithDefaultRetryConfig())
+		httpClient = guardianPolicy.PooledClient(clientOptions...)
 	}
 	trasnport := httpClient.Transport
 	authRT := &authRoundTripper{

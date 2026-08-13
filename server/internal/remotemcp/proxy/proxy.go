@@ -781,7 +781,9 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		return nil, nil, err
 	}
 
-	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
+	clientOptions := []guardian.ClientOption{guardian.WithAllowedSchemes("http")}
+	clientOptions = append(clientOptions, p.GuardianClientOptions...)
+	client := p.GuardianPolicy.Client(clientOptions...)
 	if p.DisableRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse

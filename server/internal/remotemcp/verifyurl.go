@@ -50,7 +50,7 @@ const (
 // [guardian.Policy.ValidateHTTPURL]. The caller is responsible for bounding
 // the overall deadline via ctx.
 func VerifyRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) (verified bool, httpStatus *int, message string) {
-	client := policy.Client()
+	client := policy.Client(guardian.WithAllowedSchemes("http"))
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= verifyURLMaxRedirects {
 			return fmt.Errorf("stopped after %d redirects", verifyURLMaxRedirects)

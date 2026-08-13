@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -131,7 +132,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	resp, err := s.policy.Client().Do(httpReq)
+	resp, err := s.policy.Client(guardian.WithAllowedSchemes("http")).Do(httpReq)
 	if err != nil {
 		return oops.E(oops.CodeGatewayError, err, "failed to reach registration endpoint").LogError(ctx, s.logger)
 	}

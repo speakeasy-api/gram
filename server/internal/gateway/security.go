@@ -328,7 +328,10 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Make the token request
-	client := guardianPolicy.Client(guardian.WithOTelHTTPOptions(otelhttp.WithPropagators(propagation.TraceContext{})))
+	client := guardianPolicy.Client(
+		guardian.WithAllowedSchemes("http", "https"),
+		guardian.WithOTelHTTPOptions(otelhttp.WithPropagators(propagation.TraceContext{})),
+	)
 	client.Timeout = 10 * time.Second
 	resp, err := client.Do(tokenReq)
 	if err != nil {

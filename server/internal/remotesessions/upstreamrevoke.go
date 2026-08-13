@@ -164,7 +164,7 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:      db,
 		enc:     enc,
-		client:  policy.PooledClient(),
+		client:  policy.PooledClient(guardian.WithAllowedSchemes("http", "https")),
 		metrics: newRevokeMetrics(logger, meterProvider),
 	}
 }

@@ -345,7 +345,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 
 	// Empty blocklist allows connections to private IPs (Kubernetes ClusterIPs).
 	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	httpClient := unsafePolicy.PooledClient()
+	httpClient := unsafePolicy.PooledClient(guardian.WithAllowedSchemes("http"))
 
 	return &PresidioClient{
 		baseURL:              strings.TrimRight(baseURL, "/"),

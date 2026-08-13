@@ -434,7 +434,7 @@ func refreshSessionTokens(
 		return zero, "", fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := policy.PooledClient().Do(req)
+	resp, err := policy.PooledClient(guardian.WithAllowedSchemes("http", "https")).Do(req)
 	if err != nil {
 		return zero, "", fmt.Errorf("post refresh: %w", err)
 	}

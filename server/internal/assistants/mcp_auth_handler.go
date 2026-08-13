@@ -626,7 +626,7 @@ func (s *Service) registerMCPAuthClient(ctx context.Context, endpoint, redirectU
 		return mcpAuthClientRegistrationResponse{}, fmt.Errorf("build registration request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.core.guardianPolicy.Client().Do(req)
+	resp, err := s.core.guardianPolicy.Client(guardian.WithAllowedSchemes("http", "https")).Do(req)
 	if err != nil {
 		return mcpAuthClientRegistrationResponse{}, fmt.Errorf("send registration request: %w", err)
 	}
@@ -678,7 +678,10 @@ func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttoke
 	// going into the Basic authorization header. Upstreams that decode per
 	// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
 	req.SetBasicAuth(url.QueryEscape(claims.ClientID), url.QueryEscape(clientSecret))
-	resp, err := s.core.guardianPolicy.Client(guardian.WithDefaultRetryConfig()).Do(req)
+	resp, err := s.core.guardianPolicy.Client(
+		guardian.WithDefaultRetryConfig(),
+		guardian.WithAllowedSchemes("http", "https"),
+	).Do(req)
 	if err != nil {
 		return fmt.Errorf("send token request: %w", err)
 	}

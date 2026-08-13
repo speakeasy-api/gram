@@ -306,7 +306,9 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := guardianPolicy.Client()
+	// OAuth permits HTTP only for loopback endpoints. validateOAuthEndpoint
+	// enforces that restriction for the initial URL and every redirect.
+	client := guardianPolicy.Client(guardian.WithAllowedSchemes("http"))
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return fmt.Errorf("stopped after 10 redirects")

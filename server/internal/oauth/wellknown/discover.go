@@ -169,7 +169,7 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 	reqCtx, cancel := context.WithTimeout(ctx, discoverProtectedResourceTimeout)
 	defer cancel()
 
-	client := policy.Client()
+	client := policy.Client(guardian.WithAllowedSchemes("http"))
 
 	var lastErr *ProtectedResourceDiscoveryError
 	for _, probeURL := range candidates {
