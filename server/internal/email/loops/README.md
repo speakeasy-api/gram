@@ -44,8 +44,9 @@ published message whose subject, preview, and LMX already match is left unchange
    ```
 
 Validation requires the manifest variable list to match the Go `Variables()`
-contract exactly. It also checks XML well-formedness and rejects undeclared or
-accidentally unused LMX variables.
+contract exactly. It also checks every `.lmx` file recursively for XML
+well-formedness and explicitly set Loops-supported attribute ranges, and rejects
+undeclared or accidentally unused variables in registered templates.
 
 ## Design system
 
