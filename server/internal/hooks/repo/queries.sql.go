@@ -129,6 +129,23 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
+const getChatProjectID = `-- name: GetChatProjectID :one
+SELECT project_id
+FROM chats
+WHERE id = $1
+`
+
+// Looks up a chat by id alone so hook ingest can refuse a write whose session
+// already lives in another project. Session ids hash to chat ids with no
+// project in the derivation, and an org-scoped key can present any project
+// header in the org.
+func (q *Queries) GetChatProjectID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getChatProjectID, id)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const getDeviceOwner = `-- name: GetDeviceOwner :one
 SELECT id, organization_id, provider, device_id, linked_user_id, first_seen_at, last_seen_at, created_at, updated_at, deleted_at, deleted FROM device_owners
 WHERE organization_id = $1
@@ -773,6 +790,7 @@ VALUES (
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id
 `
 
@@ -786,6 +804,11 @@ type UpsertClaudeCodeSessionParams struct {
 	Title          pgtype.Text
 }
 
+// The conflict target is the bare primary key, so a later hook request for
+// the same session with a different project header would otherwise land on
+// that row, bump updated_at, and RETURNING would hand the caller an id that
+// then accepts messages stamped with the new project. Rejecting the conflict
+// yields no row.
 func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeCodeSessionParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertClaudeCodeSession,
 		arg.ID,

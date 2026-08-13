@@ -6,14 +6,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -516,4 +520,171 @@ func TestClaudeSessionEndDoesNotWakeBeforeTranscriptPersistence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	require.Empty(t, ti.efficacySignals.signaled(), "durable observations, messages, and the sweep provide later wakes")
+}
+
+func TestUpsertClaudeCodeSession_RejectsForeignProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "hook-alt-project",
+		Slug:           "hook-alt-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	chatID := uuid.New()
+	hooksQueries := repo.New(ti.conn)
+	_, err = hooksQueries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(""),
+		UserAccountID:  uuid.NullUUID{},
+		Title:          conv.ToPGText("original"),
+	})
+	require.NoError(t, err)
+
+	_, err = hooksQueries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty("attacker"),
+		ExternalUserID: conv.ToPGTextEmpty(""),
+		UserAccountID:  uuid.NullUUID{},
+		Title:          conv.ToPGText("hijacked"),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	got, err := hooksQueries.GetChatProjectID(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, *authCtx.ProjectID, got)
+}
+
+func TestPersistConversationEvent_RejectsCrossProjectSession(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "hook-alt-session",
+		Slug:           "hook-alt-session-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	const wantUserID = "cross-project-session-user"
+	const wantUserEmail = "cross-project@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
+
+	metadata := &SessionMetadata{
+		SessionID:     sessionID,
+		ServiceName:   "claude-code",
+		UserEmail:     wantUserEmail,
+		UserID:        wantUserID,
+		ExternalOrgID: "",
+		GramOrgID:     authCtx.ActiveOrganizationID,
+		ProjectID:     authCtx.ProjectID.String(),
+	}
+	prompt := "first prompt"
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	otherMetadata := *metadata
+	otherMetadata.ProjectID = otherProject.ID.String()
+	later := "should not land"
+	err = ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &later,
+	}, &otherMetadata)
+	require.ErrorIs(t, err, errChatProjectMismatch)
+
+	own, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, own, 1)
+	require.Equal(t, "first prompt", own[0].Content)
+
+	foreign, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, foreign)
+
+	got, err := repo.New(ti.conn).GetChatProjectID(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, *authCtx.ProjectID, got)
+}
+
+func TestIngest_DoesNotMisfileChatIntoSiblingProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "hook-ingest-alt",
+		Slug:           "hook-ingest-alt-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	sessionID := "cross-project-ingest-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "owned prompt"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	nextAuth := *authCtx
+	nextAuth.ProjectID = &otherProject.ID
+	nextAuth.ProjectSlug = &otherProject.Slug
+	otherCtx := contextvalues.SetAuthContext(ctx, &nextAuth)
+	foreignPrompt := "sibling project prompt"
+	foreignPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	foreignPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &foreignPrompt},
+	}
+	res, err = ti.service.Ingest(otherCtx, foreignPayload)
+	require.NoError(t, err, "ingest stays non-blocking; the write is what must fail")
+	require.Equal(t, "allow", res.Decision)
+
+	own, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, own, 1)
+	require.Equal(t, "owned prompt", own[0].Content)
+
+	foreign, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, foreign)
 }

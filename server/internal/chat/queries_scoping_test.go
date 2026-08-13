@@ -124,3 +124,57 @@ func TestQueries_GetMaxGenerationForChat_IsProjectScoped(t *testing.T) {
 	require.Equal(t, int32(0), genElsewhere,
 		"another project sees none of this chat's messages; dropping the project_id predicate would report 3")
 }
+
+func TestQueries_RestampMismatchedChatMessageProjects(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	r := repo.New(ti.conn)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-user", "restamp session")
+	_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	mismatched, err := r.CountChatMessagesWithMismatchedProject(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), mismatched)
+	nulls, err := r.CountChatMessagesWithNullProject(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), nulls)
+
+	n, err := r.RestampMismatchedChatMessageProjects(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), n)
+
+	mismatched, err = r.CountChatMessagesWithMismatchedProject(ctx)
+	require.NoError(t, err)
+	require.Zero(t, mismatched)
+	nulls, err = r.CountChatMessagesWithNullProject(ctx)
+	require.NoError(t, err)
+	require.Zero(t, nulls)
+
+	msgs, err := r.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 3)
+}
