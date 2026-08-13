@@ -216,6 +216,52 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "reportSessionMoved")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentSessionMoved"}`)
 	})
+
+	Method("createSessionHandoff", func() {
+		Description("Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).")
+
+		// Content-bearing, so the refusal posture is getSessionMeta's, not
+		// reportSessionMoved's: an org install key plus vouched email must not
+		// be able to publish content in an arbitrary employee's name.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("session_id", String, "Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.", func() {
+				MaxLength(256)
+			})
+			Attribute("content", String, "The rendered handoff document (markdown). Size-capped; the daemon renders deterministically from the local transcript.", func() {
+				MaxLength(262144)
+			})
+			Attribute("source_surface", String, "Harness the session originated in, as detected by the agent (e.g. claude-code, codex).", func() {
+				MaxLength(64)
+			})
+			Attribute("ttl_seconds", Int, "Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900 when omitted.", func() {
+				Example(900)
+			})
+			Attribute("serial_number", String, "Hardware serial number of the machine minting the link, when the agent can read it.")
+			Attribute("hostname", String, "Hostname of the machine minting the link, when the agent can read it.")
+			Required("session_id", "content")
+		})
+
+		Result(CreateSessionHandoffResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.createSessionHandoff")
+			security.ByKeyHeader()
+			// Device identity rides in headers for the access-log hygiene
+			// reason getPlugins documents.
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createAgentSessionHandoff")
+		Meta("openapi:extension:x-speakeasy-name-override", "createSessionHandoff")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgentSessionHandoff"}`)
+	})
 })
 
 // --- Types ---
@@ -291,4 +337,13 @@ var AgentSessionMetaModel = Type("AgentSessionMeta", func() {
 var GetSessionMetaResult = Type("GetSessionMetaResult", func() {
 	Required("sessions")
 	Attribute("sessions", ArrayOf(AgentSessionMetaModel), "Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat or another owner are omitted.")
+})
+
+var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
+	Required("url", "expires_at")
+	Attribute("url", String, "Capability URL serving the uploaded handoff markdown. Unauthenticated by design — the unguessable token is the credential — and dead after the first read or expiry.")
+	Attribute("expires_at", String, func() {
+		Description("When the link stops being served regardless of reads.")
+		Format(FormatDateTime)
+	})
 })

@@ -56,6 +56,16 @@ type Service interface {
 	// be able to report moves. Fire-and-forget from the agent's perspective: the
 	// daemon must never fail a move because this call failed.
 	ReportSessionMoved(context.Context, *ReportSessionMovedPayload) (err error)
+	// Mint a short-lived capability URL for a rendered session-handoff document
+	// (session portability). The device agent uploads the handoff it rendered from
+	// the local transcript; the returned URL serves the markdown exactly once
+	// (burn-after-read) until expiry, so a cloud agent or another machine can
+	// continue the session. Content transits the server only for this purpose and
+	// stops being served at first read or expiry, whichever comes first. Requires
+	// a per-user key: the fleet-shared org install key is refused because minting
+	// a fetch-by-token URL for uploaded content is a per-user, content-bearing
+	// surface (the same DNO-383 blast-radius rule as getSessionMeta).
+	CreateSessionHandoff(context.Context, *CreateSessionHandoffPayload) (res *CreateSessionHandoffResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -78,7 +88,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved"}
+var MethodNames = [7]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved", "createSessionHandoff"}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -111,6 +121,41 @@ type AgentSessionMeta struct {
 	Title *string
 	// Last activity recorded for the captured session.
 	UpdatedAt string
+}
+
+// CreateSessionHandoffPayload is the payload type of the agent service
+// createSessionHandoff method.
+type CreateSessionHandoffPayload struct {
+	ApikeyToken *string
+	// Native harness session identifier the handoff was rendered from. Gram
+	// derives its chat id from this the same way hook ingest does; a
+	// not-yet-captured session can still mint a link.
+	SessionID string
+	// The rendered handoff document (markdown). Size-capped; the daemon renders
+	// deterministically from the local transcript.
+	Content string
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string
+	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
+	// when omitted.
+	TTLSeconds *int
+	// Hardware serial number of the machine minting the link, when the agent can
+	// read it.
+	SerialNumber *string
+	// Hostname of the machine minting the link, when the agent can read it.
+	Hostname *string
+}
+
+// CreateSessionHandoffResult is the result type of the agent service
+// createSessionHandoff method.
+type CreateSessionHandoffResult struct {
+	// Capability URL serving the uploaded handoff markdown. Unauthenticated by
+	// design — the unguessable token is the credential — and dead after the first
+	// read or expiry.
+	URL string
+	// When the link stops being served regardless of reads.
+	ExpiresAt string
 }
 
 // DeviceAgentConfiguration is the result type of the agent service

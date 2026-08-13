@@ -2104,6 +2104,20 @@ type RiskResult struct {
 	CreatedAt           pgtype.Timestamptz
 }
 
+type SessionHandoffLink struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	SessionID      string
+	Token          string
+	Content        string
+	CreatedByEmail string
+	ExpiresAt      pgtype.Timestamptz
+	ConsumedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Skill struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID

@@ -27,6 +27,26 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 	return err
 }
 
+const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
+UPDATE session_handoff_links
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE token = $1
+  AND consumed_at IS NULL
+  AND expires_at > clock_timestamp()
+RETURNING content
+`
+
+// Atomically claim a link on read: exactly one caller can flip consumed_at,
+// so a raced second fetch loses and gets no rows — burn-after-read without a
+// separate lock. Expired or already-consumed links also return no rows;
+// callers must serve all three cases as an indistinguishable 404.
+func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
+	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
+	var content string
+	err := row.Scan(&content)
+	return content, err
+}
+
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
   pr.id AS project_id,
@@ -244,6 +264,47 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, content, created_by_email, expires_at
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING id, expires_at
+`
+
+type InsertSessionHandoffLinkParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	SessionID      string
+	Token          string
+	Content        string
+	CreatedByEmail string
+	ExpiresAt      pgtype.Timestamptz
+}
+
+type InsertSessionHandoffLinkRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Mint a session-handoff capability link. The token is the capability; TTL
+// and burn-after-read (consumed_at) bound a leaked link's exposure window.
+func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessionHandoffLinkParams) (InsertSessionHandoffLinkRow, error) {
+	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.SessionID,
+		arg.Token,
+		arg.Content,
+		arg.CreatedByEmail,
+		arg.ExpiresAt,
+	)
+	var i InsertSessionHandoffLinkRow
+	err := row.Scan(&i.ID, &i.ExpiresAt)
 	return i, err
 }
 

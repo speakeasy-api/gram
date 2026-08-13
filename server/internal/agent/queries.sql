@@ -211,3 +211,25 @@ WHERE c.id = @id
   AND c.project_id = @project_id
   AND c.organization_id = @organization_id
   AND c.deleted IS FALSE;
+
+-- name: InsertSessionHandoffLink :one
+-- Mint a session-handoff capability link. The token is the capability; TTL
+-- and burn-after-read (consumed_at) bound a leaked link's exposure window.
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, content, created_by_email, expires_at
+) VALUES (
+  @project_id, @organization_id, @session_id, @token, @content, @created_by_email, @expires_at
+)
+RETURNING id, expires_at;
+
+-- name: ConsumeSessionHandoffLink :one
+-- Atomically claim a link on read: exactly one caller can flip consumed_at,
+-- so a raced second fetch loses and gets no rows — burn-after-read without a
+-- separate lock. Expired or already-consumed links also return no rows;
+-- callers must serve all three cases as an indistinguishable 404.
+UPDATE session_handoff_links
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE token = @token
+  AND consumed_at IS NULL
+  AND expires_at > clock_timestamp()
+RETURNING content;
