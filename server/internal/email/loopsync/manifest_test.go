@@ -126,14 +126,26 @@ func TestManifestValidate_AcceptsProviderAttributeBoundaries(t *testing.T) {
 	require.NoError(t, manifest.Validate())
 }
 
-func TestManifestValidate_ValidatesUnregisteredLMXFiles(t *testing.T) {
+func TestManifestValidate_AcceptsOmittedProviderAttributes(t *testing.T) {
 	t.Parallel()
 
 	manifest := validManifest(t)
-	require.NoError(t, os.WriteFile(filepath.Join(manifest.Dir, "transactional_base.lmx"), []byte(`<Paragraph fontSize="10">Example</Paragraph>`), 0o600))
+	lmx := `<Columns><ColumnItem><Paragraph>{data.resource_name}</Paragraph></ColumnItem></Columns>`
+	require.NoError(t, os.WriteFile(filepath.Join(manifest.Dir, "example_notice.lmx"), []byte(lmx), 0o600))
+
+	require.NoError(t, manifest.Validate())
+}
+
+func TestManifestValidate_ValidatesNestedUnregisteredLMXFiles(t *testing.T) {
+	t.Parallel()
+
+	manifest := validManifest(t)
+	nestedDir := filepath.Join(manifest.Dir, "starters")
+	require.NoError(t, os.Mkdir(nestedDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(nestedDir, "transactional_base.lmx"), []byte(`<Paragraph fontSize="10">Example</Paragraph>`), 0o600))
 
 	err := manifest.Validate()
-	require.ErrorContains(t, err, `validate LMX file "transactional_base.lmx"`)
+	require.ErrorContains(t, err, "transactional_base.lmx")
 	require.ErrorContains(t, err, `Paragraph attribute "fontSize" must be an integer between 12 and 64 (got "10")`)
 }
 

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -142,22 +143,32 @@ func (m *Manifest) Validate() error {
 }
 
 func validateLMXDirectory(dir string) error {
-	entries, err := os.ReadDir(dir)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return fmt.Errorf("read LMX directory: %w", err)
+		return fmt.Errorf("open LMX directory: %w", err)
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".lmx" {
-			continue
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("walk LMX directory: %w", walkErr)
 		}
-		path := filepath.Join(dir, entry.Name())
-		lmx, err := os.ReadFile(path) // #nosec G304 -- path is an entry from the manifest directory
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".lmx" {
+			return nil
+		}
+		lmx, err := root.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("read LMX file %q: %w", entry.Name(), err)
+			return fmt.Errorf("read LMX file %q: %w", path, err)
 		}
 		if err := validateXML(lmx); err != nil {
-			return fmt.Errorf("validate LMX file %q: %w", entry.Name(), err)
+			return fmt.Errorf("validate LMX file %q: %w", path, err)
 		}
+		return nil
+	})
+	closeErr := root.Close()
+	if walkErr != nil {
+		return fmt.Errorf("validate LMX directory: %w", walkErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close LMX directory: %w", closeErr)
 	}
 	return nil
 }

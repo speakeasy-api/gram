@@ -100,10 +100,11 @@ Identity map:
 - Use `{data.variable_name}` everywhere; LMX names are case-sensitive. Never use
   `{DATA_VARIABLE:...}` in LMX.
 - Loops accepts `Columns.gap` only from 12 through 150 and
-  `Paragraph.fontSize` only from 12 through 64. The local manifest validator
-  enforces these provider ranges across every `.lmx` file in the template
-  directory, including the unregistered base. Translate MJML 10px/11px labels
-  to 12px in LMX; preserve their hierarchy, not prohibited literal sizes.
+  `Paragraph.fontSize` only from 12 through 64 when those attributes are set;
+  omission uses Loops' accepted defaults. The local manifest validator enforces
+  explicit values across every `.lmx` file recursively, including unregistered
+  bases. Translate MJML 10px/11px labels to 12px in LMX; preserve their
+  hierarchy, not prohibited literal sizes.
 - State the event or action directly. Delete vague lead-ins such as “a clear read
   on how your organization is tracking.” Prefer one verb-led CTA.
 - Use conditional `<Section>` blocks for variants. Do not invent fallback syntax.
@@ -361,11 +362,11 @@ mise lint:server
 git diff --check
 ```
 
-This checks manifest structure, XML well-formedness and provider attribute
-ranges across every `.lmx` file, declared/used variables, Go contracts, API
-reconciliation behavior, and runtime ID resolution. Merge CI then uses Loops
-compilation, optimistic revisions, Guardian, and publish; any Guardian error
-blocks the release preparation.
+This checks manifest structure, XML well-formedness and explicit provider
+attribute ranges across every `.lmx` file recursively, declared/used variables,
+Go contracts, API reconciliation behavior, and runtime ID resolution. Merge CI
+then uses Loops compilation, optimistic revisions, Guardian, and publish; any
+Guardian error blocks the release preparation.
 
 ## Screenshots and visual QA
 
