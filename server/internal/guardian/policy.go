@@ -276,12 +276,13 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 	// no-op defaults make resilience enforcement strictly opt-in via
 	// WithLimiter/WithBreaker.
 	policy := &Policy{
-		tracerProvider:    tracerProvider,
-		blockedCIDRBlocks: blockedCIDRBlocks,
-		resolver:          dns.NewNetResolver(),
-		limiter:           nil,
-		breaker:           nil,
-		tlsRootCAs:        nil,
+		tracerProvider:        tracerProvider,
+		blockedCIDRBlocks:     blockedCIDRBlocks,
+		resolver:              dns.NewNetResolver(),
+		limiter:               nil,
+		breaker:               nil,
+		tlsRootCAs:            nil,
+		defaultAllowedSchemes: nil,
 	}
 
 	for _, option := range options {

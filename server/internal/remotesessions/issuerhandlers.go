@@ -852,7 +852,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	reqCtx, cancel := context.WithTimeout(ctx, discoveryHTTPTimeout)
 	defer cancel()
 
-	client := policy.Client(guardian.WithAllowedSchemes("http"))
+	client := policy.Client()
 
 	var firstErr *discoveryError
 	var fallbackDoc rfc8414Document
