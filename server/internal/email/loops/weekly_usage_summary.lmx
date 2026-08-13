@@ -19,19 +19,16 @@
   <H3 paddingTop="14">{data.total_change_percent} vs. the same point last cycle</H3>
 </Section>
 <Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingBottom="32">
-  <Columns gap="12">
+  <Columns gap="12" widths="50,50">
     <ColumnItem>
       <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">PREVIOUS CYCLE</Strong><Br />{data.previous_total_tokens}</Paragraph>
-    </ColumnItem>
-    <ColumnItem>
-      <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">CYCLE ELAPSED</Strong><Br /><Text textColor="#121212">{data.cycle_elapsed_percent}%</Text></Paragraph>
     </ColumnItem>
     <ColumnItem>
       <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">REMAINING</Strong><Br />{data.days_remaining}</Paragraph>
     </ColumnItem>
   </Columns>
 </Section>
-<Paragraph fontSize="12" lineHeight="140" paddingRight="40" paddingBottom="10" paddingLeft="40"><Strong textColor="#757575">BILLING CYCLE</Strong></Paragraph>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="32" paddingRight="40" paddingBottom="10" paddingLeft="40"><Strong textColor="#757575">BILLING CYCLE</Strong></Paragraph>
 <Paragraph fontSize="14" lineHeight="160" paddingRight="40" paddingBottom="36" paddingLeft="40">Your current cycle ends on {data.cycle_end_date}.</Paragraph>
 <Button href="{data.view_usage_url}" paddingRight="40" paddingBottom="48" paddingLeft="40">View detailed usage →</Button>
 <Divider />

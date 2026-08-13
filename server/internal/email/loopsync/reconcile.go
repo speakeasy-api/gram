@@ -13,6 +13,29 @@ type Reconciler struct {
 	Log io.Writer
 }
 
+// ResolveExisting maps manifest keys to existing Loops transactional email IDs without modifying templates.
+func ResolveExisting(ctx context.Context, api API, manifest *Manifest) (map[string]string, error) {
+	all, err := api.ListTransactionalEmails(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list Loops transactional emails: %w", err)
+	}
+
+	byName := make(map[string][]TransactionalEmail, len(all))
+	for _, transactional := range all {
+		byName[transactional.Name] = append(byName[transactional.Name], transactional)
+	}
+
+	resolved := make(map[string]string, len(manifest.Templates))
+	for key, spec := range manifest.Templates {
+		matches := byName[spec.ManagedName]
+		if len(matches) != 1 {
+			return nil, fmt.Errorf("resolve email template %q: found %d Loops emails named %q", key, len(matches), spec.ManagedName)
+		}
+		resolved[key] = matches[0].ID
+	}
+	return resolved, nil
+}
+
 func (r *Reconciler) Reconcile(ctx context.Context, manifest *Manifest, existingIDs map[string]string) (map[string]string, error) {
 	if r.API == nil {
 		return nil, fmt.Errorf("reconcile email templates: API is required")
