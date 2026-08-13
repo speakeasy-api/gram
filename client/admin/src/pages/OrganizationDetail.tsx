@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable as Table, type Column } from "@/components/data-table";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
-import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
+import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import { cn } from "@/lib/utils";
 import {
   organizationMembersQuery,
@@ -188,7 +188,7 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
                 {t}
               </SelectItem>
             ))}
-            {!ACCOUNT_TYPE_OPTIONS.includes(org.account_type) && (
+            {!isAccountType(org.account_type) && (
               <SelectItem value={org.account_type}>
                 {org.account_type}
               </SelectItem>
