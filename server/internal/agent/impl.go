@@ -341,7 +341,7 @@ func (s *Service) GetConfiguration(ctx context.Context, _ *gen.GetConfigurationP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgRead,
+		Scope:        authz.ScopeOrgAdmin,
 		ResourceKind: "",
 		ResourceID:   authCtx.ActiveOrganizationID,
 		Dimensions:   nil,
