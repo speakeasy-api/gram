@@ -87,3 +87,29 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 )
+
+// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
+// unrecognized key, an unavailable provider, or an evaluation error — resolves
+// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
+// PostHog outage can never strip the managed assistant's tools.
+const (
+	// VariantAssistantToolsLegacy serves the managed assistant the
+	// "managed-assistant" platform toolset (logs, chats, users, risk,
+	// deployments, skills, plugins, docs, changelog).
+	VariantAssistantToolsLegacy Variant = "legacy"
+	// VariantAssistantToolsPlatformMCP serves the managed assistant the
+	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
+	// legacy toolset, not in addition to it.
+	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
+)
+
+// AssistantToolsVariant normalizes a resolved variant to one of the two known
+// keys, collapsing everything unrecognized onto the legacy default. Both the
+// attach path (assistants service) and the serve path (mcp service) must agree
+// on this mapping or a toolset would be attached and then 404 at request time.
+func AssistantToolsVariant(variant Variant) Variant {
+	if variant == VariantAssistantToolsPlatformMCP {
+		return VariantAssistantToolsPlatformMCP
+	}
+	return VariantAssistantToolsLegacy
+}
