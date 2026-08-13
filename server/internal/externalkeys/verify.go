@@ -163,12 +163,7 @@ func (s *Service) resolveVerifyIdentity(ctx context.Context, logger *slog.Logger
 	// it pointing at a tombstone. Those keys still exist and still list, so this
 	// says what actually happened rather than reporting the key as missing.
 	if !row.CredentialID.Valid {
-		return gcpauth.Credential{
-			ImpersonateServiceAccount: "",
-			WifPoolID:                 "",
-			WifProviderID:             "",
-			WifProjectNumber:          "",
-		}, outcomeCredentialDeleted, "the backing credential for this key was deleted; point the key at a live credential", nil
+		return noCredential(), outcomeCredentialDeleted, "the backing credential for this key was deleted; point the key at a live credential", nil
 	}
 
 	// Rows written before this tier became impersonation-only can name no target,
@@ -181,19 +176,9 @@ func (s *Service) resolveVerifyIdentity(ctx context.Context, logger *slog.Logger
 	target := row.ImpersonateServiceAccount.String
 	switch {
 	case target == "":
-		return gcpauth.Credential{
-			ImpersonateServiceAccount: "",
-			WifPoolID:                 "",
-			WifProviderID:             "",
-			WifProjectNumber:          "",
-		}, outcomeCredentialUnusable, "the backing credential names no service account to impersonate; edit it to set one", nil
+		return noCredential(), outcomeCredentialUnusable, "the backing credential names no service account to impersonate; edit it to set one", nil
 	case row.WifPoolID.Valid || row.WifProviderID.Valid || row.WifProjectNumber.Valid:
-		return gcpauth.Credential{
-			ImpersonateServiceAccount: "",
-			WifPoolID:                 "",
-			WifProviderID:             "",
-			WifProjectNumber:          "",
-		}, outcomeCredentialUnusable, "the backing credential still uses Workload Identity Federation, which cannot be verified; save it again to convert it to impersonation", nil
+		return noCredential(), outcomeCredentialUnusable, "the backing credential still uses Workload Identity Federation, which cannot be verified; save it again to convert it to impersonation", nil
 	}
 
 	// Re-screen the stored target. The write-time guard postdates the rows it
@@ -205,28 +190,38 @@ func (s *Service) resolveVerifyIdentity(ctx context.Context, logger *slog.Logger
 	// customer's configuration for a fault on Gram's side.
 	reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
 	if err != nil {
-		return gcpauth.Credential{
-			ImpersonateServiceAccount: "",
-			WifPoolID:                 "",
-			WifProviderID:             "",
-			WifProjectNumber:          "",
-		}, "", "", oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)
+		return noCredential(), "", "", oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)
 	}
 	if reason != "" {
-		return gcpauth.Credential{
-			ImpersonateServiceAccount: "",
-			WifPoolID:                 "",
-			WifProviderID:             "",
-			WifProjectNumber:          "",
-		}, outcomeCredentialUnusable, reason, nil
+		return noCredential(), outcomeCredentialUnusable, reason, nil
 	}
 
+	return impersonationCredential(target), "", "", nil
+}
+
+// noCredential is the credential the early returns carry: each reports an
+// outcome instead, so nothing reads it. It exists because exhaustruct requires
+// every field at each literal, which put five identical five-line literals in
+// the error paths and buried the outcome each one was actually returning.
+func noCredential() gcpauth.Credential {
+	return gcpauth.Credential{
+		ImpersonateServiceAccount: "",
+		WifPoolID:                 "",
+		WifProviderID:             "",
+		WifProjectNumber:          "",
+	}
+}
+
+// impersonationCredential names the service account to impersonate. The
+// organization tier is impersonation-only, so the Workload Identity Federation
+// fields are always empty here.
+func impersonationCredential(target string) gcpauth.Credential {
 	return gcpauth.Credential{
 		ImpersonateServiceAccount: target,
 		WifPoolID:                 "",
 		WifProviderID:             "",
 		WifProjectNumber:          "",
-	}, "", "", nil
+	}
 }
 
 func unverified(outcome, detail string) *gen.VerifyKmsKeyResult {
