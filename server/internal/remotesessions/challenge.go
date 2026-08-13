@@ -742,7 +742,7 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}
 
-	resp, err := m.policy.PooledClient(guardian.WithAllowedSchemes("http", "https")).Do(req)
+	resp, err := m.policy.PooledClient(guardian.WithAllowedSchemes("http")).Do(req)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("post token: %w", err)
 	}

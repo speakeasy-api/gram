@@ -626,7 +626,7 @@ func (s *Service) registerMCPAuthClient(ctx context.Context, endpoint, redirectU
 		return mcpAuthClientRegistrationResponse{}, fmt.Errorf("build registration request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.core.guardianPolicy.Client(guardian.WithAllowedSchemes("http", "https")).Do(req)
+	resp, err := s.core.guardianPolicy.Client(guardian.WithAllowedSchemes("http")).Do(req)
 	if err != nil {
 		return mcpAuthClientRegistrationResponse{}, fmt.Errorf("send registration request: %w", err)
 	}
@@ -680,7 +680,7 @@ func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttoke
 	req.SetBasicAuth(url.QueryEscape(claims.ClientID), url.QueryEscape(clientSecret))
 	resp, err := s.core.guardianPolicy.Client(
 		guardian.WithDefaultRetryConfig(),
-		guardian.WithAllowedSchemes("http", "https"),
+		guardian.WithAllowedSchemes("http"),
 	).Do(req)
 	if err != nil {
 		return fmt.Errorf("send token request: %w", err)

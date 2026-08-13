@@ -329,7 +329,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	// Make the token request
 	client := guardianPolicy.Client(
-		guardian.WithAllowedSchemes("http", "https"),
+		guardian.WithAllowedSchemes("http"),
 		guardian.WithOTelHTTPOptions(otelhttp.WithPropagators(propagation.TraceContext{})),
 	)
 	client.Timeout = 10 * time.Second

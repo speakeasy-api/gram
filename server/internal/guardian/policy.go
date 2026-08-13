@@ -184,10 +184,10 @@ func WithRetryConfig(config *RetryConfig) func(*httpClientOptions) {
 	}
 }
 
-// WithAllowedSchemes adds to the client's default HTTPS-only URL policy with
-// the specified schemes. Scheme names are case-insensitive and surrounding
-// whitespace is ignored. If no non-empty schemes remain, the default
-// HTTPS-only policy is preserved. The restriction is enforced for every
+// WithAllowedSchemes replaces the policy's client URL scheme defaults with
+// HTTPS plus the specified schemes. Scheme names are case-insensitive and
+// surrounding whitespace is ignored. If no non-empty schemes remain, the
+// policy defaults are preserved. The restriction is enforced for every
 // request, including redirects and retry attempts.
 func WithAllowedSchemes(schemes ...string) func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
@@ -211,12 +211,13 @@ func WithAllowedSchemes(schemes ...string) func(*httpClientOptions) {
 }
 
 type Policy struct {
-	tracerProvider    trace.TracerProvider
-	blockedCIDRBlocks []*net.IPNet
-	resolver          dns.Resolver
-	limiter           Limiter
-	breaker           Breaker
-	tlsRootCAs        *x509.CertPool
+	tracerProvider        trace.TracerProvider
+	blockedCIDRBlocks     []*net.IPNet
+	resolver              dns.Resolver
+	limiter               Limiter
+	breaker               Breaker
+	tlsRootCAs            *x509.CertPool
+	defaultAllowedSchemes map[string]struct{}
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -305,9 +306,11 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 }
 
 // NewUnsafePolicy creates a new Policy with the provided disallowed CIDR blocks.
-// It returns an error if any of the CIDR blocks cannot be parsed.
-// Use NewDefaultPolicy for a safe default that blocks common private and
-// reserved IP ranges.
+// Clients built from this policy permit HTTP and HTTPS by default, preserving
+// the unrestricted transport behavior required by local development and tests.
+// It returns an error if any of the CIDR blocks cannot be parsed. Use
+// NewDefaultPolicy for a safe default that blocks common private and reserved
+// IP ranges and permits HTTPS only.
 func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks []string, options ...func(*Policy)) (*Policy, error) {
 	var disallowedBlocks []*net.IPNet
 	for _, cidr := range disallowedCIDRBlocks {
@@ -318,26 +321,31 @@ func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks [
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return newPolicy(tracerProvider, disallowedBlocks, options...), nil
+	policy := newPolicy(tracerProvider, disallowedBlocks, options...)
+	policy.defaultAllowedSchemes = map[string]struct{}{
+		"http":  {},
+		"https": {},
+	}
+	return policy, nil
 }
 
-// PooledClient returns an [http.Client] that permits HTTPS requests by default,
-// validates every request URL, and uses a pooled transport that keeps idle
-// connections alive for reuse. Use [WithAllowedSchemes] only for destinations
-// that intentionally require another scheme. PooledClient is appropriate for
-// long-lived clients that make repeated requests to the same host(s). Do not
-// use it for short-lived or one-off requests as idle connections hold open
-// file descriptors until they time out.
+// PooledClient returns an [http.Client] that validates every request URL and
+// uses a pooled transport that keeps idle connections alive for reuse.
+// [NewDefaultPolicy] permits HTTPS requests by default; [NewUnsafePolicy]
+// permits HTTP and HTTPS. Use [WithAllowedSchemes] to replace those defaults.
+// PooledClient is appropriate for long-lived clients that make repeated
+// requests to the same host(s). Do not use it for short-lived or one-off
+// requests as idle connections hold open file descriptors until they time out.
 func (p *Policy) PooledClient(options ...func(*httpClientOptions)) *HTTPClient {
 	return p.clientWithBaseTransport(cleanhttp.DefaultPooledTransport(), options...)
 }
 
-// Client returns an [http.Client] that permits HTTPS requests by default,
-// validates every request URL, and opens a new connection for every request
-// (keepalives disabled). Use [WithAllowedSchemes] only for destinations that
-// intentionally require another scheme. Because connections are never held
-// idle, the client cannot leak file descriptors, making it safe for short-lived
-// or one-off requests where connection reuse is unnecessary.
+// Client returns an [http.Client] that validates every request URL and opens a
+// new connection for every request (keepalives disabled). [NewDefaultPolicy]
+// permits HTTPS requests by default; [NewUnsafePolicy] permits HTTP and HTTPS.
+// Use [WithAllowedSchemes] to replace those defaults. Because connections are
+// never held idle, the client cannot leak file descriptors, making it safe for
+// short-lived or one-off requests where connection reuse is unnecessary.
 func (p *Policy) Client(options ...func(*httpClientOptions)) *HTTPClient {
 	return p.clientWithBaseTransport(cleanhttp.DefaultTransport(), options...)
 }
@@ -349,9 +357,10 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	if opts.allowedSchemes == nil {
-		opts.allowedSchemes = map[string]struct{}{
-			"https": {},
-		}
+		opts.allowedSchemes = p.defaultAllowedSchemes
+	}
+	if opts.allowedSchemes == nil {
+		opts.allowedSchemes = map[string]struct{}{"https": {}}
 	}
 
 	dialOpts := []func(*dialerOptions){}
