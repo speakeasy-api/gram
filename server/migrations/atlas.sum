@@ -1,4 +1,4 @@
-h1:uxzjWCwECvBuEzT27UXBKC/dsZzP/LKDoaVf9rwUCaI=
+h1:I7Bn8Gzyv7sg9x46hXitDfdgGoJd666Ds4uqD07EOfM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -334,3 +334,4 @@ h1:uxzjWCwECvBuEzT27UXBKC/dsZzP/LKDoaVf9rwUCaI=
 20260812140226_jwks-index-external-key-tenant.sql h1:uuAVtFJtvI9Fh8P1g0lZCvFFIlUUoUraHM+HvBKT1dY=
 20260812151548_openrouter-api-key-encrypted.sql h1:D24ETMrCq2AY9UZCCd8kL9D9heB6vPaPMxghWFz5/uM=
 20260812212223_chat_messages_add_tool_call_summaries.sql h1:bE7ZnZJ4qr4gPc3jbbPEUFefIZOasiHkJarje0QWEdc=
+20260813005834_platform-mcp-onboarding-state.sql h1:3hmXHcqDm0af3dyPBEC0v+YFVkZdkVwlMQd6VwXF9jM=
