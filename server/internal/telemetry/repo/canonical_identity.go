@@ -174,7 +174,12 @@ type CanonicalUserIdentity struct {
 	EmailLower string
 }
 
-func (c CanonicalUserIdentity) enabled() bool {
+// Enabled reports whether the identity can drive the canonical filter: it
+// needs an org id that passes the SQL-literal allowlist plus at least one
+// identity leg. Callers building the scope must check it — a disabled
+// canonical identity applies no filter, so the service falls back to the
+// legacy expanded scope rather than serving pages unfiltered.
+func (c CanonicalUserIdentity) Enabled() bool {
 	return canonicalIdentityOrgLiteral(c.OrgID) != "" && (c.UserID != "" || c.EmailLower != "")
 }
 
@@ -207,7 +212,7 @@ func withCanonicalUserIdentityFilter(sb squirrel.SelectBuilder, ident CanonicalU
 // orgLit is the validated org literal when canonical matching is enabled, or
 // "" — the disabled signal withCanonicalFoldSettings keys off.
 func (c CanonicalUserIdentity) orgLit() string {
-	if !c.enabled() {
+	if !c.Enabled() {
 		return ""
 	}
 	return canonicalIdentityOrgLiteral(c.OrgID)

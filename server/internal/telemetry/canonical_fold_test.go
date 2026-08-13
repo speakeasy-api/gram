@@ -307,6 +307,33 @@ func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	}
 }
 
+func TestEmployeeDetail_CanonicalFold_UnfoldableOrgFallsBackToLegacyScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	// An org id that fails the SQL-literal allowlist can never drive the
+	// in-query fold. The scope must degrade to the legacy expanded filter —
+	// serving the detail page unfiltered would show every user's rows.
+	badOrgID := "org'--" + uuid.NewString()[:8]
+	ctx = switchOrganizationInCtx(t, ctx, badOrgID)
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, badOrgID, true)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	employeeID := uuid.NewString()
+	strangerID := uuid.NewString()
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeID, "", 700, 300, 42)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), strangerID, "", 9000, 9000, 999)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	m := userMetrics(t, ctx, ti, employeeID)
+	require.Equal(t, int64(700), m.TotalInputTokens)
+}
+
 func TestGetObservabilityOverview_CanonicalFold_SummaryScopesToUser(t *testing.T) {
 	t.Parallel()
 

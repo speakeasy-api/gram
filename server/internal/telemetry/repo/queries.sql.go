@@ -85,7 +85,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, ca
 	// Canonical mode replaces the Postgres-expanded identity set with the
 	// ClickHouse identity_map fold; the literal path below is unchanged and
 	// remains the flag-off behavior.
-	if canonical.enabled() {
+	if canonical.Enabled() {
 		return withCanonicalUserIdentityFilter(sb, canonical)
 	}
 	if identity.IsEmpty() {
@@ -2452,7 +2452,7 @@ type GetOverviewSummaryParams struct {
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
 	// A canonical user scope is a user filter even though arg.User stays empty
 	// in fold mode, so it must force the raw path off the unfiltered MV.
-	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
+	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {

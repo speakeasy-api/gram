@@ -135,7 +135,14 @@ func (s *Service) resolveUserScope(ctx context.Context, orgID, identifier string
 		return repo.UserIdentity{UserIDs: nil, Emails: nil}, none
 	}
 	if fold, _ := s.canonicalIdentityMode(ctx, orgID); fold {
-		return repo.UserIdentity{UserIDs: nil, Emails: nil}, s.resolveCanonicalUserIdentity(ctx, orgID, identifier)
+		if ident := s.resolveCanonicalUserIdentity(ctx, orgID, identifier); ident.Enabled() {
+			return repo.UserIdentity{UserIDs: nil, Emails: nil}, ident
+		}
+		// The org id failed the SQL-literal allowlist, so the canonical filter
+		// cannot be built for it. Degrade to the legacy expanded scope like
+		// every other fold site does on an unfoldable org id — returning the
+		// disabled identity alongside the empty legacy set would leave the
+		// per-user queries with no user filter at all.
 	}
 	return s.resolveEmployeeIdentity(ctx, orgID, identifier), none
 }
