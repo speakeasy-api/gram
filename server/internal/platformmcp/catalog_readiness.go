@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -73,7 +74,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	if err != nil {
 		return ProviderReadinessProbeResult{}, fmt.Errorf("load registered Remote MCP source: %w", err)
 	}
-	if remote.TransportType != "streamable-http" || remote.Url == "" {
+	if remote.TransportType != "streamable-http" || !validCatalogReadinessURL(remote.Url) {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
 	}
 	headers, err := p.loadHeaders(ctx, remote.ID)
@@ -116,6 +117,11 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 
 	state, evidence := p.probe(ctx, remote.Url, headers, authorization.AccessToken)
 	return p.result(principal, registrationID, state, evidence, authorization, ""), nil
+}
+
+func validCatalogReadinessURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil
 }
 
 func (p *RemoteMCPReadinessProber) loadHeaders(ctx context.Context, remoteMCPServerID uuid.UUID) ([]remotemcprepo.RemoteMcpServerHeader, error) {

@@ -247,7 +247,7 @@ func feedbackNoteSafeText(value string) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-'
 	}) {
 		lowerWord := strings.ToLower(word)
-		if strings.Contains(lowerWord, ".") || lowerWord == "cookie" || lowerWord == "set-cookie" || lowerWord == "session" || hasSensitiveFeedbackToken(word) {
+		if lowerWord == "cookie" || lowerWord == "set-cookie" || lowerWord == "session" || hasSensitiveFeedbackToken(word) {
 			return false
 		}
 		if _, err := uuid.Parse(word); err == nil {
@@ -273,7 +273,7 @@ func hasUnsafeFeedbackPath(value string) bool {
 		if strings.HasPrefix(word, "//") {
 			return true
 		}
-		if slash := strings.IndexByte(word, '/'); slash > 0 && strings.Contains(word[:slash], ".") {
+		if strings.Contains(word, ".") {
 			return true
 		}
 	}

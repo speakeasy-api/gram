@@ -311,7 +311,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	// A Default plugin may already have contained this MCP when Platform MCP
 	// began tracking the onboarding distribution. Only remove attachments this
 	// workflow created; pre-existing administration-owned attachments remain live.
-	if err == nil && existing.AttachmentWasCreated {
+	if err == nil && existing.AttachmentWasCreated && existing.PluginServerID.Valid && existing.PluginServerID.UUID == live.ID {
 		removed, err := pluginQueries.RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: live.ID, PluginID: plugin.ID})
 		if err != nil {
 			return Distribution{}, fmt.Errorf("remove platform mcp plugin attachment: %w", err)

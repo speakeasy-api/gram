@@ -42,6 +42,22 @@ func (r *SelectedUseRecorder) RecordSuccessfulToolCall(ctx context.Context, obse
 }
 
 func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallobserver.SuccessObservation) error {
+	targetParams := repo.GetPlatformMCPSelectedUseTargetParams{
+		InitiatingSubjectUrn: userSubjectURN(observation.UserID),
+		OrganizationID:       observation.OrganizationID,
+		ProjectID:            observation.ProjectID,
+		McpServerID:          uuid.NullUUID{UUID: observation.MCPServerID, Valid: true},
+	}
+	// Most normal Remote MCP calls are not Platform MCP targets. Avoid opening a
+	// transaction for that common, best-effort observation path.
+	target, err := repo.New(r.db).GetPlatformMCPSelectedUseTarget(ctx, targetParams)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("resolve platform mcp selected-use target: %w", err)
+	}
+
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin platform mcp selected-use record: %w", err)
@@ -49,17 +65,14 @@ func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallob
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
-	target, err := q.GetPlatformMCPSelectedUseTarget(ctx, repo.GetPlatformMCPSelectedUseTargetParams{
-		InitiatingSubjectUrn: userSubjectURN(observation.UserID),
-		OrganizationID:       observation.OrganizationID,
-		ProjectID:            observation.ProjectID,
-		McpServerID:          uuid.NullUUID{UUID: observation.MCPServerID, Valid: true},
-	})
+	// Revalidate the target inside the mutation transaction so a concurrent
+	// distribution removal cannot leave evidence for a stale attachment.
+	target, err = q.GetPlatformMCPSelectedUseTarget(ctx, targetParams)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("resolve platform mcp selected-use target: %w", err)
+		return fmt.Errorf("revalidate platform mcp selected-use target: %w", err)
 	}
 
 	succeededAt := observation.SucceededAt

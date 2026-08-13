@@ -1030,17 +1030,25 @@ func TestDiscoverIssuerMetadataRejectsInsecureRedirect(t *testing.T) {
 func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T) {
 	t.Parallel()
 
-	server := fakeIssuerServer(t, func(doc map[string]any) {
-		doc["authorization_endpoint"] = "http://identity.example/authorize"
-		doc["token_endpoint"] = "http://identity.example/token"
-	})
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
-	require.NoError(t, err)
+	for name, endpoint := range map[string]string{
+		"authorization_endpoint": "http://identity.example/authorize",
+		"token_endpoint":         "http://identity.example/token",
+		"jwks_uri":               "http://identity.example/jwks",
+		"registration_endpoint":  "http://identity.example/register",
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := fakeIssuerServer(t, func(doc map[string]any) {
+				doc[name] = endpoint
+			})
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
 
-	_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "issuer metadata authorization_endpoint must use HTTPS outside local loopback")
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "issuer metadata "+name+" must use HTTPS outside local loopback")
+		})
+	}
 }
 
 func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {

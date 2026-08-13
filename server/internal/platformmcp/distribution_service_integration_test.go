@@ -140,6 +140,50 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.Equal(t, 4, published)
 }
 
+func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_replacement")
+	require.NoError(t, err)
+
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	target, err := platformrepo.New(conn).GetPlatformMCPOnboardingDistributionTarget(ctx, platformrepo.GetPlatformMCPOnboardingDistributionTargetParams{
+		OrganizationID:       principal.OrganizationID,
+		InitiatingSubjectUrn: userSubjectURN(principal.UserID),
+	})
+	require.NoError(t, err)
+	require.True(t, target.McpServerID.Valid)
+
+	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	service := NewDistributionService(conn, nil, testExistingDefaultPluginAttacher(principal.OrganizationID), func(context.Context, uuid.UUID, string, string) error { return nil })
+	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
+	require.NoError(t, err)
+
+	created, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, McpServerID: target.McpServerID})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(conn).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: created.ID, PluginID: plugin.ID})
+	require.NoError(t, err)
+	replacement, err := pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID:    plugin.ID,
+		McpServerID: target.McpServerID,
+		DisplayName: "Admin-managed replacement",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.Equal(t, distributionStateRemoved, removed.State)
+	require.True(t, removed.AttachmentLive, "removing onboarding state must not delete an administrator replacement")
+
+	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, McpServerID: target.McpServerID})
+	require.NoError(t, err)
+	require.Equal(t, replacement.ID, live.ID)
+}
+
 func TestDistributionServicePreservesPreexistingAttachmentOnRemoval(t *testing.T) {
 	t.Parallel()
 

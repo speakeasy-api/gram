@@ -92,7 +92,7 @@ setup() {
   info="$(curl --fail --silent --show-error --cacert "$NODE_EXTRA_CA_CERTS" \
     --header "Gram-Session: $session" "$GRAM_SERVER_URL/rpc/auth.info")"
   organization_id="$(printf '%s' "$info" | json_field 'active_organization_id')"
-  [ "$organization_id" != "acme-demo" ] || fail "setup refuses the read-only demo organization"
+  [ "$organization_id" != "org_gram_demo_workspace" ] || fail "setup refuses the read-only demo organization"
 
   # This authenticated org-admin route is the live authorization check and
   # preserves the normal feature audit/cache behavior before the exact cache

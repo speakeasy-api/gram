@@ -1085,6 +1085,8 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
 	}{
 		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint},
 		{name: "token_endpoint", raw: doc.TokenEndpoint},
+		{name: "jwks_uri", raw: doc.JwksURI},
+		{name: "registration_endpoint", raw: doc.RegistrationEndpoint},
 	} {
 		if endpoint.raw == "" {
 			continue
