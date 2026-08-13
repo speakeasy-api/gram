@@ -55082,6 +55082,9 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        litellm_proxied:
+          type: boolean
+          description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
         match_segments:
           type: array
           items:
@@ -55321,6 +55324,9 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        litellm_proxied:
+          type: boolean
+          description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
         num_messages:
           type: integer
           description: The number of messages in the chat

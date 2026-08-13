@@ -953,6 +953,40 @@ func TestListChats_LiteLLMOriginatingClient(t *testing.T) {
 	require.Empty(t, conv.PtrValOr(byID[unknownChatID.String()].OriginatingClient, ""))
 }
 
+// TestListChats_LiteLLMProxiedNativeSession covers sessions whose transcript is
+// owned by a native hook stream while the traffic was routed through LiteLLM:
+// their proxied rows are suppressed, so only the chat-level marker can carry
+// the LiteLLM association into the filter and the listing payload.
+func TestListChats_LiteLLMProxiedNativeSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	proxied := seedChatWithSource(t, ctx, ti, "ext-proxied", "claude-code")
+	_ = seedChatWithSource(t, ctx, ti, "ext-proxied", "claude-code")
+	require.NoError(t, repo.New(ti.conn).MarkChatLiteLLMProxied(ctx, repo.MarkChatLiteLLMProxiedParams{
+		ID:        proxied,
+		ProjectID: ti.projectID,
+	}))
+
+	source := "litellm"
+	payload := defaultPayload()
+	payload.Source = &source
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, proxied.String(), result.Chats[0].ID)
+	require.Equal(t, "claude-code", conv.PtrValOr(result.Chats[0].Source, ""))
+	require.True(t, conv.PtrValOr(result.Chats[0].LitellmProxied, false))
+	require.Empty(t, conv.PtrValOr(result.Chats[0].OriginatingClient, ""))
+
+	// The filter option must be offered even though no message row carries the
+	// litellm source.
+	sources, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.Contains(t, sources.Sources, "litellm")
+}
+
 // TestListChats_Filter_Source_EmptyReturnsAll guards against the regression
 // where an empty source filter sent SQL NULL and dropped every row.
 func TestListChats_Filter_Source_EmptyReturnsAll(t *testing.T) {

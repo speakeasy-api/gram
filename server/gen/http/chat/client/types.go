@@ -141,6 +141,9 @@ type LoadChatResponseBody struct {
 	// The supported client that originated a chat routed through the source, when
 	// known
 	OriginatingClient *string `form:"originating_client,omitempty" json:"originating_client,omitempty" xml:"originating_client,omitempty"`
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool `form:"litellm_proxied,omitempty" json:"litellm_proxied,omitempty" xml:"litellm_proxied,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -2244,6 +2247,9 @@ type ChatOverviewResponseBody struct {
 	// The supported client that originated a chat routed through the source, when
 	// known
 	OriginatingClient *string `form:"originating_client,omitempty" json:"originating_client,omitempty" xml:"originating_client,omitempty"`
+	// True when the session's traffic was observed by the LiteLLM proxy, including
+	// sessions whose transcript is owned by the agent's own hook stream
+	LitellmProxied *bool `form:"litellm_proxied,omitempty" json:"litellm_proxied,omitempty" xml:"litellm_proxied,omitempty"`
 	// When the chat was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the chat was last updated.
@@ -2858,6 +2864,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		NumMessages:          *body.NumMessages,
 		Source:               body.Source,
 		OriginatingClient:    body.OriginatingClient,
+		LitellmProxied:       body.LitellmProxied,
 		CreatedAt:            *body.CreatedAt,
 		UpdatedAt:            *body.UpdatedAt,
 		TotalInputTokens:     body.TotalInputTokens,

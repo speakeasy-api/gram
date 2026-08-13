@@ -65,7 +65,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
-import { formatPlatform } from "@/lib/formatPlatform";
+import { formatChatSource } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -263,6 +263,8 @@ function SessionSummary({
     accountType?: string;
     accountEmail?: string;
     source?: string;
+    originatingClient?: string;
+    litellmProxied?: boolean;
     createdAt: Date;
     totalCost?: number;
     totalInputTokens?: number;
@@ -345,7 +347,7 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {formatPlatform(chat.source)}
+                  {formatChatSource(chat.source, chat)}
                 </span>
               </MetaRow>
             )}
@@ -428,7 +430,7 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {formatPlatform(chat.source)}
+              {formatChatSource(chat.source, chat)}
             </span>
           </Badge.Text>
         </Badge>

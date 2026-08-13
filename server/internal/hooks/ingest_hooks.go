@@ -1385,6 +1385,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return false, nil
 	}
+	// Proxied events flag the chat whether or not their transcript row
+	// survives: natively captured sessions suppress proxied rows as
+	// duplicates, so the marker is the only durable trace that the session
+	// was routed through LiteLLM. Deferred so the flag lands after whichever
+	// persistence path created the chat row; when no chat exists yet the
+	// update is a no-op and a later event in the session sets it.
+	if proxiedTranscriptSource(hookSource) {
+		defer s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
+	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ChatID:           sessionIDToUUID(sessionID),
@@ -1505,6 +1514,20 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 	stored, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, title)
 	return stored && msg.Role == "user", err
+}
+
+func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
+	err := chatRepo.New(s.db).MarkChatLiteLLMProxied(ctx, chatRepo.MarkChatLiteLLMProxiedParams{
+		ID:        chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to mark chat as LiteLLM proxied",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
 }
 
 func usesNativeTranscriptFallback(adapter string) bool {
