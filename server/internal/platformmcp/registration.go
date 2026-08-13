@@ -726,16 +726,22 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	for _, header := range configuration.headers {
 		// Secret header values are collected only by the secure dashboard path.
 		// Reject a plaintext secret here rather than persisting it through the
-		// non-encrypting repository directly.
+		// non-encrypting repository directly. An empty static value is deliberate:
+		// it satisfies the database's value-source invariant and remains pending
+		// until the dashboard replaces it through the encryption boundary.
 		if header.secret && header.value != "" {
 			return platformrepo.PlatformMcpCatalogRegistration{}, ErrCatalogConfigurationRejected
+		}
+		value := optionalText(header.value)
+		if header.secret {
+			value = pgtype.Text{Valid: true}
 		}
 		if _, err := remotemcprepo.New(tx).CreateServerHeader(ctx, remotemcprepo.CreateServerHeaderParams{
 			Name:                   header.name,
 			Description:            optionalText(header.description),
 			IsRequired:             header.required,
 			IsSecret:               header.secret,
-			Value:                  optionalText(header.value),
+			Value:                  value,
 			ValueFromRequestHeader: pgtype.Text{},
 			RemoteMcpServerID:      remote.ID,
 			ProjectID:              project.ID,

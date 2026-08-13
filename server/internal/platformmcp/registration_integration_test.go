@@ -285,7 +285,15 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 
 	const remoteURL = "https://reviewed.example.test/mcp"
-	completed, err := store.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{remoteURL: remoteURL, displayName: "Reviewed MCP"})
+	completed, err := store.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{
+		remoteURL:   remoteURL,
+		displayName: "Reviewed MCP",
+		headers: []resolvedCatalogHeader{{
+			name:     "X-API-Key",
+			required: true,
+			secret:   true,
+		}},
+	})
 	require.NoError(t, err)
 	require.Equal(t, receiptStatusSucceeded, completed.Status)
 	require.True(t, completed.RegistrationID.Valid)
@@ -313,6 +321,18 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.Equal(t, "streamable-http", remote.TransportType)
 	require.Equal(t, "Reviewed MCP source", remote.Name.String)
 	require.Equal(t, remoteURL, remote.Url)
+	headers, err := remotemcprepo.New(conn).ListServerHeaders(ctx, remotemcprepo.ListServerHeadersParams{RemoteMcpServerID: remote.ID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Len(t, headers, 1)
+	require.Equal(t, "X-API-Key", headers[0].Name)
+	require.True(t, headers[0].IsSecret)
+	require.True(t, headers[0].Value.Valid)
+	require.Empty(t, headers[0].Value.String)
+	require.False(t, headers[0].ValueFromRequestHeader.Valid)
+	declaredSecret := []CatalogConfigurationField{{Key: "header:x-api-key", Kind: "header", Name: "X-API-Key", Required: true, Secret: true}}
+	pending, err := store.ResolveRegistrationPendingSecretFields(ctx, principal, project, registration.ID, declaredSecret)
+	require.NoError(t, err)
+	require.Equal(t, declaredSecret, pending)
 
 	issuer, err := usersessionsrepo.New(conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: registration.UserSessionIssuerID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
