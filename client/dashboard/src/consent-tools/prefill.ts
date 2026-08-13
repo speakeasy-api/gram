@@ -3,7 +3,7 @@ import {
   type ToolAnnotation,
 } from "@/components/tool-selection/annotations";
 
-export interface PrefillAnnotation {
+interface PrefillAnnotation {
   name: ToolAnnotation;
   mode: "snapshot" | "live";
 }

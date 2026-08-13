@@ -581,7 +581,7 @@ function ServerRow({
 }
 
 /** Highlights substring matches with a yellow background. */
-export function HighlightMatch({
+function HighlightMatch({
   text,
   query,
   className,
