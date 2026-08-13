@@ -30,8 +30,15 @@ const (
 )
 
 func SyncIdentityMapWorkflow(ctx workflow.Context) error {
+	// ScheduleToClose covers the full retry budget (3 attempts x 2m plus
+	// backoff, ~6m15s) with queue-wait slack, and sits under the 10m
+	// WorkflowRunTimeout so a backlogged task queue exhausts the activity's
+	// own budget rather than the workflow's. A timed-out refresh is benign:
+	// the live map stays on its previous complete generation until the next
+	// tick.
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
+		StartToCloseTimeout:    2 * time.Minute,
+		ScheduleToCloseTimeout: 8 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
 			InitialInterval:    5 * time.Second,

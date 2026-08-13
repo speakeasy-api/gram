@@ -381,6 +381,11 @@ WHERE id = ANY(@ids::bigint[])
 -- email has no directory row in the org and exactly one connected owner with
 -- an unambiguous directory email claims it. Ambiguous emails are omitted so
 -- readers fall back to literal matching rather than guessing.
+--
+-- The owner-ambiguity count deliberately includes account links whose owner is
+-- since deleted or disconnected (matching the Go resolver): a second historical
+-- claimant has telemetry rows under the shared email, and folding it to the
+-- surviving owner would move the departed claimant's usage onto them.
 WITH directory AS (
     SELECT
         our.organization_id,
