@@ -89,9 +89,20 @@ vi.mock("./UserSessionDurationField", () => ({
   UserSessionDurationField: () => null,
 }));
 
+vi.mock("./CimdAdmissionModeField", () => ({
+  CimdAdmissionModeField: () => <div>cimd-admission-mode</div>,
+}));
+
+vi.mock("./CimdCustomClientsField", () => ({
+  CimdCustomClientsField: () => <div>cimd-custom-clients</div>,
+}));
+
 beforeEach(() => {
   useUserSessionIssuer.mockReturnValue({
-    data: { id: "user-session-issuer" },
+    data: {
+      id: "user-session-issuer",
+      clientIdMetadataAdmissionMode: "reporting",
+    },
     isLoading: false,
     isError: false,
   });
@@ -210,6 +221,64 @@ describe("AuthenticationSectionBody", () => {
       false,
     );
   });
+
+  it.each(["presets", "reporting"])(
+    "shows the custom CIMD client list in %s mode",
+    (mode) => {
+      useUserSessionIssuer.mockReturnValue({
+        data: {
+          id: "user-session-issuer",
+          clientIdMetadataAdmissionMode: mode,
+        },
+        isLoading: false,
+        isError: false,
+      });
+      useAllRemoteSessionClients.mockReturnValue({
+        items: [],
+        isLoading: false,
+      });
+      useProtectedResourceMetadata.mockReturnValue({
+        status: "idle",
+        metadata: null,
+      });
+
+      render(
+        <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+      );
+
+      expect(screen.getByText("cimd-admission-mode")).toBeDefined();
+      expect(screen.getByText("cimd-custom-clients")).toBeDefined();
+    },
+  );
+
+  it.each(["open", "disabled"])(
+    "hides the custom CIMD client list in %s mode",
+    (mode) => {
+      useUserSessionIssuer.mockReturnValue({
+        data: {
+          id: "user-session-issuer",
+          clientIdMetadataAdmissionMode: mode,
+        },
+        isLoading: false,
+        isError: false,
+      });
+      useAllRemoteSessionClients.mockReturnValue({
+        items: [],
+        isLoading: false,
+      });
+      useProtectedResourceMetadata.mockReturnValue({
+        status: "idle",
+        metadata: null,
+      });
+
+      render(
+        <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+      );
+
+      expect(screen.getByText("cimd-admission-mode")).toBeDefined();
+      expect(screen.queryByText("cimd-custom-clients")).toBeNull();
+    },
+  );
 });
 
 const remoteTargetWithSessionIssuer: AuthTarget = {

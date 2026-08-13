@@ -31,14 +31,22 @@ function signal(overrides: Partial<RiskSignal>): RiskSignal {
 }
 
 describe("trendPercent", () => {
-  it("computes window-over-window growth", () => {
-    expect(trendPercent(3, 1)).toBeCloseTo(200);
-    expect(trendPercent(1, 4)).toBeCloseTo(-75);
-    expect(trendPercent(5, 5)).toBeCloseTo(0);
+  it("computes within-window growth from segment means", () => {
+    // 9 buckets -> 3-bucket segments: first mean 1, last mean 3 -> +200%.
+    expect(trendPercent([1, 1, 1, 2, 2, 2, 3, 3, 3])).toBeCloseTo(200);
+    // First mean 4, last mean 1 -> -75%.
+    expect(trendPercent([4, 4, 4, 2, 2, 2, 1, 1, 1])).toBeCloseTo(-75);
+    // Flat series -> 0%.
+    expect(trendPercent([5, 5, 5, 5, 5, 5])).toBeCloseTo(0);
   });
 
-  it("returns null without a previous baseline", () => {
-    expect(trendPercent(10, 0)).toBeNull();
+  it("returns null when the window opens with no findings", () => {
+    expect(trendPercent([0, 0, 0, 4, 6, 8])).toBeNull();
+  });
+
+  it("returns null for series too short to compare", () => {
+    expect(trendPercent([7])).toBeNull();
+    expect(trendPercent([])).toBeNull();
   });
 });
 

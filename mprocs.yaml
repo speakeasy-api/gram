@@ -5,12 +5,8 @@ procs:
     cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
     stop:
       send-keys: ["<C-c>"]
-  jaeger:
-    cmd: ["docker", "compose", "logs", "-f", "jaeger"]
-    stop:
-      send-keys: ["<C-c>"]
-  prometheus:
-    cmd: ["docker", "compose", "logs", "-f", "prometheus"]
+  lgtm:
+    cmd: ["docker", "compose", "logs", "-f", "lgtm"]
     stop:
       send-keys: ["<C-c>"]
   dev-idp:

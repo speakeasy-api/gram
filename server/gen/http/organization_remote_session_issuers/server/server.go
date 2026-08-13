@@ -19,18 +19,19 @@ import (
 // Server lists the organizationRemoteSessionIssuers service endpoint HTTP
 // handlers.
 type Server struct {
-	Mounts                    []*MountPoint
-	CreateIssuer              http.Handler
-	ListIssuers               http.Handler
-	GetIssuer                 http.Handler
-	GetIssuerDeletePreflight  http.Handler
-	UpdateIssuer              http.Handler
-	DeleteIssuer              http.Handler
-	MoveIssuer                http.Handler
-	GetIssuerMigratePreflight http.Handler
-	MigrateIssuer             http.Handler
-	FetchIssuerMetadata       http.Handler
-	RefreshIssuerMetadata     http.Handler
+	Mounts                      []*MountPoint
+	CreateIssuer                http.Handler
+	ListIssuers                 http.Handler
+	GetIssuer                   http.Handler
+	GetIssuerDeletePreflight    http.Handler
+	GetIssuerDuplicatePreflight http.Handler
+	UpdateIssuer                http.Handler
+	DeleteIssuer                http.Handler
+	MoveIssuer                  http.Handler
+	GetIssuerMigratePreflight   http.Handler
+	MigrateIssuer               http.Handler
+	FetchIssuerMetadata         http.Handler
+	RefreshIssuerMetadata       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -64,6 +65,7 @@ func New(
 			{"ListIssuers", "GET", "/rpc/organizationRemoteSessionIssuers.list"},
 			{"GetIssuer", "GET", "/rpc/organizationRemoteSessionIssuers.get"},
 			{"GetIssuerDeletePreflight", "GET", "/rpc/organizationRemoteSessionIssuers.getDeletePreflight"},
+			{"GetIssuerDuplicatePreflight", "GET", "/rpc/organizationRemoteSessionIssuers.getDuplicatePreflight"},
 			{"UpdateIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.update"},
 			{"DeleteIssuer", "DELETE", "/rpc/organizationRemoteSessionIssuers.delete"},
 			{"MoveIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.move"},
@@ -72,17 +74,18 @@ func New(
 			{"FetchIssuerMetadata", "POST", "/rpc/organizationRemoteSessionIssuers.fetchMetadata"},
 			{"RefreshIssuerMetadata", "POST", "/rpc/organizationRemoteSessionIssuers.refreshMetadata"},
 		},
-		CreateIssuer:              NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListIssuers:               NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetIssuer:                 NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
-		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
-		UpdateIssuer:              NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteIssuer:              NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
-		MoveIssuer:                NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
-		GetIssuerMigratePreflight: NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
-		MigrateIssuer:             NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
-		FetchIssuerMetadata:       NewFetchIssuerMetadataHandler(e.FetchIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
-		RefreshIssuerMetadata:     NewRefreshIssuerMetadataHandler(e.RefreshIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		CreateIssuer:                NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListIssuers:                 NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetIssuer:                   NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerDeletePreflight:    NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerDuplicatePreflight: NewGetIssuerDuplicatePreflightHandler(e.GetIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
+		UpdateIssuer:                NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteIssuer:                NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
+		MoveIssuer:                  NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerMigratePreflight:   NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
+		MigrateIssuer:               NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchIssuerMetadata:         NewFetchIssuerMetadataHandler(e.FetchIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshIssuerMetadata:       NewRefreshIssuerMetadataHandler(e.RefreshIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -95,6 +98,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListIssuers = m(s.ListIssuers)
 	s.GetIssuer = m(s.GetIssuer)
 	s.GetIssuerDeletePreflight = m(s.GetIssuerDeletePreflight)
+	s.GetIssuerDuplicatePreflight = m(s.GetIssuerDuplicatePreflight)
 	s.UpdateIssuer = m(s.UpdateIssuer)
 	s.DeleteIssuer = m(s.DeleteIssuer)
 	s.MoveIssuer = m(s.MoveIssuer)
@@ -114,6 +118,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListIssuersHandler(mux, h.ListIssuers)
 	MountGetIssuerHandler(mux, h.GetIssuer)
 	MountGetIssuerDeletePreflightHandler(mux, h.GetIssuerDeletePreflight)
+	MountGetIssuerDuplicatePreflightHandler(mux, h.GetIssuerDuplicatePreflight)
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
 	MountDeleteIssuerHandler(mux, h.DeleteIssuer)
 	MountMoveIssuerHandler(mux, h.MoveIssuer)
@@ -322,6 +327,61 @@ func NewGetIssuerDeletePreflightHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getIssuerDeletePreflight")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetIssuerDuplicatePreflightHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "getIssuerDuplicatePreflight"
+// endpoint.
+func MountGetIssuerDuplicatePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationRemoteSessionIssuers.getDuplicatePreflight", f)
+}
+
+// NewGetIssuerDuplicatePreflightHandler creates a HTTP handler which loads the
+// HTTP request and calls the "organizationRemoteSessionIssuers" service
+// "getIssuerDuplicatePreflight" endpoint.
+func NewGetIssuerDuplicatePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetIssuerDuplicatePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetIssuerDuplicatePreflightResponse(encoder)
+		encodeError    = EncodeGetIssuerDuplicatePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getIssuerDuplicatePreflight")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

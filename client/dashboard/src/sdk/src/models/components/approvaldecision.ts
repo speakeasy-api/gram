@@ -31,11 +31,11 @@ export type ApprovalDecision = {
   /**
    * Shape version of the frozen evidence payload, copied from the request at decision time.
    */
-  evidenceVersion?: number | undefined;
+  evidenceVersion: number;
   /**
    * Principals the approval covers. Empty for a denial.
    */
-  grantedPrincipalUrns?: Array<string> | undefined;
+  grantedPrincipalUrns: Array<string>;
   /**
    * The decision ID.
    */
@@ -63,8 +63,8 @@ export const ApprovalDecision$inboundSchema: z.ZodMiniType<
     decided_by: z.string(),
     decision: z.string(),
     evidence: z.optional(z.any()),
-    evidence_version: z.optional(z.int()),
-    granted_principal_urns: z.optional(z.array(z.string())),
+    evidence_version: z.int(),
+    granted_principal_urns: z.array(z.string()),
     id: z.string(),
     rationale: z.optional(z.string()),
     research_report_id: z.optional(z.string()),

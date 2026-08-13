@@ -402,8 +402,6 @@ function WatchdogContent(): JSX.Element {
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
-            from={window.from}
-            to={window.to}
             onClose={() => setUrlParam("signal", null)}
           />
           <DismissFindingsDialog

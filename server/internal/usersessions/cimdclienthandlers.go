@@ -3,8 +3,8 @@
 // document URLs an individual issuer additionally admits.
 //
 // Together with the client_id_metadata_admission_mode field on the
-// userSessionIssuers endpoints, these are the whole configuration surface
-// for CIMD admission control until the dashboard UI lands (AIS-372).
+// userSessionIssuers endpoints, these are the configuration surface for CIMD
+// admission control, consumed by the dashboard's Authentication section.
 
 package usersessions
 
@@ -29,6 +29,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+const (
+	// verifyRatePerMin / verifyRateBurst bound VerifyURL per project. Sized
+	// for a human clicking Verify while configuring an issuer — a handful of
+	// URLs in a sitting — not for enumeration. Matches the shape of the
+	// externalCredentials verify limiter.
+	verifyRatePerMin = 10
+	verifyRateBurst  = 5
 )
 
 // Lists Gram's curated CIMD preset catalog. The catalog is a compile-time
@@ -61,6 +70,70 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 	return &gen.ListCimdClientPresetsResult{Items: items}, nil
 }
 
+// Probes a CIMD document URL without persisting anything, so an operator can
+// confirm a URL works before adding it. Create deliberately performs no fetch
+// of its own, so this is the only place the document is checked before it
+// reaches an authorization request.
+//
+// Every probe outcome — including a total failure to reach the host — is a
+// successful call returning verified=false. An error return means the request
+// itself was bad or the caller is not authorized, never that the document is.
+//
+// Takes the write scope rather than read: this is a pre-flight for a write,
+// it makes Gram issue an outbound request to a caller-chosen URL, and gating
+// it lower than the create it precedes would be an odd seam.
+func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyCimdURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	// Bound per project. Fail OPEN on a limiter outage: a Redis blip must
+	// not stop an operator configuring an issuer, and the downside of an
+	// unbounded window is bounded by how long the store stays down.
+	switch res, limitErr := s.verifyLimiter.Allow(ctx, authCtx.ProjectID.String()); {
+	case limitErr != nil:
+		s.logger.WarnContext(ctx, "cimd verify rate limiter unavailable, allowing", attr.SlogError(limitErr))
+	case !res.Allowed:
+		return nil, oops.E(oops.CodeRateLimitExceeded, nil, "verify rate limit exceeded, try again shortly")
+	}
+
+	// Inspect applies the §3 syntax rules itself and reports a violation as
+	// the invalid_url outcome, so unlike create there is no separate hard
+	// fail here: a syntactically dead URL is a probe result the operator
+	// asked for, not a malformed request.
+	result := s.cimdResolver.Inspect(ctx, payload.ClientIDMetadataURI)
+
+	// This is the only endpoint that makes Gram issue an outbound request to
+	// a caller-chosen host, and the resolver's own log line carries the
+	// origin but no tenant. Stamp the project so egress can be attributed if
+	// the endpoint is ever abused as a scanner.
+	s.logger.InfoContext(ctx, "cimd url verified",
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogOutcome(string(result.Outcome)),
+	)
+
+	view := &gen.VerifyCimdURLResult{
+		Verified:   result.Outcome == cimd.OutcomeValid,
+		Outcome:    string(result.Outcome),
+		HTTPStatus: nil,
+		Reason:     nil,
+		Detail:     result.Detail,
+		ClientName: nil,
+	}
+	view.HTTPStatus = conv.PtrEmpty(result.HTTPStatus)
+	view.Reason = conv.PtrEmpty(result.Reason)
+	if result.Document != nil {
+		view.ClientName = conv.PtrEmpty(result.Document.ClientName)
+	}
+
+	return view, nil
+}
+
 // Allows an additional CIMD document URL on an issuer.
 func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload *gen.CreateUserSessionIssuerCimdClientPayload) (*gen.CreateUserSessionIssuerCimdClientResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -90,20 +163,14 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid client_id_metadata_uri: %s", err.Error()).LogError(ctx, logger)
 	}
 
-	// Probe BEFORE the write so the warning reflects the URL as saved, but
-	// treat every failure as advisory. A vendor's document host being down,
-	// slow, or behind a transient error must not block an operator from
-	// configuring policy — and the document is re-fetched and re-validated
-	// on every authorization anyway, so a bad document cannot be smuggled
-	// in by probing at a lucky moment.
-	var probeWarning *string
-	if _, err := s.cimdResolver.Resolve(ctx, payload.ClientIDMetadataURI); err != nil {
-		// The resolver's error text can name internal network conditions
-		// (guardian SSRF denials, DNS failures), so it is logged rather
-		// than echoed. The operator gets a generic, actionable warning.
-		logger.InfoContext(ctx, "cimd custom url probe failed", attr.SlogError(err))
-		probeWarning = conv.PtrEmpty("Gram could not fetch and validate a client ID metadata document at this URL. The entry was saved, but a client presenting it will fail to authorize until the document is reachable and valid.")
-	}
+	// No document fetch here, deliberately. It never blocked the write, so
+	// it bought an advisory string rather than protection, at the cost of an
+	// outbound request (up to the resolver's 10s timeout) on every add. The
+	// warning was also ephemeral — nothing persists it, so it vanished on
+	// the next read and could not be acted on later. VerifyURL now answers
+	// the same question on demand, in full, and the document is re-fetched
+	// and re-validated on every authorization regardless, so skipping the
+	// probe here cannot smuggle a bad document into the policy.
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -172,8 +239,7 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 	}
 
 	return &gen.CreateUserSessionIssuerCimdClientResult{
-		Client:       view,
-		ProbeWarning: probeWarning,
+		Client: view,
 	}, nil
 }
 

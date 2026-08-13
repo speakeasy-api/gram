@@ -76,7 +76,7 @@ type testInstance struct {
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	// servicePolicy blocks loopback / private ranges so validateURL exercises
+	// servicePolicy blocks loopback / private ranges so ValidateHTTPURL exercises
 	// the real production CIDR set, and uses a mock resolver so hostname-based
 	// test cases are deterministic.
 	servicePolicy := guardian.NewDefaultPolicy(

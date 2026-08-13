@@ -9,4 +9,8 @@ mise run github:pre-cache
 echo
 echo Install scripting dependencies
 echo ==============================
-pnpm install --frozen-lockfile --filter @gram/workspace
+# pnpm could scope this to the workspace root (`--filter @gram/workspace`);
+# aube's filters only ever match workspace *members*, so there is no way to
+# ask for the root package alone. Install the workspace instead — the mise
+# .mts tasks that run before a job's own install step need these deps.
+aube install --frozen-lockfile

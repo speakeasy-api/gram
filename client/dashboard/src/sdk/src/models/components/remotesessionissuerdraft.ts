@@ -54,6 +54,10 @@ export type RemoteSessionIssuerDraft = {
    */
   registrationEndpoint?: string | undefined;
   responseTypesSupported?: Array<string> | undefined;
+  /**
+   * Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+   */
+  revocationEndpoint?: string | undefined;
   scopesSupported?: Array<string> | undefined;
   /**
    * RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.
@@ -84,6 +88,7 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
     passthrough: z.boolean(),
     registration_endpoint: z.optional(z.string()),
     response_types_supported: z.optional(z.array(z.string())),
+    revocation_endpoint: z.optional(z.string()),
     scopes_supported: z.optional(z.array(z.string())),
     service_documentation: z.optional(z.string()),
     token_endpoint: z.optional(z.string()),
@@ -101,6 +106,7 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
       "op_tos_uri": "opTosUri",
       "registration_endpoint": "registrationEndpoint",
       "response_types_supported": "responseTypesSupported",
+      "revocation_endpoint": "revocationEndpoint",
       "scopes_supported": "scopesSupported",
       "service_documentation": "serviceDocumentation",
       "token_endpoint": "tokenEndpoint",

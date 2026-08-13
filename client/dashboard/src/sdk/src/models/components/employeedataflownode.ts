@@ -25,7 +25,7 @@ export type ServerClass = ClosedEnum<typeof ServerClass>;
 /**
  * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
  */
-export const Tier = {
+export const EmployeeDataFlowNodeTier = {
   Origin: "origin",
   Client: "client",
   Server: "server",
@@ -34,7 +34,9 @@ export const Tier = {
 /**
  * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
  */
-export type Tier = ClosedEnum<typeof Tier>;
+export type EmployeeDataFlowNodeTier = ClosedEnum<
+  typeof EmployeeDataFlowNodeTier
+>;
 
 /**
  * A node in the employee data flow graph
@@ -55,7 +57,7 @@ export type EmployeeDataFlowNode = {
   /**
    * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
    */
-  tier: Tier;
+  tier: EmployeeDataFlowNodeTier;
   /**
    * Total calls involving this node
    */
@@ -67,7 +69,9 @@ export const ServerClass$inboundSchema: z.ZodMiniEnum<typeof ServerClass> = z
   .enum(ServerClass);
 
 /** @internal */
-export const Tier$inboundSchema: z.ZodMiniEnum<typeof Tier> = z.enum(Tier);
+export const EmployeeDataFlowNodeTier$inboundSchema: z.ZodMiniEnum<
+  typeof EmployeeDataFlowNodeTier
+> = z.enum(EmployeeDataFlowNodeTier);
 
 /** @internal */
 export const EmployeeDataFlowNode$inboundSchema: z.ZodMiniType<
@@ -78,7 +82,7 @@ export const EmployeeDataFlowNode$inboundSchema: z.ZodMiniType<
     id: z.string(),
     label: z.string(),
     server_class: z.optional(ServerClass$inboundSchema),
-    tier: Tier$inboundSchema,
+    tier: EmployeeDataFlowNodeTier$inboundSchema,
     total_calls: z.int(),
   }),
   z.transform((v) => {
