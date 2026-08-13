@@ -237,7 +237,9 @@ func TestGetApprovalRequestForRecheck_UsesNewestDecision(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.JSONEq(t, widened, string(row.DecisionEvidenceSnapshot))
-	require.Equal(t, newest.DecidedAt, row.DecisionDecidedAt.Time.Format(time.RFC3339))
+	// The view emits UTC regardless of the connection's zone, so the raw
+	// timestamp is normalized before comparing.
+	require.Equal(t, newest.DecidedAt, row.DecisionDecidedAt.Time.UTC().Format(time.RFC3339))
 }
 
 // The scan is global by design; the per-request load is not. A request id

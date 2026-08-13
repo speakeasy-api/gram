@@ -22,6 +22,7 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Link } from "react-router";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -35,6 +36,8 @@ import {
   deriveSlugFromUrl,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { useIssuerDiscovery } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "../mcp/x/tabs/settings/sections/authentication/IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "../mcp/x/tabs/settings/sections/authentication/useIssuerDuplicatePreflight";
 import { buildCreateIssuerForm } from "./issuerSettingsForm";
 
 // Sentinel for the "no project" (organizational) selection. Radix Select treats
@@ -76,6 +79,20 @@ export function CreateRemoteIdentityProviderSheet({
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState("");
+
+  // The Issuer URL as it stood when the operator last left the field. Held
+  // separately from the live input so the duplicate preflight runs on a settled
+  // value rather than once per keystroke.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState("");
+  // Org scope: matches span the whole organization, project-specific records
+  // included, plus the platform catalog. That is the point at this tier — an
+  // administrator adding an organization-level provider most needs to know
+  // which projects already configured the same URL on their own.
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "organization",
+    enabled: open,
+  });
 
   const {
     issuerUrl,
@@ -138,6 +155,7 @@ export function CreateRemoteIdentityProviderSheet({
     setSlugDirty(false);
     setClientSetupDocumentationUrl("");
     setIssuerUrl("");
+    setSettledIssuerUrl("");
     resetEndpointState();
     clearDiscoverError();
     resetCreateMutation();
@@ -215,8 +233,30 @@ export function CreateRemoteIdentityProviderSheet({
 
             <IssuerUrlField
               issuerUrl={issuerUrl}
+              onIssuerUrlSettled={setSettledIssuerUrl}
+              duplicateWarning={
+                <IssuerDuplicateWarning
+                  viewerScope="organization"
+                  matches={duplicateMatches}
+                  renderLink={(match) => (
+                    <Button asChild variant="secondary">
+                      <Link
+                        to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+                          match.id,
+                        )}
+                        onClick={() => onOpenChange(false)}
+                      >
+                        View existing provider
+                      </Link>
+                    </Button>
+                  )}
+                />
+              }
               onIssuerUrlChange={(value) => {
                 setIssuerUrl(value);
+                // Any edit invalidates the last blur, so a warning cannot
+                // outlive the URL it describes.
+                setSettledIssuerUrl("");
                 clearDiscoverError();
                 if (!slugDirty) {
                   const derived = deriveSlugFromUrl(value);

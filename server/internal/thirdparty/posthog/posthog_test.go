@@ -90,3 +90,14 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 		})
 	}
 }
+
+// A nil provider is the shape callers hold before wiring completes; resolving a
+// variant on it must yield "no variant", not a nil-pointer panic on the logger.
+func TestPosthogFlagVariantNilProvider(t *testing.T) {
+	t.Parallel()
+
+	var p *Posthog
+	variant, err := p.FlagVariant(t.Context(), feature.FlagAssistantPlatformMCP, "org-test", nil)
+	require.NoError(t, err)
+	require.Empty(t, variant)
+}

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -206,11 +207,6 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 		return nil, oops.E(oops.CodeBadRequest, nil, "name is required").LogError(ctx, logger)
 	}
 
-	keyArn := strings.TrimSpace(payload.KeyArn)
-	if keyArn == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "key_arn is required").LogError(ctx, logger)
-	}
-
 	credentialID, err := uuid.Parse(payload.ExternalCredentialID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid external credential id").LogError(ctx, logger)
@@ -243,7 +239,6 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 
 	ek, err := q.UpdateExternalKey(ctx, repo.UpdateExternalKeyParams{
 		ExternalCredentialID:   credentialID,
-		Algorithm:              payload.Algorithm,
 		Name:                   name,
 		CustomerGrantReference: grantReference,
 		ID:                     id,
@@ -256,13 +251,9 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating external key").LogError(ctx, logger)
 	}
 
-	aws, err := q.UpdateAwsKmsKey(ctx, repo.UpdateAwsKmsKeyParams{
-		KeyArn:        keyArn,
-		ExternalKeyID: id,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating aws kms key").LogError(ctx, logger)
-	}
+	// The subtype row is immutable, so the copy read above is still current and
+	// there is no subtype update to perform.
+	aws := current.AwsKmsKey
 
 	if err := s.audit.LogAwsKmsKeyUpdate(ctx, dbtx, audit.LogAwsKmsKeyUpdateEvent{
 		OrganizationID:    authCtx.ActiveOrganizationID,
@@ -296,9 +287,14 @@ func (s *Service) CreateGcpKmsKey(ctx context.Context, payload *gen.CreateGcpKms
 		return nil, oops.E(oops.CodeBadRequest, nil, "name is required").LogError(ctx, logger)
 	}
 
+	// The resource name is validated here rather than only at first signing use
+	// because it is frozen once written: with identity immutable, a version-less
+	// `.../cryptoKeys/<k>` path could only be corrected by deleting the key and
+	// creating a new one. Asymmetric-sign keys have no primary version, so such a
+	// path is not resolvable to anything signable.
 	resourceName := strings.TrimSpace(payload.ResourceName)
-	if resourceName == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "resource_name is required").LogError(ctx, logger)
+	if err := gcpkms.ValidateKeyVersionName(resourceName); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "resource_name must be a fully-qualified GCP KMS crypto key version (projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>/cryptoKeyVersions/<v>)").LogError(ctx, logger)
 	}
 
 	credentialID, err := uuid.Parse(payload.ExternalCredentialID)
@@ -379,11 +375,6 @@ func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKms
 		return nil, oops.E(oops.CodeBadRequest, nil, "name is required").LogError(ctx, logger)
 	}
 
-	resourceName := strings.TrimSpace(payload.ResourceName)
-	if resourceName == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "resource_name is required").LogError(ctx, logger)
-	}
-
 	credentialID, err := uuid.Parse(payload.ExternalCredentialID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid external credential id").LogError(ctx, logger)
@@ -416,7 +407,6 @@ func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKms
 
 	ek, err := q.UpdateExternalKey(ctx, repo.UpdateExternalKeyParams{
 		ExternalCredentialID:   credentialID,
-		Algorithm:              payload.Algorithm,
 		Name:                   name,
 		CustomerGrantReference: grantReference,
 		ID:                     id,
@@ -429,13 +419,9 @@ func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating external key").LogError(ctx, logger)
 	}
 
-	gcp, err := q.UpdateGcpKmsKey(ctx, repo.UpdateGcpKmsKeyParams{
-		ResourceName:  resourceName,
-		ExternalKeyID: id,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating gcp kms key").LogError(ctx, logger)
-	}
+	// The subtype row is immutable, so the copy read above is still current and
+	// there is no subtype update to perform.
+	gcp := current.GcpKmsKey
 
 	if err := s.audit.LogGcpKmsKeyUpdate(ctx, dbtx, audit.LogGcpKmsKeyUpdateEvent{
 		OrganizationID:    authCtx.ActiveOrganizationID,
@@ -558,13 +544,18 @@ func (s *Service) DeleteGcpKmsKey(ctx context.Context, payload *gen.DeleteGcpKms
 // provider-specific audit event. A missing (or wrong-provider) id is a no-op so
 // deletes stay idempotent.
 //
-// Delete is a soft delete: the external_keys row and its id are preserved. A
-// caller changes a key's provider by delete + recreate, which mints a NEW
-// external_keys.id. Once json_web_key_sets / json_web_keys reference
-// external_keys(organization_id, id) (a foreign key with no ON DELETE, i.e.
-// RESTRICT), such a swap orphans the old key material under the previous id and
-// the new key must be re-pointed by the JWKS layer (AGE-2869 / AGE-2870).
-// Nothing references external_keys today, so this is safe for now.
+// Delete is a soft delete: the external_keys row and its id are preserved. It is
+// refused while a live json_web_key_sets or json_web_keys row references the key,
+// because a published JWK is a permanent, externally cached promise — verifiers
+// cache a kid and expect it to keep verifying for as long as it is published.
+// The guard is application-level and has to be: `deleted` is a generated column,
+// so a soft delete never fires either foreign key. See
+// ExternalKeyHasJsonWebKeyReferences for why the lock mode below matters and why
+// the foreign keys are deliberately NO ACTION rather than RESTRICT.
+//
+// The refusal path has no test here: no Go package owns json_web_key_sets /
+// json_web_keys yet, and tests may not write raw SQL. AIS-240 introduces that
+// repo and owns the coverage.
 func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string) error {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
@@ -583,6 +574,31 @@ func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string)
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	q := repo.New(dbtx)
+
+	// Lock the key before checking for references so a concurrent JWKS write
+	// cannot commit between the check and the delete.
+	_, err = q.LockExternalKeyForDelete(ctx, repo.LockExternalKeyForDeleteParams{
+		ID:             id,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		Provider:       provider,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error deleting external key").LogError(ctx, logger)
+	}
+
+	referenced, err := q.ExternalKeyHasJsonWebKeyReferences(ctx, repo.ExternalKeyHasJsonWebKeyReferencesParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ExternalKeyID:  id,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking external key references").LogError(ctx, logger)
+	}
+	if referenced {
+		return oops.E(oops.CodeConflict, nil, "external key is still in use by a JSON Web Key Set or a published JSON Web Key")
+	}
 
 	deleted, err := q.SoftDeleteExternalKey(ctx, repo.SoftDeleteExternalKeyParams{
 		ID:             id,
@@ -678,6 +694,10 @@ func credentialProviderForKey(keyProvider string) (string, bool) {
 	}
 }
 
+// awsSnapshot and gcpSnapshot capture full key state, including the frozen
+// identity fields. On an update those are identical before and after by
+// construction, which is the point: the audit trail then evidences that the key
+// material did not move, rather than leaving a reader to infer it from absence.
 func awsSnapshot(ek repo.ExternalKey, aws repo.AwsKmsKey) *audit.AwsKmsKeySnapshot {
 	return &audit.AwsKmsKeySnapshot{
 		Name:                   ek.Name,

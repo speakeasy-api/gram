@@ -401,7 +401,13 @@ func handleToolsCall(
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger)
+		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
+			recordToolCallErrorStatus(ctx, rw, rejected)
+			return nil, rejected
+		}
+		failure := oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
 	outputBytes = int64(rw.body.Len())
@@ -459,6 +465,36 @@ func handleToolsCall(
 	}
 
 	return bs, nil
+}
+
+// toolCallRejection answers a failed tool execution that the caller has to fix
+// — arguments naming a resource that does not exist, a payload an upstream
+// rejected as malformed, a scope the configured credential never had — with a
+// bad request logged at warn, and reports true. It reports false for a failure
+// that Gram or an upstream is answerable for, which the caller then reports as
+// the server fault it is.
+//
+// Caller mistakes are ordinary and arrive in volume: a single misconfigured
+// client can emit hundreds an hour, enough at error level to hold this
+// component's error-rate monitors at their threshold and mask a genuine
+// regression for a whole alert window.
+func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) (*oops.ShareableError, bool) {
+	if !oops.IsClientFault(err) {
+		return nil, false
+	}
+
+	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
+}
+
+// recordToolCallErrorStatus keeps deferred billing and telemetry metadata in
+// sync with the status represented by an error returned from the MCP boundary.
+// The response writer starts at 200 because successful tool implementations may
+// write only a body, so failures that occur before WriteHeader must update it.
+func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
+	var shareableErr *oops.ShareableError
+	if errors.As(err, &shareableErr) {
+		rw.statusCode = shareableErr.HTTPStatus(ctx)
+	}
 }
 
 func resolveUserConfiguration(

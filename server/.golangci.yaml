@@ -110,6 +110,12 @@ linters:
         linters:
           - gosec
         text: G101
+      # False positives that audit action constants and the URN prefix naming
+      # the OpenRouter key subject are somehow hardcoded credentials.
+      - path: (internal/audit/openrouterkeys|internal/urn/openrouter_api_key)\.go
+        linters:
+          - gosec
+        text: G101
       # The guardian package is the only package that is allowed to access
       # http.Client directly since it constructs the safe HTTP clients
       # that are used throughout the codebase. This is tracked by GG002.

@@ -90,7 +90,9 @@ var _ billing.Repository = (*Client)(nil)
 
 func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	client := guardianPolicy.PooledClient()
-	client.Timeout = 30 * time.Second
+	// Polar serializes /quantities meter queries per-meter on their side, so
+	// during degraded periods individual calls can take well over a minute.
+	client.Timeout = 2 * time.Minute
 
 	return &Client{
 		logger:             logger.With(attr.SlogComponent("polar_usage")),

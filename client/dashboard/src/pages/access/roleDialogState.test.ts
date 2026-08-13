@@ -486,6 +486,32 @@ describe("computeRuleLabel", () => {
       ),
     ).toBe("2 projects");
   });
+
+  it("null selectors (mcp_approval) → All projects", () => {
+    expect(computeRuleLabel(null, "mcp_approval", projects)).toBe(
+      "All projects",
+    );
+  });
+
+  it("mcp_approval selectors describe projects", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ resourceKind: "mcp_approval", resourceId: "p1" })],
+        "mcp_approval",
+        projects,
+      ),
+    ).toBe("Project: ecommerce-api");
+    expect(
+      computeRuleLabel(
+        [
+          sel({ resourceKind: "mcp_approval", resourceId: "p1" }),
+          sel({ resourceKind: "mcp_approval", resourceId: "p2" }),
+        ],
+        "mcp_approval",
+        projects,
+      ),
+    ).toBe("2 projects");
+  });
 });
 
 // --- computeRuleTooltip ---
@@ -501,6 +527,34 @@ describe("computeRuleTooltip", () => {
     expect(computeRuleTooltip("deny", null, "project", projects)).toBe(
       "Excludes access to all projects in your org",
     );
+  });
+
+  it("allow null (mcp_approval) → permits all projects", () => {
+    expect(computeRuleTooltip("allow", null, "mcp_approval", projects)).toBe(
+      "Permits access to all projects in your org",
+    );
+  });
+
+  it("mcp_approval selectors describe projects", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ resourceKind: "mcp_approval", resourceId: "p1" })],
+        "mcp_approval",
+        projects,
+      ),
+    ).toBe("Permits access in ecommerce-api");
+    expect(
+      computeRuleTooltip(
+        "deny",
+        [
+          sel({ resourceKind: "mcp_approval", resourceId: "p1" }),
+          sel({ resourceKind: "mcp_approval", resourceId: "p2" }),
+        ],
+        "mcp_approval",
+        projects,
+      ),
+    ).toBe("Excludes access to 2 projects");
   });
 
   it("empty selectors → none selected", () => {

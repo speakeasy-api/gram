@@ -303,6 +303,7 @@ type CreateRiskExclusionPayload struct {
 // createRiskPolicyBypassRequest method.
 type CreateRiskPolicyBypassRequestPayload struct {
 	SessionToken *string
+	ApikeyToken  *string
 	// Signed request token generated when a risk policy blocks an action.
 	RequestToken string
 	// The requester's own justification for needing this, shown to whoever

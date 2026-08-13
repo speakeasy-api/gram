@@ -1138,6 +1138,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		ToolName:        mcpToolName,
 		ToolInput:       payload.ToolInput,
 		RiskPolicyID:    policy.ID,
+		PolicyName:      policy.Name,
 	})
 	matchedURL := ""
 	if matched != nil {

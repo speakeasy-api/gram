@@ -9,6 +9,7 @@ import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +18,8 @@ import {
   IssuerUrlField,
 } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import { useIssuerDiscovery } from "../../../mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "../../../mcp/x/tabs/settings/sections/authentication/useIssuerDuplicatePreflight";
 import { DeleteIssuerDialog } from "../../RemoteIdentityProviders";
 import { issuerDisplayName } from "../../issuerDisplay";
 import { SettingsField, SettingsSection } from "../../issuerSettingsFields";
@@ -74,6 +77,7 @@ export function SettingsTab({
         issuer.tokenEndpointAuthMethodsSupported ?? [],
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
+      revocationEndpoint: issuer.revocationEndpoint ?? "",
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
@@ -109,6 +113,25 @@ export function SettingsTab({
   // Repointing a provider is exactly what Discover-then-Save is for, so the two
   // swap rather than sit side by side.
   const issuerUrlMatchesSaved = issuerUrl.trim() === issuer.issuer;
+
+  // Repointing a provider can duplicate an existing one just as creating it
+  // can, so the same preflight runs here. It is gated on the URL having
+  // diverged from what is saved: while they match, the only record it could
+  // report is this one. excludeId covers the remaining case, a
+  // normalization-equivalent edit (a trailing slash on your own URL) that the
+  // shared candidate set still matches.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState(issuer.issuer);
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "organization",
+    // Gated on settledIssuerUrl, NOT on issuerUrlMatchesSaved: that flag tracks
+    // the live input, and gating on it while keying the query on the settled
+    // value lets the two disagree — type a new URL, blur, then type the saved
+    // one back without blurring, and the gate closes while the key still points
+    // at the other URL.
+    enabled: settledIssuerUrl.trim() !== issuer.issuer,
+    excludeId: issuer.id,
+  });
 
   const refreshMetadata =
     useRefreshOrganizationRemoteSessionIssuerMetadataMutation({
@@ -188,8 +211,29 @@ export function SettingsTab({
       >
         <IssuerUrlField
           issuerUrl={issuerUrl}
+          onIssuerUrlSettled={setSettledIssuerUrl}
+          duplicateWarning={
+            <IssuerDuplicateWarning
+              viewerScope="organization"
+              matches={duplicateMatches}
+              renderLink={(match) => (
+                <Button asChild variant="secondary">
+                  <Link
+                    to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
+                      match.id,
+                    )}
+                  >
+                    View existing provider
+                  </Link>
+                </Button>
+              )}
+            />
+          }
           onIssuerUrlChange={(value) => {
             setIssuerUrl(value);
+            // Any edit invalidates the last blur, so a warning cannot outlive
+            // the URL it describes.
+            setSettledIssuerUrl("");
             clearDiscoverError();
             // The endpoint fields belong to the settled URL — the saved issuer,
             // or the last discovery if one ran. Once the typed URL diverges

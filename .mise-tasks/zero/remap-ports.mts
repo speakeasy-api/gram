@@ -25,9 +25,11 @@
  * manual edits the user may have made to dependent values.
  */
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseTOML } from "confbox";
-import { getPort } from "get-port-please";
+import { checkPort } from "get-port-please";
 
 /**
  * Ports of services that are shared across ALL worktrees (see
@@ -37,6 +39,80 @@ import { getPort } from "get-port-please";
  * keep their mise.toml defaults too.
  */
 const SHARED_PORT_ENV_VARS = new Set(["PRESIDIO_PORT"]);
+
+/**
+ * Range to draw worktree ports from. Deliberately BELOW the ephemeral range
+ * (49152-65535 on macOS and Linux): a port picked there is one the kernel also
+ * hands out to outbound sockets, and nothing holds the assignment between
+ * `git:workinit` picking it and Docker binding it minutes later during the
+ * boot. When that race is lost the whole stack dies at `infra:start` with
+ * `failed to bind host port ...: address already in use`, and the worktree
+ * never seeds. Stay above 20000 to clear the fixed ports in `mise.toml`.
+ */
+const PORT_RANGE_START = 20_000;
+const PORT_RANGE_END = 49_151;
+
+/** Attempts per port before giving up; the range holds ~29k candidates. */
+const MAX_PORT_ATTEMPTS = 100;
+
+/**
+ * Ports already spoken for by another worktree. A sibling's ports are recorded
+ * in its `mise.local.toml` as soon as `git:workinit` runs, but are not bound
+ * until its stack boots, so probing the host alone cannot see them: creating
+ * two worktrees back to back would otherwise hand both the same ports and the
+ * second stack would fail to bind. Best-effort — a worktree we cannot read
+ * just does not contribute reservations.
+ */
+function reservedByOtherWorktrees(): Set<number> {
+  const reserved = new Set<number>();
+
+  let porcelain: string;
+  try {
+    porcelain = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      encoding: "utf-8",
+    });
+  } catch {
+    return reserved;
+  }
+
+  for (const line of porcelain.split("\n")) {
+    if (!line.startsWith("worktree ")) continue;
+    const dir = line.slice("worktree ".length).trim();
+    let local: { env?: Record<string, string> };
+    try {
+      local = parseTOML(readFileSync(join(dir, "mise.local.toml"), "utf-8"));
+    } catch {
+      continue;
+    }
+    for (const [key, value] of Object.entries(local.env ?? {})) {
+      if (!key.endsWith("_PORT")) continue;
+      const port = Number(value);
+      if (Number.isInteger(port)) reserved.add(port);
+    }
+  }
+
+  return reserved;
+}
+
+/**
+ * Picks a free port in the non-ephemeral range that no other worktree has
+ * claimed, recording it in `reserved` so the rest of this run skips it too.
+ */
+async function allocatePort(reserved: Set<number>): Promise<number> {
+  const span = PORT_RANGE_END - PORT_RANGE_START + 1;
+  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+    const candidate = PORT_RANGE_START + Math.floor(Math.random() * span);
+    if (reserved.has(candidate)) continue;
+    // checkPort with no host tries every local address plus 0.0.0.0, which is
+    // what Docker publishes on.
+    if ((await checkPort(candidate)) === false) continue;
+    reserved.add(candidate);
+    return candidate;
+  }
+  throw new Error(
+    `Unable to find a free port in ${PORT_RANGE_START}-${PORT_RANGE_END} after ${MAX_PORT_ATTEMPTS} attempts`,
+  );
+}
 
 async function main() {
   const config = parseTOML(await readFileSync("mise.toml", "utf-8")) as {
@@ -61,6 +137,15 @@ async function main() {
     (key) => key.endsWith("_PORT") && !SHARED_PORT_ENV_VARS.has(key),
   );
 
+  // Ports this worktree keeps (--preserve) are reserved too, so a newly-added
+  // _PORT var cannot be handed a port this worktree already uses.
+  const reserved = reservedByOtherWorktrees();
+  for (const [key, value] of Object.entries(existing)) {
+    if (!key.endsWith("_PORT")) continue;
+    const port = Number(value);
+    if (Number.isInteger(port)) reserved.add(port);
+  }
+
   const emitted = new Map<string, string>();
   const emit = (key: string, value: string) => {
     // delete-then-set moves the key to the end of insertion order, matching
@@ -74,11 +159,7 @@ async function main() {
     if (preserve && portEnvVar in existing) {
       // Port is already assigned in mise.local.toml — keep it.
     } else {
-      const port = await getPort({
-        name: portEnvVar,
-        random: true,
-      });
-      emit(portEnvVar, `${port}`);
+      emit(portEnvVar, `${await allocatePort(reserved)}`);
     }
 
     for (const [key, value] of findDependentEnvVars(config.env, portEnvVar)) {

@@ -332,6 +332,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
+	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -511,7 +512,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker, encryptionClient)
 			}
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
@@ -549,6 +550,11 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
+			if err != nil {
+				return err
+			}
 
 			// we don't require a real workOS client for workers as they bypass RBAC
 			authzEngine := authz.NewEngine(
@@ -714,6 +720,8 @@ func newWorkerCommand() *cli.Command {
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
+				tracerProvider,
+				meterProvider,
 				db,
 				encryptionClient,
 				guardianPolicy,
@@ -830,47 +838,49 @@ func newWorkerCommand() *cli.Command {
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:      guardianPolicy,
-				DB:                  db,
-				EncryptionClient:    encryptionClient,
-				FeatureProvider:     featureFlags,
-				AssetStorage:        assetStorage,
-				SlackClient:         slackClient,
-				ChatMessageWriter:   chatWriter,
-				ChatClient:          chatClient,
-				OpenRouter:          openRouter,
-				K8sClient:           k8sClient,
-				ExpectedTargetCNAME: c.String("custom-domain-cname"),
-				GitHubEvidenceToken: c.String("github-evidence-token"),
-				SiteURL:             siteURL,
-				BillingTracker:      billingTracker,
-				BillingRepository:   billingRepo,
-				RedisClient:         redisClient,
-				PosthogClient:       posthogClient,
-				EmailService:        emailService,
-				FunctionsDeployer:   functionsOrchestrator,
-				FunctionsVersion:    runnerVersion,
-				RagService:          ragService,
-				MCPRegistryClient:   mcpRegistryClient,
-				TelemetryLogger:     telemetryLogger,
-				ClickhouseConn:      chDB,
-				TelemetryRepo:       telemetryrepo.New(chDB),
-				TriggersApp:         triggerApp,
-				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
-				AssistantsCore:      assistantsCore,
-				TemporalEnv:         temporalEnv,
-				PIIScanner:          piiScanner,
-				PIScanner:           piScanner,
-				CustomRuleScanner:   customRuleScanner,
-				BuiltinPresets:      builtinPresets,
-				ShadowMCPClient:     shadowMCPClient,
-				AuditLogger:         auditLogger,
-				WorkOSClient:        backgroundWorkOSClient,
-				SvixClient:          svixClient,
-				ProductFeatures:     productFeatures,
-				PluginPublisher:     pluginPublisher,
-				Publishers:          publishers,
-				TrialEmailsService:  trialEmailsService,
+				GuardianPolicy:            guardianPolicy,
+				DB:                        db,
+				EncryptionClient:          encryptionClient,
+				FeatureProvider:           featureFlags,
+				AssetStorage:              assetStorage,
+				SlackClient:               slackClient,
+				ChatMessageWriter:         chatWriter,
+				ChatClient:                chatClient,
+				OpenRouter:                openRouter,
+				K8sClient:                 k8sClient,
+				ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+				GitHubEvidenceToken:       c.String("github-evidence-token"),
+				SiteURL:                   siteURL,
+				BillingTracker:            billingTracker,
+				BillingRepository:         billingRepo,
+				RedisClient:               redisClient,
+				PosthogClient:             posthogClient,
+				EmailService:              emailService,
+				FunctionsDeployer:         functionsOrchestrator,
+				FunctionsVersion:          runnerVersion,
+				RagService:                ragService,
+				MCPRegistryClient:         mcpRegistryClient,
+				TelemetryLogger:           telemetryLogger,
+				ClickhouseConn:            chDB,
+				TelemetryRepo:             telemetryrepo.New(chDB),
+				TriggersApp:               triggerApp,
+				CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:            assistantsCore,
+				TemporalEnv:               temporalEnv,
+				PIIScanner:                piiScanner,
+				PIScanner:                 piScanner,
+				CustomRuleScanner:         customRuleScanner,
+				BuiltinPresets:            builtinPresets,
+				ShadowMCPClient:           shadowMCPClient,
+				AuditLogger:               auditLogger,
+				WorkOSClient:              backgroundWorkOSClient,
+				SvixClient:                svixClient,
+				ProductFeatures:           productFeatures,
+				PluginPublisher:           pluginPublisher,
+				Publishers:                publishers,
+				TrialEmailsService:        trialEmailsService,
+				RiskFingerprinter:         riskFingerprinter,
+				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

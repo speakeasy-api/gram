@@ -58,10 +58,18 @@ const (
 )
 
 func scopeOf(issuer repo.RemoteSessionIssuer) issuerScope {
+	return scopeOfTenancy(issuer.ProjectID, issuer.OrganizationID)
+}
+
+// scopeOfTenancy ranks a row from its two tenancy columns alone, for callers
+// holding a narrow projection rather than a whole issuer record. scopeOf is the
+// form to reach for when a full record is in hand; both must agree, so the
+// ladder is defined once, here.
+func scopeOfTenancy(projectID uuid.NullUUID, organizationID pgtype.Text) issuerScope {
 	switch {
-	case issuer.ProjectID.Valid:
+	case projectID.Valid:
 		return issuerScopeProject
-	case issuer.OrganizationID.Valid:
+	case organizationID.Valid:
 		return issuerScopeOrganization
 	default:
 		return issuerScopeGlobal

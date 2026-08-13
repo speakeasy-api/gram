@@ -19111,12 +19111,13 @@ func NewGetRiskPolicyStatusPayload(id string, apikeyToken *string, sessionToken 
 
 // NewCreateRiskPolicyBypassRequestPayload builds a risk service
 // createRiskPolicyBypassRequest endpoint payload.
-func NewCreateRiskPolicyBypassRequestPayload(body *CreateRiskPolicyBypassRequestRequestBody, sessionToken *string) *risk.CreateRiskPolicyBypassRequestPayload {
+func NewCreateRiskPolicyBypassRequestPayload(body *CreateRiskPolicyBypassRequestRequestBody, sessionToken *string, apikeyToken *string) *risk.CreateRiskPolicyBypassRequestPayload {
 	v := &risk.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: *body.RequestToken,
 		Note:         body.Note,
 	}
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v
 }

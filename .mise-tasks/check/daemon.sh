@@ -9,7 +9,8 @@ set -euo pipefail
 
 # Most probe targets below are plain-HTTP-only regardless of GRAM_HTTP_SCHEME:
 # the Go/Python control servers, dev-idp, and mock-oidc never enable TLS. Only
-# the dashboard (Vite) serves TLS when GRAM_SSL_* is configured.
+# the Vite dev servers (dashboard, admin-dashboard) serve TLS when GRAM_SSL_*
+# is configured.
 case "$usage_name" in
   dev-idp)
     mise run check:http --url "http://localhost:$GRAM_DEVIDP_PORT/healthz"
@@ -26,6 +27,9 @@ case "$usage_name" in
     ;;
   admin)
     mise run check:http --url "http://localhost:$GRAM_ADMIN_CONTROL_PORT/healthz"
+    ;;
+  admin-dashboard)
+    mise run check:http --url "$GRAM_HTTP_SCHEME://localhost:$GRAM_ADMIN_DASHBOARD_PORT/"
     ;;
   worker)
     mise run check:http --url "http://localhost:$GRAM_WORKER_CONTROL_PORT/healthz"

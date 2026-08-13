@@ -20,6 +20,7 @@ func TestCursorUsageEventKeyGolden(t *testing.T) {
 
 	event := cursorapi.UsageEvent{
 		Timestamp:        time.Date(2026, 7, 16, 10, 30, 0, 0, time.UTC),
+		ConversationID:   "11111111-2222-4333-8444-555555555555",
 		Model:            "claude-4.5-opus",
 		Kind:             "Included in Business",
 		ChargedCents:     12.5,
@@ -38,6 +39,8 @@ func TestCursorUsageEventKeyGolden(t *testing.T) {
 		UserEmail: "User@Example.com ",
 	}
 
+	// Conversation IDs are attribution metadata, not part of the stable event
+	// identity, so events ingested before Cursor exposed the field still dedupe.
 	require.Equal(t,
 		"aeeb699366765bfb9dc8db4c957dbc2beb5150032851feb3c66d7387ca9eb9b6",
 		generateCursorUsageEventHash(event))

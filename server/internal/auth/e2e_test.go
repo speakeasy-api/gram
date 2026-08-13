@@ -254,6 +254,43 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 
 }
 
+func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_NONLATIN"
+		workosOrgID  = "org_01WORKOS_NONLATIN"
+		orgName      = "アクメ株式会社"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01NONLATIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "nonlatin@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	orgMeta, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, orgid.FromWorkOSID(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, orgName, orgMeta.Name)
+	require.Equal(t, "org-01workos-nonlatin", orgMeta.Slug)
+}
+
 // TestE2E_Callback_NewUserJoiningExistingOrg verifies that when a new user
 // joins an org that already has metadata in the DB (from another user), the
 // membership reconciliation creates the relationship without corrupting the existing org row.
@@ -1377,9 +1414,8 @@ func TestE2E_Register_RejectsInvalidOrgName(t *testing.T) {
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	require.NoError(t, err)
 
-	// Register with invalid characters
-	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Bad<>Org!"})
-	assert.Error(t, err, "register should reject invalid org name characters")
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Acme\u202eInc"})
+	require.ErrorContains(t, err, "organization name contains invalid characters")
 }
 
 // TestE2E_FullOnboardingFlow exercises the complete new-user journey end to end:

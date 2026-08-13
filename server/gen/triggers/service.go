@@ -21,6 +21,8 @@ type Service interface {
 	ListTriggerDefinitions(context.Context, *ListTriggerDefinitionsPayload) (res *ListTriggerDefinitionsResult, err error)
 	// List trigger instances for the current project.
 	ListTriggerInstances(context.Context, *ListTriggerInstancesPayload) (res *ListTriggerInstancesResult, err error)
+	// List recent dispatch events for a trigger instance.
+	ListTriggerEvents(context.Context, *ListTriggerEventsPayload) (res *ListTriggerEventsResult, err error)
 	// Get a trigger instance by ID.
 	GetTriggerInstance(context.Context, *GetTriggerInstancePayload) (res *types.TriggerInstance, err error)
 	// Create a trigger instance.
@@ -55,7 +57,7 @@ const ServiceName = "triggers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listTriggerDefinitions", "listTriggerInstances", "getTriggerInstance", "createTriggerInstance", "updateTriggerInstance", "deleteTriggerInstance", "pauseTriggerInstance", "resumeTriggerInstance"}
+var MethodNames = [9]string{"listTriggerDefinitions", "listTriggerInstances", "listTriggerEvents", "getTriggerInstance", "createTriggerInstance", "updateTriggerInstance", "deleteTriggerInstance", "pauseTriggerInstance", "resumeTriggerInstance"}
 
 // CreateTriggerInstancePayload is the payload type of the triggers service
 // createTriggerInstance method.
@@ -110,6 +112,24 @@ type ListTriggerDefinitionsPayload struct {
 type ListTriggerDefinitionsResult struct {
 	// The available trigger definitions.
 	Definitions []*types.TriggerDefinition
+}
+
+// ListTriggerEventsPayload is the payload type of the triggers service
+// listTriggerEvents method.
+type ListTriggerEventsPayload struct {
+	// The trigger instance ID.
+	ID string
+	// Maximum number of events to return.
+	Limit            int
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListTriggerEventsResult is the result type of the triggers service
+// listTriggerEvents method.
+type ListTriggerEventsResult struct {
+	// The dispatch events for the trigger instance, most recent first.
+	Events []*types.TriggerEvent
 }
 
 // ListTriggerInstancesPayload is the payload type of the triggers service

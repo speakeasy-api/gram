@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"goa.design/goa/v3/security"
 )
 
 func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(t *testing.T) {
@@ -1113,4 +1114,149 @@ func TestCreatePolicyBypassRequest_FallsBackWhenApprovalUnavailable(t *testing.T
 	require.Equal(t, "bypass_request", redemption.Kind)
 	require.Equal(t, "requested", redemption.Status)
 	require.Equal(t, authCtx.UserID, redeemedBypassRow(t, ctx, ti, redemption).RequesterUserID)
+}
+
+// withAgentKeyAuth rewrites the auth context to look like an API-key-
+// authenticated device agent: no session, the given key scopes, and the key
+// owner as the caller. Mirrors what internal/auth/key.go builds for a
+// Gram-Key request.
+func withAgentKeyAuth(t *testing.T, ctx context.Context, scopes []string, ownerUserID string) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.APIKeyScopes = scopes
+	clone.SessionID = nil
+	clone.UserID = ownerUserID
+	return contextvalues.SetAuthContext(ctx, &clone)
+}
+
+// The device agent files the request with the per-user `agent_user` key. Its
+// owner is the enrolled user, so the token's requester binding passes and the
+// request is attributed to the key owner.
+func TestCreateRiskPolicyBypassRequest_AgentUserKeyCreatesForKeyOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Key Bypass Request"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/agent-key"
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL)
+
+	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+
+	keyCtx := withAgentKeyAuth(t, ctx, []string{"agent_user"}, authCtx.UserID)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(keyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	require.Equal(t, "requested", request.Status)
+	// The stack's redemption result carries only kind/id/status; the row
+	// holds the attribution main's version of this test read directly.
+	row := redeemedBypassRow(t, ctx, ti, request)
+	assert.Equal(t, authCtx.UserID, row.RequesterUserID)
+	require.NotNil(t, row.TargetKey)
+	assert.Equal(t, fullURL, *row.TargetKey)
+
+	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAuditCount+1, afterAuditCount, "key-auth create must audit like the session path")
+}
+
+// A key owned by anyone other than the token's requester must not redeem it —
+// the same binding that stops a leaked link stops a leaked or wrong key.
+func TestCreateRiskPolicyBypassRequest_OtherUsersKeyForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Key Bypass Wrong Owner"),
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/wrong-owner")
+
+	keyCtx := withAgentKeyAuth(t, ctx, []string{"agent_user"}, "user_someone_else")
+	_, err = ti.service.CreateRiskPolicyBypassRequest(keyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The shared org install key (`agent` scope) is owned by the provisioning
+// admin, not the developer named in an attributed token — it must not be able
+// to file requests on that developer's behalf. The daemon only ever uses the
+// per-user key for this call; this pins the server-side backstop.
+func TestCreateRiskPolicyBypassRequest_OrgKeyAttributedTokenForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Org Key Bypass Request"),
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/org-key")
+
+	orgKeyCtx := withAgentKeyAuth(t, ctx, []string{"agent", "agent_user"}, "user_provisioning_admin")
+	_, err = ti.service.CreateRiskPolicyBypassRequest(orgKeyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The `agent_user` scope gate lives in the generated security wiring — the
+// design's Security(ByKey, Scope("agent_user")) becomes the key scheme's
+// RequiredScopes in gen/risk — not in the handler, so the direct-call tests
+// above cannot see it. Drive the generated endpoint with a recording
+// authorizer to pin that boundary: key auth must demand agent_user, and an
+// authorization failure must short-circuit before the service method runs.
+func TestCreateRiskPolicyBypassRequest_EndpointKeyAuthDemandsAgentUserScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	var schemes []*security.APIKeyScheme
+	forbidden := oops.C(oops.CodeForbidden)
+	endpoint := gen.NewCreateRiskPolicyBypassRequestEndpoint(ti.service,
+		func(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+			schemes = append(schemes, scheme)
+			return ctx, forbidden
+		})
+
+	_, err := endpoint(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		SessionToken: nil,
+		ApikeyToken:  new("gram_test_key"),
+		RequestToken: "rpbr2.never-redeemed",
+	})
+	require.Equal(t, forbidden, err, "the authorizer's rejection must surface, not a handler error")
+
+	require.Len(t, schemes, 2, "session scheme tried first, then the key scheme")
+	require.Equal(t, "session", schemes[0].Name)
+	require.Empty(t, schemes[0].RequiredScopes)
+	require.Equal(t, "apikey", schemes[1].Name)
+	require.Equal(t, []string{"agent_user"}, schemes[1].RequiredScopes,
+		"key auth must demand agent_user; removing the design's Scope() regenerates this away and fails here")
 }

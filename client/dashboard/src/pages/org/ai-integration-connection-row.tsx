@@ -51,17 +51,15 @@ export function AIIntegrationConnectionRow({
     total: schedules.length,
   });
 
-  const streamRows = schedules.map(
-    (schedule): AIIntegrationStreamRow => ({
-      key: `${provider.provider}:${schedule.schedule}`,
-      schedule,
-      runtime: runtimeOrDefault(runtimes, schedule.schedule),
-      configured: form.isConfigured,
-      connectionEnabled: form.enabled,
-      toggle,
-      retry,
-    }),
-  );
+  const streamRows = schedules.map((schedule): AIIntegrationStreamRow => ({
+    key: `${provider.provider}:${schedule.schedule}`,
+    schedule,
+    runtime: runtimeOrDefault(runtimes, schedule.schedule),
+    configured: form.isConfigured,
+    connectionEnabled: form.enabled,
+    toggle,
+    retry,
+  }));
 
   const handleDelete = () => {
     if (!form.isConfigured) return;

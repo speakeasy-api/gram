@@ -10,22 +10,22 @@ metadata:
 
 ### Verification Commands
 
-Use `pnpm` package scripts for frontend checks. From the repo root, prefer `pnpm -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
+Use `aube` package scripts for frontend checks. From the repo root, prefer `aube run -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
 
-| Need                | Dashboard                       | Whole workspace                             |
-| ------------------- | ------------------------------- | ------------------------------------------- |
-| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm lint`                                 |
-| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm type-check`                           |
-| Tests once          | `pnpm -F dashboard test`        | Run the touched package's `pnpm test`       |
-| Tests in watch mode | `pnpm -F dashboard test:watch`  | Run the touched package's `pnpm test:watch` |
-| ESLint only         | `pnpm -F dashboard lint:eslint` | Run the touched package's script            |
-| Format check only   | `pnpm -F dashboard lint:format` | Run the touched package's script            |
+| Need                | Dashboard                           | Whole workspace                                 |
+| ------------------- | ----------------------------------- | ----------------------------------------------- |
+| Package lint gate   | `aube run -F dashboard lint`        | `aube run lint`                                 |
+| Type-check only     | `aube run -F dashboard type-check`  | `aube run type-check`                           |
+| Tests once          | `aube run -F dashboard test`        | Run the touched package's `aube run test`       |
+| Tests in watch mode | `aube run -F dashboard test:watch`  | Run the touched package's `aube run test:watch` |
+| ESLint only         | `aube run -F dashboard lint:eslint` | Run the touched package's script                |
+| Format check only   | `aube run -F dashboard lint:format` | Run the touched package's script                |
 
-For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `pnpm lint` and `pnpm type-check` scripts.
+For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `aube run lint` and `aube run type-check` scripts.
 
 ### General Guidelines
 
-- Use the `pnpm` package manager
+- Use the `aube` package manager
 - When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)
 - The document `client/dashboard/src/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
 - For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
