@@ -1,0 +1,77 @@
+{
+  "agentdojo_fp.jsonl": {
+    "gate": "fp",
+    "license": "MIT",
+    "origin": "github.com/ethz-spylab/agentdojo benign suite defaults and paired tasks",
+    "review": "mechanical-import, pending curation"
+  },
+  "agentdojo_recall.jsonl": {
+    "gate": "recall",
+    "license": "MIT",
+    "origin": "github.com/ethz-spylab/agentdojo static suite extraction",
+    "review": "mechanical-import, pending curation"
+  },
+  "curated_adversarial.jsonl": {
+    "gate": "recall",
+    "license": "Internal synthetic",
+    "origin": "model-authored adversarial coverage cases",
+    "predecessors": [
+      "adversarial_fable.jsonl",
+      "adversarial_codex.jsonl"
+    ],
+    "review": "curated; directive_present reviewed on 83 of 100 predecessor rows"
+  },
+  "curated_benigns.jsonl": {
+    "gate": "fp",
+    "license": "Internal synthetic",
+    "origin": "human-authored Gram, operational, and agent-runtime hard negatives",
+    "predecessors": [
+      "gram_benigns.jsonl",
+      "operational_benigns.jsonl",
+      "agent_fp_benigns.jsonl"
+    ],
+    "review": "curated"
+  },
+  "deepset.jsonl": {
+    "gate": "regression",
+    "license": "Apache-2.0",
+    "origin": "HuggingFace deepset/prompt-injections train+test",
+    "review": "mechanical-import; taxonomy mismatch, reported separately"
+  },
+  "litellm_extended.jsonl": {
+    "gate": "recall",
+    "license": "Internal synthetic",
+    "origin": "human-authored, inspired by BerriAI/litellm tests",
+    "review": "curated; directive_present reviewed on 48 of 51 rows"
+  },
+  "llmail_hard.jsonl": {
+    "gate": "recall",
+    "license": "MIT",
+    "origin": "HuggingFace microsoft/llmail-inject-challenge labelled unique submissions",
+    "review": "mechanical-import, pending curation; sampled from api_triggered submissions"
+  },
+  "mutations.jsonl": {
+    "gate": "recall",
+    "license": "Internal synthetic",
+    "origin": "mise gen:risk-mutations deterministic mutation output",
+    "review": "curated by seed inheritance"
+  },
+  "notinject.jsonl": {
+    "gate": "fp",
+    "license": "MIT",
+    "origin": "SaFoLab-WISC/InjecGuard NotInject dataset",
+    "review": "mechanical-import; benign trigger-vocabulary rows"
+  },
+  "trajectory_twins.jsonl": {
+    "gate": "recall",
+    "license": "Internal synthetic",
+    "origin": "human-authored AIS-324 paired trajectory cases",
+    "review": "curated"
+  },
+  "url_cue_benigns.jsonl": {
+    "gate": "fp",
+    "license": "Internal synthetic",
+    "origin": "human-authored reserved-domain hard negatives",
+    "review": "curated"
+  }
+}

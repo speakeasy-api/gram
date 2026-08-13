@@ -55,18 +55,25 @@ type toolCallCase struct {
 }
 
 type labeledCase struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Text   string `json:"text"`
-	Source string `json:"source"`
-	// Optional agent-runtime framing: plain rows omit these (judged as end-user
-	// content); typed rows carry the message type + tool the judge and scope use.
-	Type                   string         `json:"type,omitempty"`       // message.Type; default user_message
-	Tool                   string         `json:"tool,omitempty"`       // tool name for a single-tool tool_request/tool_response
-	ToolCalls              []toolCallCase `json:"tool_calls,omitempty"` // multi-call tool_request
+	ID   string `json:"id"`
+	Text string `json:"text"`
+	// Source, Gate, and Review come from manifest.json, not the row payload.
+	Source string `json:"-"`
+	Gate   string `json:"-"`
+	Review string `json:"-"`
+	// Optional agent-runtime framing: rows carry the message surface plus tool
+	// context when the judge and scope need typed runtime shape.
+	Surface                string         `json:"surface"`
+	Tool                   string         `json:"tool,omitempty"`
+	ToolCalls              []toolCallCase `json:"tool_calls,omitempty"`
 	PriorUserRequest       string         `json:"prior_user_request,omitempty"`
 	RecentUntrustedContent string         `json:"recent_untrusted_content,omitempty"`
-	DirectivePresent       *bool          `json:"directive_present,omitempty"`
+	DirectivePresent       *bool          `json:"directive_present"`
+	Carrier                string         `json:"carrier,omitempty"`
+	Technique              string         `json:"technique,omitempty"`
+	Goal                   string         `json:"goal,omitempty"`
+	FPCategory             string         `json:"fp_category,omitempty"`
+	Origin                 string         `json:"origin,omitempty"`
 	KnownGap               string         `json:"known_gap,omitempty"`
 	SeedID                 string         `json:"seed_id,omitempty"`
 }
@@ -80,10 +87,25 @@ func (c labeledCase) trajectory() judgemessage.Trajectory {
 
 // caseType returns the message type for a case, defaulting to user_message.
 func (c labeledCase) caseType() message.Type {
-	if c.Type == "" {
+	if c.Surface == "" {
 		return message.User
 	}
-	return c.Type
+	return c.Surface
+}
+
+func (c labeledCase) label() string {
+	if c.directivePresent() {
+		return "malicious"
+	}
+	return "benign"
+}
+
+func (c labeledCase) directivePresent() bool {
+	return c.DirectivePresent != nil && *c.DirectivePresent
+}
+
+func (c labeledCase) pendingReview() bool {
+	return strings.Contains(strings.ToLower(c.Review), "pending")
 }
 
 // judgeMessage renders a case as the judgemessage the judge evaluates,
@@ -124,6 +146,65 @@ type floors struct {
 	Notes             string             `json:"notes"`
 }
 
+const (
+	gateRecall     = "recall"
+	gateFP         = "fp"
+	gateRegression = "regression"
+)
+
+type corpusManifest map[string]corpusFileMetadata
+
+type corpusFileMetadata struct {
+	Origin       string   `json:"origin"`
+	License      string   `json:"license"`
+	Review       string   `json:"review"`
+	Gate         string   `json:"gate"`
+	Predecessors []string `json:"predecessors,omitempty"`
+}
+
+var allowedSurfaces = map[string]struct{}{
+	message.User:         {},
+	message.Assistant:    {},
+	message.ToolRequest:  {},
+	message.ToolResponse: {},
+}
+
+var allowedCarriers = map[string]struct{}{
+	"user_direct":       {},
+	"tool_output":       {},
+	"retrieved_content": {},
+	"file_content":      {},
+	"fake_machinery":    {},
+}
+
+var allowedTechniques = map[string]struct{}{
+	"plain_directive":      {},
+	"encoding_obfuscation": {},
+	"role_reassignment":    {},
+	"fake_system_frame":    {},
+	"helpful_mix":          {},
+	"split_directive":      {},
+	"social_engineering":   {},
+}
+
+var allowedGoals = map[string]struct{}{
+	"exfiltrate_secrets": {},
+	"destructive_action": {},
+	"override_policy":    {},
+	"misdirect_user":     {},
+	"persistence":        {},
+}
+
+var allowedFPCategories = map[string]struct{}{
+	"trigger_vocab":        {},
+	"secrets_in_output":    {},
+	"operational_log":      {},
+	"security_discussion":  {},
+	"helpful_instructions": {},
+	"machinery_envelope":   {},
+	"roleplay":             {},
+}
+
 type counts struct {
 	TP int `json:"tp"`
 	FP int `json:"fp"`
@@ -141,6 +222,13 @@ type metricsBlock struct {
 
 type sourceSummary struct {
 	Source  string       `json:"source"`
+	Counts  counts       `json:"counts"`
+	Metrics metricsBlock `json:"metrics"`
+}
+
+type facetSummary struct {
+	Facet   string       `json:"facet"`
+	Value   string       `json:"value"`
 	Counts  counts       `json:"counts"`
 	Metrics metricsBlock `json:"metrics"`
 }
@@ -167,6 +255,10 @@ type modeSummary struct {
 	Counts                   counts          `json:"counts"`
 	Overall                  metricsBlock    `json:"overall"`
 	Sources                  []sourceSummary `json:"by_source,omitempty"`
+	RecallByCarrier          []facetSummary  `json:"recall_by_carrier,omitempty"`
+	RecallByTechnique        []facetSummary  `json:"recall_by_technique,omitempty"`
+	RecallByGoal             []facetSummary  `json:"recall_by_goal,omitempty"`
+	FPRateByCategory         []facetSummary  `json:"fp_rate_by_category,omitempty"`
 	Rules                    []ruleHist      `json:"by_rule,omitempty"`
 	NewFalsePositives        []exampleCase   `json:"new_false_positives,omitempty"`
 	RecoveredTruePositive    []exampleCase   `json:"recovered_true_positives,omitempty"`
@@ -207,6 +299,8 @@ type accuracySummary struct {
 	KnownGaps      []knownGapSummary   `json:"known_gaps,omitempty"`
 	RecallGate     recallGateSummary   `json:"recall_gate"`
 	RecallGateRuns []recallGateSummary `json:"recall_gate_runs"`
+	FPGate         fpGateSummary       `json:"fp_gate"`
+	FPGateRuns     []fpGateSummary     `json:"fp_gate_runs"`
 }
 
 type recallGateSummary struct {
@@ -215,6 +309,14 @@ type recallGateSummary struct {
 	Recall   float64         `json:"recall"`
 	BySource []sourceSummary `json:"by_source"`
 	Excluded int             `json:"known_gaps_excluded"`
+}
+
+type fpGateSummary struct {
+	Scope      string         `json:"scope"`
+	Counts     counts         `json:"counts"`
+	FPRate     float64        `json:"fp_rate"`
+	ByCategory []facetSummary `json:"by_category"`
+	Excluded   int            `json:"pending_review_excluded"`
 }
 
 type stabilitySummary struct {
@@ -410,10 +512,13 @@ func run(ctx context.Context, opts options) error {
 	}
 	judgeMode := modes[0]
 	recallGateRuns := make([]recallGateSummary, len(allFindings))
+	fpGateRuns := make([]fpGateSummary, len(allFindings))
 	for i, findings := range allFindings {
 		recallGateRuns[i] = summarizeRecallGate(corpus, findings)
+		fpGateRuns[i] = summarizeFPGate(corpus, findings)
 	}
 	worstRecallGate := worstRecallGate(recallGateRuns)
+	worstFPGate := worstFPGate(fpGateRuns)
 
 	summary := accuracySummary{
 		Total:          judgeMode.Total,
@@ -423,10 +528,12 @@ func run(ctx context.Context, opts options) error {
 		Rules:          judgeMode.Rules,
 		Modes:          modes,
 		Stability:      summarizeStability(corpus, allFindings),
-		Distributions:  summarizeDistributions(modes, recallGateRuns),
+		Distributions:  summarizeDistributions(modes, recallGateRuns, fpGateRuns),
 		KnownGaps:      summarizeKnownGaps(corpus),
 		RecallGate:     worstRecallGate,
 		RecallGateRuns: recallGateRuns,
+		FPGate:         worstFPGate,
+		FPGateRuns:     fpGateRuns,
 	}
 
 	printSummary(os.Stderr, modes)
@@ -441,9 +548,13 @@ func run(ctx context.Context, opts options) error {
 				source.Source, source.Counts.TP, source.Counts.FN, source.Metrics.Recall)
 		}
 	}
+	for i, gate := range summary.FPGateRuns {
+		fmt.Fprintf(os.Stderr, "fp gate run %d: FP=%d TN=%d fp_rate=%.4f pending_review_excluded=%d\n",
+			i+1, gate.Counts.FP, gate.Counts.TN, gate.FPRate, gate.Excluded)
+	}
 
 	if opts.checkFloors {
-		if err := checkRecallFloors(fl, summary.RecallGateRuns); err != nil {
+		if err := checkFloors(fl, summary.RecallGateRuns, summary.FPGateRuns); err != nil {
 			return err
 		}
 	}
@@ -451,8 +562,8 @@ func run(ctx context.Context, opts options) error {
 	return writeMetrics(opts.outFile, opts, corpus, summary)
 }
 
-func checkRecallFloors(fl floors, runs []recallGateSummary) error {
-	for runIndex, gate := range runs {
+func checkFloors(fl floors, recallRuns []recallGateSummary, fpRuns []fpGateSummary) error {
+	for runIndex, gate := range recallRuns {
 		presentSources := make(map[string]struct{}, len(gate.BySource))
 		for _, source := range gate.BySource {
 			presentSources[source.Source] = struct{}{}
@@ -490,6 +601,19 @@ func checkRecallFloors(fl floors, runs []recallGateSummary) error {
 			)
 		}
 	}
+	for runIndex, gate := range fpRuns {
+		total := gate.Counts.FP + gate.Counts.TN
+		if total > 0 && fl.FPRateMax > 0 && gate.FPRate > fl.FPRateMax {
+			return fmt.Errorf(
+				"judge fp_rate %.4f in run %d is above max %.4f (floors.json last updated %s by %s)",
+				gate.FPRate,
+				runIndex+1,
+				fl.FPRateMax,
+				fl.LastUpdated,
+				fl.LastUpdatedBy,
+			)
+		}
+	}
 	return nil
 }
 
@@ -511,10 +635,10 @@ func summarizeStability(corpus []labeledCase, runs [][][]scanners.Finding) stabi
 		switch {
 		case positives == len(runs):
 			out.StablePositive++
-			if corpus[i].Label == "benign" {
+			if !corpus[i].directivePresent() {
 				out.StableFalsePositives++
 				out.FlipsAndStableFalseCore = append(out.FlipsAndStableFalseCore, stabilityRow{
-					ID: corpus[i].ID, Source: corpus[i].Source, Label: corpus[i].Label,
+					ID: corpus[i].ID, Source: corpus[i].Source, Label: corpus[i].label(),
 					PositiveRuns: positives, Outcome: "stable_false_positive",
 				})
 			}
@@ -522,11 +646,11 @@ func summarizeStability(corpus []labeledCase, runs [][][]scanners.Finding) stabi
 			out.StableNegative++
 		default:
 			out.Flipped++
-			if corpus[i].Label == "benign" {
+			if !corpus[i].directivePresent() {
 				out.FlippedBenign++
 			}
 			out.FlipsAndStableFalseCore = append(out.FlipsAndStableFalseCore, stabilityRow{
-				ID: corpus[i].ID, Source: corpus[i].Source, Label: corpus[i].Label,
+				ID: corpus[i].ID, Source: corpus[i].Source, Label: corpus[i].label(),
 				PositiveRuns: positives, Outcome: "flipped",
 			})
 		}
@@ -535,14 +659,18 @@ func summarizeStability(corpus []labeledCase, runs [][][]scanners.Finding) stabi
 	return out
 }
 
-func summarizeDistributions(modes []modeSummary, recallGates []recallGateSummary) distributionSummary {
+func summarizeDistributions(modes []modeSummary, recallGates []recallGateSummary, fpGates []fpGateSummary) distributionSummary {
 	var falsePositiveRates, recalls, costs []float64
 	for _, mode := range modes {
 		if strings.HasPrefix(mode.Name, "scoped_") {
 			continue
 		}
-		falsePositiveRates = append(falsePositiveRates, mode.Overall.FPRate)
 		costs = append(costs, mode.Evaluation.CostUSD)
+	}
+	for _, gate := range fpGates {
+		if gate.Counts.FP+gate.Counts.TN > 0 {
+			falsePositiveRates = append(falsePositiveRates, gate.FPRate)
+		}
 	}
 	for _, gate := range recallGates {
 		if gate.Counts.TP+gate.Counts.FN > 0 {
@@ -559,13 +687,29 @@ func summarizeDistributions(modes []modeSummary, recallGates []recallGateSummary
 func worstRecallGate(runs []recallGateSummary) recallGateSummary {
 	if len(runs) == 0 {
 		return recallGateSummary{
-			Scope:  "explicit directive-present, in-taxonomy malicious rows; AGE-3048 known gaps excluded",
+			Scope:  "gate=recall curated directive_present rows; known gaps and pending review excluded",
 			Counts: counts{TP: 0, FP: 0, TN: 0, FN: 0}, Recall: 0, BySource: nil, Excluded: 0,
 		}
 	}
 	worst := runs[0]
 	for _, run := range runs[1:] {
 		if run.Recall < worst.Recall {
+			worst = run
+		}
+	}
+	return worst
+}
+
+func worstFPGate(runs []fpGateSummary) fpGateSummary {
+	if len(runs) == 0 {
+		return fpGateSummary{
+			Scope: "gate=fp curated benign rows; pending review excluded", Counts: counts{TP: 0, FP: 0, TN: 0, FN: 0},
+			FPRate: 0, ByCategory: nil, Excluded: 0,
+		}
+	}
+	worst := runs[0]
+	for _, run := range runs[1:] {
+		if run.FPRate > worst.FPRate {
 			worst = run
 		}
 	}
@@ -611,24 +755,23 @@ func summarizeKnownGaps(corpus []labeledCase) []knownGapSummary {
 
 func summarizeRecallGate(corpus []labeledCase, findings [][]scanners.Finding) recallGateSummary {
 	out := recallGateSummary{
-		Scope:  "explicit directive-present, in-taxonomy malicious rows; AGE-3048 known gaps excluded",
+		Scope:  "gate=recall curated directive_present rows; known gaps and pending review excluded",
 		Counts: counts{TP: 0, FP: 0, TN: 0, FN: 0},
 		Recall: 0, BySource: nil, Excluded: 0,
 	}
 	bySource := map[string]*counts{}
 	for i, c := range corpus {
-		if !directivePresentForGate(c) || c.Label != "malicious" {
+		if c.Gate != gateRecall || !c.directivePresent() {
 			continue
 		}
-		if c.KnownGap != "" {
+		if c.KnownGap != "" || c.pendingReview() {
 			out.Excluded++
 			continue
 		}
-		source := recallGateSource(c.Source)
-		bucket := bySource[source]
+		bucket := bySource[c.Source]
 		if bucket == nil {
 			bucket = &counts{TP: 0, FP: 0, TN: 0, FN: 0}
-			bySource[source] = bucket
+			bySource[c.Source] = bucket
 		}
 		if len(findings[i]) > 0 {
 			out.Counts.TP++
@@ -646,19 +789,36 @@ func summarizeRecallGate(corpus []labeledCase, findings [][]scanners.Finding) re
 	return out
 }
 
-// directivePresentForGate limits recall to curated, in-taxonomy fixtures. The
-// external deepset labels intentionally remain outside this gate because that
-// corpus includes generic harmful or task-changing text that the typed PI
-// contract correctly classifies as non-PI.
-func directivePresentForGate(c labeledCase) bool {
-	return c.DirectivePresent != nil && *c.DirectivePresent
-}
-
-func recallGateSource(source string) string {
-	if strings.HasPrefix(source, "mutation:") {
-		return "mutations"
+func summarizeFPGate(corpus []labeledCase, findings [][]scanners.Finding) fpGateSummary {
+	out := fpGateSummary{
+		Scope: "gate=fp curated benign rows; pending review excluded", Counts: counts{TP: 0, FP: 0, TN: 0, FN: 0},
+		FPRate: 0, ByCategory: nil, Excluded: 0,
 	}
-	return source
+	byCategory := map[string]*counts{}
+	for i, c := range corpus {
+		if c.Gate != gateFP || c.directivePresent() {
+			continue
+		}
+		if c.pendingReview() {
+			out.Excluded++
+			continue
+		}
+		bucket := byCategory[c.FPCategory]
+		if bucket == nil {
+			bucket = &counts{TP: 0, FP: 0, TN: 0, FN: 0}
+			byCategory[c.FPCategory] = bucket
+		}
+		if len(findings[i]) > 0 {
+			out.Counts.FP++
+			bucket.FP++
+		} else {
+			out.Counts.TN++
+			bucket.TN++
+		}
+	}
+	out.FPRate = safeDiv(out.Counts.FP, out.Counts.FP+out.Counts.TN)
+	out.ByCategory = facetSummaries("fp_category", byCategory)
+	return out
 }
 
 // scopedMode summarizes findings after applying the policy scope and annotates
@@ -703,42 +863,43 @@ func printSummary(w *os.File, modes []modeSummary) {
 				p("               ! lost TP %s (%s)\n", ex.ID, ex.Source)
 			}
 		}
+		printFacetLine(p, "carrier", m.RecallByCarrier)
+		printFacetLine(p, "technique", m.RecallByTechnique)
+		printFacetLine(p, "goal", m.RecallByGoal)
+		printFacetLine(p, "fp_category", m.FPRateByCategory)
 	}
 	p("\n")
 }
 
-// requiredCorpusFiles must exist; optionalCorpusFiles are loaded when present
-// (the agent-runtime extended slices: FP-category benigns and the adversarial
-// coverage set). A missing optional file is skipped, not an error, so CI and
-// keyless dev runs still work on the base corpus.
-var requiredCorpusFiles = []string{
-	"deepset.jsonl",
-	"gram_benigns.jsonl",
-	"litellm_extended.jsonl",
-	"mutations.jsonl",
-	"operational_benigns.jsonl",
-}
-
-var optionalCorpusFiles = []string{
-	"agent_fp_benigns.jsonl",
-	"adversarial_fable.jsonl",
-	"adversarial_codex.jsonl",
-	"agent_fp_ais324.jsonl",
-	"adversarial_ais324.jsonl",
-	"trajectory_twins.jsonl",
+func printFacetLine(p func(string, ...any), label string, rows []facetSummary) {
+	if len(rows) == 0 {
+		return
+	}
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.Counts.TP+row.Counts.FN > 0 {
+			parts = append(parts, fmt.Sprintf("%s=R%.3f", row.Value, row.Metrics.Recall))
+		} else if row.Counts.FP+row.Counts.TN > 0 {
+			parts = append(parts, fmt.Sprintf("%s=FPr%.4f", row.Value, row.Metrics.FPRate))
+		}
+	}
+	if len(parts) > 0 {
+		p("             %s: %s\n", label, strings.Join(parts, ", "))
+	}
 }
 
 func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
+	manifest, err := loadManifest(dir)
+	if err != nil {
+		return nil, err
+	}
 	seen := map[string]string{}
 	var out []labeledCase
 
-	load := func(path string, optional, dedupe bool) error {
+	load := func(path string, meta corpusFileMetadata, dedupe bool) error {
 		name := filepath.Base(path)
 		f, err := os.Open(path) // #nosec G304 -- local developer/CI harness intentionally reads a configured corpus path.
 		if err != nil {
-			if optional && errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
 			return fmt.Errorf("open %s: %w", path, err)
 		}
 		defer func() { _ = f.Close() }()
@@ -752,18 +913,25 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 			if raw == "" {
 				continue
 			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+				return fmt.Errorf("%s line %d unmarshal fields: %w", name, line, err)
+			}
+			forbidden := []string{"label", "source", "type"}
+			for _, key := range forbidden {
+				if _, ok := fields[key]; ok {
+					return fmt.Errorf("%s line %d uses removed field %q", name, line, key)
+				}
+			}
 			var c labeledCase
 			if err := json.Unmarshal([]byte(raw), &c); err != nil {
 				return fmt.Errorf("%s line %d unmarshal: %w", name, line, err)
 			}
-			if c.ID == "" {
-				return fmt.Errorf("%s line %d missing id", name, line)
-			}
-			if c.Label != "malicious" && c.Label != "benign" {
-				return fmt.Errorf("%s line %d invalid label %q", name, line, c.Label)
-			}
-			if c.Type != "" && !message.IsTypeValid(c.Type) {
-				return fmt.Errorf("%s line %d invalid type %q", name, line, c.Type)
+			c.Source = strings.TrimSuffix(name, ".jsonl")
+			c.Gate = meta.Gate
+			c.Review = meta.Review
+			if err := validateCase(name, line, c); err != nil {
+				return err
 			}
 			if dedupe {
 				if _, dup := seen[c.Text]; dup {
@@ -779,26 +947,27 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 		return nil
 	}
 
-	// A separately supplied corpus is an evaluation population. Preserve every
-	// occurrence and load it first so fixture dedupe cannot hide repeated events.
 	if extraCorpus != "" {
 		if !filepath.IsAbs(extraCorpus) {
 			return nil, fmt.Errorf("--extra-corpus must be an absolute path")
 		}
-		if err := load(extraCorpus, false, false); err != nil {
+		name := filepath.Base(extraCorpus)
+		meta, ok := manifest[name]
+		if !ok {
+			return nil, fmt.Errorf("--extra-corpus file %s missing from manifest.json", name)
+		}
+		if err := load(extraCorpus, meta, false); err != nil {
 			return nil, err
 		}
 	}
-	for _, name := range requiredCorpusFiles {
-		if err := load(filepath.Join(dir, name), false, true); err != nil {
-			return nil, err
-		}
+	names := make([]string, 0, len(manifest))
+	for name := range manifest {
+		names = append(names, name)
 	}
-	for _, name := range optionalCorpusFiles {
-		// Paired trajectory rows intentionally share current-event text. Preserve
-		// those semantics; the committed merge is deduped across source corpora.
+	sort.Strings(names)
+	for _, name := range names {
 		dedupe := name != "trajectory_twins.jsonl"
-		if err := load(filepath.Join(dir, name), true, dedupe); err != nil {
+		if err := load(filepath.Join(dir, name), manifest[name], dedupe); err != nil {
 			return nil, err
 		}
 	}
@@ -809,6 +978,74 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func loadManifest(dir string) (corpusManifest, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "manifest.json")) // #nosec G304 -- local developer/CI harness path.
+	if err != nil {
+		return nil, fmt.Errorf("read manifest.json: %w", err)
+	}
+	var manifest corpusManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, fmt.Errorf("unmarshal manifest.json: %w", err)
+	}
+	if len(manifest) == 0 {
+		return nil, fmt.Errorf("manifest.json is empty")
+	}
+	for name, meta := range manifest {
+		if filepath.Ext(name) != ".jsonl" {
+			return nil, fmt.Errorf("manifest entry %s is not a JSONL file", name)
+		}
+		if meta.Origin == "" || meta.License == "" || meta.Review == "" {
+			return nil, fmt.Errorf("manifest entry %s missing provenance metadata", name)
+		}
+		switch meta.Gate {
+		case gateRecall, gateFP, gateRegression:
+		default:
+			return nil, fmt.Errorf("manifest entry %s has invalid gate %q", name, meta.Gate)
+		}
+	}
+	return manifest, nil
+}
+
+func validateCase(name string, line int, c labeledCase) error {
+	prefix := fmt.Sprintf("%s line %d %s", name, line, c.ID)
+	if c.ID == "" {
+		return fmt.Errorf("%s missing id", prefix)
+	}
+	if strings.TrimSpace(c.Text) == "" {
+		return fmt.Errorf("%s missing text", prefix)
+	}
+	if c.DirectivePresent == nil {
+		return fmt.Errorf("%s missing directive_present", prefix)
+	}
+	if _, ok := allowedSurfaces[c.Surface]; !ok {
+		return fmt.Errorf("%s invalid surface %q", prefix, c.Surface)
+	}
+	if !message.IsTypeValid(c.Surface) {
+		return fmt.Errorf("%s invalid surface %q", prefix, c.Surface)
+	}
+	if c.directivePresent() {
+		if !allowedValue(allowedCarriers, c.Carrier) || !allowedValue(allowedTechniques, c.Technique) || !allowedValue(allowedGoals, c.Goal) {
+			return fmt.Errorf("%s directive row has invalid attack facets", prefix)
+		}
+		if c.FPCategory != "" {
+			return fmt.Errorf("%s directive row must not have fp_category", prefix)
+		}
+		return nil
+	}
+	if c.Carrier != "" || c.Technique != "" || c.Goal != "" {
+		return fmt.Errorf("%s benign row must not have attack facets", prefix)
+	}
+	if c.Gate == gateFP && !allowedValue(allowedFPCategories, c.FPCategory) {
+		return fmt.Errorf("%s fp-gate benign row has invalid fp_category %q", prefix, c.FPCategory)
+	}
+	return nil
+}
+
+func allowedValue(values map[string]struct{}, value string) bool {
+	_, ok := values[value]
+	return ok
 }
 
 func resolveDirectivePresence(corpus []labeledCase) error {
@@ -848,6 +1085,9 @@ func resolveDirectivePresence(corpus []labeledCase) error {
 				return fmt.Errorf("corpus seed %q has no directive_present annotation", corpus[i].SeedID)
 			}
 			value := *corpus[seedIndex].DirectivePresent
+			if corpus[i].DirectivePresent != nil && *corpus[i].DirectivePresent != value {
+				return fmt.Errorf("corpus row %q directive_present contradicts seed_id %q", corpus[i].ID, corpus[i].SeedID)
+			}
 			corpus[i].DirectivePresent = &value
 		}
 		state[i] = resolved
@@ -868,7 +1108,7 @@ type scopeConfig struct {
 
 // loadScopes returns the candidate policy scope: the scopes.json fixture in
 // the corpus dir when present (an experimental override), otherwise the
-// production recommended scope for the prompt_injection category — so the
+// production recommended scope for the prompt_injection category, so the
 // harness validates exactly what ships in the registry.
 func loadScopes(dir string) (cfg scopeConfig, present bool, err error) {
 	raw, err := os.ReadFile(filepath.Join(dir, "scopes.json")) // #nosec G304 -- local harness corpus path.
@@ -927,7 +1167,7 @@ func scopeImpact(corpus []labeledCase, findings [][]scanners.Finding, inScope []
 		}
 		f := highestConfidenceFinding(findings[i])
 		ex := exampleCase{ID: c.ID, Source: c.Source, RuleID: f.RuleID, Score: f.Confidence, Text: c.Text}
-		if c.Label == "malicious" {
+		if c.directivePresent() {
 			lostTPs = append(lostTPs, ex)
 		} else {
 			suppressedFPs = append(suppressedFPs, ex)
@@ -972,8 +1212,8 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 	mode := summarizeFindings("judge", corpus, findings)
 	mode.Evaluation = eval
 	empty := make([][]scanners.Finding, len(corpus))
-	mode.NewFalsePositives = changedExamples(corpus, empty, findings, "benign", 500)
-	mode.RecoveredTruePositive = changedExamples(corpus, empty, findings, "malicious", 500)
+	mode.NewFalsePositives = changedExamples(corpus, empty, findings, false, 500)
+	mode.RecoveredTruePositive = changedExamples(corpus, empty, findings, true, 500)
 	mode.MissedAttacks = missedExamples(corpus, findings, 500)
 	return mode, findings, nil
 }
@@ -1239,10 +1479,17 @@ var _ openrouter.Provisioner = (*devProvisioner)(nil)
 func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.Finding) modeSummary {
 	overall := counts{TP: 0, FP: 0, TN: 0, FN: 0}
 	bySource := map[string]*counts{}
+	byCarrier := map[string]*counts{}
+	byTechnique := map[string]*counts{}
+	byGoal := map[string]*counts{}
+	byFPCategory := map[string]*counts{}
 	ruleTP := map[string]int{}
 	ruleFP := map[string]int{}
 
 	for i, c := range corpus {
+		if c.Gate == gateRegression {
+			continue
+		}
 		fs := findings[i]
 		flagged := len(fs) > 0
 
@@ -1253,24 +1500,36 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 		}
 
 		switch {
-		case c.Label == "malicious" && flagged:
+		case c.directivePresent() && flagged:
 			overall.TP++
 			bucket.TP++
+			incrementFacet(byCarrier, c.Carrier, true, true)
+			incrementFacet(byTechnique, c.Technique, true, true)
+			incrementFacet(byGoal, c.Goal, true, true)
 			for _, f := range fs {
 				ruleTP[f.RuleID]++
 			}
-		case c.Label == "malicious" && !flagged:
+		case c.directivePresent() && !flagged:
 			overall.FN++
 			bucket.FN++
-		case c.Label == "benign" && flagged:
+			incrementFacet(byCarrier, c.Carrier, true, false)
+			incrementFacet(byTechnique, c.Technique, true, false)
+			incrementFacet(byGoal, c.Goal, true, false)
+		case !c.directivePresent() && flagged:
 			overall.FP++
 			bucket.FP++
+			if c.Gate == gateFP {
+				incrementFacet(byFPCategory, c.FPCategory, false, true)
+			}
 			for _, f := range fs {
 				ruleFP[f.RuleID]++
 			}
-		case c.Label == "benign" && !flagged:
+		case !c.directivePresent() && !flagged:
 			overall.TN++
 			bucket.TN++
+			if c.Gate == gateFP {
+				incrementFacet(byFPCategory, c.FPCategory, false, false)
+			}
 		}
 	}
 
@@ -1302,10 +1561,14 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 		Name:                     mode,
 		Skipped:                  false,
 		SkipReason:               "",
-		Total:                    len(corpus),
+		Total:                    overall.TP + overall.FP + overall.TN + overall.FN,
 		Counts:                   overall,
 		Overall:                  deriveMetrics(overall),
 		Sources:                  sources,
+		RecallByCarrier:          facetSummaries("carrier", byCarrier),
+		RecallByTechnique:        facetSummaries("technique", byTechnique),
+		RecallByGoal:             facetSummaries("goal", byGoal),
+		FPRateByCategory:         facetSummaries("fp_category", byFPCategory),
 		Rules:                    rules,
 		NewFalsePositives:        nil,
 		RecoveredTruePositive:    nil,
@@ -1317,12 +1580,47 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 	}
 }
 
-// changedExamples lists rows of the given label that the baseline missed.
+func incrementFacet(dst map[string]*counts, value string, malicious bool, flagged bool) {
+	if value == "" {
+		return
+	}
+	bucket := dst[value]
+	if bucket == nil {
+		bucket = &counts{TP: 0, FP: 0, TN: 0, FN: 0}
+		dst[value] = bucket
+	}
+	switch {
+	case malicious && flagged:
+		bucket.TP++
+	case malicious && !flagged:
+		bucket.FN++
+	case !malicious && flagged:
+		bucket.FP++
+	case !malicious && !flagged:
+		bucket.TN++
+	}
+}
+
+func facetSummaries(facet string, byValue map[string]*counts) []facetSummary {
+	values := make([]string, 0, len(byValue))
+	for value := range byValue {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	out := make([]facetSummary, 0, len(values))
+	for _, value := range values {
+		c := *byValue[value]
+		out = append(out, facetSummary{Facet: facet, Value: value, Counts: c, Metrics: deriveMetrics(c)})
+	}
+	return out
+}
+
+// changedExamples lists rows with the requested directive state that the baseline missed.
 // Sorted by confidence desc, capped at limit.
-func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Finding, label string, limit int) []exampleCase {
+func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Finding, directivePresent bool, limit int) []exampleCase {
 	examples := []exampleCase{}
 	for i, c := range corpus {
-		if c.Label != label || len(baseline[i]) > 0 || len(candidate[i]) == 0 {
+		if c.Gate == gateRegression || c.directivePresent() != directivePresent || len(baseline[i]) > 0 || len(candidate[i]) == 0 {
 			continue
 		}
 		f := highestConfidenceFinding(candidate[i])
@@ -1350,7 +1648,7 @@ func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Find
 func missedExamples(corpus []labeledCase, candidate [][]scanners.Finding, limit int) []exampleCase {
 	examples := []exampleCase{}
 	for i, c := range corpus {
-		if c.Label != "malicious" || len(candidate[i]) > 0 {
+		if c.Gate == gateRegression || !c.directivePresent() || len(candidate[i]) > 0 {
 			continue
 		}
 		examples = append(examples, exampleCase{ID: c.ID, Source: c.Source, RuleID: "", Score: 0, Text: c.Text})

@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_METRICS_FILE = REPO_ROOT / "server" / "risk_accuracy_metrics.json"
 
@@ -72,6 +73,9 @@ def parse_args() -> argparse.Namespace:
 
 def run_evaluator(metrics_file: Path, judge: bool) -> int:
     cmd = [
+        "mise",
+        "exec",
+        "--",
         "go",
         "run",
         "./server/cmd/risk-pi-report",
@@ -147,6 +151,9 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
         print_table(["mode", "rule_id", "tp", "fp"], rule_rows(modes))
         print()
 
+        print_gate_sections(summary)
+        print_facet_sections(summary)
+
         l1 = maybe_mode_by_name(modes, "l1_opt_in")
         if l1:
             print("New false positives:")
@@ -196,6 +203,57 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
     )
     print()
 
+    print_gate_sections(summary)
+    print_facet_sections(summary)
+
+
+def print_gate_sections(summary: dict[str, Any]) -> None:
+    recall_gate = summary.get("recall_gate") or {}
+    if recall_gate:
+        print("Recall gate:")
+        print_gate_counts(recall_gate, "recall")
+        print_table(
+            ["source", "tp", "fn", "recall"],
+            [
+                [
+                    item["source"],
+                    item["counts"]["tp"],
+                    item["counts"]["fn"],
+                    fmt(item["metrics"].get("recall")),
+                ]
+                for item in recall_gate.get("by_source", [])
+            ],
+        )
+        print()
+
+    fp_gate = summary.get("fp_gate") or {}
+    if fp_gate:
+        print("False-positive gate:")
+        print_gate_counts(fp_gate, "fp_rate")
+        print_table(
+            ["category", "fp", "tn", "fp_rate"],
+            [
+                [
+                    item["value"],
+                    item["counts"]["fp"],
+                    item["counts"]["tn"],
+                    fmt(item["metrics"].get("fp_rate")),
+                ]
+                for item in fp_gate.get("by_category", [])
+            ],
+        )
+        print()
+
+
+def print_facet_sections(summary: dict[str, Any]) -> None:
+    print("Recall facets:")
+    print_table(["facet", "value", "tp", "fn", "recall"], facet_rows(summary, "recall"))
+    print()
+
+    print("False-positive facets:")
+    print_table(["facet", "value", "fp", "tn", "fp_rate"], facet_rows(summary, "fp"))
+    print()
+
 
 def print_counts(summary: dict[str, Any]) -> None:
     counts = summary["counts"]
@@ -208,6 +266,40 @@ def print_counts(summary: dict[str, Any]) -> None:
     print(f"f1:        {fmt(overall.get('f1'))}")
     print(f"accuracy:  {fmt(overall.get('accuracy'))}")
     print(f"fp_rate:   {fmt(overall.get('fp_rate'))}")
+
+
+def print_gate_counts(gate: dict[str, Any], metric: str) -> None:
+    counts = gate["counts"]
+    print(f"scope:     {gate.get('scope', '-')}")
+    print(f"counts:    TP={counts['tp']} FP={counts['fp']} TN={counts['tn']} FN={counts['fn']}")
+    print(f"{metric}:   {fmt(gate.get(metric))}")
+    if gate.get("known_gaps_excluded"):
+        print(f"excluded:  {gate['known_gaps_excluded']} known gaps")
+    if gate.get("pending_review_excluded"):
+        print(f"excluded:  {gate['pending_review_excluded']} pending review rows")
+
+
+def facet_rows(summary: dict[str, Any], kind: str) -> list[list[Any]]:
+    specs = (
+        [
+            ("carrier", "recall_by_carrier"),
+            ("technique", "recall_by_technique"),
+            ("goal", "recall_by_goal"),
+        ]
+        if kind == "recall"
+        else [("fp_category", "fp_rate_by_category")]
+    )
+    rows: list[list[Any]] = []
+    source = summary.get("modes", [{}])[0] if summary.get("modes") else summary
+    for facet, key in specs:
+        for item in source.get(key, []):
+            counts = item["counts"]
+            metrics = item["metrics"]
+            if kind == "recall":
+                rows.append([facet, item["value"], counts["tp"], counts["fn"], fmt(metrics.get("recall"))])
+            else:
+                rows.append([facet, item["value"], counts["fp"], counts["tn"], fmt(metrics.get("fp_rate"))])
+    return rows
 
 
 def mode_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
@@ -407,7 +499,7 @@ def maybe_mode_by_name(modes: list[dict[str, Any]], name: str) -> dict[str, Any]
     return None
 
 
-def fmt(value: float | None) -> str:
+def fmt(value: float | int | None) -> str:
     if value is None:
         return "-"
     return str(round(float(value), 4)).rstrip("0").rstrip(".")

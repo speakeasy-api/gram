@@ -31,10 +31,11 @@ func TestSummariesCaptureStabilityAndDistributions(t *testing.T) {
 	t.Parallel()
 
 	positive := []scanners.Finding{{RuleID: "pi", Tags: []string{"semantic-typed"}}}
+	no := false
 	corpus := []labeledCase{
-		{ID: "stable-fp", Label: "benign", Source: "test"},
-		{ID: "stable-negative", Label: "benign", Source: "test"},
-		{ID: "flip", Label: "benign", Source: "test"},
+		{ID: "stable-fp", DirectivePresent: &no, Source: "test"},
+		{ID: "stable-negative", DirectivePresent: &no, Source: "test"},
+		{ID: "flip", DirectivePresent: &no, Source: "test"},
 	}
 	runs := [][][]scanners.Finding{
 		{positive, nil, positive},
@@ -64,17 +65,18 @@ func TestRecallGateExcludesKnownGapsAndOutOfTaxonomyRows(t *testing.T) {
 
 	yes := true
 	corpus := []labeledCase{
-		{ID: "hit", Label: "malicious", Source: "trajectory_twins", DirectivePresent: &yes},
-		{ID: "miss", Label: "malicious", Source: "trajectory_twins", DirectivePresent: &yes},
-		{ID: "gap", Label: "malicious", Source: "trajectory_twins", DirectivePresent: &yes, KnownGap: "AGE-3048"},
-		{ID: "external-label", Label: "malicious", Source: "deepset"},
+		{ID: "hit", Source: "trajectory_twins", Gate: gateRecall, Review: "curated", DirectivePresent: &yes},
+		{ID: "miss", Source: "trajectory_twins", Gate: gateRecall, Review: "curated", DirectivePresent: &yes},
+		{ID: "gap", Source: "trajectory_twins", Gate: gateRecall, Review: "curated", DirectivePresent: &yes, KnownGap: "AGE-3048"},
+		{ID: "pending", Source: "llmail_hard", Gate: gateRecall, Review: "pending curation", DirectivePresent: &yes},
+		{ID: "external-label", Source: "deepset", Gate: gateRegression, DirectivePresent: &yes},
 	}
-	findings := [][]scanners.Finding{{{RuleID: "pi"}}, nil, nil, nil}
+	findings := [][]scanners.Finding{{{RuleID: "pi"}}, nil, nil, nil, nil}
 
 	got := summarizeRecallGate(corpus, findings)
 	require.Equal(t, counts{TP: 1, FP: 0, TN: 0, FN: 1}, got.Counts)
 	require.InDelta(t, 0.5, got.Recall, 0.0001)
-	require.Equal(t, 1, got.Excluded)
+	require.Equal(t, 2, got.Excluded)
 	require.Len(t, got.BySource, 1)
 }
 
@@ -98,24 +100,28 @@ func TestRecallFloorsUseEveryRunAndSource(t *testing.T) {
 		}},
 		Excluded: 0,
 	}
-	require.NoError(t, checkRecallFloors(fl, []recallGateSummary{passing}))
+	require.NoError(t, checkFloors(fl, []recallGateSummary{passing}, nil))
 
 	failingOverall := passing
 	failingOverall.Recall = 0.89
-	require.ErrorContains(t, checkRecallFloors(fl, []recallGateSummary{passing, failingOverall}), "run 2")
+	require.ErrorContains(t, checkFloors(fl, []recallGateSummary{passing, failingOverall}, nil), "run 2")
 
 	failingSource := passing
 	failingSource.BySource = []sourceSummary{{
 		Source: "trajectory_twins", Counts: counts{TP: 7, FP: 0, TN: 0, FN: 3},
 		Metrics: metricsBlock{Precision: 1, Recall: 0.7, F1: 0.824, Accuracy: 0.7, FPRate: 0},
 	}}
-	require.ErrorContains(t, checkRecallFloors(fl, []recallGateSummary{failingSource}), "trajectory_twins")
+	require.ErrorContains(t, checkFloors(fl, []recallGateSummary{failingSource}, nil), "trajectory_twins")
 
 	partialFloors := fl
 	partialFloors.RecallBySourceMin = map[string]float64{"trajectory_twins": 0.8, "mutations": 0.9}
 	partialBelowOverall := passing
 	partialBelowOverall.Recall = 0.85
-	require.NoError(t, checkRecallFloors(partialFloors, []recallGateSummary{partialBelowOverall}), "partial source runs use their source floor, not the full-suite overall floor")
+	require.NoError(t, checkFloors(partialFloors, []recallGateSummary{partialBelowOverall}, nil), "partial source runs use their source floor, not the full-suite overall floor")
+
+	failingFP := fpGateSummary{Counts: counts{FP: 2, TN: 8}, FPRate: 0.2}
+	fl.FPRateMax = 0.1
+	require.ErrorContains(t, checkFloors(fl, []recallGateSummary{passing}, []fpGateSummary{failingFP}), "fp_rate")
 }
 
 func TestResolveDirectivePresenceFromMutationSeed(t *testing.T) {
@@ -167,40 +173,39 @@ func TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy(t *testing.T) {
 		excluded int
 	}
 	want := map[string]taxonomyCounts{
-		"adversarial_fable": {included: 41, excluded: 9},
-		"adversarial_codex": {included: 42, excluded: 8},
-		"litellm_extended":  {included: 48, excluded: 3},
-		"mutations":         {included: 65, excluded: 5},
+		"curated_adversarial": {included: 83, excluded: 17},
+		"litellm_extended":    {included: 48, excluded: 3},
+		"mutations":           {included: 65, excluded: 5},
 	}
 	got := make(map[string]taxonomyCounts, len(want))
 	bySourceID := make(map[string]labeledCase)
 	for _, row := range corpus {
-		source := recallGateSource(row.Source)
-		if _, audited := want[source]; !audited {
+		if _, audited := want[row.Source]; !audited {
 			continue
 		}
-		require.NotNil(t, row.DirectivePresent, "%s/%s must have explicit or inherited taxonomy", source, row.ID)
-		counts := got[source]
-		if directivePresentForGate(row) {
+		require.NotNil(t, row.DirectivePresent, "%s/%s must have explicit or inherited taxonomy", row.Source, row.ID)
+		counts := got[row.Source]
+		if row.directivePresent() {
 			counts.included++
 		} else {
 			counts.excluded++
 		}
-		got[source] = counts
-		bySourceID[source+"/"+row.ID] = row
+		got[row.Source] = counts
+		bySourceID[row.Source+"/"+row.ID+"/"+row.Origin] = row
+		bySourceID[row.Source+"/"+row.ID] = row
 	}
 	require.Equal(t, want, got)
 
 	// Raw credential/network/destructive tool arguments are action-risk data,
 	// not PI without an operational directive aimed at the guarded agent.
-	require.False(t, directivePresentForGate(bySourceID["adversarial_fable/adv.exfil_in_toolargs.001"]))
-	require.False(t, directivePresentForGate(bySourceID["adversarial_codex/adv.exfil_in_toolargs.002"]))
+	require.False(t, bySourceID["curated_adversarial/adv.exfil_in_toolargs.001/fable"].directivePresent())
+	require.False(t, bySourceID["curated_adversarial/adv.exfil_in_toolargs.002/codex"].directivePresent())
 	// A planted instruction in an agent instruction file remains in taxonomy.
-	require.True(t, directivePresentForGate(bySourceID["adversarial_fable/adv.exfil_in_toolargs.003"]))
+	require.True(t, bySourceID["curated_adversarial/adv.exfil_in_toolargs.003/fable"].directivePresent())
 	// Mutations inherit the reviewed semantics of their LiteLLM seeds.
-	require.False(t, directivePresentForGate(bySourceID["mutations/mutation.delim02.base64_wrap"]))
-	require.True(t, directivePresentForGate(bySourceID["mutations/mutation.tool01.base64_wrap"]))
+	require.False(t, bySourceID["mutations/mutation.delim02.base64_wrap"].directivePresent())
+	require.True(t, bySourceID["mutations/mutation.tool01.base64_wrap"].directivePresent())
 
-	unannotated := labeledCase{ID: "unreviewed", Label: "malicious", Source: "adversarial_fable"}
-	require.False(t, directivePresentForGate(unannotated), "source membership must never imply taxonomy inclusion")
+	unannotated := labeledCase{ID: "unreviewed", Source: "curated_adversarial"}
+	require.False(t, unannotated.directivePresent(), "source membership must never imply taxonomy inclusion")
 }
