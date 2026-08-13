@@ -34,7 +34,9 @@ func (r *recordingIdentityMapSignaler) refreshCount() int {
 }
 
 // A processed membership change must request an identity map refresh after
-// commit: memberships decide which directory emails the map resolves.
+// commit: memberships decide which directory emails the map resolves. Both
+// branches signal — the upsert on membership.created and the deprovision on
+// membership.deleted.
 func TestProcessWorkOSOrganizationEvents_MembershipSignalsIdentityMapRefresh(t *testing.T) {
 	t.Parallel()
 
@@ -57,6 +59,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipSignalsIdentityMapRefresh(t *
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{{
 		newWorkOSMembershipEvent(t, "organization_membership.created", "event_0001", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC), "member"),
+		newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_0002", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC)),
 	}})
 
 	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
@@ -64,5 +67,5 @@ func TestProcessWorkOSOrganizationEvents_MembershipSignalsIdentityMapRefresh(t *
 
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
-	require.Equal(t, 1, signals.refreshCount())
+	require.Equal(t, 2, signals.refreshCount())
 }
