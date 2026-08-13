@@ -6648,8 +6648,11 @@ CREATE TABLE IF NOT EXISTS session_handoff_links (
   -- chats.external_chat_id semantics for captured coding-agent sessions).
   session_id TEXT NOT NULL,
   token TEXT NOT NULL,
-  -- The rendered handoff markdown. Size-capped at write time by the API.
-  content TEXT NOT NULL,
+  -- Object-store URL of the rendered handoff document (Tigris via the assets
+  -- abstraction). The document itself never lands in Postgres: this row holds
+  -- the capability token, tenancy, and the atomic consume claim; the blob is
+  -- deleted on first read (bucket lifecycle policies are the backstop).
+  blob_url TEXT NOT NULL,
   created_by_email TEXT NOT NULL,
   expires_at timestamptz NOT NULL,
   -- Set on the first successful read; once set, the link serves 404.

@@ -5,7 +5,7 @@ CREATE TABLE "session_handoff_links" (
   "organization_id" text NOT NULL,
   "session_id" text NOT NULL,
   "token" text NOT NULL,
-  "content" text NOT NULL,
+  "blob_url" text NOT NULL,
   "created_by_email" text NOT NULL,
   "expires_at" timestamptz NOT NULL,
   "consumed_at" timestamptz NULL,
