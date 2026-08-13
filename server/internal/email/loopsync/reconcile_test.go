@@ -54,9 +54,9 @@ func (f *fakeAPI) Guardian(context.Context, string) (GuardianResult, error) {
 	return f.guardian, nil
 }
 
-func (f *fakeAPI) Publish(context.Context, string) (TransactionalEmail, error) {
+func (f *fakeAPI) Publish(context.Context, string) error {
 	f.published++
-	return f.transactional, nil
+	return nil
 }
 
 func testManifest() *Manifest {
@@ -69,63 +69,17 @@ func testManifest() *Manifest {
 		},
 		Templates: map[string]TemplateSpec{
 			"team_invite": {
-				ManagedName:        "gram.transactional.v2.team_invite",
-				Subject:            "Join {data.organization_name}",
-				PreviewText:        "Invitation",
-				LMX:                "<Paragraph>Hello {data.organization_name}</Paragraph>",
-				SourceVariables:    []string{"organization_name"},
-				PublishedVariables: []string{"organization_name"},
+				ManagedName:     "gram.transactional.v2.team_invite",
+				Subject:         "Join {data.organization_name}",
+				PreviewText:     "Invitation",
+				Source:          "team_invite.lmx",
+				Variables:       []string{"organization_name"},
+				UnusedVariables: nil,
+				LMX:             "<Paragraph>Hello {data.organization_name}</Paragraph>",
 			},
 		},
+		Dir: "",
 	}
-}
-
-func TestReconcile_AllowsConditionOnlyVariableMissingFromPublishedContract(t *testing.T) {
-	t.Parallel()
-
-	manifest := testManifest()
-	spec := manifest.Templates["team_invite"]
-	spec.LMX = `<Section if="{data.exhausted}" ifOperation="equal" ifValue="true"><Paragraph>Hello {data.organization_name}</Paragraph></Section>`
-	spec.SourceVariables = []string{"exhausted", "organization_name"}
-	spec.PublishedVariables = []string{"organization_name"}
-	manifest.Templates["team_invite"] = spec
-
-	draftID := "message-1"
-	api := &fakeAPI{
-		transactional: TransactionalEmail{
-			ID:                  "transactional-1",
-			DraftEmailMessageID: &draftID,
-			DataVariables:       []string{"organization_name"},
-		},
-		message: EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
-	}
-
-	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), manifest, map[string]string{})
-	require.NoError(t, err)
-}
-
-func TestReconcile_RejectsMissingRenderedVariableWithConditionOnlyVariable(t *testing.T) {
-	t.Parallel()
-
-	manifest := testManifest()
-	spec := manifest.Templates["team_invite"]
-	spec.LMX = `<Section if="{data.exhausted}" ifOperation="equal" ifValue="true"><Paragraph>Hello {data.organization_name}</Paragraph></Section>`
-	spec.SourceVariables = []string{"exhausted", "organization_name"}
-	spec.PublishedVariables = []string{"organization_name"}
-	manifest.Templates["team_invite"] = spec
-
-	draftID := "message-1"
-	api := &fakeAPI{
-		transactional: TransactionalEmail{
-			ID:                  "transactional-1",
-			DraftEmailMessageID: &draftID,
-			DataVariables:       []string{},
-		},
-		message: EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
-	}
-
-	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), manifest, map[string]string{})
-	require.ErrorContains(t, err, "published data variable contract")
 }
 
 func TestReconcile_CreatesPublishesAndReturnsResolvedID(t *testing.T) {
@@ -133,12 +87,8 @@ func TestReconcile_CreatesPublishesAndReturnsResolvedID(t *testing.T) {
 
 	draftID := "message-1"
 	api := &fakeAPI{
-		transactional: TransactionalEmail{
-			ID:                  "transactional-1",
-			DraftEmailMessageID: &draftID,
-			DataVariables:       []string{"organization_name"},
-		},
-		message: EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
+		transactional: TransactionalEmail{ID: "transactional-1", DraftEmailMessageID: &draftID},
+		message:       EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
 	}
 
 	resolved, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})
@@ -149,27 +99,27 @@ func TestReconcile_CreatesPublishesAndReturnsResolvedID(t *testing.T) {
 	require.Equal(t, 1, api.published)
 }
 
-func TestReconcile_RecoversUncommittedCreationByManagedName(t *testing.T) {
+func TestReconcile_AlwaysUpdatesAndPublishesExistingTemplate(t *testing.T) {
 	t.Parallel()
 
-	publishedID := "message-published"
+	draftID := "message-draft"
 	transactional := TransactionalEmail{
-		ID:                      "transactional-existing",
-		Name:                    "gram.transactional.v2.team_invite",
-		PublishedEmailMessageID: &publishedID,
-		DataVariables:           []string{"organization_name"},
+		ID:                  "transactional-existing",
+		Name:                "gram.transactional.v2.team_invite",
+		DraftEmailMessageID: &draftID,
 	}
 	api := &fakeAPI{
 		listed:        []TransactionalEmail{transactional},
 		transactional: transactional,
 		message: EmailMessage{
-			ID:           publishedID,
-			Subject:      "Join {data.organization_name}",
-			PreviewText:  "Invitation",
-			FromName:     "Speakeasy",
-			FromEmail:    "gram",
-			ReplyToEmail: "gram@speakeasy.com",
-			LMX:          "<Paragraph>Hello {data.organization_name}</Paragraph>",
+			ID:                draftID,
+			Subject:           "Join {data.organization_name}",
+			PreviewText:       "Invitation",
+			FromName:          "Speakeasy",
+			FromEmail:         "gram",
+			ReplyToEmail:      "gram@speakeasy.com",
+			LMX:               "<Paragraph>Hello {data.organization_name}</Paragraph>",
+			ContentRevisionID: "revision-1",
 		},
 	}
 
@@ -177,58 +127,44 @@ func TestReconcile_RecoversUncommittedCreationByManagedName(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "transactional-existing", resolved["team_invite"])
 	require.Zero(t, api.created)
-	require.Zero(t, api.updated)
-	require.Zero(t, api.published)
+	require.Equal(t, 1, api.updated)
+	require.Equal(t, 1, api.published)
 }
 
-func TestReconcile_LeavesMatchingPublishedMessageUnchangedWhenDraftExists(t *testing.T) {
+func TestReconcile_RecoversUncommittedCreationByManagedName(t *testing.T) {
 	t.Parallel()
 
 	draftID := "message-draft"
-	publishedID := "message-published"
 	transactional := TransactionalEmail{
-		ID:                      "transactional-existing",
-		Name:                    "gram.transactional.v2.team_invite",
-		DraftEmailMessageID:     &draftID,
-		PublishedEmailMessageID: &publishedID,
-		DataVariables:           []string{"organization_name"},
+		ID:                  "transactional-existing",
+		Name:                "gram.transactional.v2.team_invite",
+		DraftEmailMessageID: &draftID,
 	}
 	api := &fakeAPI{
 		listed:        []TransactionalEmail{transactional},
 		transactional: transactional,
-		message: EmailMessage{
-			ID:           publishedID,
-			Subject:      "Join {data.organization_name}",
-			PreviewText:  "Invitation",
-			FromName:     "Speakeasy",
-			FromEmail:    "gram",
-			ReplyToEmail: "gram@speakeasy.com",
-			LMX:          "<Paragraph>Hello {data.organization_name}</Paragraph>",
-		},
+		message:       EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
 	}
 
-	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})
+	resolved, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})
 	require.NoError(t, err)
-	require.Zero(t, api.updated)
-	require.Zero(t, api.published)
+	require.Equal(t, "transactional-existing", resolved["team_invite"])
+	require.Zero(t, api.created)
+	require.Equal(t, 1, api.updated)
+	require.Equal(t, 1, api.published)
 }
 
-func TestReconcile_VerifiesPublishedVariablesFromFreshTransactional(t *testing.T) {
+func TestReconcile_TreatsSuccessfulPublishAsSuccess(t *testing.T) {
 	t.Parallel()
 
 	draftID := "message-1"
 	api := &fakeAPI{
-		transactional: TransactionalEmail{
-			ID:                  "transactional-1",
-			DraftEmailMessageID: &draftID,
-			DataVariables:       []string{"unexpected"},
-		},
-		message: EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
+		transactional: TransactionalEmail{ID: "transactional-1", DraftEmailMessageID: &draftID},
+		message:       EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
 	}
 
 	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "published data variable contract")
+	require.NoError(t, err)
 	require.Equal(t, 1, api.published)
 }
 
@@ -246,13 +182,9 @@ func TestReconcile_GuardianErrorsBlockPublish(t *testing.T) {
 
 	draftID := "message-1"
 	api := &fakeAPI{
-		transactional: TransactionalEmail{
-			ID:                  "transactional-1",
-			DraftEmailMessageID: &draftID,
-			DataVariables:       []string{"organization_name"},
-		},
-		message:  EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
-		guardian: GuardianResult{Errors: []GuardianIssue{{Rule: "missingButtonHrefs", Description: "button needs a link"}}},
+		transactional: TransactionalEmail{ID: "transactional-1", DraftEmailMessageID: &draftID},
+		message:       EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
+		guardian:      GuardianResult{Errors: []GuardianIssue{{Rule: "missingButtonHrefs", Description: "button needs a link"}}},
 	}
 
 	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})

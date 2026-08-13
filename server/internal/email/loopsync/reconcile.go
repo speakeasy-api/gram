@@ -35,136 +35,89 @@ func (r *Reconciler) Reconcile(ctx context.Context, manifest *Manifest, existing
 	resolved := make(map[string]string, len(keys))
 	for _, key := range keys {
 		spec := manifest.Templates[key]
-		transactional, created, err := r.resolve(ctx, key, spec, existingIDs[key], byName)
+		transactional, err := r.resolve(ctx, key, spec, existingIDs[key], byName)
 		if err != nil {
 			return nil, err
 		}
 		resolved[key] = transactional.ID
 
-		changed, err := r.syncOne(ctx, manifest.Defaults, spec, transactional, created)
-		if err != nil {
+		if err := r.syncOne(ctx, manifest.Defaults, spec, transactional); err != nil {
 			return nil, fmt.Errorf("sync email template %q: %w", key, err)
 		}
 		if r.Log != nil {
-			status := "unchanged"
-			if changed {
-				status = "published"
-			}
-			_, _ = fmt.Fprintf(r.Log, "%s: %s\n", key, status)
+			_, _ = fmt.Fprintf(r.Log, "%s: published\n", key)
 		}
 	}
 	return resolved, nil
 }
 
-func (r *Reconciler) resolve(ctx context.Context, key string, spec TemplateSpec, mappedID string, byName map[string][]TransactionalEmail) (TransactionalEmail, bool, error) {
+func (r *Reconciler) resolve(ctx context.Context, key string, spec TemplateSpec, mappedID string, byName map[string][]TransactionalEmail) (TransactionalEmail, error) {
 	if mappedID != "" {
 		transactional, err := r.API.GetTransactionalEmail(ctx, mappedID)
 		if err != nil {
-			return TransactionalEmail{}, false, fmt.Errorf("resolve mapped email template %q: %w", key, err)
+			return TransactionalEmail{}, fmt.Errorf("resolve mapped email template %q: %w", key, err)
 		}
 		if transactional.Name != spec.ManagedName {
-			return TransactionalEmail{}, false, fmt.Errorf("resolve mapped email template %q: ID %q belongs to %q, want %q", key, mappedID, transactional.Name, spec.ManagedName)
+			return TransactionalEmail{}, fmt.Errorf("resolve mapped email template %q: ID %q belongs to %q, want %q", key, mappedID, transactional.Name, spec.ManagedName)
 		}
-		return transactional, false, nil
+		return transactional, nil
 	}
 
 	matches := byName[spec.ManagedName]
 	if len(matches) > 1 {
-		return TransactionalEmail{}, false, fmt.Errorf("resolve email template %q: found %d Loops emails named %q", key, len(matches), spec.ManagedName)
+		return TransactionalEmail{}, fmt.Errorf("resolve email template %q: found %d Loops emails named %q", key, len(matches), spec.ManagedName)
 	}
 	if len(matches) == 1 {
-		return matches[0], false, nil
+		return matches[0], nil
 	}
 
 	transactional, err := r.API.CreateTransactionalEmail(ctx, spec.ManagedName)
 	if err != nil {
-		return TransactionalEmail{}, false, fmt.Errorf("create email template %q: %w", key, err)
+		return TransactionalEmail{}, fmt.Errorf("create email template %q: %w", key, err)
 	}
-	return transactional, true, nil
+	return transactional, nil
 }
 
-func (r *Reconciler) syncOne(ctx context.Context, defaults MessageDefaults, spec TemplateSpec, transactional TransactionalEmail, created bool) (bool, error) {
-	if !created && transactional.PublishedEmailMessageID != nil {
-		published, err := r.API.GetEmailMessage(ctx, *transactional.PublishedEmailMessageID)
-		if err != nil {
-			return false, fmt.Errorf("get published message: %w", err)
-		}
-		if sameContent(published, defaults, spec) {
-			if err := r.verifyPublishedVariables(ctx, transactional.ID, spec); err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-	}
-
+func (r *Reconciler) syncOne(ctx context.Context, defaults MessageDefaults, spec TemplateSpec, transactional TransactionalEmail) error {
 	transactional, err := r.API.EnsureDraft(ctx, transactional.ID)
 	if err != nil {
-		return false, fmt.Errorf("ensure draft: %w", err)
+		return fmt.Errorf("ensure draft: %w", err)
 	}
 	if transactional.DraftEmailMessageID == nil {
-		return false, fmt.Errorf("ensure draft: Loops returned no draft email message ID")
+		return fmt.Errorf("ensure draft: Loops returned no draft email message ID")
 	}
 
 	draft, err := r.API.GetEmailMessage(ctx, *transactional.DraftEmailMessageID)
 	if err != nil {
-		return false, fmt.Errorf("get draft message: %w", err)
+		return fmt.Errorf("get draft message: %w", err)
 	}
-	if !sameContent(draft, defaults, spec) {
-		draft, err = r.API.UpdateEmailMessage(ctx, draft.ID, UpdateEmailMessageInput{
-			ExpectedRevisionID: draft.ContentRevisionID,
-			Subject:            spec.Subject,
-			PreviewText:        spec.PreviewText,
-			FromName:           defaults.FromName,
-			FromEmail:          defaults.FromEmail,
-			ReplyToEmail:       defaults.ReplyToEmail,
-			LMX:                spec.LMX,
-		})
-		if err != nil {
-			return false, fmt.Errorf("update draft message: %w", err)
-		}
+	draft, err = r.API.UpdateEmailMessage(ctx, draft.ID, UpdateEmailMessageInput{
+		ExpectedRevisionID: draft.ContentRevisionID,
+		Subject:            spec.Subject,
+		PreviewText:        spec.PreviewText,
+		FromName:           defaults.FromName,
+		FromEmail:          defaults.FromEmail,
+		ReplyToEmail:       defaults.ReplyToEmail,
+		LMX:                spec.LMX,
+	})
+	if err != nil {
+		return fmt.Errorf("update draft message: %w", err)
 	}
 
 	guardian, err := r.API.Guardian(ctx, draft.ID)
 	if err != nil {
-		return false, fmt.Errorf("run Guardian: %w", err)
+		return fmt.Errorf("run Guardian: %w", err)
 	}
 	if len(guardian.Errors) > 0 {
 		messages := make([]string, 0, len(guardian.Errors))
 		for _, issue := range guardian.Errors {
 			messages = append(messages, issue.Rule+": "+issue.Description)
 		}
-		return false, fmt.Errorf("Guardian rejected draft: %s", strings.Join(messages, "; "))
+		return fmt.Errorf("Guardian rejected draft: %s", strings.Join(messages, "; "))
 	}
 
-	if _, err := r.API.Publish(ctx, transactional.ID); err != nil {
-		return false, fmt.Errorf("publish draft: %w", err)
-	}
-	if err := r.verifyPublishedVariables(ctx, transactional.ID, spec); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func (r *Reconciler) verifyPublishedVariables(ctx context.Context, transactionalID string, spec TemplateSpec) error {
-	published, err := r.API.GetTransactionalEmail(ctx, transactionalID)
-	if err != nil {
-		return fmt.Errorf("verify published email: %w", err)
-	}
-	want := slices.Clone(spec.PublishedVariables)
-	got := slices.Clone(published.DataVariables)
-	slices.Sort(want)
-	slices.Sort(got)
-	if !slices.Equal(got, want) {
-		return fmt.Errorf("published data variable contract is %v, want %v", got, want)
+	if err := r.API.Publish(ctx, transactional.ID); err != nil {
+		return fmt.Errorf("publish draft: %w", err)
 	}
 	return nil
-}
-
-func sameContent(message EmailMessage, defaults MessageDefaults, spec TemplateSpec) bool {
-	return message.Subject == spec.Subject &&
-		message.PreviewText == spec.PreviewText &&
-		message.FromName == defaults.FromName &&
-		message.FromEmail == defaults.FromEmail &&
-		message.ReplyToEmail == defaults.ReplyToEmail &&
-		strings.TrimSpace(message.LMX) == spec.LMX
 }
