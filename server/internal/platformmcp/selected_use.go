@@ -73,11 +73,14 @@ func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallob
 		OrganizationID: observation.OrganizationID,
 		ProjectID:      observation.ProjectID,
 	})
-	if errors.Is(err, pgx.ErrNoRows) || plugin.ID != target.DefaultPluginID {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("lock platform mcp selected-use default plugin: %w", err)
+	}
+	if plugin.ID != target.DefaultPluginID {
+		return nil
 	}
 	if err := q.LockPlatformMCPDistribution(ctx, repo.LockPlatformMCPDistributionParams{
 		OrganizationID:  observation.OrganizationID,

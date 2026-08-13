@@ -271,13 +271,13 @@ func hasEmbeddedURIScheme(value string) bool {
 
 func hasUnsafeFeedbackPath(value string) bool {
 	for _, word := range strings.Fields(value) {
-		if strings.HasPrefix(word, "//") {
-			return true
-		}
 		trimmed := strings.Trim(word, "([{\"'")
 		trimmed = strings.TrimRight(trimmed, ".,;:!?)]}\"")
 		if trimmed == "" {
 			continue
+		}
+		if strings.HasPrefix(trimmed, "//") || net.ParseIP(trimmed) != nil {
+			return true
 		}
 		if parsed, err := url.Parse("//" + trimmed); err == nil && parsed.Host != "" && unsafeFeedbackHost(parsed) {
 			return true

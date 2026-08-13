@@ -1035,7 +1035,7 @@ func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T)
 		message  string
 	}{
 		"authorization_endpoint": {endpoint: "http://identity.example/authorize", message: "must use HTTPS outside local loopback"},
-		"token_endpoint":         {endpoint: "http://identity.example/token", message: "must use HTTPS outside local loopback"},
+		"token_endpoint":         {endpoint: "http://identity.example/token", message: "must use HTTPS or the same local loopback origin"},
 		"jwks_uri":               {endpoint: "http://identity.example/jwks", message: "must use HTTPS"},
 		"registration_endpoint":  {endpoint: "http://identity.example/register", message: "must use HTTPS"},
 	} {

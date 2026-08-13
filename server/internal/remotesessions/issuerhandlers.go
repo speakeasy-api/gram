@@ -1087,7 +1087,7 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.U
 		requireHTTPS bool
 	}{
 		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint, requireHTTPS: false},
-		{name: "token_endpoint", raw: doc.TokenEndpoint, requireHTTPS: false},
+		{name: "token_endpoint", raw: doc.TokenEndpoint, requireHTTPS: true},
 		{name: "jwks_uri", raw: doc.JwksURI, requireHTTPS: true},
 		{name: "registration_endpoint", raw: doc.RegistrationEndpoint, requireHTTPS: true},
 	} {
