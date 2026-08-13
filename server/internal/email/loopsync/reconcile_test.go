@@ -69,14 +69,63 @@ func testManifest() *Manifest {
 		},
 		Templates: map[string]TemplateSpec{
 			"team_invite": {
-				ManagedName:     "gram.transactional.v2.team_invite",
-				Subject:         "Join {data.organization_name}",
-				PreviewText:     "Invitation",
-				LMX:             "<Paragraph>Hello {data.organization_name}</Paragraph>",
-				SourceVariables: []string{"organization_name"},
+				ManagedName:        "gram.transactional.v2.team_invite",
+				Subject:            "Join {data.organization_name}",
+				PreviewText:        "Invitation",
+				LMX:                "<Paragraph>Hello {data.organization_name}</Paragraph>",
+				SourceVariables:    []string{"organization_name"},
+				PublishedVariables: []string{"organization_name"},
 			},
 		},
 	}
+}
+
+func TestReconcile_AllowsConditionOnlyVariableMissingFromPublishedContract(t *testing.T) {
+	t.Parallel()
+
+	manifest := testManifest()
+	spec := manifest.Templates["team_invite"]
+	spec.LMX = `<Section if="{data.exhausted}" ifOperation="equal" ifValue="true"><Paragraph>Hello {data.organization_name}</Paragraph></Section>`
+	spec.SourceVariables = []string{"exhausted", "organization_name"}
+	spec.PublishedVariables = []string{"organization_name"}
+	manifest.Templates["team_invite"] = spec
+
+	draftID := "message-1"
+	api := &fakeAPI{
+		transactional: TransactionalEmail{
+			ID:                  "transactional-1",
+			DraftEmailMessageID: &draftID,
+			DataVariables:       []string{"organization_name"},
+		},
+		message: EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
+	}
+
+	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), manifest, map[string]string{})
+	require.NoError(t, err)
+}
+
+func TestReconcile_RejectsMissingRenderedVariableWithConditionOnlyVariable(t *testing.T) {
+	t.Parallel()
+
+	manifest := testManifest()
+	spec := manifest.Templates["team_invite"]
+	spec.LMX = `<Section if="{data.exhausted}" ifOperation="equal" ifValue="true"><Paragraph>Hello {data.organization_name}</Paragraph></Section>`
+	spec.SourceVariables = []string{"exhausted", "organization_name"}
+	spec.PublishedVariables = []string{"organization_name"}
+	manifest.Templates["team_invite"] = spec
+
+	draftID := "message-1"
+	api := &fakeAPI{
+		transactional: TransactionalEmail{
+			ID:                  "transactional-1",
+			DraftEmailMessageID: &draftID,
+			DataVariables:       []string{},
+		},
+		message: EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
+	}
+
+	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), manifest, map[string]string{})
+	require.ErrorContains(t, err, "published data variable contract")
 }
 
 func TestReconcile_CreatesPublishesAndReturnsResolvedID(t *testing.T) {

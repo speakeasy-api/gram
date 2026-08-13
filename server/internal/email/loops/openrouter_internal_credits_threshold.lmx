@@ -1,20 +1,20 @@
 <Style backgroundColor="#FAFAFA" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderWidth="0" borderRadius="0" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="#121212" />
-<Columns gap="0" widths="65,35" verticalAlignment="middle" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+<Columns gap="12" widths="65,35" verticalAlignment="middle" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
   <ColumnItem><Paragraph fontSize="21" lineHeight="100"><Strong>speakeasy</Strong></Paragraph></ColumnItem>
-  <ColumnItem><Paragraph align="right" fontSize="10" lineHeight="140"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph></ColumnItem>
+  <ColumnItem><Paragraph align="right" fontSize="12" lineHeight="140"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph></ColumnItem>
 </Columns>
-<Paragraph fontSize="11" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">INTERNAL AI CREDIT ALERT</Strong></Paragraph>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">INTERNAL AI CREDIT ALERT</Strong></Paragraph>
 <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.threshold_percent}% of internal credits used</H1>
 <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} is approaching the credit cap used for platform analysis.</Paragraph>
 <Section if="{data.exhausted}" ifOperation="equal" ifValue="true" blockColor="#FFF1ED" blockBorderColor="#E8A18D" blockBorderWidth="1" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
-  <Paragraph fontSize="10" lineHeight="140"><Strong textColor="#C83228">CREDITS EXHAUSTED</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#C83228">CREDITS EXHAUSTED</Strong></Paragraph>
   <Paragraph fontSize="14" lineHeight="155" paddingTop="8">Risk and analysis coverage may be reduced until credits reset or the limit changes.</Paragraph>
 </Section>
 <Section if="{data.exhausted}" ifOperation="equal" ifValue="false" blockColor="#FFFFFF" blockBorderColor="#DBDBDB" blockBorderWidth="1" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
-  <Paragraph fontSize="10" lineHeight="140"><Strong textColor="#757575">ACTION</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">ACTION</Strong></Paragraph>
   <Paragraph fontSize="14" lineHeight="155" paddingTop="8">Review usage before analysis coverage is affected.</Paragraph>
 </Section>
 <Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
-  <Paragraph fontSize="10" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
   <Paragraph fontSize="12" lineHeight="160" paddingTop="8">This is an automated platform credit alert.</Paragraph>
 </Section>

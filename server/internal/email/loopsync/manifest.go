@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -31,14 +33,15 @@ type MessageDefaults struct {
 }
 
 type TemplateSpec struct {
-	ManagedName     string   `json:"managed_name"`
-	Subject         string   `json:"subject"`
-	PreviewText     string   `json:"preview_text"`
-	Source          string   `json:"source"`
-	Variables       []string `json:"variables"`
-	UnusedVariables []string `json:"unused_variables,omitempty"`
-	LMX             string   `json:"-"`
-	SourceVariables []string `json:"-"`
+	ManagedName        string   `json:"managed_name"`
+	Subject            string   `json:"subject"`
+	PreviewText        string   `json:"preview_text"`
+	Source             string   `json:"source"`
+	Variables          []string `json:"variables"`
+	UnusedVariables    []string `json:"unused_variables,omitempty"`
+	LMX                string   `json:"-"`
+	SourceVariables    []string `json:"-"`
+	PublishedVariables []string `json:"-"`
 }
 
 func LoadManifest(path string) (*Manifest, error) {
@@ -77,6 +80,9 @@ func (m *Manifest) Validate() error {
 	if m.Defaults.FromName == "" || m.Defaults.FromEmail == "" || m.Defaults.ReplyToEmail == "" {
 		return fmt.Errorf("email manifest: sender defaults are incomplete")
 	}
+	if err := validateLMXDirectory(m.Dir); err != nil {
+		return err
+	}
 
 	managedNames := make(map[string]string, len(m.Templates))
 	for key, spec := range m.Templates {
@@ -101,10 +107,6 @@ func (m *Manifest) Validate() error {
 		if err != nil {
 			return fmt.Errorf("read LMX for %q: %w", key, err)
 		}
-		if err := validateXML(lmx); err != nil {
-			return fmt.Errorf("validate LMX for %q: %w", key, err)
-		}
-
 		sourceVariables := extractDataVariables(spec.Subject + "\n" + spec.PreviewText + "\n" + string(lmx))
 		declared, duplicate := makeUniqueSet(spec.Variables)
 		if duplicate != "" {
@@ -136,22 +138,85 @@ func (m *Manifest) Validate() error {
 
 		spec.LMX = strings.TrimSpace(string(lmx))
 		spec.SourceVariables = sourceVariables
+		publishedVariables, err := extractPublishedDataVariables(spec.Subject, spec.PreviewText, lmx)
+		if err != nil {
+			return fmt.Errorf("extract published LMX variables for %q: %w", key, err)
+		}
+		spec.PublishedVariables = publishedVariables
 		m.Templates[key] = spec
 	}
 	return nil
 }
 
-func validateXML(lmx []byte) error {
-	decoder := xml.NewDecoder(strings.NewReader("<Root>" + string(lmx) + "</Root>"))
-	for {
-		_, err := decoder.Token()
-		if errors.Is(err, io.EOF) {
+func validateLMXDirectory(dir string) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("open LMX directory: %w", err)
+	}
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("walk LMX directory: %w", walkErr)
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".lmx" {
 			return nil
 		}
+		lmx, err := root.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("read LMX token: %w", err)
+			return fmt.Errorf("read LMX file %q: %w", path, err)
+		}
+		if err := validateXML(lmx); err != nil {
+			return fmt.Errorf("validate LMX file %q: %w", path, err)
+		}
+		return nil
+	})
+	closeErr := root.Close()
+	if walkErr != nil {
+		return fmt.Errorf("validate LMX directory: %w", walkErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close LMX directory: %w", closeErr)
+	}
+	return nil
+}
+
+func validateXML(lmx []byte) error {
+	return walkXML(lmx, func(token xml.Token) error {
+		start, ok := token.(xml.StartElement)
+		if !ok {
+			return nil
+		}
+		switch start.Name.Local {
+		case "Columns":
+			if err := validateIntegerAttribute(start, "gap", 12, 150); err != nil {
+				return err
+			}
+		case "Paragraph":
+			if err := validateIntegerAttribute(start, "fontSize", 12, 64); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func validateIntegerAttribute(element xml.StartElement, name string, minimum, maximum int) error {
+	for _, attribute := range element.Attr {
+		if attribute.Name.Local != name {
+			continue
+		}
+		value, err := strconv.Atoi(attribute.Value)
+		if err != nil || value < minimum || value > maximum {
+			return fmt.Errorf(
+				"%s attribute %q must be an integer between %d and %d (got %q)",
+				element.Name.Local,
+				name,
+				minimum,
+				maximum,
+				attribute.Value,
+			)
 		}
 	}
+	return nil
 }
 
 func extractDataVariables(content string) []string {
@@ -165,6 +230,51 @@ func extractDataVariables(content string) []string {
 	}
 	slices.Sort(variables)
 	return variables
+}
+
+func extractPublishedDataVariables(subject, previewText string, lmx []byte) ([]string, error) {
+	var published strings.Builder
+	published.WriteString(subject)
+	published.WriteByte('\n')
+	published.WriteString(previewText)
+	published.WriteByte('\n')
+
+	err := walkXML(lmx, func(token xml.Token) error {
+		switch token := token.(type) {
+		case xml.StartElement:
+			for _, attribute := range token.Attr {
+				if token.Name.Local == "Section" && attribute.Name.Local == "if" {
+					continue
+				}
+				published.WriteString(attribute.Value)
+				published.WriteByte('\n')
+			}
+		case xml.CharData:
+			published.Write(token)
+			published.WriteByte('\n')
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return extractDataVariables(published.String()), nil
+}
+
+func walkXML(lmx []byte, visit func(xml.Token) error) error {
+	decoder := xml.NewDecoder(strings.NewReader("<Root>" + string(lmx) + "</Root>"))
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read LMX token: %w", err)
+		}
+		if err := visit(token); err != nil {
+			return err
+		}
+	}
 }
 
 func makeUniqueSet(values []string) (map[string]struct{}, string) {
