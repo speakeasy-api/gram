@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { createColumnHelper } from "@tanstack/react-table";
 
-import type { Column } from "@/components/data-table";
+import type { DataTableFeatures } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
@@ -13,85 +14,91 @@ function fmtDateShort(iso?: string): string {
   return d.toLocaleDateString();
 }
 
+const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
+
 // Module scope gives the array one identity for the life of the tab, so the
-// memos on the page that take it as a dependency survive a re-render. The
-// header of each column doubles as its label in the Columns control.
-export const ORG_COLUMNS: Column<AdminOrganization>[] = [
-  {
-    key: "name",
+// table does not rebuild its column model on every render. The header of each
+// column doubles as its label in the Columns control.
+export const ORG_COLUMNS = column.columns([
+  column.accessor("name", {
     header: "Name",
     // The link, not the row, carries the keyboard path and the accessible
     // name. It also lets the operator open the organization in a new tab.
-    render: (org) => (
+    cell: ({ row }) => (
       <Link
         to="/organizations/$idOrSlug"
-        params={{ idOrSlug: org.slug || org.id }}
+        params={{ idOrSlug: row.original.slug || row.original.id }}
         className="text-sm underline-offset-4 hover:underline focus-visible:underline"
       >
-        {org.name}
+        {row.original.name}
       </Link>
     ),
-  },
-  {
-    key: "slug",
+  }),
+  column.accessor("slug", {
     header: "Slug",
-    render: (org) => <span className="text-sm">{org.slug}</span>,
-  },
-  {
-    key: "account_type",
+    cell: ({ row }) => <span className="text-sm">{row.original.slug}</span>,
+  }),
+  column.accessor("account_type", {
     header: "Type",
-    render: (org) => (
+    cell: ({ row }) => (
       <Badge variant="outline" className={badgeTone.neutral}>
-        {org.account_type}
+        {row.original.account_type}
       </Badge>
     ),
-  },
-  {
-    key: "member_count",
+  }),
+  column.accessor("member_count", {
     header: "Members",
-    render: (org) => <span className="text-sm">{org.member_count}</span>,
-  },
-  {
-    key: "workos_id",
+    cell: ({ row }) => (
+      <span className="text-sm">{row.original.member_count}</span>
+    ),
+  }),
+  column.accessor("workos_id", {
     header: "WorkOS",
-    render: (org) => (
-      <span
-        className={cn("text-sm", !org.workos_id && "text-muted-foreground")}
-      >
-        {org.workos_id ? `${org.workos_id.substring(0, 12)}...` : "-"}
-      </span>
-    ),
-  },
-  {
-    key: "disabled_at",
-    header: "Disabled",
-    render: (org) => (
-      <span
-        className={cn("text-sm", !org.disabled_at && "text-muted-foreground")}
-      >
-        {org.disabled_at ? fmtDateShort(org.disabled_at) : "-"}
-      </span>
-    ),
-  },
-  {
-    key: "free_trial_ends_at",
-    header: "Trial ends",
-    render: (org) => (
+    cell: ({ row }) => (
       <span
         className={cn(
           "text-sm",
-          !org.free_trial_ends_at && "text-muted-foreground",
+          !row.original.workos_id && "text-muted-foreground",
         )}
       >
-        {fmtDateShort(org.free_trial_ends_at)}
+        {row.original.workos_id
+          ? `${row.original.workos_id.substring(0, 12)}...`
+          : "-"}
       </span>
     ),
-  },
-  {
-    key: "created_at",
-    header: "Created",
-    render: (org) => (
-      <span className="text-sm">{fmtDateShort(org.created_at)}</span>
+  }),
+  column.accessor("disabled_at", {
+    header: "Disabled",
+    cell: ({ row }) => (
+      <span
+        className={cn(
+          "text-sm",
+          !row.original.disabled_at && "text-muted-foreground",
+        )}
+      >
+        {row.original.disabled_at
+          ? fmtDateShort(row.original.disabled_at)
+          : "-"}
+      </span>
     ),
-  },
-];
+  }),
+  column.accessor("free_trial_ends_at", {
+    header: "Trial ends",
+    cell: ({ row }) => (
+      <span
+        className={cn(
+          "text-sm",
+          !row.original.free_trial_ends_at && "text-muted-foreground",
+        )}
+      >
+        {fmtDateShort(row.original.free_trial_ends_at)}
+      </span>
+    ),
+  }),
+  column.accessor("created_at", {
+    header: "Created",
+    cell: ({ row }) => (
+      <span className="text-sm">{fmtDateShort(row.original.created_at)}</span>
+    ),
+  }),
+]);

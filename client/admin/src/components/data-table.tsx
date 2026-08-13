@@ -1,4 +1,12 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
+import {
+  columnVisibilityFeature,
+  FlexRender,
+  tableFeatures,
+  type ReactTable,
+  type Row,
+  type RowData,
+} from "@tanstack/react-table";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -12,33 +20,33 @@ import {
 } from "@/components/ui/table";
 
 /**
- * Column-driven wrapper around the table primitives.
+ * Presentational wrapper around the table primitives, driven by a TanStack
+ * table instance.
  *
- * Two ways to use it:
+ * Compose it: `DataTable.Header`, `DataTable.Body`, `DataTable.Row`. A page
+ * keeps its own per-row classes and handlers that way.
  *
- *   - pass `data` + `rowKey` and let it render the header, the rows and the
- *     empty state;
- *   - pass children and compose `DataTable.Header` / `DataTable.Body` /
- *     `DataTable.Row` yourself when a page needs per-row classes or handlers.
- *
- * The `ui/table` primitives are stock shadcn, so the column sizing and the
- * padding scale live here rather than in the primitive.
+ * The `ui/table` primitives are stock shadcn, so the padding scale lives here
+ * rather than in the primitive.
  */
-
-export type TableCellPadding = "condensed" | "normal" | "spacious";
 
 /**
- * `'auto'` sizes a column to its content. Everything else takes the width
- * as given.
+ * The feature registry every admin table shares.
+ *
+ * Column visibility gates `row.getVisibleCells`, `column.getIsVisible` and
+ * `column.getCanHide`, which this wrapper and its header both call. A table
+ * with no Columns control still registers it for that reason.
  */
-export type ColumnWidth = "auto" | `${number}px` | `${number}%`;
+export const dataTableFeatures = tableFeatures({ columnVisibilityFeature });
 
-export type Column<T extends object> = {
-  key: keyof T | string;
-  header: React.ReactNode;
-  render?: (row: T) => React.ReactNode;
-  width?: ColumnWidth;
-};
+export type DataTableFeatures = typeof dataTableFeatures;
+
+export type DataTableInstance<T extends RowData> = ReactTable<
+  DataTableFeatures,
+  T
+>;
+
+export type TableCellPadding = "condensed" | "normal" | "spacious";
 
 // Applied to the table root so the scale reaches every th and td, including
 // the ones a page composes by hand.
@@ -48,75 +56,15 @@ const cellPaddingClasses: Record<TableCellPadding, string> = {
   spacious: "[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3",
 };
 
-function columnStyle<T extends object>(
-  column: Column<T>,
-): React.CSSProperties | undefined {
-  if (!column.width) return undefined;
-  // A width of 1% collapses the column onto its content under `table-layout:
-  // auto`, which is what `'auto'` meant on the old grid table.
-  return { width: column.width === "auto" ? "1%" : column.width };
-}
-
-type SharedProps<T extends object> = {
-  columns: Column<T>[];
+function DataTableRoot({
+  cellPadding = "normal",
+  className,
+  children,
+}: {
   cellPadding?: TableCellPadding;
   className?: string;
-};
-
-type WrapperProps<T extends object> = SharedProps<T> & {
   children: React.ReactNode;
-};
-
-type DataProps<T extends object> = SharedProps<T> & {
-  data: T[];
-  rowKey: (row: T) => string | number;
-  onRowClick?: (row: T) => void;
-  noResultsMessage?: React.ReactNode;
-};
-
-function isWrapperProps<T extends object>(
-  props: WrapperProps<T> | DataProps<T>,
-): props is WrapperProps<T> {
-  return "children" in props && props.children !== undefined;
-}
-
-function cellContent<T extends object>(row: T, column: Column<T>) {
-  if (column.render) {
-    return column.render(row);
-  }
-
-  return column.key in row ? String(row[column.key as keyof T]) : "";
-}
-
-function DataTableRoot<T extends object>(
-  props: WrapperProps<T> | DataProps<T>,
-) {
-  const { columns, cellPadding = "normal", className } = props;
-
-  const content = isWrapperProps(props) ? (
-    props.children
-  ) : (
-    <>
-      <DataTableHeader columns={columns} />
-      <TableBody>
-        {props.data.length === 0 ? (
-          <DataTableNoResultsMessage>
-            {props.noResultsMessage}
-          </DataTableNoResultsMessage>
-        ) : (
-          props.data.map((row) => (
-            <DataTableRow
-              key={props.rowKey(row)}
-              row={row}
-              columns={columns}
-              onClick={props.onRowClick}
-            />
-          ))
-        )}
-      </TableBody>
-    </>
-  );
-
+}) {
   return (
     // The stock table container sets `overflow-x: auto`, which also turns it
     // into a vertical scroll box. The sticky header would then pin to that box
@@ -124,40 +72,40 @@ function DataTableRoot<T extends object>(
     // the page keeps both the scrolling and the pinned header.
     <div className="[&>[data-slot=table-container]]:overflow-visible">
       <Table className={cn(cellPaddingClasses[cellPadding], className)}>
-        {content}
+        {children}
       </Table>
     </div>
   );
 }
 
-function DataTableHeader<T extends object>({
-  columns,
+function DataTableHeader<T extends RowData>({
+  table,
   className,
 }: {
-  columns: Column<T>[];
+  table: DataTableInstance<T>;
   className?: string;
 }) {
   return (
     <TableHeader className={cn("bg-muted sticky top-0 z-10", className)}>
-      <TableRow>
-        {columns.map((column) => (
-          <TableHead key={String(column.key)} style={columnStyle(column)}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
+      {table.getHeaderGroups().map((group) => (
+        <TableRow key={group.id}>
+          {group.headers.map((header) => (
+            <TableHead key={header.id}>
+              {header.isPlaceholder ? null : <FlexRender header={header} />}
+            </TableHead>
+          ))}
+        </TableRow>
+      ))}
     </TableHeader>
   );
 }
 
-function DataTableRow<T extends object>({
+function DataTableRow<T extends RowData>({
   row,
-  columns,
   onClick,
   className,
 }: {
-  row: T;
-  columns: Column<T>[];
+  row: Row<DataTableFeatures, T>;
   onClick?: (row: T) => void;
   className?: string;
 }) {
@@ -173,7 +121,7 @@ function DataTableRow<T extends object>({
         if ((event.target as HTMLElement).closest("a,button,input,label")) {
           return;
         }
-        onClick(row);
+        onClick(row.original);
       }
     : undefined;
 
@@ -182,9 +130,9 @@ function DataTableRow<T extends object>({
       className={cn(onClick && "cursor-pointer", className)}
       onClick={handleClick}
     >
-      {columns.map((column) => (
-        <TableCell key={String(column.key)}>
-          {cellContent(row, column)}
+      {row.getVisibleCells().map((cell) => (
+        <TableCell key={cell.id}>
+          <FlexRender cell={cell} />
         </TableCell>
       ))}
     </TableRow>

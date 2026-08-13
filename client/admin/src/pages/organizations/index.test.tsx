@@ -1,5 +1,10 @@
 import type { AnyRouter } from "@tanstack/react-router";
 import {
+  useTable,
+  type ColumnVisibilityState,
+  type Updater,
+} from "@tanstack/react-table";
+import {
   act,
   cleanup,
   fireEvent,
@@ -22,12 +27,14 @@ import type {
   ListOrganizationsParams,
   ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { useState, type JSX } from "react";
+
 import { routeTree } from "@/routeTree.gen";
 import {
   organizationsSearchSchema,
   type OrganizationsSearch,
 } from "@/routes/organizations.index";
-import type { Column } from "@/components/data-table";
+import { dataTableFeatures } from "@/components/data-table";
 import { renderRouteTree } from "@/test/harness";
 
 import { ORG_COLUMNS } from "./columns";
@@ -245,6 +252,12 @@ describe("organizations list", () => {
     });
     expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
 
+    // The row has to drop the same cell the header dropped, or every cell
+    // after it slides one column to the left.
+    expect(screen.getAllByRole("cell").length).toBe(
+      screen.getAllByRole("columnheader").length,
+    );
+
     // Reopening reads the menu against the page's own state. Without this the
     // bar could take a constant and its guard would never fire.
     openOn(screen.getByRole("button", { name: "Columns" }));
@@ -353,66 +366,136 @@ describe("organizations list", () => {
   });
 });
 
-// The bar takes its columns as props, so the last-column case is reachable
-// here without clicking seven items shut through a menu that closes each time.
+// The bar takes a table, so the last-column case is reachable here by handing
+// it a two column table rather than by clicking seven items shut through a
+// menu that closes each time.
 describe("TableActionBar", () => {
   const [FIRST, SECOND] = ORG_COLUMNS;
   if (!FIRST || !SECOND) throw new Error("ORG_COLUMNS needs two columns");
 
+  // An accessor column takes its id from its key unless it names one, and that
+  // id is what the visibility state is keyed by.
+  const SECOND_ID = String(SECOND.id ?? SECOND.accessorKey);
+
+  // Sliced, so the array carries the element type useTable asks for.
+  const MENU_COLUMNS = ORG_COLUMNS.slice(0, 2);
+
+  function ColumnsMenu({
+    initialVisibility,
+    onVisibilityChange,
+    columns,
+  }: {
+    initialVisibility: ColumnVisibilityState;
+    onVisibilityChange: (updater: Updater<ColumnVisibilityState>) => void;
+    columns: typeof MENU_COLUMNS;
+  }): JSX.Element {
+    const [columnVisibility, setColumnVisibility] = useState(initialVisibility);
+    const table = useTable({
+      features: dataTableFeatures,
+      columns,
+      data: ORGS,
+      getRowId: (org) => org.id,
+      state: { columnVisibility },
+      // The spy sits in front of the state, so a blocked toggle is a call that
+      // never happened rather than a state that happened to settle back.
+      onColumnVisibilityChange: (updater) => {
+        onVisibilityChange(updater);
+        setColumnVisibility(updater);
+      },
+    });
+    return <TableActionBar table={table} />;
+  }
+
   function openColumnsMenu(
-    visibleColumns: Column<AdminOrganization>[],
-  ): Mock<(key: string) => void> {
-    const onToggleColumn = vi.fn<(key: string) => void>();
+    initialVisibility: ColumnVisibilityState,
+    columns: typeof MENU_COLUMNS = MENU_COLUMNS,
+  ): Mock<(updater: Updater<ColumnVisibilityState>) => void> {
+    const onVisibilityChange =
+      vi.fn<(updater: Updater<ColumnVisibilityState>) => void>();
     render(
-      <TableActionBar
-        columns={ORG_COLUMNS}
-        visibleColumns={visibleColumns}
-        onToggleColumn={onToggleColumn}
+      <ColumnsMenu
+        initialVisibility={initialVisibility}
+        onVisibilityChange={onVisibilityChange}
+        columns={columns}
       />,
     );
     openOn(screen.getByRole("button", { name: "Columns" }));
-    return onToggleColumn;
+    return onVisibilityChange;
+  }
+
+  // A toggle that lands closes the menu. Reopening also reads the item back
+  // against the state that settled, not against the click that asked for it.
+  function reopenColumnsMenu(): void {
+    openOn(screen.getByRole("button", { name: "Columns" }));
   }
 
   // Found by the name an operator reads, so the query goes through the same
   // accessible name a screen reader would announce. A header is a node in
   // general, and only a string carries a name this query can match.
-  function itemFor(column: Column<AdminOrganization>): HTMLElement {
-    const { header } = column;
+  function itemFor(header: unknown): HTMLElement {
     if (typeof header !== "string") {
-      throw new Error(`column ${String(column.key)} needs a text header`);
+      throw new Error("the column under test needs a text header");
     }
     return screen.getByRole("menuitemcheckbox", { name: header });
   }
 
   it("stops the operator hiding the last visible column", () => {
-    const onToggleColumn = openColumnsMenu([FIRST]);
+    const onVisibilityChange = openColumnsMenu({ [SECOND_ID]: false });
 
-    const item = itemFor(FIRST);
+    const item = itemFor(FIRST.header);
     fireEvent.click(item);
-    expect(onToggleColumn).not.toHaveBeenCalled();
+    expect(onVisibilityChange).not.toHaveBeenCalled();
 
     // Marked rather than disabled. Radix drops a disabled item out of the
     // menu's roving focus, and a screen reader then never reaches it.
     expect(item.getAttribute("aria-disabled")).toBe("true");
     expect(item.hasAttribute("data-disabled")).toBe(false);
+
+    // The other half of the guard. Radix dismisses the menu on select unless
+    // the default is prevented, and a menu that closes on a locked item reads
+    // as if the click had worked.
+    expect(itemFor(FIRST.header)).toBe(item);
   });
 
   it("still unhides a column while only one is visible", () => {
-    const onToggleColumn = openColumnsMenu([FIRST]);
+    const onVisibilityChange = openColumnsMenu({ [SECOND_ID]: false });
 
-    fireEvent.click(itemFor(SECOND));
+    const item = itemFor(SECOND.header);
+    expect(item.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(item);
+    expect(onVisibilityChange).toHaveBeenCalled();
 
     // The lock holds the last visible column, not the whole menu. Locking the
     // menu would trap the operator in the state the lock exists to prevent.
-    expect(onToggleColumn).toHaveBeenCalledWith(String(SECOND.key));
+    reopenColumnsMenu();
+    expect(itemFor(SECOND.header).getAttribute("aria-checked")).toBe("true");
   });
 
   it("hides a column while a second one is still visible", () => {
-    const onToggleColumn = openColumnsMenu([FIRST, SECOND]);
+    const onVisibilityChange = openColumnsMenu({});
 
-    fireEvent.click(itemFor(FIRST));
-    expect(onToggleColumn).toHaveBeenCalledWith(String(FIRST.key));
+    fireEvent.click(itemFor(FIRST.header));
+    expect(onVisibilityChange).toHaveBeenCalled();
+
+    reopenColumnsMenu();
+    expect(itemFor(FIRST.header).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("locks a column that opts out of hiding", () => {
+    // Both are visible, so the last-column rule is not what holds this one.
+    const onVisibilityChange = openColumnsMenu({}, [
+      { ...FIRST, enableHiding: false },
+      SECOND,
+    ]);
+
+    const item = itemFor(FIRST.header);
+    fireEvent.click(item);
+    expect(onVisibilityChange).not.toHaveBeenCalled();
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+
+    // The opt-out is per column, so the menu still works around it.
+    fireEvent.click(itemFor(SECOND.header));
+    expect(onVisibilityChange).toHaveBeenCalled();
   });
 });
 

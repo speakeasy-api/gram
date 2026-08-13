@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { useCallback, useMemo, useState, type JSX } from "react";
+import { useTable, type ColumnVisibilityState } from "@tanstack/react-table";
+import { useState, type JSX } from "react";
 
-import { DataTable as Table } from "@/components/data-table";
+import { dataTableFeatures, DataTable as Table } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { organizationsListQuery } from "@/lib/adminQueries";
 import {
@@ -39,9 +40,8 @@ export function OrganizationsList(): JSX.Element {
 
   // Column visibility is deliberately not in the URL. It is a per-operator
   // preference, not part of the view a link carries, and it resets on reload.
-  const [hiddenColumns, setHiddenColumns] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [columnVisibility, setColumnVisibility] =
+    useState<ColumnVisibilityState>({});
 
   // One object is the source of both the request and the signature below. Two
   // hand-written lists drift: a slice that adds a filter to the request would
@@ -95,34 +95,20 @@ export function OrganizationsList(): JSX.Element {
     });
   };
 
-  const toggleColumn = useCallback((key: string) => {
-    setHiddenColumns((current) => {
-      const next = new Set(current);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
-  }, []);
-
-  const visibleColumns = useMemo(
-    () =>
-      ORG_COLUMNS.filter((column) => !hiddenColumns.has(String(column.key))),
-    [hiddenColumns],
-  );
-
   const orgs = data?.organizations ?? NO_ORGS;
 
-  const rows = useMemo(
-    () =>
-      orgs.map((org) => (
-        <Table.Row
-          key={org.id}
-          row={org}
-          columns={visibleColumns}
-          onClick={openOrganization}
-        />
-      )),
-    [orgs, visibleColumns, openOrganization],
-  );
+  const table = useTable({
+    features: dataTableFeatures,
+    columns: ORG_COLUMNS,
+    data: orgs,
+    // Without this a row is keyed by its index, and React reuses those keys
+    // across a page change and across a filter change.
+    getRowId: (org) => org.id,
+    state: { columnVisibility },
+    onColumnVisibilityChange: setColumnVisibility,
+  });
+
+  const rows = table.getRowModel().rows;
 
   return (
     <div className="space-y-6">
@@ -138,11 +124,7 @@ export function OrganizationsList(): JSX.Element {
         )}
 
         <div className="rounded-lg border">
-          <TableActionBar
-            columns={ORG_COLUMNS}
-            visibleColumns={visibleColumns}
-            onToggleColumn={toggleColumn}
-          />
+          <TableActionBar table={table} />
 
           <div
             className={cn(
@@ -150,17 +132,23 @@ export function OrganizationsList(): JSX.Element {
               isPlaceholderData && "opacity-60",
             )}
           >
-            <Table columns={visibleColumns}>
-              <Table.Header columns={visibleColumns} />
+            <Table>
+              <Table.Header table={table} />
               <Table.Body>
-                {orgs.length === 0 ? (
+                {rows.length === 0 ? (
                   <Table.NoResultsMessage>
                     <span className="text-muted-foreground text-sm">
                       {emptyStateMessage(isLoading, isError)}
                     </span>
                   </Table.NoResultsMessage>
                 ) : (
-                  rows
+                  rows.map((row) => (
+                    <Table.Row
+                      key={row.id}
+                      row={row}
+                      onClick={openOrganization}
+                    />
+                  ))
                 )}
               </Table.Body>
             </Table>
