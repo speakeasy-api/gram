@@ -48,6 +48,14 @@ type Service interface {
 	GetAwsKmsKey(context.Context, *GetAwsKmsKeyPayload) (res *AwsKmsKey, err error)
 	// Get a GCP KMS external key by ID. Requires org:read.
 	GetGcpKmsKey(context.Context, *GetGcpKmsKeyPayload) (res *GcpKmsKey, err error)
+	// Probe that Gram can reach a GCP KMS external key through its backing
+	// credential and use it to sign: read the key's public half, confirm its
+	// algorithm matches the one recorded, sign a probe digest, and verify that
+	// signature locally against the public half. Performs a real signing
+	// operation, which is billed to the key's owner and lands in their Cloud Audit
+	// Log. Ephemeral: nothing is persisted. Rate limited per organization.
+	// Requires org:admin.
+	VerifyGcpKmsKey(context.Context, *VerifyGcpKmsKeyPayload) (res *VerifyKmsKeyResult, err error)
 	// Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with
 	// a conflict while any JSON Web Key Set or published JSON Web Key still
 	// references the key, since deleting it would break verification for every
@@ -80,7 +88,7 @@ const ServiceName = "externalKeys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createAwsKmsKey", "updateAwsKmsKey", "createGcpKmsKey", "updateGcpKmsKey", "listExternalKeys", "listAwsKmsKeys", "listGcpKmsKeys", "getAwsKmsKey", "getGcpKmsKey", "deleteAwsKmsKey", "deleteGcpKmsKey"}
+var MethodNames = [12]string{"createAwsKmsKey", "updateAwsKmsKey", "createGcpKmsKey", "updateGcpKmsKey", "listExternalKeys", "listAwsKmsKeys", "listGcpKmsKeys", "getAwsKmsKey", "getGcpKmsKey", "verifyGcpKmsKey", "deleteAwsKmsKey", "deleteGcpKmsKey"}
 
 // AwsKmsKey is the result type of the externalKeys service createAwsKmsKey
 // method.
@@ -289,6 +297,27 @@ type UpdateGcpKmsKeyPayload struct {
 	// Optional. The Gram service-account email the customer granted on the key in
 	// an IAM binding. Not a secret.
 	CustomerGrantReference *string
+}
+
+// VerifyGcpKmsKeyPayload is the payload type of the externalKeys service
+// verifyGcpKmsKey method.
+type VerifyGcpKmsKeyPayload struct {
+	// The ID of the key to verify.
+	ID           string
+	SessionToken *string
+}
+
+// VerifyKmsKeyResult is the result type of the externalKeys service
+// verifyGcpKmsKey method.
+type VerifyKmsKeyResult struct {
+	// Whether the key produced a signature that validated against its own public
+	// half.
+	Verified bool
+	// The machine-readable outcome of the probe.
+	ProbeOutcome string
+	// Human-readable detail about the probe outcome, including the failure reason
+	// when it did not verify.
+	Detail *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

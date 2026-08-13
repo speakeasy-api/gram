@@ -12,6 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import {
+  VerifyKmsKeyResult,
+  VerifyKmsKeyResult$inboundSchema,
+} from "../models/components/verifykmskeyresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  DeleteGcpIamCredentialRequest,
-  DeleteGcpIamCredentialRequest$outboundSchema,
-  DeleteGcpIamCredentialSecurity,
-} from "../models/operations/deletegcpiamcredential.js";
+  VerifyGcpKmsKeyRequest,
+  VerifyGcpKmsKeyRequest$outboundSchema,
+  VerifyGcpKmsKeySecurity,
+} from "../models/operations/verifygcpkmskey.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteGcpIamCredential externalCredentials
+ * verifyGcpKmsKey externalKeys
  *
  * @remarks
- * Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
+ * Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
  */
-export function externalCredentialsDeleteGcpIam(
+export function externalKeysVerifyGcpKms(
   client: GramCore,
-  request: DeleteGcpIamCredentialRequest,
-  security?: DeleteGcpIamCredentialSecurity | undefined,
+  request: VerifyGcpKmsKeyRequest,
+  security?: VerifyGcpKmsKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    void,
+    VerifyKmsKeyResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -69,13 +73,13 @@ export function externalCredentialsDeleteGcpIam(
 
 async function $do(
   client: GramCore,
-  request: DeleteGcpIamCredentialRequest,
-  security?: DeleteGcpIamCredentialSecurity | undefined,
+  request: VerifyGcpKmsKeyRequest,
+  security?: VerifyGcpKmsKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      void,
+      VerifyKmsKeyResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -91,7 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(DeleteGcpIamCredentialRequest$outboundSchema, value),
+    (value) => z.parse(VerifyGcpKmsKeyRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -100,7 +104,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/externalCredentials.deleteGcpIam")();
+  const path = pathToFunc("/rpc/externalKeys.verifyGcpKms")();
 
   const query = encodeFormQuery({
     "id": payload.id,
@@ -127,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteGcpIamCredential",
+    operationID: "verifyGcpKmsKey",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -141,7 +145,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "DELETE",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -172,7 +176,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    void,
+    VerifyKmsKeyResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +187,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(204, z.void()),
+    M.json(200, VerifyKmsKeyResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -8,9 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { externalCredentialsDeleteGcpIam } from "../funcs/externalCredentialsDeleteGcpIam.js";
+import { externalKeysVerifyGcpKms } from "../funcs/externalKeysVerifyGcpKms.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { VerifyKmsKeyResult } from "../models/components/verifykmskeyresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -23,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  DeleteGcpIamCredentialRequest,
-  DeleteGcpIamCredentialSecurity,
-} from "../models/operations/deletegcpiamcredential.js";
+  VerifyGcpKmsKeyRequest,
+  VerifyGcpKmsKeySecurity,
+} from "../models/operations/verifygcpkmskey.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type DeleteGcpIamCredentialMutationVariables = {
-  request: DeleteGcpIamCredentialRequest;
-  security?: DeleteGcpIamCredentialSecurity | undefined;
+export type VerifyGcpKmsKeyMutationVariables = {
+  request: VerifyGcpKmsKeyRequest;
+  security?: VerifyGcpKmsKeySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type DeleteGcpIamCredentialMutationData = void;
+export type VerifyGcpKmsKeyMutationData = VerifyKmsKeyResult;
 
-export type DeleteGcpIamCredentialMutationError =
+export type VerifyGcpKmsKeyMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -50,49 +51,49 @@ export type DeleteGcpIamCredentialMutationError =
   | SDKValidationError;
 
 /**
- * deleteGcpIamCredential externalCredentials
+ * verifyGcpKmsKey externalKeys
  *
  * @remarks
- * Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
+ * Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
  */
-export function useDeleteGcpIamCredentialMutation(
+export function useVerifyGcpKmsKeyMutation(
   options?: MutationHookOptions<
-    DeleteGcpIamCredentialMutationData,
-    DeleteGcpIamCredentialMutationError,
-    DeleteGcpIamCredentialMutationVariables
+    VerifyGcpKmsKeyMutationData,
+    VerifyGcpKmsKeyMutationError,
+    VerifyGcpKmsKeyMutationVariables
   >,
 ): UseMutationResult<
-  DeleteGcpIamCredentialMutationData,
-  DeleteGcpIamCredentialMutationError,
-  DeleteGcpIamCredentialMutationVariables
+  VerifyGcpKmsKeyMutationData,
+  VerifyGcpKmsKeyMutationError,
+  VerifyGcpKmsKeyMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildDeleteGcpIamCredentialMutation(client, options),
+    ...buildVerifyGcpKmsKeyMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyDeleteGcpIamCredential(): MutationKey {
-  return ["@gram/client", "externalCredentials", "deleteGcpIam"];
+export function mutationKeyVerifyGcpKmsKey(): MutationKey {
+  return ["@gram/client", "externalKeys", "verifyGcpKms"];
 }
 
-export function buildDeleteGcpIamCredentialMutation(
+export function buildVerifyGcpKmsKeyMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: DeleteGcpIamCredentialMutationVariables,
-  ) => Promise<DeleteGcpIamCredentialMutationData>;
+    variables: VerifyGcpKmsKeyMutationVariables,
+  ) => Promise<VerifyGcpKmsKeyMutationData>;
 } {
   return {
-    mutationKey: mutationKeyDeleteGcpIamCredential(),
-    mutationFn: function deleteGcpIamCredentialMutationFn({
+    mutationKey: mutationKeyVerifyGcpKmsKey(),
+    mutationFn: function verifyGcpKmsKeyMutationFn({
       request,
       security,
       options,
-    }): Promise<DeleteGcpIamCredentialMutationData> {
+    }): Promise<VerifyGcpKmsKeyMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -105,7 +106,7 @@ export function buildDeleteGcpIamCredentialMutation(
           ),
         },
       };
-      return unwrapAsync(externalCredentialsDeleteGcpIam(
+      return unwrapAsync(externalKeysVerifyGcpKms(
         client$,
         request,
         security,

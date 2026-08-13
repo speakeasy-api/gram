@@ -2115,6 +2115,239 @@ func DecodeGetGcpKmsKeyResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildVerifyGcpKmsKeyRequest instantiates a HTTP request object with method
+// and path set to call the "externalKeys" service "verifyGcpKmsKey" endpoint
+func (c *Client) BuildVerifyGcpKmsKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyGcpKmsKeyExternalKeysPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("externalKeys", "verifyGcpKmsKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyGcpKmsKeyRequest returns an encoder for requests sent to the
+// externalKeys verifyGcpKmsKey server.
+func EncodeVerifyGcpKmsKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*externalkeys.VerifyGcpKmsKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("externalKeys", "verifyGcpKmsKey", "*externalkeys.VerifyGcpKmsKeyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeVerifyGcpKmsKeyResponse returns a decoder for responses returned by
+// the externalKeys verifyGcpKmsKey endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeVerifyGcpKmsKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyGcpKmsKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyGcpKmsKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			res := NewVerifyGcpKmsKeyVerifyKmsKeyResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VerifyGcpKmsKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyGcpKmsKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyGcpKmsKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyGcpKmsKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyGcpKmsKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyGcpKmsKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyGcpKmsKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyGcpKmsKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+				}
+				err = ValidateVerifyGcpKmsKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+				}
+				return nil, NewVerifyGcpKmsKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyGcpKmsKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+				}
+				err = ValidateVerifyGcpKmsKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+				}
+				return nil, NewVerifyGcpKmsKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("externalKeys", "verifyGcpKmsKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyGcpKmsKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			err = ValidateVerifyGcpKmsKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("externalKeys", "verifyGcpKmsKey", err)
+			}
+			return nil, NewVerifyGcpKmsKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("externalKeys", "verifyGcpKmsKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteAwsKmsKeyRequest instantiates a HTTP request object with method
 // and path set to call the "externalKeys" service "deleteAwsKmsKey" endpoint
 func (c *Client) BuildDeleteAwsKmsKeyRequest(ctx context.Context, v any) (*http.Request, error) {

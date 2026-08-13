@@ -62,6 +62,49 @@ WHERE ek.id = @id
   AND ek.provider = 'gcp_kms'
   AND ek.deleted IS FALSE;
 
+-- Loads everything the verify probe needs in one read: the key, its provider
+-- subtype, and the GCP identity of the credential that reaches it.
+--
+-- The credential joins are LEFT so a key whose credential was soft-deleted still
+-- returns the key. An inner join would surface that as no rows, which the caller
+-- can only report as "key not found" — a lie about a key that plainly exists,
+-- and a reachable one: external_credentials.deleted is a generated column, so a
+-- soft delete never fires the external_keys foreign key. credential_id is NULL
+-- in exactly that case, which is what lets the caller say so.
+--
+-- The join predicate spells out every condition the credential must meet rather
+-- than matching on id alone, so a row that fails one of them reads as an absent
+-- credential instead of joining and reporting some later, more confusing
+-- symptom. validateBackingCredential already enforces all of them on both write
+-- paths, so only a direct database edit reaches those cases.
+--
+-- No row lock is taken. Verify performs no write, so there is nothing for a
+-- concurrent credential change to race: the probe reports the configuration as
+-- it stood when it was read, which is all it ever claims to do.
+-- name: GetGcpKmsKeyForVerify :one
+SELECT
+  sqlc.embed(ek),
+  sqlc.embed(gcp),
+  ec.id AS credential_id,
+  gic.impersonate_service_account,
+  gic.wif_pool_id,
+  gic.wif_provider_id,
+  gic.wif_project_number
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+LEFT JOIN external_credentials AS ec
+       ON ec.id = ek.external_credential_id
+      AND ec.organization_id = ek.organization_id
+      AND ec.project_id IS NULL
+      AND ec.provider = 'gcp_iam'
+      AND ec.deleted IS FALSE
+LEFT JOIN gcp_iam_credentials AS gic
+       ON gic.external_credential_id = ec.id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.provider = 'gcp_kms'
+  AND ek.deleted IS FALSE;
+
 -- name: ListExternalKeys :many
 SELECT *
 FROM external_keys

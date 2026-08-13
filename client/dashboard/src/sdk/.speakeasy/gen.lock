@@ -210,6 +210,7 @@ trackedFiles:
   src/funcs/externalKeysListGcpKms.ts: {}
   src/funcs/externalKeysUpdateAwsKms.ts: {}
   src/funcs/externalKeysUpdateGcpKms.ts: {}
+  src/funcs/externalKeysVerifyGcpKms.ts: {}
   src/funcs/externalReceiveWorkOSWebhook.ts: {}
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
@@ -1388,6 +1389,7 @@ trackedFiles:
   src/models/components/validatekeyresult.ts: {}
   src/models/components/verifycimdurlresult.ts: {}
   src/models/components/verifycredentialresult.ts: {}
+  src/models/components/verifykmskeyresult.ts: {}
   src/models/components/verifyonboardinghookssetupresult.ts: {}
   src/models/components/verifyplatformcredentialresult.ts: {}
   src/models/components/verifyurlform.ts: {}
@@ -1942,6 +1944,7 @@ trackedFiles:
   src/models/operations/validateapikey.ts: {}
   src/models/operations/verifygcpiamcredential.ts: {}
   src/models/operations/verifygcpiamplatformcredential.ts: {}
+  src/models/operations/verifygcpkmskey.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
   src/models/operations/verifyusersessionissuercimdclienturl.ts: {}
@@ -2727,6 +2730,7 @@ trackedFiles:
   src/react-query/validateAPIKey.ts: {}
   src/react-query/verifyGcpIamCredential.ts: {}
   src/react-query/verifyGcpIamPlatformCredential.ts: {}
+  src/react-query/verifyGcpKmsKey.ts: {}
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
@@ -9033,6 +9037,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  verifyGcpKmsKey:
+    speakeasy-default-verify-gcp-kms-key:
+      parameters:
+        query:
+          id: "877826b2-7a42-46f7-8a9f-e2c98083421c"
+      responses:
+        "200":
+          application/json: {"probe_outcome": "algorithm_mismatch", "verified": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   verifyOnboardingHooksSetup:
     speakeasy-default-verify-onboarding-hooks-setup:
       responses:

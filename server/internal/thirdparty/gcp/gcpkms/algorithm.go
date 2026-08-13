@@ -47,6 +47,23 @@ var joseAlgorithmByKMS = map[kmspb.CryptoKeyVersion_CryptoKeyVersionAlgorithm]jo
 	kmspb.CryptoKeyVersion_EC_SIGN_ED25519:            jose.EdDSA,
 }
 
+// ParseSignatureAlgorithm converts a stored algorithm name into the JOSE
+// algorithm it denotes, rejecting anything outside the supported set.
+//
+// jose.SignatureAlgorithm is a defined string type, so a plain conversion of a
+// database column compiles and accepts any value it happens to hold. Callers
+// that read an algorithm back out of storage go through here instead, which is
+// what keeps a value this package has no digest or verification path for from
+// reaching VerifySigningKey and failing somewhere less legible.
+func ParseSignatureAlgorithm(name string) (jose.SignatureAlgorithm, error) {
+	alg := jose.SignatureAlgorithm(name)
+	if !slices.Contains(supportedAlgorithms, alg) {
+		return "", fmt.Errorf("%w: %q; Gram supports %v", ErrUnsupportedAlgorithm, name, supportedAlgorithms)
+	}
+
+	return alg, nil
+}
+
 // joseAlgorithm maps a KMS key-version algorithm onto the JOSE algorithm Gram
 // records, rejecting anything outside the supported set.
 func joseAlgorithm(kmsAlg kmspb.CryptoKeyVersion_CryptoKeyVersionAlgorithm) (jose.SignatureAlgorithm, error) {

@@ -278,7 +278,7 @@ var _ = Service("externalCredentials", func() {
 	})
 
 	Method("deleteAwsIamCredential", func() {
-		Description("Soft-delete an AWS IAM external credential by ID. Requires org:admin.")
+		Description("Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to delete.", func() {
@@ -301,7 +301,7 @@ var _ = Service("externalCredentials", func() {
 	})
 
 	Method("deleteGcpIamCredential", func() {
-		Description("Soft-delete a GCP IAM external credential by ID. Requires org:admin.")
+		Description("Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to delete.", func() {

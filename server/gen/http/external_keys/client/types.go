@@ -263,6 +263,19 @@ type GetGcpKmsKeyResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// VerifyGcpKmsKeyResponseBody is the type of the "externalKeys" service
+// "verifyGcpKmsKey" endpoint HTTP response body.
+type VerifyGcpKmsKeyResponseBody struct {
+	// Whether the key produced a signature that validated against its own public
+	// half.
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// The machine-readable outcome of the probe.
+	ProbeOutcome *string `form:"probe_outcome,omitempty" json:"probe_outcome,omitempty" xml:"probe_outcome,omitempty"`
+	// Human-readable detail about the probe outcome, including the failure reason
+	// when it did not verify.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
+}
+
 // CreateAwsKmsKeyUnauthorizedResponseBody is the type of the "externalKeys"
 // service "createAwsKmsKey" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1936,6 +1949,195 @@ type GetGcpKmsKeyUnexpectedResponseBody struct {
 // service "getGcpKmsKey" endpoint HTTP response body for the "gateway_error"
 // error.
 type GetGcpKmsKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyUnauthorizedResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "unauthorized"
+// error.
+type VerifyGcpKmsKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyForbiddenResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "forbidden"
+// error.
+type VerifyGcpKmsKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyBadRequestResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "bad_request"
+// error.
+type VerifyGcpKmsKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyNotFoundResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "not_found"
+// error.
+type VerifyGcpKmsKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyConflictResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "conflict"
+// error.
+type VerifyGcpKmsKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyUnsupportedMediaResponseBody is the type of the
+// "externalKeys" service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type VerifyGcpKmsKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyInvalidResponseBody is the type of the "externalKeys" service
+// "verifyGcpKmsKey" endpoint HTTP response body for the "invalid" error.
+type VerifyGcpKmsKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyInvariantViolationResponseBody is the type of the
+// "externalKeys" service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type VerifyGcpKmsKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyUnexpectedResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "unexpected"
+// error.
+type VerifyGcpKmsKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyGcpKmsKeyGatewayErrorResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type VerifyGcpKmsKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3916,6 +4118,168 @@ func NewGetGcpKmsKeyGatewayError(body *GetGcpKmsKeyGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewVerifyGcpKmsKeyVerifyKmsKeyResultOK builds a "externalKeys" service
+// "verifyGcpKmsKey" endpoint result from a HTTP "OK" response.
+func NewVerifyGcpKmsKeyVerifyKmsKeyResultOK(body *VerifyGcpKmsKeyResponseBody) *externalkeys.VerifyKmsKeyResult {
+	v := &externalkeys.VerifyKmsKeyResult{
+		Verified:     *body.Verified,
+		ProbeOutcome: *body.ProbeOutcome,
+		Detail:       body.Detail,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyUnauthorized builds a externalKeys service verifyGcpKmsKey
+// endpoint unauthorized error.
+func NewVerifyGcpKmsKeyUnauthorized(body *VerifyGcpKmsKeyUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyForbidden builds a externalKeys service verifyGcpKmsKey
+// endpoint forbidden error.
+func NewVerifyGcpKmsKeyForbidden(body *VerifyGcpKmsKeyForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyBadRequest builds a externalKeys service verifyGcpKmsKey
+// endpoint bad_request error.
+func NewVerifyGcpKmsKeyBadRequest(body *VerifyGcpKmsKeyBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyNotFound builds a externalKeys service verifyGcpKmsKey
+// endpoint not_found error.
+func NewVerifyGcpKmsKeyNotFound(body *VerifyGcpKmsKeyNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyConflict builds a externalKeys service verifyGcpKmsKey
+// endpoint conflict error.
+func NewVerifyGcpKmsKeyConflict(body *VerifyGcpKmsKeyConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyUnsupportedMedia builds a externalKeys service
+// verifyGcpKmsKey endpoint unsupported_media error.
+func NewVerifyGcpKmsKeyUnsupportedMedia(body *VerifyGcpKmsKeyUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyInvalid builds a externalKeys service verifyGcpKmsKey
+// endpoint invalid error.
+func NewVerifyGcpKmsKeyInvalid(body *VerifyGcpKmsKeyInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyInvariantViolation builds a externalKeys service
+// verifyGcpKmsKey endpoint invariant_violation error.
+func NewVerifyGcpKmsKeyInvariantViolation(body *VerifyGcpKmsKeyInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyUnexpected builds a externalKeys service verifyGcpKmsKey
+// endpoint unexpected error.
+func NewVerifyGcpKmsKeyUnexpected(body *VerifyGcpKmsKeyUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyGatewayError builds a externalKeys service verifyGcpKmsKey
+// endpoint gateway_error error.
+func NewVerifyGcpKmsKeyGatewayError(body *VerifyGcpKmsKeyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteAwsKmsKeyUnauthorized builds a externalKeys service deleteAwsKmsKey
 // endpoint unauthorized error.
 func NewDeleteAwsKmsKeyUnauthorized(body *DeleteAwsKmsKeyUnauthorizedResponseBody) *goa.ServiceError {
@@ -4590,6 +4954,23 @@ func ValidateGetGcpKmsKeyResponseBody(body *GetGcpKmsKeyResponseBody) (err error
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyResponseBody runs the validations defined on
+// VerifyGcpKmsKeyResponseBody
+func ValidateVerifyGcpKmsKeyResponseBody(body *VerifyGcpKmsKeyResponseBody) (err error) {
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	if body.ProbeOutcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("probe_outcome", "body"))
+	}
+	if body.ProbeOutcome != nil {
+		if !(*body.ProbeOutcome == "verified" || *body.ProbeOutcome == "credential_deleted" || *body.ProbeOutcome == "credential_unusable" || *body.ProbeOutcome == "invalid_resource_name" || *body.ProbeOutcome == "key_not_found" || *body.ProbeOutcome == "permission_denied" || *body.ProbeOutcome == "key_unusable" || *body.ProbeOutcome == "unsupported_algorithm" || *body.ProbeOutcome == "algorithm_mismatch" || *body.ProbeOutcome == "signature_invalid" || *body.ProbeOutcome == "unavailable" || *body.ProbeOutcome == "unexpected") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.probe_outcome", *body.ProbeOutcome, []any{"verified", "credential_deleted", "credential_unusable", "invalid_resource_name", "key_not_found", "permission_denied", "key_unusable", "unsupported_algorithm", "algorithm_mismatch", "signature_invalid", "unavailable", "unexpected"}))
+		}
 	}
 	return
 }
@@ -6733,6 +7114,246 @@ func ValidateGetGcpKmsKeyUnexpectedResponseBody(body *GetGcpKmsKeyUnexpectedResp
 // ValidateGetGcpKmsKeyGatewayErrorResponseBody runs the validations defined on
 // getGcpKmsKey_gateway_error_response_body
 func ValidateGetGcpKmsKeyGatewayErrorResponseBody(body *GetGcpKmsKeyGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyUnauthorizedResponseBody runs the validations defined
+// on verifyGcpKmsKey_unauthorized_response_body
+func ValidateVerifyGcpKmsKeyUnauthorizedResponseBody(body *VerifyGcpKmsKeyUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyForbiddenResponseBody runs the validations defined on
+// verifyGcpKmsKey_forbidden_response_body
+func ValidateVerifyGcpKmsKeyForbiddenResponseBody(body *VerifyGcpKmsKeyForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyBadRequestResponseBody runs the validations defined
+// on verifyGcpKmsKey_bad_request_response_body
+func ValidateVerifyGcpKmsKeyBadRequestResponseBody(body *VerifyGcpKmsKeyBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyNotFoundResponseBody runs the validations defined on
+// verifyGcpKmsKey_not_found_response_body
+func ValidateVerifyGcpKmsKeyNotFoundResponseBody(body *VerifyGcpKmsKeyNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyConflictResponseBody runs the validations defined on
+// verifyGcpKmsKey_conflict_response_body
+func ValidateVerifyGcpKmsKeyConflictResponseBody(body *VerifyGcpKmsKeyConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyUnsupportedMediaResponseBody runs the validations
+// defined on verifyGcpKmsKey_unsupported_media_response_body
+func ValidateVerifyGcpKmsKeyUnsupportedMediaResponseBody(body *VerifyGcpKmsKeyUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyInvalidResponseBody runs the validations defined on
+// verifyGcpKmsKey_invalid_response_body
+func ValidateVerifyGcpKmsKeyInvalidResponseBody(body *VerifyGcpKmsKeyInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyInvariantViolationResponseBody runs the validations
+// defined on verifyGcpKmsKey_invariant_violation_response_body
+func ValidateVerifyGcpKmsKeyInvariantViolationResponseBody(body *VerifyGcpKmsKeyInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyUnexpectedResponseBody runs the validations defined
+// on verifyGcpKmsKey_unexpected_response_body
+func ValidateVerifyGcpKmsKeyUnexpectedResponseBody(body *VerifyGcpKmsKeyUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyGcpKmsKeyGatewayErrorResponseBody runs the validations defined
+// on verifyGcpKmsKey_gateway_error_response_body
+func ValidateVerifyGcpKmsKeyGatewayErrorResponseBody(body *VerifyGcpKmsKeyGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
