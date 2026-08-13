@@ -82,6 +82,12 @@ export function AssistantOverviewSettings({
     if (current.name.trim() === "") {
       return "Name cannot be empty";
     }
+    if (
+      current.maxConcurrency.trim() === "" ||
+      current.warmTtlSeconds.trim() === ""
+    ) {
+      return "Concurrency and warm TTL cannot be empty";
+    }
     const concurrency = Number(current.maxConcurrency);
     if (
       !Number.isInteger(concurrency) ||

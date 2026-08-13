@@ -22,6 +22,7 @@ import { AssistantToolsetRef } from "@gram/client/models/components/assistanttoo
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -160,7 +161,12 @@ export function AssistantMCPServersSection({
           level="component"
           reason="You need project write access to attach MCP servers."
         >
-          <Button variant="tertiary" size="sm" onClick={() => setAddOpen(true)}>
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setAddOpen(true)}
+            disabled={update.isPending}
+          >
             <Button.LeftIcon>
               <Icon name="plus" className="h-3 w-3" />
             </Button.LeftIcon>
@@ -194,6 +200,7 @@ export function AssistantMCPServersSection({
         open={addOpen}
         onOpenChange={setAddOpen}
         attached={attached}
+        saving={update.isPending}
         onAdd={addRefs}
       />
     </div>
@@ -295,11 +302,13 @@ function AddServersDialog({
   open,
   onOpenChange,
   attached,
+  saving,
   onAdd,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   attached: AttachedRef[];
+  saving: boolean;
   onAdd: (refs: AttachedRef[]) => void;
 }): JSX.Element {
   const gramProject = useProjectSlugForRequests();
@@ -309,6 +318,14 @@ function AddServersDialog({
     undefined,
     { throwOnError: false, enabled: open },
   );
+  const { data: endpointsResult } = useMcpEndpoints(
+    { gramProject },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: open,
+    },
+  );
   const [selected, setSelected] = useState<Map<string, AttachedRef>>(new Map());
 
   const attachedKeys = useMemo(
@@ -317,12 +334,26 @@ function AddServersDialog({
   );
 
   const options = useMemo(() => {
+    // Mirror the attach-time validation in the assistants service: tunneled
+    // backends, disabled servers, and servers without a Gram-hosted endpoint
+    // are rejected on write, so don't offer them.
+    const serverIdsWithGramEndpoint = new Set(
+      (endpointsResult?.mcpEndpoints ?? [])
+        .filter((endpoint) => !endpoint.customDomainId)
+        .map((endpoint) => endpoint.mcpServerId),
+    );
     const toolsetOptions = toolsets.map((t): AttachedRef => ({
       kind: "toolset",
       slug: t.slug,
     }));
     const serverOptions = (mcpServersResult?.mcpServers ?? [])
-      .filter((server) => !!server.slug)
+      .filter(
+        (server) =>
+          !!server.slug &&
+          !server.tunneledMcpServerId &&
+          server.visibility !== "disabled" &&
+          serverIdsWithGramEndpoint.has(server.id),
+      )
       .map((server): AttachedRef => ({
         kind: "mcpServer",
         slug: server.slug ?? "",
@@ -330,7 +361,7 @@ function AddServersDialog({
     return [...toolsetOptions, ...serverOptions].filter(
       (ref) => !attachedKeys.has(`${ref.kind}:${ref.slug}`),
     );
-  }, [toolsets, mcpServersResult, attachedKeys]);
+  }, [toolsets, mcpServersResult, endpointsResult, attachedKeys]);
 
   const toggle = (ref: AttachedRef) => {
     const key = `${ref.kind}:${ref.slug}`;
@@ -394,7 +425,7 @@ function AddServersDialog({
             Cancel
           </Button>
           <Button
-            disabled={selected.size === 0}
+            disabled={selected.size === 0 || saving}
             onClick={() => {
               onAdd([...selected.values()]);
               close(false);
