@@ -674,6 +674,29 @@ func TestPolicy_ValidateHTTPURL_AllowsPublicIPLiteral(t *testing.T) {
 	require.Equal(t, "8.8.8.8", u.Hostname())
 }
 
+func TestPolicy_ValidateHTTPURL_AllowsHTTPPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPURL(t.Context(), "http://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPSURL_RejectsHTTPScheme(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPSURL(t.Context(), "http://8.8.8.8/openapi.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPSURL_AllowsPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPSURL(t.Context(), "https://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
 func TestPolicy_ValidateHTTPURL_AllowsPublicHostname(t *testing.T) {
 	t.Parallel()
 	policy := guardian.NewDefaultPolicy(

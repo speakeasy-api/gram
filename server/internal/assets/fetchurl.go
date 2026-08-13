@@ -29,7 +29,7 @@ func outboundFetchClient(policy *guardian.Policy, timeout time.Duration) *guardi
 		if len(via) >= fetchURLMaxRedirects {
 			return fmt.Errorf("stopped after %d redirects", fetchURLMaxRedirects)
 		}
-		if _, err := policy.ValidateHTTPURL(req.Context(), req.URL.String()); err != nil {
+		if _, err := policy.ValidateHTTPSURL(req.Context(), req.URL.String()); err != nil {
 			return fmt.Errorf("redirect url: %w", err)
 		}
 		return nil

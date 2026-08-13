@@ -35,6 +35,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"syscall"
 	"time"
 
@@ -505,17 +506,33 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 	return nil
 }
 
-// ValidateHTTPURL checks that rawURL is an absolute http(s) URL whose host is
-// permitted by the policy's CIDR blocklist. It validates the URL string and
-// resolves the host; it does not connect. Runtime enforcement still happens
-// via [Policy.Dialer] on the subsequent request, including each redirect.
+// ValidateHTTPURL checks that rawURL is an absolute http or https URL whose
+// host is permitted by the policy's CIDR blocklist. It validates the URL
+// string and resolves the host; it does not connect. Runtime enforcement still
+// happens via [Policy.Dialer] on the subsequent request, including each
+// redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
+// should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
+// the clear.
 func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"})
+}
+
+// ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Use it for
+// user-supplied fetch URLs so the request cannot be MITM'd in transit.
+func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"})
+}
+
+func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
 	}
 
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if !slices.Contains(schemes, u.Scheme) {
+		if len(schemes) == 1 {
+			return nil, fmt.Errorf("url scheme must be %s", schemes[0])
+		}
 		return nil, fmt.Errorf("url scheme must be http or https")
 	}
 

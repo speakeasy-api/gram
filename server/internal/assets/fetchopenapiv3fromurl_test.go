@@ -2,6 +2,7 @@ package assets_test
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
@@ -43,17 +44,38 @@ func fetchOpenAPIForm(rawURL string) *gen.FetchOpenAPIv3FromURLForm {
 	}
 }
 
+func newTLSOpenAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewTLSServer(handler)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func unsafeFetchPolicy(t *testing.T, blocklist []string, resolver dns.Resolver, servers ...*httptest.Server) *guardian.Policy {
+	t.Helper()
+	pool := x509.NewCertPool()
+	for _, srv := range servers {
+		pool.AddCert(srv.Certificate())
+	}
+	opts := []func(*guardian.Policy){guardian.WithTLSRootCAs(pool)}
+	if resolver != nil {
+		opts = append(opts, guardian.WithResolver(resolver))
+	}
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), blocklist, opts...)
+	require.NoError(t, err)
+	return policy
+}
+
 func TestService_FetchOpenAPIv3FromURL_Success(t *testing.T) {
 	t.Parallel()
 
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := newTLSOpenAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write([]byte(fetchOpenAPIYAML))
-	}))
-	t.Cleanup(upstream.Close)
+	})
 
-	ctx, ti := newTestAssetsService(t)
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, upstream))
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
 	require.NoError(t, err)
 
@@ -83,12 +105,13 @@ func TestService_FetchOpenAPIv3FromURL_Unauthorized(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
-func TestService_FetchOpenAPIv3FromURL_RejectsNonHTTPScheme(t *testing.T) {
+func TestService_FetchOpenAPIv3FromURL_RejectsNonHTTPSScheme(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
 
 	for _, rawURL := range []string{
+		"http://example.com/openapi.yaml",
 		"file:///etc/passwd",
 		"ftp://example.com/openapi.yaml",
 		"gopher://example.com/1",
@@ -121,12 +144,12 @@ func TestService_FetchOpenAPIv3FromURL_RejectsBlockedIPLiterals(t *testing.T) {
 	ctx, ti := newTestAssetsServiceWithPolicy(t, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
 
 	for _, rawURL := range []string{
-		"http://127.0.0.1/openapi.yaml",
-		"http://10.0.0.1/openapi.yaml",
-		"http://172.16.0.1/openapi.yaml",
-		"http://192.168.1.1/openapi.yaml",
-		"http://169.254.169.254/latest/meta-data/",
-		"http://[::1]/openapi.yaml",
+		"https://127.0.0.1/openapi.yaml",
+		"https://10.0.0.1/openapi.yaml",
+		"https://172.16.0.1/openapi.yaml",
+		"https://192.168.1.1/openapi.yaml",
+		"https://169.254.169.254/latest/meta-data/",
+		"https://[::1]/openapi.yaml",
 	} {
 		_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(rawURL))
 		var oopsErr *oops.ShareableError
@@ -154,7 +177,7 @@ func TestService_FetchOpenAPIv3FromURL_RejectsBlockedHostname(t *testing.T) {
 
 	ctx, ti := newTestAssetsServiceWithPolicy(t, policy)
 
-	_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm("http://"+blockedHost+"/openapi.yaml"))
+	_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm("https://"+blockedHost+"/openapi.yaml"))
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -178,23 +201,16 @@ func TestService_FetchOpenAPIv3FromURL_RedirectToBlockedHost(t *testing.T) {
 	})
 
 	// Block TEST-NET-3 only; loopback stays reachable so the httptest
-	// server (which listens on 127.0.0.1) can serve the initial request.
-	policy, err := guardian.NewUnsafePolicy(
-		testenv.NewTracerProvider(t),
-		[]string{"203.0.113.0/24"},
-		guardian.WithResolver(mockResolver),
-	)
-	require.NoError(t, err)
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Location", "http://"+blockedHost+"/openapi.yaml")
+	// TLS server (which listens on 127.0.0.1) can serve the initial request.
+	upstream := newTLSOpenAPIServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://"+blockedHost+"/openapi.yaml")
 		w.WriteHeader(http.StatusFound)
-	}))
-	t.Cleanup(upstream.Close)
+	})
+	policy := unsafeFetchPolicy(t, []string{"203.0.113.0/24"}, mockResolver, upstream)
 
 	ctx, ti := newTestAssetsServiceWithPolicy(t, policy)
 
-	_, err = ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL))
+	_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL))
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -206,18 +222,15 @@ func TestService_FetchOpenAPIv3FromURL_RedirectToBlockedHost(t *testing.T) {
 func TestService_FetchOpenAPIv3FromURL_FollowsAllowedRedirect(t *testing.T) {
 	t.Parallel()
 
-	dest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	dest := newTLSOpenAPIServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write([]byte(fetchOpenAPIYAML))
-	}))
-	t.Cleanup(dest.Close)
-
-	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	})
+	src := newTLSOpenAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, dest.URL+"/openapi.yaml", http.StatusFound)
-	}))
-	t.Cleanup(src.Close)
+	})
 
-	ctx, ti := newTestAssetsService(t)
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, src, dest))
 
 	result, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(src.URL))
 	require.NoError(t, err)
@@ -239,22 +252,15 @@ func TestService_FetchOpenAPIv3FromURL_RedirectToUnresolvableHost(t *testing.T) 
 		},
 	})
 
-	policy, err := guardian.NewUnsafePolicy(
-		testenv.NewTracerProvider(t),
-		[]string{},
-		guardian.WithResolver(mockResolver),
-	)
-	require.NoError(t, err)
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Location", "http://"+brokenHost+"/openapi.yaml")
+	upstream := newTLSOpenAPIServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://"+brokenHost+"/openapi.yaml")
 		w.WriteHeader(http.StatusFound)
-	}))
-	t.Cleanup(upstream.Close)
+	})
+	policy := unsafeFetchPolicy(t, []string{}, mockResolver, upstream)
 
 	ctx, ti := newTestAssetsServiceWithPolicy(t, policy)
 
-	_, err = ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL))
+	_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL))
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -267,13 +273,12 @@ func TestService_FetchOpenAPIv3FromURL_RedirectToUnresolvableHost(t *testing.T) 
 func TestService_FetchOpenAPIv3FromURL_RedirectsCapped(t *testing.T) {
 	t.Parallel()
 
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := newTLSOpenAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", r.URL.Path+"/next")
 		w.WriteHeader(http.StatusFound)
-	}))
-	t.Cleanup(upstream.Close)
+	})
 
-	ctx, ti := newTestAssetsService(t)
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, upstream))
 
 	_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL+"/start"))
 
@@ -284,12 +289,44 @@ func TestService_FetchOpenAPIv3FromURL_RedirectsCapped(t *testing.T) {
 	require.Contains(t, oopsErr.String(), "stopped after 3 redirects")
 }
 
+func TestService_FetchOpenAPIv3FromURL_RejectsHTTPRedirect(t *testing.T) {
+	t.Parallel()
+
+	upstream := newTLSOpenAPIServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "http://8.8.8.8/openapi.yaml")
+		w.WriteHeader(http.StatusFound)
+	})
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, upstream))
+
+	_, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL))
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, "error fetching URL", oopsErr.Error())
+	require.NotErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestService_FetchImageFromURL_RejectsHTTPScheme(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAssetsService(t)
+
+	_, err := ti.service.FetchImageFromURL(ctx, "http://example.com/favicon.ico")
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, "invalid URL", oopsErr.Error())
+}
+
 func TestService_FetchImageFromURL_RejectsBlockedIPLiteral(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsServiceWithPolicy(t, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
 
-	_, err := ti.service.FetchImageFromURL(ctx, "http://169.254.169.254/latest/meta-data/")
+	_, err := ti.service.FetchImageFromURL(ctx, "https://169.254.169.254/latest/meta-data/")
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

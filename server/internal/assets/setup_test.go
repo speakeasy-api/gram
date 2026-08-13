@@ -60,8 +60,8 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
 	tracerProvider := testenv.NewTracerProvider(t)
-	// UnsafePolicy with an empty blocklist lets httptest.NewServer (loopback)
-	// succeed. SSRF tests that need the production CIDR set use
+	// UnsafePolicy with an empty blocklist lets httptest loopback succeed.
+	// SSRF tests that need the production CIDR set use
 	// [newTestAssetsServiceWithPolicy] with [guardian.NewDefaultPolicy].
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
