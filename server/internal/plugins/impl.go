@@ -1636,12 +1636,13 @@ func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.Aut
 }
 
 // publishUpToDate reports whether the project's current plugin state matches
-// what was last published, by recomputing the live MCP fingerprint the same way
-// publishProject does and comparing both it and the current hooks generator
-// version to what the connection last recorded. It returns nil ("unknown") when
-// freshness can't be determined — the connection predates the hooks/MCP split,
-// or recomputing the fingerprint fails — so a transient compute error degrades
-// the status read rather than failing it.
+// what a publish would produce for this org, by recomputing the live MCP
+// fingerprint the same way publishProject does and — only when the org is
+// cleared for the current hooks version by the phased rollout — comparing the
+// hooks generator version and config to what the connection last recorded. It
+// returns nil ("unknown") when freshness can't be determined — the connection
+// predates the hooks/MCP split, or recomputing the fingerprint fails — so a
+// transient compute error degrades the status read rather than failing it.
 func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *bool {
 	// Connections published before the hooks/MCP split carry no stored MCP
 	// fingerprints, so there's nothing to compare against.
@@ -1693,13 +1694,28 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
 	}
 
-	// Up to date only when both components match what was last published: the MCP
-	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
-	// config (so a marketplace rename or browser-login toggle that hasn't
-	// propagated to the hooks subtree yet reads as stale rather than current).
-	upToDate := maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
-		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
-		storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
+	// The hooks component counts against freshness only when the org is cleared
+	// for the current generator version. publishProject applies the same
+	// eligibility gate and carries a gated org's published hooks subtree
+	// verbatim, so for a gated org the published hooks ARE its target: comparing
+	// them against the current constant would read "stale" on every generator
+	// bump, and no publish could ever clear it. A hook-affecting config change
+	// while gated (hooksConfigDeferred) is likewise not actionable — it applies
+	// automatically once the rollout pin advances — so it must not read as stale
+	// either. The eligibility inputs mirror the dashboard publish path
+	// (PublishPlugins), which passes the same auth-context org id and slug.
+	hooksCurrent := true
+	if s.hooksRolloutEligible(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
+		hooksCurrent = conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
+			storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
+	}
+
+	// Up to date only when both components match what was last published: the
+	// MCP per-plugin fingerprints, and (for rollout-cleared orgs) the hooks
+	// generator version plus the hook-affecting config (so a marketplace rename
+	// or browser-login toggle that hasn't propagated to the hooks subtree yet
+	// reads as stale rather than current).
+	upToDate := maps.Equal(mcpFingerprints, publishedMCPFingerprints) && hooksCurrent
 	return &upToDate
 }
 
