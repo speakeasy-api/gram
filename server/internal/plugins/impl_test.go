@@ -1388,6 +1388,80 @@ func TestPluginsService_GetPublishStatus_StaleAfterEdit(t *testing.T) {
 	require.NotNil(t, status.LastPublishedAt)
 }
 
+// publishedFreshnessFixture publishes a minimal project and rewinds its stored
+// hooks version to "0", simulating a hooks generator bump that shipped after the
+// org's last publish. Callers then read GetPublishStatus under different rollout
+// clearances.
+func publishedFreshnessFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, name+"-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty(name + " Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+}
+
+// A publish-status read must apply the same phased-rollout gate as the publish
+// path. An org not cleared for the current hooks generator version keeps its
+// published hooks by design — every publish carries them verbatim — so a
+// pending hooks bump must not read as "needs syncing": syncing cannot clear it,
+// and the chip would stick until the rollout pin advances.
+func TestPluginsService_GetPublishStatus_GatedOrgIgnoresPendingHooksBump(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	// nil feature provider + non-canary org slug → not cleared for the current
+	// hooks version (the gate fails closed).
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	publishedFreshnessFixture(t, ctx, ti, "Gated Freshness")
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate,
+		"a rollout-gated org pinned to older hooks must not read as needing sync")
+}
+
+// Once the rollout pin clears the org for the current hooks version, the same
+// pending hooks bump must read as stale, prompting a publish that applies it.
+func TestPluginsService_GetPublishStatus_EligibleOrgReadsPendingHooksBumpAsStale(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A pin above any plausible generator version clears this org for the bump.
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
+
+	publishedFreshnessFixture(t, ctx, ti, "Eligible Freshness")
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.False(t, *status.UpToDate,
+		"a cleared org with a pending hooks bump must read as needing sync")
+}
+
 // A Remote MCP-backed (mcp_server) plugin server is emitted into the generated
 // bundle as an HTTP server pointing at its resolved endpoint URL, with no
 // static Authorization header — auth is handled at the HTTP layer via the
