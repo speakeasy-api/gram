@@ -56,6 +56,8 @@ var (
 	ErrBlockedIP = fmt.Errorf("blocked ip")
 )
 
+const defaultDialFallbackDelay = 300 * time.Millisecond
+
 var defaultBlockedCIDRBlocks = []*net.IPNet{
 	// Source: https://www.rfc-editor.org/rfc/rfc5735
 	mustParseCIDR("10.0.0.0/8"),         /* Private network - RFC 1918 */
@@ -567,17 +569,129 @@ func (p *Policy) clientDialContext(options ...func(*dialerOptions)) func(context
 			}
 		}
 
-		dialErrors := make([]error, 0, len(ips))
-		for _, ip := range ips {
-			conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
-			if dialErr == nil {
-				return conn, nil
-			}
-			dialErrors = append(dialErrors, dialErr)
-		}
-
-		return nil, fmt.Errorf("%s: dial resolved addresses: %w", address, errors.Join(dialErrors...))
+		return dialResolvedAddresses(ctx, dialer, network, port, ips)
 	}
+}
+
+type dialResult struct {
+	conn net.Conn
+	err  error
+}
+
+// dialResolvedAddresses races already-validated IPs with the same stagger used
+// by net.Dialer's Happy Eyeballs path. All attempts share the dialer's timeout,
+// so a multi-address host cannot multiply the connection deadline.
+func dialResolvedAddresses(
+	ctx context.Context,
+	dialer *net.Dialer,
+	network string,
+	port string,
+	ips []net.IP,
+) (net.Conn, error) {
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("dial resolved addresses: %w: no addresses", ErrBadHost)
+	}
+
+	ips = interleaveIPFamilies(ips)
+
+	var dialCtx context.Context
+	var cancel context.CancelFunc
+	if dialer.Timeout > 0 {
+		dialCtx, cancel = context.WithTimeout(ctx, dialer.Timeout)
+	} else {
+		dialCtx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+
+	fallbackDelay := dialer.FallbackDelay
+	if fallbackDelay == 0 {
+		fallbackDelay = defaultDialFallbackDelay
+	}
+
+	results := make(chan dialResult, len(ips))
+	for index, ip := range ips {
+		target := net.JoinHostPort(ip.String(), port)
+		go func(delay time.Duration) {
+			if delay > 0 {
+				timer := time.NewTimer(delay)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+				case <-dialCtx.Done():
+					results <- dialResult{conn: nil, err: dialCtx.Err()}
+					return
+				}
+			}
+
+			conn, err := dialer.DialContext(dialCtx, network, target)
+			if err != nil {
+				err = fmt.Errorf("%s: %w", target, err)
+			}
+			results <- dialResult{conn: conn, err: err}
+		}(time.Duration(index) * fallbackDelay)
+	}
+
+	dialErrors := make([]error, 0, len(ips))
+	for remaining := len(ips); remaining > 0; remaining-- {
+		select {
+		case result := <-results:
+			if result.err == nil {
+				cancel()
+				go closeLateDialConnections(results, remaining-1)
+				return result.conn, nil
+			}
+			dialErrors = append(dialErrors, result.err)
+		case <-dialCtx.Done():
+			dialErrors = append(dialErrors, dialCtx.Err())
+			go closeLateDialConnections(results, remaining)
+			return nil, fmt.Errorf("dial resolved addresses: %w", errors.Join(dialErrors...))
+		}
+	}
+
+	return nil, fmt.Errorf("dial resolved addresses: %w", errors.Join(dialErrors...))
+}
+
+func closeLateDialConnections(results <-chan dialResult, remaining int) {
+	for range remaining {
+		result := <-results
+		if result.conn != nil {
+			_ = result.conn.Close()
+		}
+	}
+}
+
+func interleaveIPFamilies(ips []net.IP) []net.IP {
+	if len(ips) < 2 {
+		return ips
+	}
+
+	firstIsIPv4 := ips[0].To4() != nil
+	primary := make([]net.IP, 0, len(ips))
+	secondary := make([]net.IP, 0, len(ips))
+	for _, ip := range ips {
+		if (ip.To4() != nil) == firstIsIPv4 {
+			primary = append(primary, ip)
+		} else {
+			secondary = append(secondary, ip)
+		}
+	}
+	if len(secondary) == 0 {
+		return ips
+	}
+
+	interleaved := make([]net.IP, 0, len(ips))
+	for len(primary) > 0 || len(secondary) > 0 {
+		if len(primary) > 0 {
+			interleaved = append(interleaved, primary[0])
+			primary = primary[1:]
+		}
+		if len(secondary) > 0 {
+			interleaved = append(interleaved, secondary[0])
+			secondary = secondary[1:]
+		}
+	}
+
+	return interleaved
 }
 
 // ValidateHost checks whether the given host is permitted by the policy's
