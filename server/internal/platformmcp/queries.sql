@@ -1262,13 +1262,25 @@ INSERT INTO platform_mcp_onboarding_milestones (
     connection_generation,
     project_id,
     mcp_key
-) VALUES (
+)
+SELECT
     @organization_id,
     'first_value_achieved',
     @connection_id,
     @connection_generation,
     @project_id,
     @mcp_key
+WHERE EXISTS (
+    SELECT 1
+    FROM projects AS project
+    JOIN platform_mcp_connections AS connection
+      ON connection.id = @connection_id
+     AND connection.organization_id = project.organization_id
+     AND connection.active_generation = @connection_generation
+     AND connection.revoked_at IS NULL
+    WHERE project.id = @project_id
+      AND project.organization_id = @organization_id
+      AND project.deleted IS FALSE
 )
 ON CONFLICT (organization_id, project_id, mcp_key)
 WHERE milestone = 'first_value_achieved'
