@@ -1,0 +1,13 @@
+<Style backgroundColor="#FAFAFA" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderWidth="0" borderRadius="0" buttonBodyColor="#121212" buttonTextColor="#FFFFFF" buttonBorderRadius="0" buttonBodyXPadding="22" buttonBodyYPadding="14" buttonTextFontSize="13" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" />
+<Columns gap="0" widths="65,35" verticalAlignment="middle" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+  <ColumnItem><Paragraph fontSize="21" lineHeight="100"><Strong>speakeasy</Strong></Paragraph></ColumnItem>
+  <ColumnItem><Paragraph align="right" fontSize="10" lineHeight="140"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph></ColumnItem>
+</Columns>
+<Paragraph fontSize="11" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">ENTERPRISE ONBOARDING</Strong></Paragraph>
+<H1 paddingRight="40" paddingBottom="26" paddingLeft="40">Set up your AI control plane</H1>
+<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">Use the guided setup to configure Speakeasy for your organization. You can return to setup at any time.</Paragraph>
+<Button href="{data.setup_link}" paddingRight="40" paddingBottom="48" paddingLeft="40">Start setup →</Button>
+<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="10" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">You’re receiving this email because you were invited to administer Speakeasy for your organization.</Paragraph>
+</Section>

@@ -1,0 +1,17 @@
+<Style backgroundColor="#FAFAFA" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderWidth="0" borderRadius="0" buttonBodyColor="#121212" buttonTextColor="#FFFFFF" buttonBorderRadius="0" buttonBodyXPadding="22" buttonBodyYPadding="14" buttonTextFontSize="13" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textLinkColor="#121212" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" />
+<Columns gap="0" widths="65,35" verticalAlignment="middle" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+  <ColumnItem><Paragraph fontSize="21" lineHeight="100"><Strong>speakeasy</Strong></Paragraph></ColumnItem>
+  <ColumnItem><Paragraph align="right" fontSize="10" lineHeight="140"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph></ColumnItem>
+</Columns>
+<Paragraph fontSize="11" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">{data.email_eyebrow}</Strong></Paragraph>
+<H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.email_headline}</H1>
+<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.email_body}</Paragraph>
+<Section blockColor="#FFFFFF" blockBorderColor="#DBDBDB" blockBorderWidth="1" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
+  <Paragraph fontSize="10" lineHeight="140"><Strong textColor="#757575">{data.detail_label}</Strong></Paragraph>
+  <Paragraph fontSize="14" lineHeight="155" paddingTop="8"><Text textColor="#121212">{data.detail_value}</Text></Paragraph>
+</Section>
+<Button href="{data.action_url}" paddingTop="32" paddingRight="40" paddingBottom="48" paddingLeft="40">{data.action_label} →</Button>
+<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="10" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">{data.footer_reason}</Paragraph>
+</Section>

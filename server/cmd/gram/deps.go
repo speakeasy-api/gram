@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -71,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -81,6 +83,23 @@ import (
 )
 
 func noopShutdown(context.Context) error { return nil }
+
+func newEmailService(ctx context.Context, c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*email.Service, error) {
+	ids, err := email.ParseTemplateIDs(c.String("email-template-ids"))
+	if err != nil {
+		return nil, fmt.Errorf("load email template IDs: %w", err)
+	}
+
+	enabled := loops.IsConfigured(c.String("loops-api-key"))
+	if enabled {
+		if err := ids.ValidateRegistered(); err != nil {
+			return nil, fmt.Errorf("validate email template IDs: %w", err)
+		}
+	}
+
+	sender := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+	return email.NewService(logger, sender, ids, enabled), nil
+}
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	var cfgLoader cli.BeforeFunc = func(ctx *cli.Context) error { return nil }
