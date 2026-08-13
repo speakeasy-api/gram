@@ -509,11 +509,15 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// nonce behind — and so a bad name fails before the identity-provider hop
 	// rather than after it. Only when the parameter is present: a malformed
 	// value must never be able to block an ordinary login.
-	orgName := strings.TrimSpace(conv.PtrValOr(payload.OrgName, ""))
-	if orgName != "" {
-		if err := validateOrgName(orgName); err != nil {
+	orgName := conv.PtrValOr(payload.OrgName, "")
+	if strings.TrimSpace(orgName) != "" {
+		validated, err := validateOrgName(orgName)
+		if err != nil {
 			return nil, err
 		}
+		orgName = validated
+	} else {
+		orgName = ""
 	}
 
 	// An email means the sign-up page collected one to pre-fill on the identity
@@ -946,7 +950,11 @@ type orgProvisionOptions struct {
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
 
-	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
+	base, err := orgslug.Base(orgName)
+	if err != nil {
+		return empty, fmt.Errorf("derive slug base: %w", err)
+	}
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, base)
 	if err != nil {
 		return empty, fmt.Errorf("find unique slug: %w", err)
 	}
@@ -982,11 +990,12 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("user already has an active organization"), "user already has an active organization")
 	}
 
-	if err := validateOrgName(payload.OrgName); err != nil {
+	orgName, err := validateOrgName(payload.OrgName)
+	if err != nil {
 		return err
 	}
 
-	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, orgProvisionOptions{
+	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, orgName, orgProvisionOptions{
 		Whitelisted:    true,
 		ProvisionTrial: true,
 	})

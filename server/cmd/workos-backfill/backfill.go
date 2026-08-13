@@ -207,9 +207,9 @@ func backfillOrganizationMetadata(ctx context.Context, repo *orgrepo.Queries, or
 }
 
 func uniqueOrganizationSlug(ctx context.Context, repo orgslug.Lookup, name, fallback string) (string, error) {
-	base := orgslug.Slugify(name)
-	if base == "" {
-		base = fallback
+	base, err := orgslug.StableBase(name, fallback)
+	if err != nil {
+		return "", fmt.Errorf("derive organization slug: %w", err)
 	}
 	slug, err := orgslug.FindUnique(ctx, repo, base)
 	if err != nil {
