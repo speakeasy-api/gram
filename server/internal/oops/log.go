@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,6 +30,55 @@ func LogWarn(ctx context.Context, logger *slog.Logger, err error, args ...slog.A
 	return err
 }
 
+type spanErrorHandlingKey struct{}
+
+type spanErrorHandling struct {
+	mu      sync.Mutex
+	handled []error
+}
+
+// WithSpanErrorHandling returns a context that tracks errors whose span
+// treatment has already been applied by LogError or LogWarn. Error boundaries
+// use this to avoid recording the same returned error again.
+func WithSpanErrorHandling(ctx context.Context) context.Context {
+	return context.WithValue(ctx, spanErrorHandlingKey{}, &spanErrorHandling{mu: sync.Mutex{}, handled: nil})
+}
+
+// SpanErrorHandled reports whether err wraps an error whose span treatment was
+// applied through the logging context.
+func SpanErrorHandled(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+
+	handling, ok := ctx.Value(spanErrorHandlingKey{}).(*spanErrorHandling)
+	if !ok {
+		return false
+	}
+
+	handling.mu.Lock()
+	defer handling.mu.Unlock()
+
+	for _, handled := range handling.handled {
+		if errors.Is(err, handled) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func markSpanErrorHandled(ctx context.Context, err error) {
+	handling, ok := ctx.Value(spanErrorHandlingKey{}).(*spanErrorHandling)
+	if !ok {
+		return
+	}
+
+	handling.mu.Lock()
+	defer handling.mu.Unlock()
+	handling.handled = append(handling.handled, err)
+}
+
 // recordSpan controls whether a non-canceled error is recorded on the span.
 //
 //go:noinline
@@ -36,6 +86,7 @@ func logErr(ctx context.Context, logger *slog.Logger, err error, level slog.Leve
 	if err == nil {
 		return
 	}
+	markSpanErrorHandled(ctx, err)
 
 	msg := err.Error()
 	detail := err.Error()

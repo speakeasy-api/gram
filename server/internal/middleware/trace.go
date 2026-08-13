@@ -26,6 +26,7 @@ func TraceMethods(tracer trace.Tracer) func(goa.Endpoint) goa.Endpoint {
 			}
 
 			ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.%s", svc, method))
+			ctx = oops.WithSpanErrorHandling(ctx)
 			defer span.End()
 
 			val, err := next(ctx, req)
@@ -35,14 +36,16 @@ func TraceMethods(tracer trace.Tracer) func(goa.Endpoint) goa.Endpoint {
 				// client-fault-noise suppression. Re-recording here would duplicate
 				// the exception event and undo that suppression, so only act as a
 				// fallback for errors that never passed through such a helper.
-				if se, ok := errors.AsType[*oops.ShareableError](err); ok {
-					if !se.SpanHandled() {
-						span.SetStatus(codes.Error, se.String())
-						span.RecordError(se, trace.WithStackTrace(true))
+				if !oops.SpanErrorHandled(ctx, err) {
+					if se, ok := errors.AsType[*oops.ShareableError](err); ok {
+						if !se.SpanHandled() {
+							span.SetStatus(codes.Error, se.String())
+							span.RecordError(se, trace.WithStackTrace(true))
+						}
+					} else {
+						span.SetStatus(codes.Error, err.Error())
+						span.RecordError(err, trace.WithStackTrace(true))
 					}
-				} else {
-					span.SetStatus(codes.Error, err.Error())
-					span.RecordError(err, trace.WithStackTrace(true))
 				}
 				return nil, err
 			}
