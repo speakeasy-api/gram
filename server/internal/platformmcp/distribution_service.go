@@ -184,10 +184,13 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		return Distribution{}, fmt.Errorf("get live platform mcp plugin attachment: %w", err)
 	}
 
-	// Preserve the ownership fact across reauthorization. A live attachment that
-	// was originally created by this workflow remains removable by this workflow;
-	// a pre-existing attachment remains administration-owned.
-	created := found && existing.AttachmentWasCreated
+	// Preserve ownership across reauthorization only while the exact attachment
+	// created by this workflow remains live. An administrator-created replacement
+	// for a deleted workflow attachment remains administration-owned.
+	created := found &&
+		existing.AttachmentWasCreated &&
+		existing.PluginServerID.Valid &&
+		existing.PluginServerID.UUID == live.ID
 	if errors.Is(err, pgx.ErrNoRows) {
 		pluginServerID, attached, err := s.attach(ctx, tx, distributionAuthContext(principal), principal.OrganizationID, target.ProjectID, target.McpServerID.UUID, distributionDisplayName(target))
 		if err != nil {

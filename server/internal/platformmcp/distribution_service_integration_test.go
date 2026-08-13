@@ -174,7 +174,11 @@ func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: distributed.Version})
+	redistributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.Equal(t, distributionStateAttached, redistributed.State)
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: redistributed.Version})
 	require.NoError(t, err)
 	require.Equal(t, distributionStateRemoved, removed.State)
 	require.True(t, removed.AttachmentLive, "removing onboarding state must not delete an administrator replacement")
