@@ -151,16 +151,31 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
 
+	// Fold mode: canonical serves folded identities from the identity_map;
+	// shadow serves literal results and logs how the folded variant would
+	// differ; off keeps the Postgres-side per-request identity expansion.
+	var foldIdentities, shadowFold bool
+	if queryTouchesEmail(groupBy, filters) {
+		foldIdentities, shadowFold = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
+	}
+	if !foldIdentities {
+		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
+	}
+
+	canonicalOrg := ""
+	if foldIdentities {
+		canonicalOrg = authCtx.ActiveOrganizationID
+	}
 	params := repo.AttributeMetricsQueryParams{
-		ProjectIDs:      scope.projectIDs,
-		TimeStart:       timeStart,
-		TimeEnd:         timeEnd,
-		GroupBy:         groupBy,
-		SortBy:          sortBy,
-		Filters:         filters,
-		IntervalSeconds: interval,
+		ProjectIDs:           scope.projectIDs,
+		TimeStart:            timeStart,
+		TimeEnd:              timeEnd,
+		GroupBy:              groupBy,
+		SortBy:               sortBy,
+		Filters:              filters,
+		IntervalSeconds:      interval,
+		CanonicalIdentityOrg: canonicalOrg,
 	}
 	useSkillVersions := groupBy == "skill_version"
 	for _, filter := range filters {
@@ -208,6 +223,12 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	})
 	if err := eg.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
+	}
+
+	// The skill-version path reads raw telemetry through its own builders;
+	// shadow only validates the aggregate fold it will actually replace.
+	if shadowFold && !useSkillVersions {
+		s.shadowCompareCanonicalFold(ctx, authCtx.ActiveOrganizationID, params, tableRows)
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
@@ -474,17 +495,28 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
-	filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
+	var foldIdentities bool
+	if queryTouchesEmail("", filters) {
+		foldIdentities, _ = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
+	}
+	if !foldIdentities {
+		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
+	}
 
+	canonicalOrg := ""
+	if foldIdentities {
+		canonicalOrg = authCtx.ActiveOrganizationID
+	}
 	params := repo.ListSessionsParams{
-		ProjectIDs:       projectIDs,
-		TimeStart:        timeStart,
-		TimeEnd:          timeEnd,
-		Filters:          filters,
-		SortBy:           sortBy,
-		CursorSortValue:  cursorSortValue,
-		CursorGramChatID: cursorGramChatID,
-		Limit:            limit + 1,
+		ProjectIDs:           projectIDs,
+		TimeStart:            timeStart,
+		TimeEnd:              timeEnd,
+		Filters:              filters,
+		SortBy:               sortBy,
+		CursorSortValue:      cursorSortValue,
+		CursorGramChatID:     cursorGramChatID,
+		Limit:                limit + 1,
+		CanonicalIdentityOrg: canonicalOrg,
 	}
 	// Wide windows are served from chat_session_summaries, narrow ones from
 	// raw telemetry_logs (repo.ListSessionsParams.UsesSummaryPath).

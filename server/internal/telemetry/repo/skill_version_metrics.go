@@ -195,7 +195,7 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		existingFilters = append(existingFilters, filter)
 	}
 	var err error
-	sessionBuilder, err = applySessionFilters(sessionBuilder, existingFilters)
+	sessionBuilder, err = applySessionFilters(sessionBuilder, existingFilters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return "", nil, err
 	}
