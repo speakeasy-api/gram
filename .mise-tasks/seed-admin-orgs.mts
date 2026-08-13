@@ -161,7 +161,9 @@ async function main(): Promise<void> {
       disabledAt: days(-1 - (i % 40)),
       // The list column still reads free_trial_ends_at, so set it per row
       // instead of letting the column default make every org look mid-trial.
-      freeTrialEndsAt: days(trial ? trial.endsInDays : -age + 14),
+      // Signup plus 14 days, clamped into the past: without the clamp an org
+      // younger than 14 days gets a future date and reads as mid-trial.
+      freeTrialEndsAt: days(trial ? trial.endsInDays : Math.min(14 - age, -1)),
       memberCount: 1 + (i % 12),
       trial,
       trialTier,
@@ -224,7 +226,7 @@ async function main(): Promise<void> {
     )
     .join(",\n");
   await psql(
-    `INSERT INTO organization_user_relationships (organization_id, user_id, workos_user_id, workos_membership_id) VALUES\n${relationshipValues}\nON CONFLICT DO NOTHING;`,
+    `INSERT INTO organization_user_relationships (organization_id, user_id, workos_user_id, workos_membership_id) VALUES\n${relationshipValues}\nON CONFLICT (organization_id, user_id) DO UPDATE SET workos_user_id = EXCLUDED.workos_user_id, workos_membership_id = EXCLUDED.workos_membership_id, deleted_at = NULL, updated_at = clock_timestamp();`,
   );
 
   const summary = await psql(
