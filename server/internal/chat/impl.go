@@ -2270,6 +2270,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		HTTPMetadata: nil, APIKeyID: "", JSONSchema: &jsonSchema,
 		Reasoning:    &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl: nil, NormalizeOutboundMessages: false,
+		WebSearch: nil, DisableResponseHealing: false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to summarize tool call").LogError(ctx, s.logger)
