@@ -3643,9 +3643,7 @@ WHERE EXISTS (
       AND project.organization_id = $1
       AND project.deleted IS FALSE
 )
-ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
-WHERE attempt_id IS NOT NULL
-DO NOTHING
+ON CONFLICT DO NOTHING
 `
 
 type RecordPlatformMCPOnboardingLifecycleMilestoneParams struct {
@@ -3732,13 +3730,7 @@ INSERT INTO platform_mcp_onboarding_milestones (
     $6,
     $7
 )
-<<<<<<<
-ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id, connection_generation)
-WHERE attempt_id IS NOT NULL
-DO NOTHING
-=======
 ON CONFLICT DO NOTHING
->>>>>>>
 `
 
 type RecordPlatformMCPSetupMilestoneParams struct {

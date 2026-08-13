@@ -1520,13 +1520,7 @@ INSERT INTO platform_mcp_onboarding_milestones (
     @mcp_key,
     @attempt_id
 )
-<<<<<<<
-ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id, connection_generation)
-WHERE attempt_id IS NOT NULL
-DO NOTHING;
-=======
 ON CONFLICT DO NOTHING;
->>>>>>>
 
 -- name: HasPlatformMCPOnboardingRegistrationSucceeded :one
 SELECT EXISTS (
@@ -1624,9 +1618,7 @@ WHERE EXISTS (
       AND project.organization_id = @organization_id
       AND project.deleted IS FALSE
 )
-ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
-WHERE attempt_id IS NOT NULL
-DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- name: RecordPlatformMCPRegistrationSucceeded :exec
 INSERT INTO platform_mcp_onboarding_milestones (
