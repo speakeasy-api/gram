@@ -99,6 +99,11 @@ Identity map:
   contract.
 - Use `{data.variable_name}` everywhere; LMX names are case-sensitive. Never use
   `{DATA_VARIABLE:...}` in LMX.
+- Loops accepts `Columns.gap` only from 12 through 150 and
+  `Paragraph.fontSize` only from 12 through 64. The local manifest validator
+  enforces these provider ranges across every `.lmx` file in the template
+  directory, including the unregistered base. Translate MJML 10px/11px labels
+  to 12px in LMX; preserve their hierarchy, not prohibited literal sizes.
 - State the event or action directly. Delete vague lead-ins such as “a clear read
   on how your organization is tracking.” Prefer one verb-led CTA.
 - Use conditional `<Section>` blocks for variants. Do not invent fallback syntax.
@@ -122,7 +127,8 @@ explicitly managed through Loops, the approved fallback is:
 - omit the spectrum rail rather than replace it with a new accent;
 - use the text-only `speakeasy` / `AI CONTROL PLANE` header;
 - use Inter with the declared UI sans fallback while retaining the approved
-  sizes, hierarchy, light palette, square black CTA, panels, and pale footer.
+  hierarchy, light palette, square black CTA, panels, and pale footer; translate
+  label text below 12px to Loops' 12px minimum.
 
 Those are constrained delivery fallbacks, not a second design. Do not add a dark
 masthead, neon accent, rounded cards, gradient, or substitute palette.
@@ -355,10 +361,11 @@ mise lint:server
 git diff --check
 ```
 
-This checks manifest structure, XML well-formedness, declared/used variables,
-Go contracts, API reconciliation behavior, and runtime ID resolution. Merge CI
-then uses Loops compilation, optimistic revisions, Guardian, and publish; any
-Guardian error blocks the release preparation.
+This checks manifest structure, XML well-formedness and provider attribute
+ranges across every `.lmx` file, declared/used variables, Go contracts, API
+reconciliation behavior, and runtime ID resolution. Merge CI then uses Loops
+compilation, optimistic revisions, Guardian, and publish; any Guardian error
+blocks the release preparation.
 
 ## Screenshots and visual QA
 
