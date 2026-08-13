@@ -2270,6 +2270,11 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		HTTPMetadata: nil, APIKeyID: "", JSONSchema: &jsonSchema,
 		Reasoning:    &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl: nil, NormalizeOutboundMessages: false,
+		// Zero values stated for exhaustruct, deliberately not opting out of
+		// response healing: this call predates the opt-out and keeps its
+		// original behavior. Whether a healed summary (schema-valid filler in
+		// the ops timeline) beats a failed one is the summary feature's call
+		// to make, with a test — not a merge resolution's.
 		WebSearch: nil, DisableResponseHealing: false,
 	})
 	if err != nil {
