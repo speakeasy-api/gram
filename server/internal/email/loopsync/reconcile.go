@@ -150,7 +150,7 @@ func (r *Reconciler) verifyPublishedVariables(ctx context.Context, transactional
 	if err != nil {
 		return fmt.Errorf("verify published email: %w", err)
 	}
-	want := slices.Clone(spec.SourceVariables)
+	want := slices.Clone(spec.PublishedVariables)
 	got := slices.Clone(published.DataVariables)
 	slices.Sort(want)
 	slices.Sort(got)
