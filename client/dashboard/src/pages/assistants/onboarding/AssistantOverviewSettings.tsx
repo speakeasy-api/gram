@@ -81,6 +81,7 @@ export function AssistantOverviewSettings({
           value={assistant.model}
           onValueChange={(model) => void save({ model }).catch(() => {})}
           disabled={disabled}
+          ariaLabel="Model"
           triggerClassName="h-7 max-w-[240px] text-xs"
         />
       </Row>
@@ -95,6 +96,7 @@ export function AssistantOverviewSettings({
           value={assistant.maxConcurrency}
           min={1}
           max={100}
+          ariaLabel="Concurrency"
           disabled={disabled}
           onCommit={(maxConcurrency) => save({ maxConcurrency })}
         />
@@ -105,6 +107,7 @@ export function AssistantOverviewSettings({
           min={0}
           max={3600}
           suffix="s"
+          ariaLabel="Warm TTL in seconds"
           disabled={disabled}
           onCommit={(warmTtlSeconds) => save({ warmTtlSeconds })}
         />
@@ -123,6 +126,7 @@ function EditableNumberValue({
   min,
   max,
   suffix,
+  ariaLabel,
   disabled,
   onCommit,
 }: {
@@ -130,6 +134,7 @@ function EditableNumberValue({
   min: number;
   max: number;
   suffix?: string;
+  ariaLabel: string;
   disabled: boolean;
   onCommit: (value: number) => Promise<void>;
 }): JSX.Element {
@@ -164,6 +169,7 @@ function EditableNumberValue({
     <span className="flex items-center gap-1">
       <Input
         type="number"
+        aria-label={ariaLabel}
         value={draft ?? String(value)}
         onChange={setDraft}
         onBlur={() => void commit()}

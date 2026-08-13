@@ -28,7 +28,7 @@ export function useChatDetailSheet(): {
           {
             onSuccess: () => {
               void invalidateAllListChats(queryClient);
-              setSelectedChatId(null);
+              setSelectedChatId((prev) => (prev === chatId ? null : prev));
             },
           },
         );

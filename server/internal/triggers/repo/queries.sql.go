@@ -368,6 +368,7 @@ SELECT
 FROM assistant_thread_events e
 LEFT JOIN assistant_threads t
     ON t.id = e.assistant_thread_id
+    AND t.project_id = $1
     AND t.deleted IS FALSE
 WHERE e.project_id = $1
   AND e.trigger_instance_id = $2

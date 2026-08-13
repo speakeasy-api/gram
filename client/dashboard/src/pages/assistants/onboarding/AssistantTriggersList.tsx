@@ -14,6 +14,21 @@ import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
+function triggerStatusLabel(status: string): string {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "paused":
+      return "Paused";
+    case "fired":
+      return "Fired";
+    case "cancelled":
+      return "Canceled";
+    default:
+      return status;
+  }
+}
+
 function eventStatusVariant(status: TriggerEventStatus): BadgeVariant {
   switch (status) {
     case TriggerEventStatus.Completed:
@@ -108,7 +123,7 @@ function TriggerRow({
           )}
         </Stack>
         <Badge size="sm" variant="neutral">
-          {trigger.status === "active" ? "Active" : "Paused"}
+          {triggerStatusLabel(trigger.status)}
         </Badge>
       </button>
 

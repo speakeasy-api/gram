@@ -71,6 +71,16 @@ export function AssistantSessionsList({
   const total = data?.total ?? chats.length;
   const rangeLabel = formatDateRangeLabel(dateRange, customRangeLabel);
 
+  // Carry the active range to the full Agent Sessions page so its listing
+  // matches what this tab shows. It reads the same range/from/to params.
+  const viewAllQueryParams: Record<string, string> = customRange
+    ? {
+        assistantId,
+        from: from.toISOString(),
+        to: to.toISOString(),
+      }
+    : { assistantId, range: dateRange };
+
   if (error) {
     return (
       <Text small muted>
@@ -102,10 +112,10 @@ export function AssistantSessionsList({
           </Stack>
         ) : (
           <SessionsContent
-            assistantId={assistantId}
             chats={chats}
             total={total}
             rangeLabel={rangeLabel}
+            viewAllQueryParams={viewAllQueryParams}
             selectedChatId={selectedChatId}
             onOpenChat={openChat}
           />
@@ -118,17 +128,17 @@ export function AssistantSessionsList({
 }
 
 function SessionsContent({
-  assistantId,
   chats,
   total,
   rangeLabel,
+  viewAllQueryParams,
   selectedChatId,
   onOpenChat,
 }: {
-  assistantId: string;
   chats: ChatOverview[];
   total: number;
   rangeLabel: string;
+  viewAllQueryParams: Record<string, string>;
   selectedChatId: string | null;
   onOpenChat: (chatId: string) => void;
 }): JSX.Element {
@@ -207,7 +217,7 @@ function SessionsContent({
 
       {total > Math.min(chats.length, PREVIEW_LIMIT) && (
         <routes.agentSessions.Link
-          queryParams={{ assistantId }}
+          queryParams={viewAllQueryParams}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
         >
           View all sessions
