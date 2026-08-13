@@ -45,6 +45,7 @@ import {
 import { hasRevealableEvent, REVEAL_SCOPE, useUnmaskedMatch } from "./unmask";
 import { useRBAC } from "@/hooks/useRBAC";
 import { invalidateExclusionSurfaces } from "./exclusion-invalidation";
+import { useCelEngine } from "./use-cel-engine";
 
 const GLOBAL_SCOPE = "__global__";
 
@@ -88,6 +89,9 @@ export function ExclusionEditor({
 
   const invalidate = () => invalidateExclusionSurfaces(queryClient);
 
+  // Surface the API's message (e.g. "invalid regex pattern: …") rather than a
+  // generic failure: server-side validation is the backstop for anything the
+  // form couldn't check locally, so its reason must reach the operator.
   const createMutation = useRiskCreateExclusionMutation({
     onSuccess: () => {
       void invalidate();
@@ -96,7 +100,12 @@ export function ExclusionEditor({
       );
       onDone();
     },
-    onError: () => toast.error("Failed to create exclusion."),
+    onError: (err) =>
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to create exclusion.",
+      ),
   });
   const updateMutation = useRiskUpdateExclusionMutation({
     onSuccess: () => {
@@ -104,7 +113,12 @@ export function ExclusionEditor({
       toast.success("Exclusion updated. Findings will update shortly.");
       onDone();
     },
-    onError: () => toast.error("Failed to update exclusion."),
+    onError: (err) =>
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to update exclusion.",
+      ),
   });
 
   const editing = state.mode === "edit" ? state.exclusion : null;
@@ -262,6 +276,13 @@ function ExclusionForm({
   const [error, setError] = useState<string | null>(null);
   const [askPrompt, setAskPrompt] = useState("");
 
+  // Regex patterns are RE2 (compiled by Go on the server and in the
+  // analyzers), so save-time validation must use the wasm engine's RE2
+  // compiler — JS RegExp is a different dialect and rejects valid RE2 like
+  // "(?i)". Loaded only once the criteria box is visible (the wasm asset is
+  // large); if it isn't ready by save time the API validates instead.
+  const engineState = useCelEngine(choice === "custom");
+
   // Dedicated exclusion-suggestion endpoint. The structured fields it returns
   // are serialized through the same mapping the form parses on save, so a
   // suggestion the user accepts untouched is guaranteed to round-trip.
@@ -325,6 +346,13 @@ function ExclusionForm({
     if (!parsed.ok) {
       setError(parsed.error);
       return;
+    }
+    if (parsed.value.matchType === "regex" && engineState.status === "ready") {
+      const compiled = engineState.engine.compileRegex(parsed.value.matchValue);
+      if (!compiled.ok) {
+        setError(`Invalid regex pattern: ${compiled.error}`);
+        return;
+      }
     }
     setError(null);
     onSubmit({ fields: parsed.value, scope, enabled });
