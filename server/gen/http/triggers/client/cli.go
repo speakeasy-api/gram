@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	triggers "github.com/speakeasy-api/gram/server/gen/triggers"
 	goa "goa.design/goa/v3/pkg"
@@ -53,6 +54,59 @@ func BuildListTriggerInstancesPayload(triggersListTriggerInstancesSessionToken s
 		}
 	}
 	v := &triggers.ListTriggerInstancesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListTriggerEventsPayload builds the payload for the triggers
+// listTriggerEvents endpoint from CLI flags.
+func BuildListTriggerEventsPayload(triggersListTriggerEventsID string, triggersListTriggerEventsLimit string, triggersListTriggerEventsSessionToken string, triggersListTriggerEventsProjectSlugInput string) (*triggers.ListTriggerEventsPayload, error) {
+	var err error
+	var id string
+	{
+		id = triggersListTriggerEventsID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var limit int
+	{
+		if triggersListTriggerEventsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(triggersListTriggerEventsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if triggersListTriggerEventsSessionToken != "" {
+			sessionToken = &triggersListTriggerEventsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if triggersListTriggerEventsProjectSlugInput != "" {
+			projectSlugInput = &triggersListTriggerEventsProjectSlugInput
+		}
+	}
+	v := &triggers.ListTriggerEventsPayload{}
+	v.ID = id
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

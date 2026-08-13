@@ -121,6 +121,26 @@ WHERE ti.project_id = @project_id
   AND ti.status = 'active'
   AND ti.deleted IS FALSE;
 
+-- name: ListTriggerEvents :many
+SELECT
+    e.id,
+    e.trigger_instance_id,
+    e.status,
+    e.attempts,
+    e.last_error,
+    e.created_at,
+    e.processed_at,
+    t.chat_id
+FROM assistant_thread_events e
+LEFT JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.deleted IS FALSE
+WHERE e.project_id = @project_id
+  AND e.trigger_instance_id = @trigger_instance_id
+  AND e.deleted IS FALSE
+ORDER BY e.created_at DESC
+LIMIT @row_limit;
+
 -- name: DeleteTriggerInstance :one
 UPDATE trigger_instances
 SET
