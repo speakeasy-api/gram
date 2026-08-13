@@ -58,6 +58,7 @@ import (
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
@@ -133,6 +134,7 @@ func UsageCommands() []string {
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|encrypt-key|disable-key|enable-key)",
+		"platform-mcp (get-onboarding|start-onboarding|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -1557,6 +1559,42 @@ func ParseEndpoint(
 		adminOpenRouterKeysEnableKeyFlags            = flag.NewFlagSet("enable-key", flag.ExitOnError)
 		adminOpenRouterKeysEnableKeyBodyFlag         = adminOpenRouterKeysEnableKeyFlags.String("body", "REQUIRED", "")
 		adminOpenRouterKeysEnableKeySessionTokenFlag = adminOpenRouterKeysEnableKeyFlags.String("session-token", "", "")
+
+		platformMcpFlags = flag.NewFlagSet("platform-mcp", flag.ContinueOnError)
+
+		platformMcpGetOnboardingFlags            = flag.NewFlagSet("get-onboarding", flag.ExitOnError)
+		platformMcpGetOnboardingSessionTokenFlag = platformMcpGetOnboardingFlags.String("session-token", "", "")
+
+		platformMcpStartOnboardingFlags            = flag.NewFlagSet("start-onboarding", flag.ExitOnError)
+		platformMcpStartOnboardingSessionTokenFlag = platformMcpStartOnboardingFlags.String("session-token", "", "")
+
+		platformMcpRecordInstallIntentFlags            = flag.NewFlagSet("record-install-intent", flag.ExitOnError)
+		platformMcpRecordInstallIntentBodyFlag         = platformMcpRecordInstallIntentFlags.String("body", "REQUIRED", "")
+		platformMcpRecordInstallIntentSessionTokenFlag = platformMcpRecordInstallIntentFlags.String("session-token", "", "")
+
+		platformMcpRecordAgentConfigurationCopiedFlags            = flag.NewFlagSet("record-agent-configuration-copied", flag.ExitOnError)
+		platformMcpRecordAgentConfigurationCopiedSessionTokenFlag = platformMcpRecordAgentConfigurationCopiedFlags.String("session-token", "", "")
+
+		platformMcpStartOnboardingSetupFlags            = flag.NewFlagSet("start-onboarding-setup", flag.ExitOnError)
+		platformMcpStartOnboardingSetupSessionTokenFlag = platformMcpStartOnboardingSetupFlags.String("session-token", "", "")
+
+		platformMcpRecheckOnboardingReadinessFlags            = flag.NewFlagSet("recheck-onboarding-readiness", flag.ExitOnError)
+		platformMcpRecheckOnboardingReadinessSessionTokenFlag = platformMcpRecheckOnboardingReadinessFlags.String("session-token", "", "")
+
+		platformMcpDistributeOnboardingCandidateFlags            = flag.NewFlagSet("distribute-onboarding-candidate", flag.ExitOnError)
+		platformMcpDistributeOnboardingCandidateBodyFlag         = platformMcpDistributeOnboardingCandidateFlags.String("body", "REQUIRED", "")
+		platformMcpDistributeOnboardingCandidateSessionTokenFlag = platformMcpDistributeOnboardingCandidateFlags.String("session-token", "", "")
+
+		platformMcpRemoveOnboardingDistributionFlags            = flag.NewFlagSet("remove-onboarding-distribution", flag.ExitOnError)
+		platformMcpRemoveOnboardingDistributionBodyFlag         = platformMcpRemoveOnboardingDistributionFlags.String("body", "REQUIRED", "")
+		platformMcpRemoveOnboardingDistributionSessionTokenFlag = platformMcpRemoveOnboardingDistributionFlags.String("session-token", "", "")
+
+		platformMcpRepairOnboardingPublicationFlags            = flag.NewFlagSet("repair-onboarding-publication", flag.ExitOnError)
+		platformMcpRepairOnboardingPublicationBodyFlag         = platformMcpRepairOnboardingPublicationFlags.String("body", "REQUIRED", "")
+		platformMcpRepairOnboardingPublicationSessionTokenFlag = platformMcpRepairOnboardingPublicationFlags.String("session-token", "", "")
+
+		platformMcpDismissOnboardingFlags            = flag.NewFlagSet("dismiss-onboarding", flag.ExitOnError)
+		platformMcpDismissOnboardingSessionTokenFlag = platformMcpDismissOnboardingFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -3623,6 +3661,18 @@ func ParseEndpoint(
 	adminOpenRouterKeysDisableKeyFlags.Usage = adminOpenRouterKeysDisableKeyUsage
 	adminOpenRouterKeysEnableKeyFlags.Usage = adminOpenRouterKeysEnableKeyUsage
 
+	platformMcpFlags.Usage = platformMcpUsage
+	platformMcpGetOnboardingFlags.Usage = platformMcpGetOnboardingUsage
+	platformMcpStartOnboardingFlags.Usage = platformMcpStartOnboardingUsage
+	platformMcpRecordInstallIntentFlags.Usage = platformMcpRecordInstallIntentUsage
+	platformMcpRecordAgentConfigurationCopiedFlags.Usage = platformMcpRecordAgentConfigurationCopiedUsage
+	platformMcpStartOnboardingSetupFlags.Usage = platformMcpStartOnboardingSetupUsage
+	platformMcpRecheckOnboardingReadinessFlags.Usage = platformMcpRecheckOnboardingReadinessUsage
+	platformMcpDistributeOnboardingCandidateFlags.Usage = platformMcpDistributeOnboardingCandidateUsage
+	platformMcpRemoveOnboardingDistributionFlags.Usage = platformMcpRemoveOnboardingDistributionUsage
+	platformMcpRepairOnboardingPublicationFlags.Usage = platformMcpRepairOnboardingPublicationUsage
+	platformMcpDismissOnboardingFlags.Usage = platformMcpDismissOnboardingUsage
+
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -4068,6 +4118,8 @@ func ParseEndpoint(
 			svcf = adminExternalCredentialsFlags
 		case "admin-open-router-keys":
 			svcf = adminOpenRouterKeysFlags
+		case "platform-mcp":
+			svcf = platformMcpFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -5064,6 +5116,40 @@ func ParseEndpoint(
 
 			case "enable-key":
 				epf = adminOpenRouterKeysEnableKeyFlags
+
+			}
+
+		case "platform-mcp":
+			switch epn {
+			case "get-onboarding":
+				epf = platformMcpGetOnboardingFlags
+
+			case "start-onboarding":
+				epf = platformMcpStartOnboardingFlags
+
+			case "record-install-intent":
+				epf = platformMcpRecordInstallIntentFlags
+
+			case "record-agent-configuration-copied":
+				epf = platformMcpRecordAgentConfigurationCopiedFlags
+
+			case "start-onboarding-setup":
+				epf = platformMcpStartOnboardingSetupFlags
+
+			case "recheck-onboarding-readiness":
+				epf = platformMcpRecheckOnboardingReadinessFlags
+
+			case "distribute-onboarding-candidate":
+				epf = platformMcpDistributeOnboardingCandidateFlags
+
+			case "remove-onboarding-distribution":
+				epf = platformMcpRemoveOnboardingDistributionFlags
+
+			case "repair-onboarding-publication":
+				epf = platformMcpRepairOnboardingPublicationFlags
+
+			case "dismiss-onboarding":
+				epf = platformMcpDismissOnboardingFlags
 
 			}
 
@@ -7010,6 +7096,40 @@ func ParseEndpoint(
 			case "enable-key":
 				endpoint = c.EnableKey()
 				data, err = adminopenrouterkeysc.BuildEnableKeyPayload(*adminOpenRouterKeysEnableKeyBodyFlag, *adminOpenRouterKeysEnableKeySessionTokenFlag)
+			}
+		case "platform-mcp":
+			c := platformmcpc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-onboarding":
+				endpoint = c.GetOnboarding()
+				data, err = platformmcpc.BuildGetOnboardingPayload(*platformMcpGetOnboardingSessionTokenFlag)
+			case "start-onboarding":
+				endpoint = c.StartOnboarding()
+				data, err = platformmcpc.BuildStartOnboardingPayload(*platformMcpStartOnboardingSessionTokenFlag)
+			case "record-install-intent":
+				endpoint = c.RecordInstallIntent()
+				data, err = platformmcpc.BuildRecordInstallIntentPayload(*platformMcpRecordInstallIntentBodyFlag, *platformMcpRecordInstallIntentSessionTokenFlag)
+			case "record-agent-configuration-copied":
+				endpoint = c.RecordAgentConfigurationCopied()
+				data, err = platformmcpc.BuildRecordAgentConfigurationCopiedPayload(*platformMcpRecordAgentConfigurationCopiedSessionTokenFlag)
+			case "start-onboarding-setup":
+				endpoint = c.StartOnboardingSetup()
+				data, err = platformmcpc.BuildStartOnboardingSetupPayload(*platformMcpStartOnboardingSetupSessionTokenFlag)
+			case "recheck-onboarding-readiness":
+				endpoint = c.RecheckOnboardingReadiness()
+				data, err = platformmcpc.BuildRecheckOnboardingReadinessPayload(*platformMcpRecheckOnboardingReadinessSessionTokenFlag)
+			case "distribute-onboarding-candidate":
+				endpoint = c.DistributeOnboardingCandidate()
+				data, err = platformmcpc.BuildDistributeOnboardingCandidatePayload(*platformMcpDistributeOnboardingCandidateBodyFlag, *platformMcpDistributeOnboardingCandidateSessionTokenFlag)
+			case "remove-onboarding-distribution":
+				endpoint = c.RemoveOnboardingDistribution()
+				data, err = platformmcpc.BuildRemoveOnboardingDistributionPayload(*platformMcpRemoveOnboardingDistributionBodyFlag, *platformMcpRemoveOnboardingDistributionSessionTokenFlag)
+			case "repair-onboarding-publication":
+				endpoint = c.RepairOnboardingPublication()
+				data, err = platformmcpc.BuildRepairOnboardingPublicationPayload(*platformMcpRepairOnboardingPublicationBodyFlag, *platformMcpRepairOnboardingPublicationSessionTokenFlag)
+			case "dismiss-onboarding":
+				endpoint = c.DismissOnboarding()
+				data, err = platformmcpc.BuildDismissOnboardingPayload(*platformMcpDismissOnboardingSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14275,6 +14395,214 @@ func adminOpenRouterKeysEnableKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys enable-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+// platformMcpUsage displays the usage of the platform-mcp command and its
+// subcommands.
+func platformMcpUsage() {
+	fmt.Fprintln(os.Stderr, `Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] platform-mcp COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-onboarding: Get the current user's safe Platform MCP onboarding projection for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    start-onboarding: Create or resume the current user's durable Platform MCP onboarding workflow.`)
+	fmt.Fprintln(os.Stderr, `    record-install-intent: Record a selected manual-install client family for the current user's Platform MCP workflow.`)
+	fmt.Fprintln(os.Stderr, `    record-agent-configuration-copied: Record that the user copied the displayed Platform MCP configuration or completed an equivalent supported agent-setup action.`)
+	fmt.Fprintln(os.Stderr, `    start-onboarding-setup: Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.`)
+	fmt.Fprintln(os.Stderr, `    recheck-onboarding-readiness: Force a rate-limited authenticated readiness recheck for the workflow-bound local registration.`)
+	fmt.Fprintln(os.Stderr, `    distribute-onboarding-candidate: Attach the workflow-bound ready local MCP to the selected project's existing Default plugin. The caller supplies only the selected project slug and its opaque server-issued version token.`)
+	fmt.Fprintln(os.Stderr, `    remove-onboarding-distribution: Remove only the workflow-bound MCP from the selected project's existing Default plugin. Registration, readiness, connection, and prior evidence remain intact.`)
+	fmt.Fprintln(os.Stderr, `    repair-onboarding-publication: Retry in-memory local package publication for the workflow-bound distribution without changing its attachment or version.`)
+	fmt.Fprintln(os.Stderr, `    dismiss-onboarding: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s platform-mcp COMMAND --help\n", os.Args[0])
+}
+func platformMcpGetOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp get-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the current user's safe Platform MCP onboarding projection for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp get-onboarding --session-token \"abc123\"")
+}
+
+func platformMcpStartOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp start-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or resume the current user's durable Platform MCP onboarding workflow.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp start-onboarding --session-token \"abc123\"")
+}
+
+func platformMcpRecordInstallIntentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp record-install-intent", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record a selected manual-install client family for the current user's Platform MCP workflow.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp record-install-intent --body '{\n      \"client_family\": \"claude_cowork\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRecordAgentConfigurationCopiedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp record-agent-configuration-copied", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record that the user copied the displayed Platform MCP configuration or completed an equivalent supported agent-setup action.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp record-agent-configuration-copied --session-token \"abc123\"")
+}
+
+func platformMcpStartOnboardingSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp start-onboarding-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp start-onboarding-setup --session-token \"abc123\"")
+}
+
+func platformMcpRecheckOnboardingReadinessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp recheck-onboarding-readiness", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Force a rate-limited authenticated readiness recheck for the workflow-bound local registration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp recheck-onboarding-readiness --session-token \"abc123\"")
+}
+
+func platformMcpDistributeOnboardingCandidateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp distribute-onboarding-candidate", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Attach the workflow-bound ready local MCP to the selected project's existing Default plugin. The caller supplies only the selected project slug and its opaque server-issued version token.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp distribute-onboarding-candidate --body '{\n      \"expected_version\": \"abc123\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRemoveOnboardingDistributionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp remove-onboarding-distribution", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove only the workflow-bound MCP from the selected project's existing Default plugin. Registration, readiness, connection, and prior evidence remain intact.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp remove-onboarding-distribution --body '{\n      \"expected_version\": \"abc123\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRepairOnboardingPublicationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp repair-onboarding-publication", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Retry in-memory local package publication for the workflow-bound distribution without changing its attachment or version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp repair-onboarding-publication --body '{\n      \"expected_version\": \"abc123\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpDismissOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp dismiss-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp dismiss-onboarding --session-token \"abc123\"")
 }
 
 // pluginsUsage displays the usage of the plugins command and its subcommands.
