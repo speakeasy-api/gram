@@ -2323,6 +2323,15 @@ CREATE INDEX IF NOT EXISTS assistant_thread_events_project_id_thread_status_crea
 ON assistant_thread_events (project_id, assistant_thread_id, status, created_at)
 WHERE deleted IS FALSE;
 
+-- Serves per-trigger traffic listings.
+CREATE INDEX IF NOT EXISTS assistant_thread_events_project_id_trigger_created_at_idx
+ON assistant_thread_events (project_id, trigger_instance_id, created_at DESC)
+WHERE deleted IS FALSE AND trigger_instance_id IS NOT NULL;
+
+-- Serves the ON DELETE SET NULL fan-out when a trigger instance is deleted.
+CREATE INDEX IF NOT EXISTS assistant_thread_events_trigger_instance_id_idx
+ON assistant_thread_events (trigger_instance_id);
+
 -- Create the chat_messages table to store individual messages in each chat
 CREATE TABLE IF NOT EXISTS chat_messages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
