@@ -7,12 +7,12 @@
     <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
   </ColumnItem>
 </Columns>
-<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40">{data.email_eyebrow}</Paragraph>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">{data.email_eyebrow}</Strong></Paragraph>
 <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.email_headline}</H1>
 <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.email_body}</Paragraph>
 <Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
-  <Paragraph fontSize="12" lineHeight="140">{data.detail_label}</Paragraph>
-  <Paragraph fontSize="14" lineHeight="155" paddingTop="8">{data.detail_value}</Paragraph>
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">{data.detail_label}</Strong></Paragraph>
+  <Paragraph fontSize="14" lineHeight="155" paddingTop="8"><Text textColor="#121212">{data.detail_value}</Text></Paragraph>
 </Section>
 <Button href="{data.action_url}" paddingTop="32" paddingRight="40" paddingBottom="48" paddingLeft="40">{data.action_label} →</Button>
 <Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">

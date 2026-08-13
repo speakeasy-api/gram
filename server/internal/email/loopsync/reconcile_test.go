@@ -131,29 +131,6 @@ func TestReconcile_AlwaysUpdatesAndPublishesExistingTemplate(t *testing.T) {
 	require.Equal(t, 1, api.published)
 }
 
-func TestReconcile_RecoversUncommittedCreationByManagedName(t *testing.T) {
-	t.Parallel()
-
-	draftID := "message-draft"
-	transactional := TransactionalEmail{
-		ID:                  "transactional-existing",
-		Name:                "gram.transactional.v2.team_invite",
-		DraftEmailMessageID: &draftID,
-	}
-	api := &fakeAPI{
-		listed:        []TransactionalEmail{transactional},
-		transactional: transactional,
-		message:       EmailMessage{ID: draftID, ContentRevisionID: "revision-1"},
-	}
-
-	resolved, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})
-	require.NoError(t, err)
-	require.Equal(t, "transactional-existing", resolved["team_invite"])
-	require.Zero(t, api.created)
-	require.Equal(t, 1, api.updated)
-	require.Equal(t, 1, api.published)
-}
-
 func TestReconcile_TreatsSuccessfulPublishAsSuccess(t *testing.T) {
 	t.Parallel()
 

@@ -19,7 +19,7 @@
     <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">PREVIOUS CYCLE</Strong><Br />{data.previous_total_tokens}</Paragraph>
   </ColumnItem>
   <ColumnItem>
-    <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">CYCLE ELAPSED</Strong><Br />{data.cycle_elapsed_percent}<Text textColor="#121212">%</Text></Paragraph>
+    <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">CYCLE ELAPSED</Strong><Br /><Text textColor="#121212">{data.cycle_elapsed_percent}%</Text></Paragraph>
   </ColumnItem>
   <ColumnItem>
     <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="22" paddingBottom="20" paddingLeft="22"><Strong textColor="#757575">REMAINING</Strong><Br />{data.days_remaining}</Paragraph>
