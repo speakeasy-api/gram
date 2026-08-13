@@ -82,6 +82,7 @@ export function OrgSidebar({
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
+    orgRoutes.encryptionKeys,
   ].some((r) => r.active);
 
   const secureActive = [
@@ -128,6 +129,7 @@ export function OrgSidebar({
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
+    orgRoutes.encryptionKeys,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -211,6 +213,10 @@ export function OrgSidebar({
                     ? [
                         {
                           item: orgRoutes.externalServices,
+                          scope: orgReadOrAdmin,
+                        },
+                        {
+                          item: orgRoutes.encryptionKeys,
                           scope: orgReadOrAdmin,
                         },
                       ]
