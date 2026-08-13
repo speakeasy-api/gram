@@ -351,7 +351,7 @@ func TestEmployeeDetail_CanonicalFold_DeletedUserEmailNotFolded(t *testing.T) {
 
 	departedID, departedEmail := seedConnectedOrgUser(t, ctx, ti, "fold-departed")
 	departedLower := strings.ToLower(departedEmail)
-	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUserFixture(ctx, departedID))
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUser(ctx, departedID))
 
 	// The identity map excludes deleted users, so the departed user's email
 	// can already belong to an active owner in the map.
