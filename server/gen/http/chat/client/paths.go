@@ -47,6 +47,11 @@ func SummarizeChatPath() string {
 	return "/rpc/chat.summarize"
 }
 
+// SummarizeToolCallChatPath returns the URL path to the chat service summarizeToolCall HTTP endpoint.
+func SummarizeToolCallChatPath() string {
+	return "/rpc/chat.summarizeToolCall"
+}
+
 // SubmitFeedbackChatPath returns the URL path to the chat service submitFeedback HTTP endpoint.
 func SubmitFeedbackChatPath() string {
 	return "/rpc/chat.submitFeedback"

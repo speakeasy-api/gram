@@ -86,7 +86,8 @@ const createQueryClient = () =>
 export const queryClient: QueryClient =
   (import.meta.hot?.data?.queryClient as QueryClient) ?? createQueryClient();
 
-if (import.meta.hot) {
+// Vite always provides `hot.data`, but vitest's shim defines `hot` without it.
+if (import.meta.hot?.data) {
   import.meta.hot.data.queryClient = queryClient;
 }
 

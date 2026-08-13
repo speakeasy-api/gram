@@ -36,19 +36,13 @@ type CreateAwsKmsKeyRequestBody struct {
 type UpdateAwsKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The ARN of the AWS KMS key.
-	KeyArn string `form:"key_arn" json:"key_arn" xml:"key_arn"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be an
+	// aws_iam credential belonging to the same organization.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
-	// The signing algorithm of the key.
-	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The AWS principal ARN the customer granted on the key in its key
+	// policy. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -76,19 +70,13 @@ type CreateGcpKmsKeyRequestBody struct {
 type UpdateGcpKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
-	ResourceName string `form:"resource_name" json:"resource_name" xml:"resource_name"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be a
+	// gcp_iam credential belonging to the same organization.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
-	// The signing algorithm of the key.
-	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Gram service-account email the customer granted on the key in
+	// an IAM binding. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -2384,9 +2372,7 @@ func NewCreateAwsKmsKeyRequestBody(p *externalkeys.CreateAwsKmsKeyPayload) *Crea
 func NewUpdateAwsKmsKeyRequestBody(p *externalkeys.UpdateAwsKmsKeyPayload) *UpdateAwsKmsKeyRequestBody {
 	body := &UpdateAwsKmsKeyRequestBody{
 		ID:                     p.ID,
-		KeyArn:                 p.KeyArn,
 		ExternalCredentialID:   p.ExternalCredentialID,
-		Algorithm:              p.Algorithm,
 		Name:                   p.Name,
 		CustomerGrantReference: p.CustomerGrantReference,
 	}
@@ -2411,9 +2397,7 @@ func NewCreateGcpKmsKeyRequestBody(p *externalkeys.CreateGcpKmsKeyPayload) *Crea
 func NewUpdateGcpKmsKeyRequestBody(p *externalkeys.UpdateGcpKmsKeyPayload) *UpdateGcpKmsKeyRequestBody {
 	body := &UpdateGcpKmsKeyRequestBody{
 		ID:                     p.ID,
-		ResourceName:           p.ResourceName,
 		ExternalCredentialID:   p.ExternalCredentialID,
-		Algorithm:              p.Algorithm,
 		Name:                   p.Name,
 		CustomerGrantReference: p.CustomerGrantReference,
 	}

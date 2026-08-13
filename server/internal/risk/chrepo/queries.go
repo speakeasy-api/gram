@@ -104,6 +104,56 @@ func chNullable[T any](p *T) any {
 	return *p
 }
 
+// riskFindingColumns is the full risk_findings column list, in the exact
+// order InsertRiskFindings binds values. The retroactive exclusion queries
+// (retro_exclusion.go) render their INSERT ... SELECT copy projection from
+// this same list so a new column cannot land in one write path and silently
+// default in the other. TestCopyProjection_LockstepWithInsertColumns pins the
+// projection's replacement set against this list; the positional Values()
+// binding in InsertRiskFindings is the one thing no test pins — when editing
+// this list, keep that argument order in lockstep by hand.
+var riskFindingColumns = []string{
+	"id",
+	"created_at",
+	"inserted_at",
+	"organization_id",
+	"project_id",
+	"request_id",
+	"chat_message_id",
+	"content_part_id",
+	"risk_policy_id",
+	"risk_policy_version",
+	"rule_id",
+	"description",
+	"source",
+	"confidence",
+	"tags",
+	"start_pos",
+	"end_pos",
+	"dead_letter_reason",
+	"chat_id",
+	"user_id",
+	"external_user_id",
+	"category",
+	"match_len",
+	"match_redacted",
+	"fingerprint_pepper_version",
+	"fingerprint_global_hs256",
+	"fingerprint_tenant_hs256",
+	"excluded_at",
+	"exclusion_id",
+	"false_positive_at",
+	"message_created_at",
+	"assistant_id",
+	"chat_source",
+	"team",
+	"user_email",
+	"surface",
+	"field",
+	"path",
+	"tool_call_id",
+}
+
 // InsertRiskFindings writes findings using a server-side async insert
 // (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget from
 // CH's perspective: it acks once the rows are queued in CH's async insert
@@ -118,48 +168,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 		"wait_for_async_insert": 0,
 	}))
 
-	builder := sq.Insert("risk_findings").
-		Columns(
-			"id",
-			"created_at",
-			"inserted_at",
-			"organization_id",
-			"project_id",
-			"request_id",
-			"chat_message_id",
-			"content_part_id",
-			"risk_policy_id",
-			"risk_policy_version",
-			"rule_id",
-			"description",
-			"source",
-			"confidence",
-			"tags",
-			"start_pos",
-			"end_pos",
-			"dead_letter_reason",
-			"chat_id",
-			"user_id",
-			"external_user_id",
-			"category",
-			"match_len",
-			"match_redacted",
-			"fingerprint_pepper_version",
-			"fingerprint_global_hs256",
-			"fingerprint_tenant_hs256",
-			"excluded_at",
-			"exclusion_id",
-			"false_positive_at",
-			"message_created_at",
-			"assistant_id",
-			"chat_source",
-			"team",
-			"user_email",
-			"surface",
-			"field",
-			"path",
-			"tool_call_id",
-		)
+	builder := sq.Insert("risk_findings").Columns(riskFindingColumns...)
 
 	// inserted_at must be strictly increasing within this batch, not just
 	// "now" — the read-side dedup (ROW_NUMBER() OVER (PARTITION BY id ORDER BY

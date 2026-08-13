@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -649,6 +651,13 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, session.ActiveOrganizationID)
 		require.NoError(t, err)
 		require.Equal(t, "enterprise", trial.Tier)
+
+		// Callback is unauthenticated, so the audit actor cannot come from an
+		// auth context. The email has to be threaded through provisioning.
+		entry, err := audittest.LatestAuditLogByAction(ctx, instance.conn, audit.ActionOrganizationEnterpriseTrialArmed)
+		require.NoError(t, err)
+		require.NotEmpty(t, entry.ActorDisplay, "signup must attribute the trial to the user who signed up")
+		require.Equal(t, userInfo.Email, entry.ActorDisplay)
 	})
 
 	t.Run("trial notifier failure does not fail signup", func(t *testing.T) {

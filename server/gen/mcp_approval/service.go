@@ -87,7 +87,7 @@ type ApprovalDecision struct {
 	Evidence any
 	// Shape version of the frozen evidence payload, copied from the request at
 	// decision time.
-	EvidenceVersion *int
+	EvidenceVersion int
 	// When the decision was made.
 	DecidedAt string
 }

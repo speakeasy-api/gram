@@ -113,7 +113,7 @@ export function SkillFeedbackSection({
   skillId: string;
   projectId: string;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const query = useSkillFeedbackInfinite(
     { id: skillId, limit: 50 },
     undefined,
@@ -152,7 +152,7 @@ export function SkillFeedbackSection({
           <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-5 text-left">
             <span className="block">
               <Text as="span" variant="subheading" className="block">
-                All agent reviews
+                Agent Feedback
               </Text>
               <Text as="span" small muted className="block">
                 See collection health, recurring findings, and the evidence used

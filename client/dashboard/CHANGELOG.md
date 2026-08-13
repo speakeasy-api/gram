@@ -1,5 +1,64 @@
 # dashboard
 
+## 0.106.0
+
+### Minor Changes
+
+- 6f8d740: Configure which OAuth Client ID Metadata Document clients an MCP server accepts, directly from its authentication settings: choose between Gram's verified client catalog (viewable inline), any spec-valid client, or none at all, and allow additional document URLs beyond the catalog. Custom URLs can be verified before they are added, confirming the document is reachable and valid and naming the client it belongs to.
+- 8ae2c53: Revoke Remote Session credentials upstream via RFC 7009. Remote session issuers gain a `revocation_endpoint`, discovered from the issuer's RFC 8414 metadata document during issuer refresh. When a Remote Session is revoked, Gram now posts the stored token to the issuer's revocation endpoint so the upstream authorization server drops it, instead of leaving a live access/refresh pair that keeps working elsewhere until it expires on its own clock.
+
+  This covers every path that ends a session: revoking one session, revoking all of a client's sessions, deleting a client, which cascades a soft-delete to its sessions, and the consent screen's per-provider "Disconnect" — the one an end user drives rather than an admin. Batches run under bounded concurrency and a single budget for the whole batch, since every session on a client shares one upstream host.
+
+  The upstream call is best-effort by construction: it runs after the local revoke has committed, is bounded by a short timeout, and routes through the guardian egress policy. Failures are logged and metered, never surfaced to the caller — the local revoke is the security control the caller asked for and it has already succeeded. Issuers that advertise no revocation endpoint are recorded as a distinct `skipped` metric outcome rather than folded into success or failure, since that is the expected case for a large share of upstreams. A batch that exhausts its budget before reaching every session records the remainder as `dropped` rather than passing them off as done.
+
+- 7df6ad7: Add a new UI for the Watchdog page.
+- a2b272c: Warn when an identity provider duplicates an issuer URL that already exists, at all three tiers and on both create and edit. The warning is advisory and never blocks the write, since duplicating an issuer has legitimate use cases.
+
+### Patch Changes
+
+- 0e614ac: chat.list accepts a `user_id` filter so callers with project-wide chat visibility can narrow results to a specific Gram user. The Project Assistant dock uses it, together with the dashboard source-kind filter, so "Continue chat" only offers sessions the viewer started from the dashboard.
+- 3fb5ea2: Make skill and environment resources clickable on the access challenges page. Skill rows now link to the project's Skills page and environment rows link to the project's Environments page, instead of rendering a bare resource id.
+- 43107ac: Add compact tool-call rows with separately loaded, persisted two-sentence summaries and risk-first detail expansion.
+- 07e96cf: Hide the composer's cycling example prompts once a file is attached.
+- f552a11: The chat composer recalls past prompts terminal-style: Up walks back through prompts sent from this browser, Down walks forward, and the walk wraps around through the empty draft. History is kept in localStorage, scoped per project.
+- 0e7eb7f: Give the composer's "Add context" picker room to read: a wider pane, tool rows titled by their unqualified name so they stop truncating into identical ellipses, a single type scale across both halves, and a labelled header over the results so skills and tools are told apart while browsing, not only while searching.
+
+  The slash-command menu now drops below the composer when there is not enough room above it, so it stays on screen on the welcome surface instead of opening past the top edge.
+
+- 8589630: Read the employee page's usage stat tiles from the per-user metrics query
+  instead of the employees-list summary. The list query groups a
+  person's telemetry by identity, so those tiles were showing one identity's slice
+  of the usage — for someone on a personal AI account, often the slice with no
+  tokens or cost in it. The metrics query aggregates the same person's rows
+  without grouping them, so the tiles now show their whole total. A failed usage
+  query also surfaces as an error instead of rendering as a legitimate-looking
+  zero.
+- 5ffabf3: Freeze external key identity: `externalKeys.updateAwsKms` and `externalKeys.updateGcpKms` no longer accept `key_arn` / `resource_name` or `algorithm` and cover only `name`, `external_credential_id` and `customer_grant_reference`, so changing what a key is now means deleting it and creating a new one (a breaking change to those two methods). Deleting a key is refused with a conflict while a JSON Web Key Set or published key still references it, and `createGcpKms` now requires a fully-qualified crypto key version path.
+- 8540e53: Link durable block pages to the owning project's risk event log.
+- 8f3fb58: Show the supported client that originated an Agent Session routed through LiteLLM while preserving LiteLLM filtering.
+- abcde04: Logging out now returns `Clear-Site-Data: "cookies", "storage"`, so the browser drops the session cookie across the origin's registrable domain and empties localStorage, sessionStorage, IndexedDB and Cache Storage. Previously teardown relied entirely on an expiring `Set-Cookie` plus a best-effort localStorage sweep, both of which leave data behind when a cookie attribute drifts or a page navigates away mid-logout. The theme preference and project favorites still survive a logout: the dashboard reads them before the request goes out and writes them back once the response lands.
+- 164f45d: Merge the composer's two `@` buttons into a single "Add context" picker covering both skills and tool mentions.
+- 7c02667: Organization names accept punctuation and every script. The old rule allowed
+  only letters, digits, spaces, hyphens and underscores, which turned away
+  "Acme, Inc.", "Bob's Bakery", "Café Zoë", and — more importantly — every
+  company whose name is not written in the Latin alphabet, since a name in
+  Japanese, Chinese, Korean, Cyrillic, Arabic or Hebrew could not clear the rule
+  at all. Names are now capped at 100 characters (counted in characters, so a
+  non-Latin name gets the same room a Latin one does), must carry at least two
+  letters or numbers, and may use anything that renders: control characters, bidi
+  overrides and other invisible formatting are still rejected, and whitespace is
+  normalized. The URL slug is unaffected in shape — it is still derived
+  separately, with a generated fallback for names that contain fewer than two
+  URL-safe characters.
+- c2c59c8: Let organization admins set an organization-wide automatic remote session refresh policy (Disabled, User controlled, or Required) from the MCP Connections page, and surface the effective policy to end users on the OAuth consent screen. Required keeps every eligible connection refreshed and shows the consent control locked; Disabled stops background refresh and states it read-only so users know idle connections will lapse.
+- af354b1: Add a PAYG rate adjustment (%) input to the platform-admin TUM contract price estimator on the billing page. A positive percentage uplifts every pay-as-you-go band rate and a negative one discounts them, so an admin can price a negotiated swing off the list rates without retyping the bands. The adjustment is reflected in the PAYG card's tier table, blended rate, and the committed-vs-PAYG comparison, and a discount-driven "PAYG is cheaper" outcome is attributed to the adjustment instead of being flagged as a pricing-model error.
+- 530feba: Attach files to the Project Assistant. The composer accepts files from the paperclip or by dropping them anywhere on the chat, and the assistant can read them: images and text-like files (including OpenAPI specs) travel with the turn, and anything it cannot read inline comes with a short-lived download link.
+- c07751f: Split skill details into focused pages for content, usage, feedback, versions, and settings.
+- e8d3459: Score Watchdog signals from the matched risk policy's configured score, and simplify the signal drawer to a single Create-exclusion action.
+- 748871c: Watchdog trend percentages now measure change within the current window so
+  they move with the sparkline. Fix category badge labels rendering with
+  clipped glyphs.
+
 ## 0.105.0
 
 ### Minor Changes

@@ -24,7 +24,7 @@ INSERT INTO assets (
 ) VALUES (
     $1
   , $2
-  , $3
+  , $3::uuid
   , $4
   , $5
   , $6
@@ -34,7 +34,7 @@ ON CONFLICT (project_id, sha256) DO UPDATE SET
     deleted_at = NULL,
     url = $2,
     updated_at = clock_timestamp()
-RETURNING id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAssetParams struct {
@@ -61,6 +61,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Name,
 		&i.Url,
 		&i.Kind,
@@ -78,7 +79,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 const getAssetsByID = `-- name: GetAssetsByID :many
 SELECT id, url, sha256, content_type, content_length
 FROM assets
-WHERE project_id = $1
+WHERE project_id = $1::uuid
   AND id = ANY($2::uuid[])
   AND deleted IS FALSE
 `
@@ -127,7 +128,7 @@ SELECT url, content_type, content_length, updated_at
 FROM assets
 WHERE
   id = $1 AND kind = 'chat_attachment'
-  AND project_id = $2
+  AND project_id = $2::uuid
   AND deleted = false
 `
 
@@ -160,7 +161,7 @@ SELECT url, content_type, content_length, updated_at
 FROM assets
 WHERE
   id = $1 AND kind = 'functions'
-  AND project_id = $2
+  AND project_id = $2::uuid
 `
 
 type GetFunctionAssetURLParams struct {
@@ -215,7 +216,7 @@ SELECT url, content_type, content_length, updated_at
 FROM assets
 WHERE
   id = $1 AND kind = 'openapiv3'
-  AND project_id = $2
+  AND project_id = $2::uuid
 `
 
 type GetOpenAPIv3AssetURLParams struct {
@@ -243,7 +244,7 @@ func (q *Queries) GetOpenAPIv3AssetURL(ctx context.Context, arg GetOpenAPIv3Asse
 }
 
 const getProjectAsset = `-- name: GetProjectAsset :one
-SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND id = $2
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1::uuid AND id = $2
 `
 
 type GetProjectAssetParams struct {
@@ -257,6 +258,7 @@ func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Name,
 		&i.Url,
 		&i.Kind,
@@ -272,7 +274,7 @@ func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams
 }
 
 const getProjectAssetBySHA256 = `-- name: GetProjectAssetBySHA256 :one
-SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1 AND sha256 = $2
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1::uuid AND sha256 = $2
 `
 
 type GetProjectAssetBySHA256Params struct {
@@ -286,6 +288,7 @@ func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAss
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Name,
 		&i.Url,
 		&i.Kind,
@@ -301,7 +304,7 @@ func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAss
 }
 
 const listAssets = `-- name: ListAssets :many
-SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1::uuid
 `
 
 func (q *Queries) ListAssets(ctx context.Context, projectID uuid.UUID) ([]Asset, error) {
@@ -316,6 +319,7 @@ func (q *Queries) ListAssets(ctx context.Context, projectID uuid.UUID) ([]Asset,
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
+			&i.OrganizationID,
 			&i.Name,
 			&i.Url,
 			&i.Kind,

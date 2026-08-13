@@ -385,6 +385,7 @@ const (
 
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
+	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
 
 	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
@@ -392,6 +393,10 @@ const (
 	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
 	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
 	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
+	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
+	RiskExclusionMatchTypeKey      = attribute.Key("gram.risk.exclusion_match_type")
+	RiskReconcileRowCountKey       = attribute.Key("gram.risk.reconcile_row_count")
+	RiskReconcileRowsKeptKey       = attribute.Key("gram.risk.reconcile_rows_kept")
 	SpendRuleIDKey                 = attribute.Key("gram.spend.rule_id")
 	RiskSourceKey                  = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey             = attribute.Key("gram.risk.scan.attempt")
@@ -1584,6 +1589,14 @@ func SlogRemoteSessionClientMigratedCount(v int64) slog.Attr {
 	return slog.Int64(string(RemoteSessionClientMigratedCountKey), v)
 }
 
+func RemoteSessionRevokeDroppedCount(v int) attribute.KeyValue {
+	return RemoteSessionRevokeDroppedCountKey.Int(v)
+}
+
+func SlogRemoteSessionRevokeDroppedCount(v int) slog.Attr {
+	return slog.Int(string(RemoteSessionRevokeDroppedCountKey), v)
+}
+
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return UserSessionClientMigratedCountKey.Int64(v)
 }
@@ -1655,6 +1668,26 @@ func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(Ri
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func RiskExclusionID(v string) attribute.KeyValue { return RiskExclusionIDKey.String(v) }
+func SlogRiskExclusionID(v string) slog.Attr      { return slog.String(string(RiskExclusionIDKey), v) }
+
+func RiskExclusionMatchType(v string) attribute.KeyValue {
+	return RiskExclusionMatchTypeKey.String(v)
+}
+func SlogRiskExclusionMatchType(v string) slog.Attr {
+	return slog.String(string(RiskExclusionMatchTypeKey), v)
+}
+
+func RiskReconcileRowCount(v int) attribute.KeyValue { return RiskReconcileRowCountKey.Int(v) }
+func SlogRiskReconcileRowCount(v int) slog.Attr {
+	return slog.Int(string(RiskReconcileRowCountKey), v)
+}
+
+func RiskReconcileRowsKept(v int) attribute.KeyValue { return RiskReconcileRowsKeptKey.Int(v) }
+func SlogRiskReconcileRowsKept(v int) slog.Attr {
+	return slog.Int(string(RiskReconcileRowsKeptKey), v)
+}
 
 func SpendRuleID(v string) attribute.KeyValue { return SpendRuleIDKey.String(v) }
 func SlogSpendRuleID(v string) slog.Attr      { return slog.String(string(SpendRuleIDKey), v) }

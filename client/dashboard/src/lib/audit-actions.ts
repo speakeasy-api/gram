@@ -70,6 +70,8 @@ export const AUDIT_ACTIONS = [
   "mcp_metadata:update",
   "model_provider_key:delete",
   "model_provider_key:upsert",
+  "openrouter-key:disable",
+  "openrouter-key:enable",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
@@ -344,6 +346,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated model provider key";
     case "model_provider_key:delete":
       return "removed model provider key";
+
+    case "openrouter-key:disable":
+      return "disabled platform OpenRouter key";
+    case "openrouter-key:enable":
+      return "enabled platform OpenRouter key";
 
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";

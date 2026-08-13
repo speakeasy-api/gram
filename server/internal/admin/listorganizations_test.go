@@ -283,12 +283,25 @@ func TestListOrganizations_CursorPagination(t *testing.T) {
 	require.Len(t, page2.Organizations, 2)
 	require.Equal(t, "org_c", page2.Organizations[0].ID)
 	require.Equal(t, "org_d", page2.Organizations[1].ID)
-	// Final page is full but exhausts, so next call returns empty + nil cursor.
-	require.NotNil(t, page2.NextCursor)
-	require.Equal(t, "org_d", *page2.NextCursor)
+	// The last page is full and exhausts the table, so it ends the walk.
+	require.Nil(t, page2.NextCursor)
+}
 
-	page3, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Limit: &limit, Cursor: page2.NextCursor})
+func TestListOrganizations_FullPageWithFilterEndsTheWalk(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	seedOrg(t, ctx, conn, orgFixture{id: "org_a", name: "Alpha", slug: "alpha", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_b", name: "Bravo", slug: "bravo", whitelisted: true})
+	// Sorts after the page but the filter drops it, so it is not a next page.
+	seedOrg(t, ctx, conn, orgFixture{id: "org_c", name: "Charlie", slug: "charlie", accountType: "pro", whitelisted: true})
+
+	limit := 2
+	at := "free"
+
+	page, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Limit: &limit, AccountType: &at})
 	require.NoError(t, err)
-	require.Empty(t, page3.Organizations)
-	require.Nil(t, page3.NextCursor)
+	require.Len(t, page.Organizations, 2)
+	require.Nil(t, page.NextCursor)
 }

@@ -12,6 +12,7 @@ import {
   PencilIcon,
   Search,
   Settings2,
+  Sparkles,
   Square,
   Wrench,
 } from "lucide-react";
@@ -43,6 +44,7 @@ import {
   useContext,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -83,6 +85,7 @@ import { useDensity } from "@/elements/hooks/useDensity";
 import { useDictationLevels } from "@/elements/hooks/useDictationLevels";
 import { useElements } from "@/elements/hooks/useElements";
 import { isLocalThreadId } from "@/elements/hooks/useGramThreadListAdapter";
+import { usePromptHistory } from "@/elements/hooks/usePromptHistory";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { useRecordCassette } from "@/elements/hooks/useRecordCassette";
 import { useThemeProps } from "@/elements/hooks/useThemeProps";
@@ -626,7 +629,11 @@ export const Composer: FC<ComposerProps> = ({
 
   const isReplay = replayCtx?.isReplay ?? false;
   const isDictating = useAuiState(({ composer }) => composer.dictation != null);
-  const isComposerEmpty = useAuiState(({ composer }) => composer.text === "");
+  // A dropped file is a draft even with no text yet — the landing's cycling
+  // example prompts would otherwise keep running above the attachment chip.
+  const isComposerEmpty = useAuiState(
+    ({ composer }) => composer.text === "" && composer.attachments.length === 0,
+  );
   const composerConfig = config.composer ?? {
     placeholder: "Send a message...",
     attachments: true,
@@ -667,10 +674,54 @@ export const Composer: FC<ComposerProps> = ({
     setActiveSlashIndex(0);
   }, [slashQuery]);
 
+  // Terminal-style prompt recall. The draft text lives on the runtime, so the
+  // ref is what the submit handler reads: the runtime clears the composer as
+  // part of sending, and refs still hold the pre-send render's value there.
+  const promptHistory = usePromptHistory(config.projectSlug);
+  const composerTextRef = useRef(composerText);
+  composerTextRef.current = composerText;
+
   const runSlashCommand = (command: ComposerSlashCommand) => {
     const composer = aui.composer();
     composer.setText(command.prompt);
     composer.send();
+    // Sends straight through the runtime, so the form never submits and the
+    // prompt would otherwise be missing from recall.
+    promptHistory.record(command.prompt);
+  };
+
+  const recallPrompt = (
+    textarea: HTMLTextAreaElement,
+    direction: "up" | "down",
+  ) => {
+    const recalled = promptHistory.navigate(direction, textarea.value);
+    if (recalled === null) return false;
+    aui.composer().setText(recalled);
+    // The composer is controlled, so the caret can only be placed once the
+    // recalled text has actually been painted.
+    requestAnimationFrame(() => {
+      textarea.setSelectionRange(recalled.length, recalled.length);
+    });
+    return true;
+  };
+
+  /**
+   * Arrow keys belong to the textarea first: recall only takes over when the
+   * caret has nowhere left to go in that direction (first line for Up, last
+   * line for Down), or when the text on screen is one we just recalled — that
+   * keeps a multi-line prompt from trapping the walk after one step.
+   */
+  const canRecall = (
+    textarea: HTMLTextAreaElement,
+    direction: "up" | "down",
+  ) => {
+    const { value, selectionStart, selectionEnd } = textarea;
+    // A live selection is the user placing their cursor, never a recall.
+    if (selectionStart !== selectionEnd) return false;
+    if (promptHistory.isShowingRecalled(value)) return true;
+    return direction === "up"
+      ? !value.slice(0, selectionStart).includes("\n")
+      : !value.slice(selectionEnd).includes("\n");
   };
 
   if (components.Composer) {
@@ -719,6 +770,9 @@ export const Composer: FC<ComposerProps> = ({
           ref={composerRootRef}
           // Capture: the menu owns Up/Down/Enter while it is open, before the
           // textarea inserts a newline or the composer sends the raw query.
+          onSubmit={() => {
+            promptHistory.record(composerTextRef.current);
+          }}
           onKeyDownCapture={(event) => {
             if (!slashOpen) return;
             if (event.key === "ArrowDown") {
@@ -786,6 +840,31 @@ export const Composer: FC<ComposerProps> = ({
           )}
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
+            // Bubble phase, on the textarea itself: the slash menu (form,
+            // capture) and the @-mention menu (textarea, capture + stopPropagation)
+            // both get the arrow keys first, so recall only sees the ones nobody
+            // else claimed.
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+              // Modified arrows select, jump by word, or move the caret to the
+              // ends of the field — all of them the textarea's to handle.
+              if (
+                event.shiftKey ||
+                event.altKey ||
+                event.metaKey ||
+                event.ctrlKey
+              ) {
+                return;
+              }
+              // The slash menu owns the arrows while it is open. It runs in
+              // capture on the form and calls preventDefault, but the event
+              // still reaches this handler.
+              if (slashOpen || isDictating || isReplay) return;
+              const textarea = event.currentTarget;
+              const direction = event.key === "ArrowUp" ? "up" : "down";
+              if (!canRecall(textarea, direction)) return;
+              if (recallPrompt(textarea, direction)) event.preventDefault();
+            }}
             className={cn(
               "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-4 pt-0.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-0",
               d("h-input"),
@@ -841,8 +920,11 @@ const ComposerDictationWave: FC = () => {
   );
 };
 
+/** `max-h-64` plus the 8px offset, in px — the room an upward menu needs. */
+const SLASH_MENU_MAX_HEIGHT = 264;
+
 /**
- * Command list shown above the composer while the draft is a `/` query.
+ * Command list shown beside the composer while the draft is a `/` query.
  * Selection is owned by the composer so Enter and click resolve to the same
  * row; rows use onMouseDown-prevent so clicking one doesn't blur the input
  * (which would clear the query before the click lands).
@@ -854,11 +936,24 @@ const ComposerSlashCommandMenu: FC<{
   onSelect: (command: ComposerSlashCommand) => void;
 }> = ({ commands, activeIndex, onHover, onSelect }) => {
   const r = useRadius();
+  const ref = useRef<HTMLDivElement>(null);
+  // The menu opens upwards, which is right for a composer pinned to the bottom
+  // of a thread. On the welcome screen the composer sits high in the page, and
+  // there the same menu would open off the top edge — so measure what is
+  // actually above the composer and drop downwards when it will not fit.
+  const [dropDown, setDropDown] = useState(false);
+  useLayoutEffect(() => {
+    const composer = ref.current?.offsetParent;
+    if (!composer) return;
+    setDropDown(composer.getBoundingClientRect().top < SLASH_MENU_MAX_HEIGHT);
+  }, [commands.length]);
   return (
     <div
+      ref={ref}
       role="listbox"
       className={cn(
-        "aui-composer-slash-menu absolute bottom-full left-0 z-50 mb-2 max-h-64 w-full overflow-y-auto border border-input bg-background shadow-md",
+        "aui-composer-slash-menu absolute left-0 z-50 max-h-64 w-full overflow-y-auto border border-input bg-background shadow-md",
+        dropDown ? "top-full mt-2" : "bottom-full mb-2",
         r("lg"),
       )}
     >
@@ -1075,9 +1170,49 @@ function deriveToolCategory(name: string): string {
   return "Tools";
 }
 
+// Tools are listed under their server in the rail, so repeating the
+// `<server>__` namespace in every row buys nothing and pushes the part that
+// distinguishes one tool from the next past the truncation point.
+function shortToolName(name: string): string {
+  const namespaceIdx = name.indexOf("__");
+  return namespaceIdx > 0 ? name.slice(namespaceIdx + 2) : name;
+}
+
 interface ToolCategory {
   name: string;
   tools: MentionableTool[];
+}
+
+const contextRailGroupClass =
+  "flex items-center gap-1.5 px-2 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
+
+const contextRailItemClass = (active: boolean) =>
+  cn(
+    "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm transition-colors",
+    active
+      ? "bg-muted font-medium text-foreground"
+      : "text-muted-foreground hover:bg-muted/60",
+  );
+
+/** Shared eyebrow so both halves of the pane announce themselves the same way. */
+function ContextSectionHeader({
+  icon: Icon,
+  label,
+  count,
+}: {
+  icon: typeof Wrench;
+  label: string;
+  count?: number;
+}): React.ReactElement {
+  return (
+    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-background px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      <Icon className="size-3.5 shrink-0" />
+      <span>{label}</span>
+      {count !== undefined && (
+        <span className="tabular-nums opacity-60">{count}</span>
+      )}
+    </div>
+  );
 }
 
 /** Rail entry for the skills half of the context picker. */
@@ -1250,7 +1385,10 @@ const ComposerContextPicker: FC = () => {
       <PopoverContent
         side="top"
         align="start"
-        className="aui-composer-context-popover w-[420px] overflow-hidden p-0"
+        // `bg-background` rather than the primitive's `bg-popover`: hosts that
+        // mount Elements outside the dashboard's own theme leave `--popover`
+        // unset, and the pane renders see-through over the page behind it.
+        className="aui-composer-context-popover w-[560px] max-w-[calc(100vw-2rem)] overflow-hidden bg-background p-0"
         onEscapeKeyDown={(event) => {
           if (query !== "") {
             event.preventDefault();
@@ -1258,7 +1396,7 @@ const ComposerContextPicker: FC = () => {
           }
         }}
       >
-        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-input px-3 py-2.5">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
@@ -1275,44 +1413,47 @@ const ComposerContextPicker: FC = () => {
             aria-label="Search context"
           />
         </div>
-        <div className="flex h-72">
+        <div className="flex h-80">
           {/* The rail is a browse aid only; a search reaches across both
               halves, so it is hidden while one is running. */}
           {!searching && (
-            <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
+            <div className="w-44 shrink-0 overflow-y-auto border-r border-input p-2">
               {hasSkills && (
-                <button
-                  type="button"
-                  onClick={() => setSection(CONTEXT_SKILLS_SECTION)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                    activeSection === CONTEXT_SKILLS_SECTION
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60",
-                  )}
-                >
-                  <span className="truncate">Skills</span>
-                  <span className="ml-2 shrink-0 tabular-nums opacity-60">
-                    {skillContext?.skills.length ?? 0}
-                  </span>
-                </button>
+                <>
+                  <div className={contextRailGroupClass}>
+                    <Sparkles className="size-3.5 shrink-0" />
+                    Skills
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSection(CONTEXT_SKILLS_SECTION)}
+                    className={contextRailItemClass(
+                      activeSection === CONTEXT_SKILLS_SECTION,
+                    )}
+                  >
+                    <span className="truncate">All skills</span>
+                    <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                      {skillContext?.skills.length ?? 0}
+                    </span>
+                  </button>
+                </>
               )}
               {hasTools && (
                 <>
-                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  <div
+                    className={cn(contextRailGroupClass, hasSkills && "mt-3")}
+                  >
+                    <Wrench className="size-3.5 shrink-0" />
                     Tools
                   </div>
                   <button
                     type="button"
                     onClick={() => setSection(CONTEXT_ALL_TOOLS_SECTION)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                      activeSection === CONTEXT_ALL_TOOLS_SECTION
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-muted/60",
+                    className={contextRailItemClass(
+                      activeSection === CONTEXT_ALL_TOOLS_SECTION,
                     )}
                   >
-                    <span className="truncate">All</span>
+                    <span className="truncate">All tools</span>
                     <span className="ml-2 shrink-0 tabular-nums opacity-60">
                       {tools.length}
                     </span>
@@ -1322,11 +1463,8 @@ const ComposerContextPicker: FC = () => {
                       key={category.name}
                       type="button"
                       onClick={() => setSection(category.name)}
-                      className={cn(
-                        "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                        activeSection === category.name
-                          ? "bg-muted font-medium text-foreground"
-                          : "text-muted-foreground hover:bg-muted/60",
+                      className={contextRailItemClass(
+                        activeSection === category.name,
                       )}
                     >
                       <span className="truncate">{category.name}</span>
@@ -1353,11 +1491,11 @@ const ComposerContextPicker: FC = () => {
             {showSkills &&
               (searching || activeSection === CONTEXT_SKILLS_SECTION) && (
                 <>
-                  {searching && (
-                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                      Skills
-                    </div>
-                  )}
+                  <ContextSectionHeader
+                    icon={Sparkles}
+                    label="Skills"
+                    count={matchingSkills.length}
+                  />
                   <ContextSkillResults
                     skillContext={skillContext}
                     visibleSkills={matchingSkills}
@@ -1370,11 +1508,15 @@ const ComposerContextPicker: FC = () => {
             {showTools &&
               (searching || activeSection !== CONTEXT_SKILLS_SECTION) && (
                 <>
-                  {searching && (
-                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                      Tools
-                    </div>
-                  )}
+                  <ContextSectionHeader
+                    icon={Wrench}
+                    label={
+                      searching || activeSection === CONTEXT_ALL_TOOLS_SECTION
+                        ? "Tools"
+                        : `Tools · ${activeSection}`
+                    }
+                    count={matchingTools.length}
+                  />
                   <ContextToolResults
                     tools={matchingTools}
                     loading={mcpToolsLoading}
@@ -1406,27 +1548,39 @@ function ContextToolResults({
     );
   }
   return (
-    <div className="p-2">
-      {tools.map((tool) => (
-        <button
-          key={tool.id}
-          type="button"
-          onClick={() => onSelect(tool.name)}
-          className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
-        >
-          <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">
-              {tool.name}
-            </span>
-            {tool.description && (
-              <span className="line-clamp-2 text-xs text-muted-foreground">
-                {tool.description}
+    <div className="px-2 pb-2">
+      {tools.map((tool) => {
+        const short = shortToolName(tool.name);
+        return (
+          <button
+            key={tool.id}
+            type="button"
+            onClick={() => onSelect(tool.name)}
+            className="flex w-full items-start gap-2.5 rounded px-2 py-2 text-left transition-colors hover:bg-muted"
+          >
+            <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {short}
               </span>
-            )}
-          </span>
-        </button>
-      ))}
+              {short !== tool.name && (
+                <span className="block truncate font-mono text-xs text-muted-foreground">
+                  {tool.name}
+                </span>
+              )}
+              {tool.description && (
+                // No `block` here: it wins over the `display: -webkit-box`
+                // that `line-clamp` needs, and the clamp silently stops
+                // clamping — which is how a paragraph-long tool description
+                // ends up filling the pane.
+                <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                  {tool.description}
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1506,7 +1660,7 @@ function ContextSkillResults({
 
   const atLimit = selectedIDs.size >= maxSelected;
   return (
-    <div className="max-h-72 overflow-y-auto p-2">
+    <div className="px-2 pb-2">
       {visibleSkills.map((skill) => {
         const selected = selectedIDs.has(skill.id);
         return (
@@ -1516,7 +1670,7 @@ function ContextSkillResults({
             onClick={() => onToggle(skill.id)}
             disabled={atLimit && !selected}
             aria-pressed={selected}
-            className="flex w-full items-start gap-2 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-start gap-2.5 rounded px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input">
               {selected ? <CheckIcon className="size-3" /> : null}
@@ -1525,11 +1679,11 @@ function ContextSkillResults({
               <span className="block truncate text-sm font-medium text-foreground">
                 {skill.displayName}
               </span>
-              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+              <span className="block truncate font-mono text-xs text-muted-foreground">
                 {skill.name}
               </span>
               {skill.summary ? (
-                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                   {skill.summary}
                 </span>
               ) : null}

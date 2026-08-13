@@ -16,12 +16,13 @@ import (
 const ttl = 24 * time.Hour
 
 type Record struct {
-	ProjectID uuid.UUID
-	CallID    string
-	TraceID   string
-	SessionID string
-	UserID    string
-	Email     string
+	ProjectID         uuid.UUID
+	CallID            string
+	TraceID           string
+	SessionID         string
+	UserID            string
+	Email             string
+	OriginatingClient string
 }
 
 type Cache struct {
@@ -43,12 +44,13 @@ func (c *Cache) Get(ctx context.Context, projectID uuid.UUID, callID string) (Re
 	var record Record
 	if err := c.cache.Get(ctx, key(projectID, callID), &record); err != nil {
 		return Record{
-			ProjectID: uuid.Nil,
-			CallID:    "",
-			TraceID:   "",
-			SessionID: "",
-			UserID:    "",
-			Email:     "",
+			ProjectID:         uuid.Nil,
+			CallID:            "",
+			TraceID:           "",
+			SessionID:         "",
+			UserID:            "",
+			Email:             "",
+			OriginatingClient: "",
 		}, fmt.Errorf("get LiteLLM call: %w", err)
 	}
 	return record, nil

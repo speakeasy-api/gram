@@ -643,3 +643,74 @@ func TestPolicy_ValidateHost_UnsafePolicyPermitsBlockedLiteral(t *testing.T) {
 	require.NoError(t, policy.ValidateHost(t.Context(), "127.0.0.1"))
 	require.NoError(t, policy.ValidateHost(t.Context(), "10.0.0.1"))
 }
+
+func TestPolicy_ValidateHTTPURL_RejectsNonHTTPScheme(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPURL(t.Context(), "ftp://example.com/spec.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPURL_RejectsEmptyHost(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPURL(t.Context(), "https:///spec.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPURL_RejectsBlockedIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPURL(t.Context(), "http://169.254.169.254/latest/meta-data/")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestPolicy_ValidateHTTPURL_AllowsPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPURL(t.Context(), "https://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPURL_AllowsHTTPPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPURL(t.Context(), "http://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPSURL_RejectsHTTPScheme(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := policy.ValidateHTTPSURL(t.Context(), "http://8.8.8.8/openapi.yaml")
+	require.Error(t, err)
+}
+
+func TestPolicy_ValidateHTTPSURL_AllowsPublicIPLiteral(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	u, err := policy.ValidateHTTPSURL(t.Context(), "https://8.8.8.8/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "8.8.8.8", u.Hostname())
+}
+
+func TestPolicy_ValidateHTTPURL_AllowsPublicHostname(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
+			LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+				if host == "cdn.example.com" {
+					return []net.IP{net.ParseIP("8.8.8.8")}, nil
+				}
+				return nil, fmt.Errorf("unexpected host: %s", host)
+			},
+		})),
+	)
+	u, err := policy.ValidateHTTPURL(t.Context(), "https://cdn.example.com/openapi.yaml")
+	require.NoError(t, err)
+	require.Equal(t, "cdn.example.com", u.Hostname())
+}
