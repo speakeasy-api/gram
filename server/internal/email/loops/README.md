@@ -47,6 +47,9 @@ Validation requires the manifest variable list to match the Go `Variables()`
 contract exactly. It also checks every `.lmx` file recursively for XML
 well-formedness and explicitly set Loops-supported attribute ranges, and rejects
 undeclared or accidentally unused variables in registered templates.
+Variables used only by a Section `if` remain part of the application contract,
+although Loops omits them from the published `dataVariables` metadata; release
+verification compares that metadata against rendered variables only.
 
 ## Design system
 

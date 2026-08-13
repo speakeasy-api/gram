@@ -108,6 +108,10 @@ Identity map:
 - State the event or action directly. Delete vague lead-ins such as “a clear read
   on how your organization is tracking.” Prefer one verb-led CTA.
 - Use conditional `<Section>` blocks for variants. Do not invent fallback syntax.
+- Keep condition-only variables in the Go and manifest contract. Loops omits
+  variables used only by a Section `if` attribute from its published
+  `dataVariables` metadata; repository reconciliation accounts for that provider
+  behavior while continuing to verify every rendered variable exactly.
 - LMX cannot embed raw HTML. Send scalar variables and compose the layout in LMX.
 - `<Image src>` must be a Loops-hosted upload. Do not use a repo-local or public
   URL as `src`; use a text masthead until an upload is deliberately managed.
