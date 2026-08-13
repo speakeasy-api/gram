@@ -46,6 +46,7 @@ func (f *fakeAPI) UpdateEmailMessage(_ context.Context, _ string, input UpdateEm
 	f.message.FromName = input.FromName
 	f.message.FromEmail = input.FromEmail
 	f.message.ReplyToEmail = input.ReplyToEmail
+	f.message.EmailFormat = input.EmailFormat
 	f.message.LMX = input.LMX
 	return f.message, nil
 }
@@ -97,6 +98,7 @@ func TestReconcile_CreatesPublishesAndReturnsResolvedID(t *testing.T) {
 	require.Equal(t, 1, api.created)
 	require.Equal(t, 1, api.updated)
 	require.Equal(t, 1, api.published)
+	require.Equal(t, "styled", api.message.EmailFormat)
 }
 
 func TestReconcile_AlwaysUpdatesAndPublishesExistingTemplate(t *testing.T) {

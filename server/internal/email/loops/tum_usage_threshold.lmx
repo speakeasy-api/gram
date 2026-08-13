@@ -1,7 +1,11 @@
-<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="" buttonBodyXPadding="16" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="4" buttonTextColor="" buttonTextFormat="0" buttonTextFontSize="16" dividerColor="" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="" heading2FontSize="24" heading2LineHeight="125" heading2LetterSpacing="0" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
-<Columns gap="12" widths="65,35" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="" buttonBodyXPadding="16" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="4" buttonTextColor="" buttonTextFormat="0" buttonTextFontSize="16" dividerColor="#BABABA" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="" heading2FontSize="24" heading2LineHeight="125" heading2LetterSpacing="0" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png" width="600" />
+<Columns gap="12" widths="10,45,45" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
   <ColumnItem verticalAlignment="middle">
-    <Paragraph fontSize="21" lineHeight="100"><Strong>speakeasy</Strong></Paragraph>
+    <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png" width="28" />
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="21" lineHeight="100">speakeasy</Paragraph>
   </ColumnItem>
   <ColumnItem verticalAlignment="middle">
     <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
@@ -10,14 +14,17 @@
 <Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">USAGE ALERT · </Strong>{data.organization_name}</Paragraph>
 <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.threshold_percent}% of allowance used</H1>
 <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} has used {data.usage_tokens} of {data.token_limit} tokens under management.</Paragraph>
-<Columns gap="12" blockColor="#FFFFFF" paddingRight="40" paddingBottom="32" paddingLeft="40">
-  <ColumnItem>
-    <Paragraph fontSize="12" lineHeight="140" blockColor="#FFFFFF" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24"><Strong textColor="#757575">CYCLE START</Strong><Br />{data.cycle_start}</Paragraph>
-  </ColumnItem>
-  <ColumnItem>
-    <Paragraph fontSize="12" lineHeight="140" blockColor="#FFFFFF" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24"><Strong textColor="#757575">CYCLE END</Strong><Br />{data.cycle_end}</Paragraph>
-  </ColumnItem>
-</Columns>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingRight="40" paddingBottom="32" paddingLeft="40">
+  <Columns gap="12">
+    <ColumnItem>
+      <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24"><Strong textColor="#757575">CYCLE START</Strong><Br />{data.cycle_start}</Paragraph>
+    </ColumnItem>
+    <ColumnItem>
+      <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24"><Strong textColor="#757575">CYCLE END</Strong><Br />{data.cycle_end}</Paragraph>
+    </ColumnItem>
+  </Columns>
+</Section>
+<Divider />
 <Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
   <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
   <Paragraph fontSize="12" lineHeight="160" paddingTop="8">This is an automated billing usage alert.</Paragraph>

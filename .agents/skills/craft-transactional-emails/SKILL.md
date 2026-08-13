@@ -15,8 +15,9 @@ inline MJML starter is the approved visual specification.
 - Never use customer or private production names, IDs, domains, addresses,
   URLs, or figures in source, temporary previews, screenshots, logs, or test
   sends. Use `Example Organization`, `person@example.com`, and `<ORG_ID>`.
-  The public Speakeasy font and favicon URLs in the approved starter are the
-  only production-asset exception; copy them unchanged when using that starter.
+  The public Speakeasy font and favicon URLs are allowed only in the approved
+  MJML specification/preview starter. Production LMX must use the canonical
+  Loops-hosted assets below.
 - Keep transactional content operational. No marketing copy or unsubscribe UI.
 
 ## Discover the contract
@@ -104,7 +105,8 @@ Identity map:
 - Keep condition-only variables in the Go and manifest contract.
 - LMX cannot embed raw HTML. Send scalar variables and compose the layout in LMX.
 - `<Image src>` must be a Loops-hosted upload. Do not use a repo-local or public
-  URL as `src`; use a text masthead until an upload is deliberately managed.
+  URL as `src`. The canonical spectrum rail and logo mark below are deliberately
+  managed Loops assets and must be copied unchanged.
 - Loops templates do not inherit a parent. Copy the starter into each `.lmx` and
   specialize its message content.
 - Keep labels, headline fragments, body copy, CTA labels, and footer reasons
@@ -112,21 +114,23 @@ Identity map:
   means the LMX may reference exactly those two variables—not generic chrome
   variables from either starter.
 
-### Approved LMX fallback
+### Approved production LMX translation
 
 `transactional_base.lmx` is the only production shell. Copy it; do not derive a
-new shell from another email. LMX cannot express the MJML’s raw spectrum table,
-hosted ABCDiatype/Tobias font faces, or public favicon URL. Until those assets are
-explicitly managed through Loops, the approved fallback is:
+new shell from another email. The production shell uses two Loops-hosted assets:
 
-- omit the spectrum rail rather than replace it with a new accent;
-- use the text-only `speakeasy` / `AI CONTROL PLANE` header;
-- use Inter with the declared UI sans fallback while retaining the approved
-  hierarchy, light palette, square black CTA, panels, and pale footer; translate
-  label text below 12px to Loops' 12px minimum.
+- spectrum rail: `https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png`
+- logo mark: `https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png`
 
-Those are constrained delivery fallbacks, not a second design. Do not add a dark
-masthead, neon accent, rounded cards, gradient, or substitute palette.
+Preserve both URLs: rail width `600`; logo-mark width `28`. LMX still cannot load the
+starter's hosted ABCDiatype/Tobias font faces or render a dashed one-sided
+footer border. Use Inter with the declared UI sans fallback and a pale solid
+divider while retaining the approved hierarchy, light palette, square black
+CTA, panels, and footer. Translate label text below 12px to Loops' 12px minimum.
+
+Those are constrained delivery fallbacks, not a second design. Do not remove
+the managed rail or mark, or add a dark masthead, neon accent, rounded cards,
+gradient, or substitute palette.
 
 ## Inline transactional mail starter
 
