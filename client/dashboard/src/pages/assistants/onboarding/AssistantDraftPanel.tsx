@@ -20,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
+import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
 import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { AssistantTriggersList } from "./AssistantTriggersList";
@@ -184,62 +185,10 @@ export function AssistantDraftPanel(): JSX.Element {
                 <AssistantSkillsSection />
               </RequireScope>
 
-              <Section
-                title={`MCP Servers (${
-                  a.toolsets.length + (a.mcpServers ?? []).length
-                })`}
-                empty="No MCP servers attached."
-                isEmpty={
-                  a.toolsets.length === 0 && (a.mcpServers ?? []).length === 0
-                }
-              >
-                <Stack gap={2}>
-                  {a.toolsets.map((t) => (
-                    <routes.mcp.details.Link
-                      key={t.toolsetSlug}
-                      params={[t.toolsetSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between border px-3 py-2 transition-colors hover:no-underline"
-                    >
-                      <Stack gap={0} className="min-w-0">
-                        <code className="truncate text-xs">
-                          {t.toolsetSlug}
-                        </code>
-                        {t.environmentSlug && (
-                          <Text small muted className="text-[11px]">
-                            env: {t.environmentSlug}
-                          </Text>
-                        )}
-                      </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
-                    </routes.mcp.details.Link>
-                  ))}
-                  {(a.mcpServers ?? []).map((m) => (
-                    <routes.mcp.x.Link
-                      key={m.mcpServerSlug}
-                      params={[m.mcpServerSlug]}
-                      className="border-border hover:bg-surface-secondary flex items-center justify-between border px-3 py-2 transition-colors hover:no-underline"
-                    >
-                      <Stack gap={0} className="min-w-0">
-                        <code className="truncate text-xs">
-                          {m.mcpServerSlug}
-                        </code>
-                        {m.environmentSlug && (
-                          <Text small muted className="text-[11px]">
-                            env: {m.environmentSlug}
-                          </Text>
-                        )}
-                      </Stack>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground h-4 w-4 shrink-0"
-                      />
-                    </routes.mcp.x.Link>
-                  ))}
-                </Stack>
-              </Section>
+              <AssistantMCPServersSection
+                assistant={a}
+                onUpdated={() => void draft.refetchAssistant()}
+              />
             </Stack>
           </TabsContent>
 
