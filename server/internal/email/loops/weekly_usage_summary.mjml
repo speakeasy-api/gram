@@ -159,23 +159,7 @@
       </mj-column>
     </mj-section>
 
-    <mj-section css-class="mobile-pad" padding="32px 40px 0">
-      <mj-column>
-        <mj-text css-class="eyebrow" color="#757575" font-size="10px" line-height="1.4" padding="0 0 10px">
-          Billing cycle progress
-        </mj-text>
-        <mj-raw>
-          <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;background:#ebebeb;">
-            <tr>
-              <td width="{DATA_VARIABLE:cycle_elapsed_percent}%" height="8" bgcolor="#2874d7" style="font-size:0;line-height:0;">&nbsp;</td>
-              <td height="8" bgcolor="#ebebeb" style="font-size:0;line-height:0;">&nbsp;</td>
-            </tr>
-          </table>
-        </mj-raw>
-      </mj-column>
-    </mj-section>
-
-    <mj-section css-class="mobile-pad" padding="16px 40px 36px">
+    <mj-section css-class="mobile-pad" padding="32px 40px 36px">
       <mj-column>
         <mj-text color="#545454" font-size="14px" line-height="1.6" padding="0">
           Your current cycle ends on <strong style="color:#121212;font-weight:400;">{DATA_VARIABLE:cycle_end_date}</strong>.
