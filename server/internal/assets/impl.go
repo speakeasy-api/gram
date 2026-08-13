@@ -812,7 +812,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 
 	logger := s.logger
 
-	parsedURL, err := validateFetchURL(ctx, s.guardianPolicy, payload.URL)
+	parsedURL, err := s.guardianPolicy.ValidateHTTPURL(ctx, payload.URL)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid URL")
 	}
@@ -1006,7 +1006,7 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 
 	logger := s.logger
 
-	if _, err := validateFetchURL(ctx, s.guardianPolicy, imageURL); err != nil {
+	if _, err := s.guardianPolicy.ValidateHTTPURL(ctx, imageURL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid URL")
 	}
 

@@ -34,6 +34,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"syscall"
 	"time"
 
@@ -502,6 +503,31 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 	}
 
 	return nil
+}
+
+// ValidateHTTPURL checks that rawURL is an absolute http(s) URL whose host is
+// permitted by the policy's CIDR blocklist. It validates the URL string and
+// resolves the host; it does not connect. Runtime enforcement still happens
+// via [Policy.Dialer] on the subsequent request, including each redirect.
+func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse url: %w", err)
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("url scheme must be http or https")
+	}
+
+	if u.Host == "" {
+		return nil, fmt.Errorf("url must include a host")
+	}
+
+	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {
+		return nil, fmt.Errorf("validate host: %w", err)
+	}
+
+	return u, nil
 }
 
 // checkIP returns [ErrBlockedIP] if ip falls within any of the policy's

@@ -203,6 +203,67 @@ func TestService_FetchOpenAPIv3FromURL_RedirectToBlockedHost(t *testing.T) {
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
 }
 
+func TestService_FetchOpenAPIv3FromURL_FollowsAllowedRedirect(t *testing.T) {
+	t.Parallel()
+
+	dest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write([]byte(fetchOpenAPIYAML))
+	}))
+	t.Cleanup(dest.Close)
+
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, dest.URL+"/openapi.yaml", http.StatusFound)
+	}))
+	t.Cleanup(src.Close)
+
+	ctx, ti := newTestAssetsService(t)
+
+	result, err := ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(src.URL))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Asset)
+	require.Equal(t, "openapiv3", result.Asset.Kind)
+}
+
+func TestService_FetchOpenAPIv3FromURL_RedirectToUnresolvableHost(t *testing.T) {
+	t.Parallel()
+
+	const brokenHost = "broken.test"
+	mockResolver := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+			if host == brokenHost {
+				return nil, fmt.Errorf("mock resolver: nxdomain")
+			}
+			return nil, fmt.Errorf("unexpected host: %s", host)
+		},
+	})
+
+	policy, err := guardian.NewUnsafePolicy(
+		testenv.NewTracerProvider(t),
+		[]string{},
+		guardian.WithResolver(mockResolver),
+	)
+	require.NoError(t, err)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "http://"+brokenHost+"/openapi.yaml")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, policy)
+
+	_, err = ti.service.FetchOpenAPIv3FromURL(ctx, fetchOpenAPIForm(upstream.URL))
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, "error fetching URL", oopsErr.Error())
+	require.ErrorIs(t, err, guardian.ErrBadHost)
+	require.NotErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
 func TestService_FetchOpenAPIv3FromURL_RedirectsCapped(t *testing.T) {
 	t.Parallel()
 
