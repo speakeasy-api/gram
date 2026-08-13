@@ -827,8 +827,7 @@ FROM chat_attribution lc;
 
 -- name: GetAssistantSessionSummaryProjection :one
 -- Returns the range-bounded Postgres portion of the assistant activity
--- summary plus the matching chat ids needed to aggregate token and cost
--- telemetry. Setup/onboarding threads are excluded from runtime activity.
+-- summary. Setup/onboarding threads are excluded from runtime activity.
 WITH target_assistant AS (
   SELECT a.id
   FROM assistants a
@@ -865,9 +864,34 @@ activity AS (
 SELECT
   EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
   COUNT(*)::bigint AS sessions,
-  COALESCE(SUM(activity.messages), 0)::bigint AS messages,
-  COALESCE(array_agg(activity.chat_id), ARRAY[]::uuid[])::uuid[] AS chat_ids
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages
 FROM activity;
+
+-- name: ListAssistantSessionSummaryChatIDs :many
+-- Keyset page over every visible runtime chat for an assistant. This is
+-- deliberately independent of message activity: completion telemetry can be
+-- in range even when its corresponding message was persisted outside the
+-- selected range. The endpoint consumes fixed-size pages so it remains
+-- uncapped without constructing an unbounded UUID array or ClickHouse IN list.
+SELECT DISTINCT at.chat_id
+FROM assistant_threads at
+JOIN assistants a
+  ON a.id = at.assistant_id
+  AND a.project_id = at.project_id
+  AND a.deleted IS FALSE
+JOIN chats c
+  ON c.id = at.chat_id
+  AND c.project_id = at.project_id
+  AND c.deleted IS FALSE
+WHERE at.assistant_id = @assistant_id
+  AND at.project_id = @project_id
+  AND at.source_kind <> 'setup'
+  AND at.deleted IS FALSE
+  AND at.chat_id > @after_chat_id
+  AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR c.user_id = @user_id::text)
+ORDER BY at.chat_id
+LIMIT @page_limit;
 
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the

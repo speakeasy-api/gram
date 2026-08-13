@@ -56,17 +56,15 @@ func TestGetChatMetricsSummaryByIDs_RangeBounded(t *testing.T) {
 	insertChatCompletionMetricLog(t, ctx, projectID, chatID, now.Add(-2*time.Hour), 100, 50, 150, 1.5)
 	insertChatCompletionMetricLog(t, ctx, projectID, chatID, now, 12, 8, 20, 0.42)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		got, err := ti.chClient.GetChatMetricsSummaryByIDs(ctx, repo.GetChatMetricsSummaryByIDsParams{
-			ProjectID: projectID,
-			ChatIDs:   []string{chatID},
-			From:      now.Add(-time.Hour),
-			To:        now.Add(time.Hour),
-		})
-		require.NoError(c, err)
-		require.Equal(c, int64(20), got.TotalTokens)
-		require.Less(c, math.Abs(got.TotalCost-0.42), 1e-9)
-	}, 10*time.Second, 200*time.Millisecond)
+	got, err := ti.chClient.GetChatMetricsSummaryByIDs(ctx, repo.GetChatMetricsSummaryByIDsParams{
+		ProjectID: projectID,
+		ChatIDs:   []string{chatID},
+		From:      now.Add(-time.Hour),
+		To:        now.Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(20), got.TotalTokens)
+	require.Less(t, math.Abs(got.TotalCost-0.42), 1e-9)
 }
 
 func insertChatCompletionMetricLog(t *testing.T, ctx context.Context, projectID, chatID string, timestamp time.Time, inputTokens, outputTokens, totalTokens int, cost float64) {

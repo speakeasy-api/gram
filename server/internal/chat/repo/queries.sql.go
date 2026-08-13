@@ -686,8 +686,7 @@ activity AS (
 SELECT
   EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
   COUNT(*)::bigint AS sessions,
-  COALESCE(SUM(activity.messages), 0)::bigint AS messages,
-  COALESCE(array_agg(activity.chat_id), ARRAY[]::uuid[])::uuid[] AS chat_ids
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages
 FROM activity
 `
 
@@ -704,12 +703,10 @@ type GetAssistantSessionSummaryProjectionRow struct {
 	AssistantExists bool
 	Sessions        int64
 	Messages        int64
-	ChatIds         []uuid.UUID
 }
 
 // Returns the range-bounded Postgres portion of the assistant activity
-// summary plus the matching chat ids needed to aggregate token and cost
-// telemetry. Setup/onboarding threads are excluded from runtime activity.
+// summary. Setup/onboarding threads are excluded from runtime activity.
 func (q *Queries) GetAssistantSessionSummaryProjection(ctx context.Context, arg GetAssistantSessionSummaryProjectionParams) (GetAssistantSessionSummaryProjectionRow, error) {
 	row := q.db.QueryRow(ctx, getAssistantSessionSummaryProjection,
 		arg.AssistantID,
@@ -720,12 +717,7 @@ func (q *Queries) GetAssistantSessionSummaryProjection(ctx context.Context, arg 
 		arg.ToTime,
 	)
 	var i GetAssistantSessionSummaryProjectionRow
-	err := row.Scan(
-		&i.AssistantExists,
-		&i.Sessions,
-		&i.Messages,
-		&i.ChatIds,
-	)
+	err := row.Scan(&i.AssistantExists, &i.Sessions, &i.Messages)
 	return i, err
 }
 
@@ -1406,6 +1398,69 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	var last_cursor_id pgtype.Text
 	err := row.Scan(&last_cursor_id)
 	return last_cursor_id, err
+}
+
+const listAssistantSessionSummaryChatIDs = `-- name: ListAssistantSessionSummaryChatIDs :many
+SELECT DISTINCT at.chat_id
+FROM assistant_threads at
+JOIN assistants a
+  ON a.id = at.assistant_id
+  AND a.project_id = at.project_id
+  AND a.deleted IS FALSE
+JOIN chats c
+  ON c.id = at.chat_id
+  AND c.project_id = at.project_id
+  AND c.deleted IS FALSE
+WHERE at.assistant_id = $1
+  AND at.project_id = $2
+  AND at.source_kind <> 'setup'
+  AND at.deleted IS FALSE
+  AND at.chat_id > $3
+  AND ($4::text = '' OR c.external_user_id = $4::text)
+  AND ($5::text = '' OR c.user_id = $5::text)
+ORDER BY at.chat_id
+LIMIT $6
+`
+
+type ListAssistantSessionSummaryChatIDsParams struct {
+	AssistantID    uuid.UUID
+	ProjectID      uuid.UUID
+	AfterChatID    uuid.UUID
+	ExternalUserID string
+	UserID         string
+	PageLimit      int32
+}
+
+// Keyset page over every visible runtime chat for an assistant. This is
+// deliberately independent of message activity: completion telemetry can be
+// in range even when its corresponding message was persisted outside the
+// selected range. The endpoint consumes fixed-size pages so it remains
+// uncapped without constructing an unbounded UUID array or ClickHouse IN list.
+func (q *Queries) ListAssistantSessionSummaryChatIDs(ctx context.Context, arg ListAssistantSessionSummaryChatIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantSessionSummaryChatIDs,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.AfterChatID,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var chat_id uuid.UUID
+		if err := rows.Scan(&chat_id); err != nil {
+			return nil, err
+		}
+		items = append(items, chat_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatContentPartsByChatID = `-- name: ListChatContentPartsByChatID :many

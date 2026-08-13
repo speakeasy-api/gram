@@ -410,10 +410,20 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
 }
 
+const assistantSessionSummaryMetricsBatch = 1000
+
 func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.GetAssistantSessionSummaryPayload) (*gen.AssistantSessionSummary, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeProjectRead,
+		ResourceKind: "",
+		ResourceID:   authCtx.ProjectID.String(),
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
 	}
 
 	assistantID, err := uuid.Parse(payload.AssistantID)
@@ -455,19 +465,44 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 		TotalTokens: 0,
 		TotalCost:   0,
 	}
-	if s.telemetryService != nil && len(projection.ChatIds) > 0 {
-		chatIDs := make([]string, len(projection.ChatIds))
-		for i, chatID := range projection.ChatIds {
-			chatIDs[i] = chatID.String()
-		}
-		metrics, err = s.telemetryService.GetChatMetricsSummaryByIDs(ctx, telemetryrepo.GetChatMetricsSummaryByIDsParams{
-			ProjectID: authCtx.ProjectID.String(),
-			ChatIDs:   chatIDs,
-			From:      from,
-			To:        to,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "summarize assistant session usage").LogError(ctx, s.logger)
+	if s.telemetryService != nil {
+		afterChatID := uuid.Nil
+		for {
+			chatIDs, err := s.repo.ListAssistantSessionSummaryChatIDs(ctx, repo.ListAssistantSessionSummaryChatIDsParams{
+				AssistantID:    assistantID,
+				ProjectID:      *authCtx.ProjectID,
+				AfterChatID:    afterChatID,
+				ExternalUserID: externalUserID,
+				UserID:         userID,
+				PageLimit:      assistantSessionSummaryMetricsBatch,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "list assistant sessions for usage summary").LogError(ctx, s.logger)
+			}
+			if len(chatIDs) == 0 {
+				break
+			}
+
+			batch := make([]string, len(chatIDs))
+			for i, chatID := range chatIDs {
+				batch[i] = chatID.String()
+			}
+			batchMetrics, err := s.telemetryService.GetChatMetricsSummaryByIDs(ctx, telemetryrepo.GetChatMetricsSummaryByIDsParams{
+				ProjectID: authCtx.ProjectID.String(),
+				ChatIDs:   batch,
+				From:      from,
+				To:        to,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "summarize assistant session usage").LogError(ctx, s.logger)
+			}
+			metrics.TotalTokens += batchMetrics.TotalTokens
+			metrics.TotalCost += batchMetrics.TotalCost
+
+			afterChatID = chatIDs[len(chatIDs)-1]
+			if len(chatIDs) < assistantSessionSummaryMetricsBatch {
+				break
+			}
 		}
 	}
 
