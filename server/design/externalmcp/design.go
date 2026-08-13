@@ -250,6 +250,8 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
 	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).")
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
+	Attribute("repository", ExternalMCPRepository, "The source repository the registry links for this server, when it declares one")
+	Attribute("packages", ArrayOf(ExternalMCPPackage), "Published packages that run this server, when the registry declares any")
 
 	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
 	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
@@ -325,6 +327,56 @@ var ExternalMCPTool = Type("ExternalMCPTool", func() {
 	Attribute("description", String, "Description of the tool")
 	Attribute("input_schema", Any, "Input schema for the tool")
 	Attribute("annotations", Any, "Annotations for the tool")
+})
+
+// ExternalMCPRepository and ExternalMCPPackage carry the registry's linked
+// source repository and published packages. Both are registry declarations:
+// nothing ties the linked repository or a package to what a remote endpoint
+// actually runs, and consumers presenting them as evidence must say so.
+var ExternalMCPRepository = Type("ExternalMCPRepository", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("The source repository a registry entry links for its server. A registry declaration: nothing verifies the endpoint runs this code.")
+
+	Attribute("url", String, "Repository URL", func() {
+		Format(FormatURI)
+	})
+	Attribute("source", String, "Hosting service the repository lives on, such as github")
+	Attribute("subfolder", String, "Path within the repository holding the server, for monorepos")
+
+	Required("url")
+})
+
+var ExternalMCPPackage = Type("ExternalMCPPackage", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A published package that runs this server, as declared by the registry")
+
+	Attribute("registry_type", String, "Package registry the artifact is published to, such as npm or pypi")
+	Attribute("registry_base_url", String, "Registry base URL when the package lives outside the default public registry", func() {
+		Format(FormatURI)
+	})
+	Attribute("identifier", String, "Package identifier, scope included")
+	Attribute("version", String, "Published version")
+	Attribute("runtime_hint", String, "Launcher the publisher suggests, such as npx or uvx")
+	Attribute("transport_type", String, "Execution transport the package declares, such as stdio")
+	Attribute("environment_variables", ArrayOf(ExternalMCPPackageEnvironmentVariable), "Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.")
+	Attribute("file_sha256", String, "SHA-256 of the packaged artifact, when the registry publishes one")
+
+	Required("registry_type", "identifier", "version")
+})
+
+var ExternalMCPPackageEnvironmentVariable = Type("ExternalMCPPackageEnvironmentVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An environment variable a package declares its install requires")
+
+	Attribute("name", String, "Variable name the install must populate")
+	Attribute("description", String, "The publisher's explanation of the variable. Untrusted text.")
+	Attribute("is_secret", Boolean, "Whether the publisher marked the value sensitive")
+	Attribute("is_required", Boolean, "Whether an install cannot proceed without it")
+
+	Required("name", "is_secret", "is_required")
 })
 
 var ExternalMCPRemote = Type("ExternalMCPRemote", func() {

@@ -6,8 +6,9 @@ const config: KnipConfig = {
   entry: ["src/theme-init.ts"],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
   ignoreBinaries: [
-    // Invoked from the lint:format script; not on the dep tree.
-    "oxfmt",
+    // The package manager itself, used to chain scripts and to reach the
+    // workspace-root oxfmt binary; not on the dep tree.
+    "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
   ],

@@ -466,9 +466,9 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 		gramOrgID = orgid.FromWorkOSID(m.OrganizationID)
 	}
 
-	slug := orgslug.Slugify(org.Name)
-	if slug == "" {
-		slug = m.OrganizationID
+	slug, err := orgslug.StableBase(org.Name, m.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("derive slug for WorkOS organization %q: %w", m.OrganizationID, err)
 	}
 
 	existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)

@@ -59,6 +59,7 @@ export function buildUpdateIssuerForm(
       fromDiscovery?.tokenEndpointAuthMethodsSupported,
     clientIdMetadataDocumentSupported:
       fromDiscovery?.clientIdMetadataDocumentSupported,
+    revocationEndpoint: fromDiscovery?.revocationEndpoint,
     serviceDocumentation: fromDiscovery?.serviceDocumentation,
     opPolicyUri: fromDiscovery?.opPolicyUri,
     opTosUri: fromDiscovery?.opTosUri,
@@ -113,6 +114,10 @@ export function buildCreateIssuerForm(
     // Discover and typed the endpoints by hand.
     clientIdMetadataDocumentSupported:
       fromDiscovery?.clientIdMetadataDocumentSupported ?? false,
+    // The RFC 7009 revocation endpoint is discovery-only too, and undefined is
+    // the ordinary case: plenty of issuers advertise none, and sessions minted
+    // against those revoke locally with no upstream call.
+    revocationEndpoint: fromDiscovery?.revocationEndpoint || undefined,
     // RFC 8414 documentation URLs are discovery-only — there are no form
     // inputs for them. Undefined when the operator skipped Discover or the
     // issuer advertised nothing usable.

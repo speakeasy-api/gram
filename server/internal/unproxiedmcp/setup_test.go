@@ -80,7 +80,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	// servicePolicy blocks loopback / private ranges so validateServerURL
+	// servicePolicy blocks loopback / private ranges so ValidateHTTPURL
 	// exercises the real production CIDR set, and uses a mock resolver so
 	// hostname-based test cases are deterministic.
 	servicePolicy := guardian.NewDefaultPolicy(

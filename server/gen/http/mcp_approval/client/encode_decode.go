@@ -2002,14 +2002,12 @@ func unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(v *Appro
 		Rationale:        v.Rationale,
 		ResearchReportID: v.ResearchReportID,
 		Evidence:         v.Evidence,
-		EvidenceVersion:  v.EvidenceVersion,
+		EvidenceVersion:  *v.EvidenceVersion,
 		DecidedAt:        *v.DecidedAt,
 	}
-	if v.GrantedPrincipalUrns != nil {
-		res.GrantedPrincipalUrns = make([]string, len(v.GrantedPrincipalUrns))
-		for i, val := range v.GrantedPrincipalUrns {
-			res.GrantedPrincipalUrns[i] = val
-		}
+	res.GrantedPrincipalUrns = make([]string, len(v.GrantedPrincipalUrns))
+	for i, val := range v.GrantedPrincipalUrns {
+		res.GrantedPrincipalUrns[i] = val
 	}
 
 	return res

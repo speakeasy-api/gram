@@ -12,6 +12,7 @@ import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { chatSummarize } from "../funcs/chatSummarize.js";
+import { chatSummarizeToolCall } from "../funcs/chatSummarizeToolCall.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
@@ -20,6 +21,7 @@ import { GenerateTitleResponseBody } from "../models/components/generatetitleres
 import { ListChatsResult } from "../models/components/listchatsresult.js";
 import { ListSourcesResult } from "../models/components/listsourcesresult.js";
 import { SummarizeChatResult } from "../models/components/summarizechatresult.js";
+import { SummarizeToolCallResult } from "../models/components/summarizetoolcallresult.js";
 import { WorkUnitsTrendResult } from "../models/components/workunitstrendresult.js";
 import {
   CreditUsageRequest,
@@ -61,6 +63,10 @@ import {
   SummarizeChatRequest,
   SummarizeChatSecurity,
 } from "../models/operations/summarizechat.js";
+import {
+  SummarizeToolCallRequest,
+  SummarizeToolCallSecurity,
+} from "../models/operations/summarizetoolcall.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Chat extends ClientSDK {
@@ -247,6 +253,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SummarizeChatResult> {
     return unwrapAsync(chatSummarize(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * summarizeToolCall chat
+   *
+   * @remarks
+   * Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.
+   */
+  async summarizeToolCall(
+    request: SummarizeToolCallRequest,
+    security?: SummarizeToolCallSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SummarizeToolCallResult> {
+    return unwrapAsync(chatSummarizeToolCall(
       this,
       request,
       security,

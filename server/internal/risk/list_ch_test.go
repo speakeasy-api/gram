@@ -283,3 +283,109 @@ func TestListRiskResults_ClickHouseUniqueMatchPagination(t *testing.T) {
 	}
 	require.Equal(t, []string{dupNew.ID.String(), other.ID.String()}, seen)
 }
+
+// TestListRiskResults_ClickHouseRetroFlagCopies guards the dedup-before-state
+// order of the listing: exclusion and false-positive flags change by
+// appending a NEWER copy of a row (the retroactive reconcile, the
+// false-positive mirror), so the listing must resolve each id to its latest
+// copy before gating on the flags. Filtering first would drop the flagged
+// copy, let the stale live copy win the dedup, and retro-hidden findings
+// would keep showing on the list while overview and signals already hide
+// them.
+func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("List CH Retro Copies")})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().AddDate(0, 0, -7).Truncate(time.Hour)
+	createdAt := base.Add(4 * time.Hour)
+	day := createdAt.Truncate(24 * time.Hour)
+	scope := chrepo.RetroExclusionScope{
+		OrganizationID: orgID,
+		ProjectID:      projectID.String(),
+		DayStart:       day,
+		DayEnd:         day.AddDate(0, 0, 1),
+	}
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	keep := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(30*time.Minute), "presidio", "pii.email_address", "alice@example.com", "<redacted len=9 sha=aaaaaaaa>", "fp-keep", "")
+	retroHidden := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(1*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=bbbbbbbb>", "fp-hidden", "")
+	fpLater := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(3*time.Hour), "gitleaks", "secret.aws_secret_key", "alice@example.com", "<redacted len=5 sha=dddddddd>", "fp-fp", "")
+
+	// Annotated at ingest; the retro reversal below appends its un-flag copy.
+	unhideExclusion := uuid.Must(uuid.NewV7())
+	ingestExcluded := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(2*time.Hour), "gitleaks", "secret.slack_token", "alice@example.com", "<redacted len=6 sha=cccccccc>", "fp-unhide", "")
+	ingestAt := createdAt.Add(time.Minute)
+	ingestExcluded.ExcludedAt = &ingestAt
+	ingestExcluded.ExclusionID = &unhideExclusion
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{keep, retroHidden, ingestExcluded, fpLater}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// Retro apply hides retroHidden; retro reversal un-hides ingestExcluded.
+	// Both go through the real append-copy mechanism (synchronous inserts).
+	now := time.Now().UTC()
+	exclusionID := uuid.Must(uuid.NewV7())
+	require.NoError(t, chQueries.AppendRetroExclusionApply(ctx, scope, exclusionID,
+		chrepo.FormatCHTime(now), chrepo.FormatCHTime(now.Add(time.Microsecond)), chrepo.RetroExclusionPredicate{
+			PolicyID:           "",
+			RuleID:             "secret.github_pat",
+			Source:             "",
+			TenantFingerprints: nil,
+			RuleIDFilter:       "",
+			SourceFilter:       "",
+		}))
+	require.NoError(t, chQueries.AppendRetroExclusionReversal(ctx, scope, unhideExclusion,
+		chrepo.FormatCHTime(now.Add(2*time.Microsecond)), chrepo.BlanketReversal()))
+
+	// False-positive mirror shape: a newer copy of the same id with
+	// false_positive_at set (raw fixture insert, exempt from the no-raw-SQL
+	// test rule; message_created_at must match the original so the id dedup's
+	// inserted_at tiebreak decides).
+	require.NoError(t, ti.chConn.Exec(ctx, `
+		INSERT INTO risk_findings (id, created_at, message_created_at, organization_id, project_id, risk_policy_id, rule_id, source, category, chat_id, false_positive_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'secret.aws_secret_key', 'gitleaks', 'secrets', ?, ?)
+	`, fpLater.ID, createdAt, fpLater.MessageCreatedAt, orgID, projectID.String(), policy.ID, chatID.String(), createdAt.Add(2*time.Minute)))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	var got []string
+	for _, r := range page.Results {
+		got = append(got, r.ID)
+	}
+	require.Equal(t, []string{ingestExcluded.ID.String(), keep.ID.String()}, got,
+		"retro-hidden and fp-marked rows disappear; retro-un-hidden rows reappear")
+	require.Equal(t, int64(2), page.TotalCount)
+
+	// Unique match: when a group's newest occurrence is retro-hidden, the
+	// older live occurrence represents the group again.
+	uniqNew := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(3*time.Hour), "gitleaks", "secret.db_password", "alice@example.com", "<redacted len=8 sha=eeeeeeee>", "fp-uniq", "")
+	uniqOld := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(1*time.Hour), "gitleaks", "secret.db_password", "alice@example.com", "<redacted len=8 sha=ffffffff>", "fp-uniq", "")
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{uniqNew, uniqOld}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	// Fresh timestamp: the flag copy must sort after the rows inserted above.
+	flagAt := time.Now().UTC()
+	require.NoError(t, chQueries.AppendRetroExclusionApplyByIDs(ctx, scope, exclusionID,
+		chrepo.FormatCHTime(flagAt), chrepo.FormatCHTime(flagAt.Add(time.Microsecond)), []uuid.UUID{uniqNew.ID}))
+
+	unique, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{UniqueMatch: new(true)})
+	require.NoError(t, err)
+	var uniqueIDs []string
+	for _, r := range unique.Results {
+		uniqueIDs = append(uniqueIDs, r.ID)
+	}
+	require.Contains(t, uniqueIDs, uniqOld.ID.String())
+	require.NotContains(t, uniqueIDs, uniqNew.ID.String())
+}

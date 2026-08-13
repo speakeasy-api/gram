@@ -812,26 +812,19 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 
 	logger := s.logger
 
-	// Validate URL
-	parsedURL, err := url.Parse(payload.URL)
+	parsedURL, err := s.guardianPolicy.ValidateHTTPSURL(ctx, payload.URL)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse url: %w", err), "invalid URL")
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "URL must use http or https scheme")
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid URL")
 	}
 
-	// Fetch the OpenAPI spec from the URL
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, payload.URL, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create request: %w", err), "error fetching URL")
 	}
 
-	client := s.guardianPolicy.Client()
-	client.Timeout = 30 * time.Second
-	resp, err := client.Do(req)
+	resp, err := outboundFetchClient(s.guardianPolicy, 30*time.Second).Do(req)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("fetch url: %w", err), "error fetching URL")
+		return nil, fetchURLRequestError(err)
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return resp.Body.Close()
@@ -1013,12 +1006,8 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 
 	logger := s.logger
 
-	parsedURL, err := url.Parse(imageURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse url: %w", err), "invalid URL")
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "URL must use http or https scheme")
+	if _, err := s.guardianPolicy.ValidateHTTPSURL(ctx, imageURL); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid URL")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
@@ -1026,11 +1015,9 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create request: %w", err), "error fetching URL")
 	}
 
-	client := s.guardianPolicy.Client()
-	client.Timeout = 10 * time.Second
-	resp, err := client.Do(req)
+	resp, err := outboundFetchClient(s.guardianPolicy, 10*time.Second).Do(req)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("fetch url: %w", err), "error fetching URL")
+		return nil, fetchURLRequestError(err)
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return resp.Body.Close()

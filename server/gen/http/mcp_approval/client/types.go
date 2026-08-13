@@ -3109,14 +3109,12 @@ func NewRecordDecisionApprovalDecisionOK(body *RecordDecisionResponseBody) *mcpa
 		Rationale:        body.Rationale,
 		ResearchReportID: body.ResearchReportID,
 		Evidence:         body.Evidence,
-		EvidenceVersion:  body.EvidenceVersion,
+		EvidenceVersion:  *body.EvidenceVersion,
 		DecidedAt:        *body.DecidedAt,
 	}
-	if body.GrantedPrincipalUrns != nil {
-		v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
-		for i, val := range body.GrantedPrincipalUrns {
-			v.GrantedPrincipalUrns[i] = val
-		}
+	v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
+	for i, val := range body.GrantedPrincipalUrns {
+		v.GrantedPrincipalUrns[i] = val
 	}
 
 	return v
@@ -3528,6 +3526,12 @@ func ValidateRecordDecisionResponseBody(body *RecordDecisionResponseBody) (err e
 	}
 	if body.DecidedBy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("decided_by", "body"))
+	}
+	if body.GrantedPrincipalUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted_principal_urns", "body"))
+	}
+	if body.EvidenceVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("evidence_version", "body"))
 	}
 	if body.DecidedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("decided_at", "body"))
@@ -5520,6 +5524,12 @@ func ValidateApprovalDecisionResponseBody(body *ApprovalDecisionResponseBody) (e
 	}
 	if body.DecidedBy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("decided_by", "body"))
+	}
+	if body.GrantedPrincipalUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted_principal_urns", "body"))
+	}
+	if body.EvidenceVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("evidence_version", "body"))
 	}
 	if body.DecidedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("decided_at", "body"))

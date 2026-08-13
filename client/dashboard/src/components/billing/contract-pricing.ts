@@ -116,13 +116,23 @@ export function overageLines(
 
 // The full pay-as-you-go bill for one month — every token is charged, from
 // the first one, with no baseline to subtract.
-export function paygLines(monthlyTokens: number): TierLine[] {
+//
+// `rateAdjustPct` scales every band rate by a percentage (+10 → +10% uplift,
+// -15 → 15% discount): PAYG deals are negotiated as a swing off the list
+// rates, not as four hand-edited band rates. Band boundaries are absolute
+// volumes and don't move. Floored at -100% — beyond that a rate would go
+// negative, which prices as free, not as a rebate.
+export function paygLines(
+  monthlyTokens: number,
+  rateAdjustPct = 0,
+): TierLine[] {
+  const rateMultiplier = Math.max(0, 1 + rateAdjustPct / 100);
   return graduatedLines(
     monthlyTokens,
     PAYG_TIERS.map((t) => ({
       label: t.label,
       upper: t.upToTokens,
-      ratePerMillion: t.ratePerMillion,
+      ratePerMillion: t.ratePerMillion * rateMultiplier,
     })),
     0,
   );
