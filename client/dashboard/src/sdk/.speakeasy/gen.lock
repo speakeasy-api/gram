@@ -4833,7 +4833,7 @@ examples:
           id: "<id>"
       responses:
         "200":
-          application/json: {"decisions": [{"decided_at": "2026-10-26T17:15:52.509Z", "decided_by": "<value>", "decision": "<value>", "id": "<id>"}], "request": {"created_at": "2024-09-16T23:32:47.039Z", "id": "<id>", "requester_count": 739187, "status": "<value>", "target_kind": "<value>", "target_raw": "<value>", "updated_at": "2026-06-05T13:37:30.614Z", "version_pinned": true}, "requesters": [], "research_reports": [{"created_at": "2026-10-26T17:15:52.509Z", "id": "<id>", "report_version": 237209, "status": "<value>"}]}
+          application/json: {"decisions": [{"decided_at": "2026-10-26T17:15:52.509Z", "decided_by": "<value>", "decision": "<value>", "evidence_version": 719873, "granted_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "id": "<id>"}], "request": {"created_at": "2024-09-16T23:32:47.039Z", "id": "<id>", "requester_count": 739187, "status": "<value>", "target_kind": "<value>", "target_raw": "<value>", "updated_at": "2026-06-05T13:37:30.614Z", "version_pinned": true}, "requesters": [], "research_reports": [{"created_at": "2026-10-26T17:15:52.509Z", "id": "<id>", "report_version": 237209, "status": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -7176,7 +7176,7 @@ examples:
         application/json: {"decision": "approved", "id": "<id>", "rationale": "<value>"}
       responses:
         "200":
-          application/json: {"decided_at": "2024-02-04T10:29:28.784Z", "decided_by": "<value>", "decision": "<value>", "id": "<id>"}
+          application/json: {"decided_at": "2024-02-04T10:29:28.784Z", "decided_by": "<value>", "decision": "<value>", "evidence_version": 31420, "granted_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

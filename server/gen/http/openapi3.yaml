@@ -55165,6 +55165,8 @@ components:
                 - id
                 - decision
                 - decided_by
+                - granted_principal_urns
+                - evidence_version
                 - decided_at
         ApprovalRequestDetail:
             type: object

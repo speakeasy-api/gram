@@ -78,15 +78,23 @@ func fromGetRow(row repo.GetApprovalRequestRow) requestFields {
 }
 
 func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
+	// The column is NOT NULL with an array default, but the field is required
+	// at the API boundary, so a nil scan result must still surface as an
+	// empty set rather than fail response validation.
+	granted := decision.GrantedPrincipalUrns
+	if granted == nil {
+		granted = []string{}
+	}
+
 	return &gen.ApprovalDecision{
 		ID:                   decision.ID.String(),
 		Decision:             decision.Decision,
 		DecidedBy:            decision.DecidedBy,
 		Rationale:            fromPGText(decision.Rationale),
-		GrantedPrincipalUrns: decision.GrantedPrincipalUrns,
+		GrantedPrincipalUrns: granted,
 		ResearchReportID:     nullUUIDString(decision.McpResearchReportID),
 		Evidence:             rawEvidence(decision.EvidenceSnapshot),
-		EvidenceVersion:      evidenceVersion(decision.EvidenceVersion),
+		EvidenceVersion:      int(decision.EvidenceVersion),
 		DecidedAt:            conv.FromPGTimestamptz(decision.DecidedAt),
 	}
 }

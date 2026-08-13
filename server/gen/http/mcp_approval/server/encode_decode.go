@@ -775,6 +775,8 @@ func marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(v *mcpappr
 		for i, val := range v.GrantedPrincipalUrns {
 			res.GrantedPrincipalUrns[i] = val
 		}
+	} else {
+		res.GrantedPrincipalUrns = []string{}
 	}
 
 	return res
