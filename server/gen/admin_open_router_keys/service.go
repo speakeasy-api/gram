@@ -17,16 +17,11 @@ import (
 // Platform-admin management of per-organization platform OpenRouter keys.
 // Speakeasy-staff only; every method requires the platform-admin flag.
 type Service interface {
-	// List every organization's platform OpenRouter keys with their encryption
-	// state. Requires platform admin.
+	// List every organization's platform OpenRouter keys. Requires platform admin.
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Fetch an organization's live credit usage from OpenRouter for one key.
 	// Requires platform admin.
 	GetKeyUsage(context.Context, *GetKeyUsagePayload) (res *GetKeyUsageResult, err error)
-	// Encrypt an organization's stored OpenRouter key at rest: writes the
-	// encrypted copy, verifies it decrypts, then clears the plaintext column.
-	// Idempotent. Requires platform admin.
-	EncryptKey(context.Context, *EncryptKeyPayload) (res *AdminOpenRouterKey, err error)
 	// Lock down an organization's platform OpenRouter key, upstream and locally.
 	// Requires platform admin.
 	DisableKey(context.Context, *DisableKeyPayload) (res *AdminOpenRouterKey, err error)
@@ -55,10 +50,10 @@ const ServiceName = "adminOpenRouterKeys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"listKeys", "getKeyUsage", "encryptKey", "disableKey", "enableKey"}
+var MethodNames = [4]string{"listKeys", "getKeyUsage", "disableKey", "enableKey"}
 
 // AdminOpenRouterKey is the result type of the adminOpenRouterKeys service
-// encryptKey method.
+// disableKey method.
 type AdminOpenRouterKey struct {
 	// Organization that owns the key.
 	OrganizationID string
@@ -75,8 +70,6 @@ type AdminOpenRouterKey struct {
 	MonthlyCredits int64
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool
-	// Storage state of the key material.
-	EncryptionStatus string
 	// When the key row was created.
 	CreatedAt string
 	// When the key row was last updated.
@@ -100,16 +93,6 @@ type EnableKeyPayload struct {
 	// Organization that owns the key.
 	OrganizationID string
 	// Key type to enable.
-	KeyType string
-}
-
-// EncryptKeyPayload is the payload type of the adminOpenRouterKeys service
-// encryptKey method.
-type EncryptKeyPayload struct {
-	SessionToken *string
-	// Organization that owns the key.
-	OrganizationID string
-	// Key type to encrypt.
 	KeyType string
 }
 

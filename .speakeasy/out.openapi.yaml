@@ -2984,94 +2984,6 @@ paths:
       x-speakeasy-name-override: enableKey
       x-speakeasy-react-hook:
         name: EnableAdminOpenRouterKey
-  /rpc/adminOpenRouterKeys.encryptKey:
-    post:
-      description: 'Encrypt an organization''s stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.'
-      operationId: encryptAdminOpenRouterKey
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EncryptOpenRouterKeyRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminOpenRouterKey'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: encryptKey adminOpenRouterKeys
-      tags:
-        - adminOpenRouterKeys
-      x-speakeasy-name-override: encryptKey
-      x-speakeasy-react-hook:
-        name: EncryptAdminOpenRouterKey
   /rpc/adminOpenRouterKeys.getKeyUsage:
     get:
       description: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.
@@ -3175,7 +3087,7 @@ paths:
         name: AdminOpenRouterKeyUsage
   /rpc/adminOpenRouterKeys.listKeys:
     get:
-      description: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+      description: List every organization's platform OpenRouter keys. Requires platform admin.
       operationId: listAdminOpenRouterKeys
       parameters:
         - allowEmptyValue: true
@@ -55912,13 +55824,6 @@ components:
         disabled:
           type: boolean
           description: Whether the key is locked down (refused locally and disabled upstream).
-        encryption_status:
-          type: string
-          description: Storage state of the key material.
-          enum:
-            - plaintext
-            - encrypted_with_plaintext
-            - encrypted
         gram_account_type:
           type: string
           description: The organization's Gram account type (e.g. free, pro, enterprise).
@@ -55951,7 +55856,6 @@ components:
         - key_type
         - monthly_credits
         - disabled
-        - encryption_status
         - created_at
         - updated_at
     AdminOrganization:
@@ -60804,21 +60708,6 @@ components:
           minLength: 1
       required:
         - id
-    EncryptOpenRouterKeyRequestBody:
-      type: object
-      properties:
-        key_type:
-          type: string
-          description: Key type to encrypt.
-          enum:
-            - chat
-            - internal
-        organization_id:
-          type: string
-          description: Organization that owns the key.
-      required:
-        - organization_id
-        - key_type
     EnsureServerReviewRequestBody:
       type: object
       properties:
