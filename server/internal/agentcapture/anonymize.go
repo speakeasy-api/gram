@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const saltSize = 32
@@ -109,6 +111,39 @@ func (a *Anonymizer) ScrubRow(row *logRow) error {
 		row.Body = scrubPlaceholder(row.Body)
 	}
 	return nil
+}
+
+// ScrubChat anonymizes one exported external chat in place: the title is
+// user-authored free text and the external user ID is a provider-side
+// identity. Gram-internal IDs (chat, project, connected user) stay intact
+// for local joins, and the external chat ID is a content natural key, not a
+// person, so it survives too.
+func (a *Anonymizer) ScrubChat(row *chatExportRow) {
+	if row.Title != nil && *row.Title != "" {
+		row.Title = conv.PtrEmpty(scrubPlaceholder(*row.Title))
+	}
+	if row.ExternalUserID != nil && *row.ExternalUserID != "" {
+		row.ExternalUserID = conv.PtrEmpty(a.pseudonymID(*row.ExternalUserID))
+	}
+}
+
+// ScrubChatMessage anonymizes one exported external chat message in place:
+// content is the transcript text, the user agent and IP address describe a
+// person's device, and the external user ID is a provider-side identity. The
+// external message ID is the row's natural key and stays.
+func (a *Anonymizer) ScrubChatMessage(row *chatMessageExportRow) {
+	if row.Content != "" {
+		row.Content = scrubPlaceholder(row.Content)
+	}
+	if row.ExternalUserID != nil && *row.ExternalUserID != "" {
+		row.ExternalUserID = conv.PtrEmpty(a.pseudonymID(*row.ExternalUserID))
+	}
+	if row.UserAgent != nil && *row.UserAgent != "" {
+		row.UserAgent = conv.PtrEmpty(scrubPlaceholder(*row.UserAgent))
+	}
+	if row.IPAddress != nil && *row.IPAddress != "" {
+		row.IPAddress = conv.PtrEmpty(a.pseudonymID(*row.IPAddress))
+	}
 }
 
 // ScrubJSON walks a JSON object and applies the anonymization rules to every

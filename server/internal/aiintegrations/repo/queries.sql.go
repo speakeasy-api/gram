@@ -312,6 +312,30 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 	return i, err
 }
 
+const getConfigIDByOrgAndProvider = `-- name: GetConfigIDByOrgAndProvider :one
+SELECT id
+FROM ai_integration_configs
+WHERE organization_id = $1
+  AND provider = $2
+  AND deleted IS FALSE
+`
+
+type GetConfigIDByOrgAndProviderParams struct {
+	OrganizationID string
+	Provider       string
+}
+
+// Resolves a config row id without requiring its provider-named sync
+// schedule row to exist, unlike GetConfigByOrgAndProvider which joins on it.
+// Backs the local agent-telemetry capture, whose config rows deliberately
+// carry no sync schedules.
+func (q *Queries) GetConfigIDByOrgAndProvider(ctx context.Context, arg GetConfigIDByOrgAndProviderParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getConfigIDByOrgAndProvider, arg.OrganizationID, arg.Provider)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getFirstProjectByOrganization = `-- name: GetFirstProjectByOrganization :one
 SELECT id
 FROM projects

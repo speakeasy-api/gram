@@ -6,7 +6,7 @@
 #USAGE flag "--agent <agent>" default="claude" help="Agent to drive and capture: claude"
 #USAGE flag "--project <slug>" default="default" help="Project slug rows are attributed to and dumped from"
 #USAGE flag "--api-key <key>" env="GRAM_CAPTURE_API_KEY" help="Provider admin API key for the poll leg (claude: Anthropic admin key); empty skips polling"
-#USAGE flag "--external-org-id <id>" env="GRAM_CAPTURE_EXTERNAL_ORG_ID" help="Provider-side organization ID, stamped on polled rows when set"
+#USAGE flag "--external-org-id <id>" env="GRAM_CAPTURE_EXTERNAL_ORG_ID" help="Provider-side organization ID; enables the Compliance API transcript import and is stamped on polled rows"
 #USAGE flag "--lookback <duration>" default="168h" help="Poll and dump window as a Go duration (168h = 7 days)"
 #USAGE flag "--out <dir>" default="local/agent-telemetry" help="Output directory for the NDJSON dump"
 #USAGE flag "--prompt <text>" help="Drive the session headless with this single prompt instead of interactively"

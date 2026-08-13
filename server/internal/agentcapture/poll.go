@@ -29,8 +29,9 @@ func (s *Service) pollClaude(ctx context.Context, projectID uuid.UUID, organizat
 		SyncID: uuid.Nil,
 		// The Anthropic Admin Analytics endpoints infer the organization from
 		// the org-scoped admin key, so the external org ID is optional here;
-		// when supplied it is stamped on rows as gram.external_org_id, and
-		// org-scoped feeds added later (the Compliance API) require it.
+		// when supplied it is stamped on rows as gram.external_org_id. The
+		// Compliance API transcript import requires it and runs as its own
+		// leg (pollClaudeCompliance).
 		OrganizationID:         organizationID,
 		Provider:               aiintegrations.ProviderAnthropicCompliance,
 		ProjectID:              projectID,

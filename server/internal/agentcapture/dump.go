@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -70,23 +71,28 @@ ORDER BY time_unix_nano, id
 `
 
 // manifest describes one capture dump so consumers know the window, scope,
-// and file layout without inspecting rows.
+// and file layout without inspecting rows. rows_total counts telemetry_logs
+// rows; the external chat export (Compliance API transcripts, which land in
+// Postgres rather than bronze) is counted separately.
 type manifest struct {
-	GeneratedAt    time.Time      `json:"generated_at"`
-	ProjectID      string         `json:"project_id"`
-	ProjectSlug    string         `json:"project_slug"`
-	OrganizationID string         `json:"organization_id"`
-	WindowSince    time.Time      `json:"window_since"`
-	WindowUntil    time.Time      `json:"window_until"`
-	Anonymized     bool           `json:"anonymized"`
-	RowsTotal      int            `json:"rows_total"`
-	RowsByEventURN map[string]int `json:"rows_by_event_urn"`
-	Files          map[string]int `json:"files"`
+	GeneratedAt       time.Time      `json:"generated_at"`
+	ProjectID         string         `json:"project_id"`
+	ProjectSlug       string         `json:"project_slug"`
+	OrganizationID    string         `json:"organization_id"`
+	WindowSince       time.Time      `json:"window_since"`
+	WindowUntil       time.Time      `json:"window_until"`
+	Anonymized        bool           `json:"anonymized"`
+	RowsTotal         int            `json:"rows_total"`
+	RowsByEventURN    map[string]int `json:"rows_by_event_urn"`
+	ChatsTotal        int            `json:"chats_total"`
+	ChatMessagesTotal int            `json:"chat_messages_total"`
+	Files             map[string]int `json:"files"`
 }
 
 // dump exports the project's telemetry_logs rows for the capture window as
 // NDJSON, one file per event origin (provider_api, provider_otel, agent_hook,
-// gram_service, unknown), with a manifest.json describing the capture.
+// gram_service, unknown), plus the external chat transcripts under chats/,
+// with a manifest.json describing the capture.
 func (s *Service) dump(ctx context.Context, project projectsrepo.Project, since, until time.Time, opts Options) error {
 	// The telemetry logger writes with async_insert=1 / wait_for_async_insert=0,
 	// so rows from the poll phase may still sit in ClickHouse's async insert
@@ -200,17 +206,25 @@ func (s *Service) dump(ctx context.Context, project projectsrepo.Project, since,
 		files[filepath.Join("logs", origin+".ndjson")] = w.rows
 	}
 
+	chatFiles, err := s.dumpExternalChats(ctx, project, since, until, opts, anonymizer)
+	if err != nil {
+		return fmt.Errorf("dump external chats: %w", err)
+	}
+	maps.Copy(files, chatFiles)
+
 	m := manifest{
-		GeneratedAt:    time.Now().UTC(),
-		ProjectID:      project.ID.String(),
-		ProjectSlug:    project.Slug,
-		OrganizationID: project.OrganizationID,
-		WindowSince:    since,
-		WindowUntil:    until,
-		Anonymized:     opts.Anonymize,
-		RowsTotal:      total,
-		RowsByEventURN: byURN,
-		Files:          files,
+		GeneratedAt:       time.Now().UTC(),
+		ProjectID:         project.ID.String(),
+		ProjectSlug:       project.Slug,
+		OrganizationID:    project.OrganizationID,
+		WindowSince:       since,
+		WindowUntil:       until,
+		Anonymized:        opts.Anonymize,
+		RowsTotal:         total,
+		RowsByEventURN:    byURN,
+		ChatsTotal:        chatFiles[filepath.Join("chats", "chats.ndjson")],
+		ChatMessagesTotal: chatFiles[filepath.Join("chats", "messages.ndjson")],
+		Files:             files,
 	}
 	encoded, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {

@@ -1,14 +1,17 @@
 // Package agentcapture drives a local-dev capture of agent provider
-// telemetry. It polls a provider's admin APIs into the local telemetry_logs
-// bronze table — the same ingest path production uses — and then dumps the
-// captured window as an anonymized NDJSON fixture, so telemetry features can
-// be developed against realistic data without live credentials.
+// telemetry. It polls a provider's admin APIs through the same ingest paths
+// production uses — Admin Analytics reports into the ClickHouse
+// telemetry_logs bronze table, and (when an external org ID is supplied)
+// Compliance API chat transcripts into Postgres chats/chat_messages — and
+// then dumps the captured window as an anonymized NDJSON fixture, so
+// telemetry features can be developed against realistic data without live
+// credentials.
 //
 // The capture is one leg of local test-data generation: interactive or
 // scripted agent sessions (mise hooks:test / hooks:e2e) stream OTel and hook
 // events into telemetry_logs live, while this package backfills the
-// provider-settled reports that production pollers fetch on Temporal
-// schedules. The dump covers both.
+// provider-settled reports and transcripts that production pollers fetch on
+// Temporal schedules. The dump covers all of it.
 package agentcapture
 
 import (
@@ -24,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -43,10 +47,12 @@ type Options struct {
 	APIKey string
 
 	// ExternalOrgID is the provider-side organization ID (for claude: the
-	// Anthropic organization UUID from the Console). Optional for the Admin
-	// Analytics reports, whose org-scoped admin key already implies the
-	// organization; when set it is stamped on captured rows as
-	// gram.external_org_id, matching production configs.
+	// Anthropic organization UUID from the Console). The Admin Analytics
+	// reports work without it — their org-scoped admin key already implies
+	// the organization — but the Compliance API transcript import requires
+	// it, so setting it is what enables that leg. When set it is also
+	// stamped on captured rows as gram.external_org_id, matching production
+	// configs.
 	ExternalOrgID string
 
 	// ProjectSlug names the local project that polled rows are attributed to
@@ -77,6 +83,7 @@ type Service struct {
 	store           *aiintegrations.Store
 	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
+	enc             *encryption.Client
 	written         *writeCounter
 }
 
@@ -90,6 +97,7 @@ func NewService(
 	store *aiintegrations.Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
+	enc *encryption.Client,
 ) *Service {
 	written := &writeCounter{mu: sync.Mutex{}, total: 0}
 	telemetryLogger.AddObserver(written)
@@ -100,6 +108,7 @@ func NewService(
 		store:           store,
 		guardianPolicy:  guardianPolicy,
 		telemetryLogger: telemetryLogger,
+		enc:             enc,
 		written:         written,
 	}
 }
@@ -138,6 +147,15 @@ func (s *Service) Run(ctx context.Context, opts Options) error {
 		s.logger.InfoContext(ctx, "no api key supplied: skipping provider poll phase")
 	} else {
 		pollErr = s.pollClaude(ctx, project.ID, project.OrganizationID, opts, since, until)
+		// The Compliance API needs the explicit org UUID (the admin key
+		// alone is not enough to scope its activities feed), so the
+		// transcript leg runs only when the flag is supplied.
+		if opts.ExternalOrgID == "" {
+			s.logger.InfoContext(ctx, "no external org id supplied: skipping claude.ai transcript import (compliance api)")
+		} else if err := s.pollClaudeCompliance(ctx, project, opts, since); err != nil {
+			s.logger.ErrorContext(ctx, "compliance transcript import failed", attr.SlogError(err))
+			pollErr = errors.Join(pollErr, fmt.Errorf("sync anthropic_compliance: %w", err))
+		}
 	}
 
 	if !opts.Dump {

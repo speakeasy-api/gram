@@ -454,6 +454,58 @@ VALUES (
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING;
 
+-- name: ListExternalChatsForExport :many
+-- Backs the local agent-telemetry capture dump: external (provider-imported)
+-- chats for a project whose activity falls inside the export window. The
+-- lower bound is on updated_at so a chat created before the window but still
+-- receiving messages inside it is exported alongside those messages.
+SELECT
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , external_user_id
+  , external_chat_id
+  , title
+  , created_at
+  , updated_at
+FROM chats
+WHERE project_id = @project_id
+  AND external_chat_id IS NOT NULL
+  AND deleted IS FALSE
+  AND updated_at >= @since
+  AND created_at < @until
+ORDER BY created_at, id;
+
+-- name: ListExternalChatMessagesForExport :many
+-- Backs the local agent-telemetry capture dump: provider-imported messages
+-- of external chats in the export window. created_at is the provider-side
+-- message timestamp, so the window filter matches the telemetry dump's.
+-- content_raw is deliberately not exported: the rendered content column is
+-- enough for fixtures and the raw blocks would need their own deep scrub.
+SELECT
+    m.id
+  , m.chat_id
+  , m.role
+  , m.content
+  , m.model
+  , m.user_id
+  , m.external_user_id
+  , m.external_message_id
+  , m.origin
+  , m.user_agent
+  , m.ip_address
+  , m.source
+  , m.created_at
+FROM chat_messages m
+INNER JOIN chats c ON c.id = m.chat_id
+WHERE c.project_id = @project_id
+  AND c.external_chat_id IS NOT NULL
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= @since
+  AND m.created_at < @until
+ORDER BY m.chat_id, m.created_at, m.seq;
+
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
 -- each page via a window count, so this only runs when a requested page is

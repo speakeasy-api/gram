@@ -1,8 +1,10 @@
 // Command capture-agent-telemetry is a local-dev tool that polls an agent
-// provider's admin APIs into the local telemetry_logs bronze table and dumps
-// the captured window as an anonymized NDJSON fixture. It is deliberately a
-// standalone binary, not a gram CLI subcommand: it exists for generating
-// local test data and never ships to production.
+// provider's admin APIs into the local dev stack — Admin Analytics reports
+// into the telemetry_logs bronze table, and Compliance API chat transcripts
+// into Postgres when an external org ID is supplied — and dumps the captured
+// window as an anonymized NDJSON fixture. It is deliberately a standalone
+// binary, not a gram CLI subcommand: it exists for generating local test
+// data and never ships to production.
 //
 // The mise task `capture:agent-telemetry` wraps this command, running the
 // poll leg in parallel with an interactive agent session (mise hooks:test)
@@ -46,12 +48,12 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    "api-key",
-				Usage:   "Provider admin API key (for claude: an Anthropic admin key with Admin Analytics access); when empty the poll phase is skipped",
+				Usage:   "Provider admin API key (for claude: an Anthropic admin key with Admin Analytics access, plus Compliance API access when --external-org-id is set); when empty the poll phase is skipped",
 				EnvVars: []string{"GRAM_CAPTURE_API_KEY"},
 			},
 			&cli.StringFlag{
 				Name:    "external-org-id",
-				Usage:   "Provider-side organization ID (for claude: the Anthropic organization UUID); optional for Admin Analytics, stamped on rows as gram.external_org_id when set",
+				Usage:   "Provider-side organization ID (for claude: the Anthropic organization UUID); enables the Compliance API transcript import and is stamped on polled rows as gram.external_org_id",
 				EnvVars: []string{"GRAM_CAPTURE_EXTERNAL_ORG_ID"},
 			},
 			&cli.StringFlag{
@@ -201,7 +203,7 @@ func run(c *cli.Context) error {
 		telemetry.NewNoopLogPublisher(logger),
 	)
 
-	svc := agentcapture.NewService(logger, db, ch, store, guardianPolicy, telemetryLogger)
+	svc := agentcapture.NewService(logger, db, ch, store, guardianPolicy, telemetryLogger, encryptionClient)
 	if err := svc.Run(ctx, agentcapture.Options{
 		Agent:         c.String("agent"),
 		APIKey:        c.String("api-key"),
