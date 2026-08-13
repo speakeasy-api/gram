@@ -21,6 +21,12 @@ import (
 // read cannot pile up goroutines behind a degraded ClickHouse.
 const shadowCompareTimeout = 30 * time.Second
 
+// maxConcurrentShadowCompares caps in-flight shadow re-queries across all
+// requests. Shadow is sampling, not accounting: when ClickHouse slows down and
+// the cap is hit, further comparisons are skipped rather than queued so
+// validation traffic cannot amplify the slowdown.
+const maxConcurrentShadowCompares = 4
+
 // queryTouchesEmail reports whether a request involves the email dimension at
 // all — the only case where folding changes anything, and the gate on paying
 // the flag-evaluation and shadow-compare cost.
@@ -79,8 +85,16 @@ func (s *Service) canonicalIdentityMode(ctx context.Context, orgID string) (fold
 // groups must preserve the cost total. Runs in the background off a detached
 // context so it never delays or fails the caller's request.
 func (s *Service) shadowCompareCanonicalFold(ctx context.Context, orgID string, params repo.AttributeMetricsQueryParams, literalRows []repo.AttributeMetricsRow) {
+	select {
+	case s.shadowFoldSem <- struct{}{}:
+	default:
+		s.logger.InfoContext(ctx, "identity fold shadow comparison skipped: concurrency cap reached", attr.SlogOrganizationID(orgID))
+		return
+	}
+
 	bgCtx := context.WithoutCancel(ctx)
 	go func() {
+		defer func() { <-s.shadowFoldSem }()
 		bgCtx, cancel := context.WithTimeout(bgCtx, shadowCompareTimeout)
 		defer cancel()
 

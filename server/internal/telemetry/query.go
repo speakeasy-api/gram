@@ -159,6 +159,14 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	if queryTouchesEmail(groupBy, filters) {
 		foldIdentities, shadowFold = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
 	}
+	// Shadow must replay the exact query fold mode would run: the original
+	// request filters, folded in-query. Cloned before the Postgres expansion
+	// below mutates the elements — feeding already-expanded aliases into the
+	// fold would mask Postgres-ahead/map-lag divergence.
+	var shadowFilters []repo.AttributeMetricsFilter
+	if shadowFold {
+		shadowFilters = slices.Clone(filters)
+	}
 	if !foldIdentities {
 		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
 	}
@@ -228,7 +236,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	// The skill-version path reads raw telemetry through its own builders;
 	// shadow only validates the aggregate fold it will actually replace.
 	if shadowFold && !useSkillVersions {
-		s.shadowCompareCanonicalFold(ctx, authCtx.ActiveOrganizationID, params, tableRows)
+		shadowParams := params
+		shadowParams.Filters = shadowFilters
+		s.shadowCompareCanonicalFold(ctx, authCtx.ActiveOrganizationID, shadowParams, tableRows)
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil

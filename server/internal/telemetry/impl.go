@@ -61,6 +61,9 @@ type Service struct {
 	sessionCaptureEnabled FeatureChecker
 	authz                 *authz.Engine
 	featureFlags          feature.Provider
+	// shadowFoldSem bounds concurrent identity-fold shadow queries; see
+	// maxConcurrentShadowCompares.
+	shadowFoldSem chan struct{}
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -108,6 +111,7 @@ func NewService(
 		chatSessions:          chatSessions,
 		authz:                 authzEngine,
 		featureFlags:          featureFlags,
+		shadowFoldSem:         make(chan struct{}, maxConcurrentShadowCompares),
 	}
 }
 
