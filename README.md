@@ -115,3 +115,5 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 <p align="left">
   <a href="https://speakeasy.com/"><img alt="Built by Speakeasy" src="https://www.speakeasy.com/assets/badges/built-by-speakeasy.svg" /></a>
 </p>
+
+<!-- stacked preview validation: PR delta is docs-only; base branch carries the .github change -->
