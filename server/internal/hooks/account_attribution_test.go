@@ -1024,7 +1024,7 @@ func TestLogs_AttributedAccountLinkSignalsIdentityMapRefresh(t *testing.T) {
 		},
 	))
 	require.NoError(t, err)
-	require.Greater(t, ti.identitySignals.refreshCount(), before)
+	require.Equal(t, before+1, ti.identitySignals.refreshCount())
 
 	// Unknown email on a fresh device: the upsert stores an unattributed link
 	// (no user id), which cannot change any fold — no refresh.

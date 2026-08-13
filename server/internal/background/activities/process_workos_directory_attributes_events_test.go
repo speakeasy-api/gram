@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -376,11 +377,16 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	}})
 
 	capturingCache := newCaptureCache()
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, capturingCache, nil)
+	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, capturingCache, signals)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0003", res.LastEventID)
+
+	// Both the membership upsert and the deactivation's deprovision request an
+	// identity map refresh; the active directory-user upsert does not.
+	require.Equal(t, 2, signals.refreshCount())
 
 	// The directory user row is soft-deleted.
 	_, err = workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)

@@ -80,7 +80,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 
 	deleted := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipDeleted
 	if deleted || payload.Status == string(usermanagement.Inactive) {
-		effects, err := deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
+		return deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
 			organizationID:     org.ID,
 			gramUserID:         gramUserID,
 			workosUserID:       payload.UserID,
@@ -88,8 +88,6 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 			eventID:            event.ID,
 			eventUpdatedAt:     payload.UpdatedAt,
 		})
-		effects.refreshIdentityMap = err == nil
-		return effects, err
 	}
 
 	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {

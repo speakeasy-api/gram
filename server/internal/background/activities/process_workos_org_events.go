@@ -47,9 +47,6 @@ type ProcessWorkOSOrganizationEventsResult struct {
 	HasMore      bool   `json:"has_more"`
 }
 
-// ProcessWorkOSOrganizationEvents pages through WorkOS organization-scoped events
-// since the stored cursor, applying supported organization, role, membership,
-// and Directory Sync events in a transaction before advancing the cursor.
 // IdentityMapRefreshSignaler requests an immediate ClickHouse identity map
 // sync after directory changes, instead of waiting out the sync schedule.
 // Optional: nil means changes converge at the next scheduled tick.
@@ -57,6 +54,9 @@ type IdentityMapRefreshSignaler interface {
 	SignalIdentityMapRefresh(ctx context.Context) error
 }
 
+// ProcessWorkOSOrganizationEvents pages through WorkOS organization-scoped events
+// since the stored cursor, applying supported organization, role, membership,
+// and Directory Sync events in a transaction before advancing the cursor.
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger

@@ -180,6 +180,11 @@ type IdentityMapRefreshSignaler interface {
 	SignalIdentityMapRefresh(ctx context.Context) error
 }
 
+// identityMapRefreshSignalTimeout bounds one refresh request. A request is
+// best-effort and always follows a durable link write, so it must never hold
+// a hook response open on a slow Temporal call.
+const identityMapRefreshSignalTimeout = time.Second
+
 // signalIdentityMapRefresh delivers one best-effort refresh request after an
 // attributed account link write. Detached from the request context — the link
 // is already durable — and bounded so a slow Temporal call can never hold a
@@ -189,7 +194,7 @@ func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
 	if s.identityMapRefresh == nil {
 		return
 	}
-	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityMapRefreshSignalTimeout)
 	defer cancel()
 	if err := s.identityMapRefresh.SignalIdentityMapRefresh(signalCtx); err != nil {
 		s.logger.ErrorContext(ctx, "signal identity map refresh from hook", attr.SlogError(err))
