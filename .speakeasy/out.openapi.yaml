@@ -9877,6 +9877,124 @@ paths:
       tags:
         - chat
       x-speakeasy-name-override: generateTitle
+  /rpc/chat.getAssistantSessionSummary:
+    get:
+      description: Get assistant session activity totals for a time range.
+      operationId: getAssistantSessionSummary
+      parameters:
+        - allowEmptyValue: true
+          description: The assistant whose activity to summarize
+          in: query
+          name: assistant_id
+          required: true
+          schema:
+            description: The assistant whose activity to summarize
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Start of the activity range (ISO 8601)
+          in: query
+          name: from
+          required: true
+          schema:
+            description: Start of the activity range (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: End of the activity range (ISO 8601)
+          in: query
+          name: to
+          required: true
+          schema:
+            description: End of the activity range (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSessionSummary'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getAssistantSessionSummary chat
+      tags:
+        - chat
+      x-speakeasy-name-override: getAssistantSessionSummary
+      x-speakeasy-react-hook:
+        name: AssistantSessionSummary
+        type: query
   /rpc/chat.getWorkUnitsTrend:
     get:
       description: 'Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.'
@@ -54815,6 +54933,30 @@ components:
         - updated_at
         - last_access
         - valid_at
+    AssistantSessionSummary:
+      type: object
+      properties:
+        messages:
+          type: integer
+          description: Number of messages created in the range
+          format: int64
+        sessions:
+          type: integer
+          description: Number of sessions with activity in the range
+          format: int64
+        total_cost:
+          type: number
+          description: Cost in USD incurred in the range
+          format: double
+        total_tokens:
+          type: integer
+          description: Tokens consumed in the range
+          format: int64
+      required:
+        - sessions
+        - messages
+        - total_tokens
+        - total_cost
     AssistantSkillRef:
       type: object
       properties:

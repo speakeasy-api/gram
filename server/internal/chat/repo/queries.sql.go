@@ -649,6 +649,86 @@ func (q *Queries) GetActiveUserCountByMessages(ctx context.Context, arg GetActiv
 	return active_user_count, err
 }
 
+const getAssistantSessionSummaryProjection = `-- name: GetAssistantSessionSummaryProjection :one
+WITH target_assistant AS (
+  SELECT a.id
+  FROM assistants a
+  WHERE a.id = $1
+    AND a.project_id = $2
+    AND a.deleted IS FALSE
+),
+assistant_chats AS MATERIALIZED (
+  SELECT DISTINCT at.chat_id
+  FROM assistant_threads at
+  JOIN target_assistant a ON a.id = at.assistant_id
+  JOIN chats c
+    ON c.id = at.chat_id
+    AND c.project_id = at.project_id
+    AND c.deleted IS FALSE
+  WHERE at.project_id = $2
+    AND at.source_kind <> 'setup'
+    AND at.deleted IS FALSE
+    AND ($3::text = '' OR c.external_user_id = $3::text)
+    AND ($4::text = '' OR c.user_id = $4::text)
+),
+activity AS (
+  SELECT
+    ac.chat_id,
+    COUNT(*)::bigint AS messages
+  FROM assistant_chats ac
+  JOIN chat_messages cm
+    ON cm.chat_id = ac.chat_id
+    AND cm.project_id = $2
+  WHERE cm.created_at >= $5
+    AND cm.created_at <= $6
+  GROUP BY ac.chat_id
+)
+SELECT
+  EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
+  COUNT(*)::bigint AS sessions,
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages,
+  COALESCE(array_agg(activity.chat_id), ARRAY[]::uuid[])::uuid[] AS chat_ids
+FROM activity
+`
+
+type GetAssistantSessionSummaryProjectionParams struct {
+	AssistantID    uuid.UUID
+	ProjectID      uuid.UUID
+	ExternalUserID string
+	UserID         string
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
+}
+
+type GetAssistantSessionSummaryProjectionRow struct {
+	AssistantExists bool
+	Sessions        int64
+	Messages        int64
+	ChatIds         []uuid.UUID
+}
+
+// Returns the range-bounded Postgres portion of the assistant activity
+// summary plus the matching chat ids needed to aggregate token and cost
+// telemetry. Setup/onboarding threads are excluded from runtime activity.
+func (q *Queries) GetAssistantSessionSummaryProjection(ctx context.Context, arg GetAssistantSessionSummaryProjectionParams) (GetAssistantSessionSummaryProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantSessionSummaryProjection,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	var i GetAssistantSessionSummaryProjectionRow
+	err := row.Scan(
+		&i.AssistantExists,
+		&i.Sessions,
+		&i.Messages,
+		&i.ChatIds,
+	)
+	return i, err
+}
+
 const getAssistantThreadAssistantIDByChatID = `-- name: GetAssistantThreadAssistantIDByChatID :one
 SELECT t.assistant_id
 FROM assistant_threads t

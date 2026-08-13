@@ -3951,6 +3951,23 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	return result, nil
 }
 
+// GetChatMetricsSummaryByIDs retrieves range-bounded token and cost totals for
+// a set of chats.
+func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.GetChatMetricsSummaryByIDsParams) (repo.ChatMetricsSummary, error) {
+	if s.chRepo == nil {
+		return repo.ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	result, err := s.chRepo.GetChatMetricsSummaryByIDs(ctx, params)
+	if err != nil {
+		return repo.ChatMetricsSummary{}, fmt.Errorf("get chat metrics summary by ids: %w", err)
+	}
+	return result, nil
+}
+
 // GetChatAnalysisVerdictsByChatIDs retrieves the newest published chat
 // analysis verdict per chat for one judge (e.g. work units). This is used by
 // the chat service to enrich chat responses from ClickHouse.

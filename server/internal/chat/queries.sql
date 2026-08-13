@@ -825,6 +825,50 @@ SELECT
   lc.total_count
 FROM chat_attribution lc;
 
+-- name: GetAssistantSessionSummaryProjection :one
+-- Returns the range-bounded Postgres portion of the assistant activity
+-- summary plus the matching chat ids needed to aggregate token and cost
+-- telemetry. Setup/onboarding threads are excluded from runtime activity.
+WITH target_assistant AS (
+  SELECT a.id
+  FROM assistants a
+  WHERE a.id = @assistant_id
+    AND a.project_id = @project_id
+    AND a.deleted IS FALSE
+),
+assistant_chats AS MATERIALIZED (
+  SELECT DISTINCT at.chat_id
+  FROM assistant_threads at
+  JOIN target_assistant a ON a.id = at.assistant_id
+  JOIN chats c
+    ON c.id = at.chat_id
+    AND c.project_id = at.project_id
+    AND c.deleted IS FALSE
+  WHERE at.project_id = @project_id
+    AND at.source_kind <> 'setup'
+    AND at.deleted IS FALSE
+    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+),
+activity AS (
+  SELECT
+    ac.chat_id,
+    COUNT(*)::bigint AS messages
+  FROM assistant_chats ac
+  JOIN chat_messages cm
+    ON cm.chat_id = ac.chat_id
+    AND cm.project_id = @project_id
+  WHERE cm.created_at >= @from_time
+    AND cm.created_at <= @to_time
+  GROUP BY ac.chat_id
+)
+SELECT
+  EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
+  COUNT(*)::bigint AS sessions,
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages,
+  COALESCE(array_agg(activity.chat_id), ARRAY[]::uuid[])::uuid[] AS chat_ids
+FROM activity;
+
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the
 -- project's chats, honoring the same visibility scoping as ListChats. Feeds the

@@ -5,6 +5,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { Icon } from "@/components/ui/Icon";
+import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -14,22 +15,23 @@ import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRoutes } from "@/routes";
 import { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import { useAssistantSessionSummary } from "@gram/client/react-query/assistantSessionSummary.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
-const PREVIEW_LIMIT = 8;
+const SESSION_PAGE_LIMIT = 8;
 
-// One fetch feeds both the stats banner and the row list. Metrics are summed
-// over the fetched page, so the banner is exact until an assistant exceeds
-// this many sessions in the selected range — then the tiles disclose the cap.
-const STATS_FETCH_LIMIT = 100;
+function emptySessionsMessage(offset: number): string {
+  if (offset > 0) return "This page has no sessions. Go to the previous page.";
+  return "No sessions yet. Conversations with this assistant will appear here.";
+}
 
 /**
  * The assistant detail panel's Sessions tab: an aggregate stats banner over a
- * selectable time range (default last 30 days), plus a compact session list in
- * the Agent Sessions row shape. Selecting a session opens the same
+ * selectable time range (default last 30 days), plus an independently
+ * paginated session list in the Agent Sessions row shape. Selecting a session opens the same
  * ChatDetailSheet the Agent Sessions page uses — an overlay, not a navigation —
  * so the detail view is identical. The footer links to the full, filterable
  * page.
@@ -40,6 +42,7 @@ export function AssistantSessionsList({
   assistantId: string;
 }): JSX.Element {
   const { selectedChatId, openChat, sheet } = useChatDetailSheet();
+  const [offset, setOffset] = useState(0);
 
   const {
     dateRange,
@@ -52,42 +55,33 @@ export function AssistantSessionsList({
     clearCustomRange,
   } = useDateRangeFilter("30d");
 
-  const { data, isLoading, error } = useListChats(
+  const summary = useAssistantSessionSummary(
+    { assistantId, from, to },
+    undefined,
+    { retry: false, throwOnError: false },
+  );
+
+  const sessions = useListChats(
     {
       assistantId,
       // Onboarding threads are plumbing, not assistant traffic.
       excludeSourceKind: "setup",
-      from,
-      to,
       sortBy: "last_message_timestamp",
       sortOrder: "desc",
-      limit: STATS_FETCH_LIMIT,
+      limit: SESSION_PAGE_LIMIT,
+      offset,
     },
     undefined,
     { retry: false, throwOnError: false },
   );
 
-  const chats = data?.chats ?? [];
-  const total = data?.total ?? chats.length;
+  useEffect(() => setOffset(0), [assistantId]);
+
+  const chats = sessions.data?.chats ?? [];
+  const total = sessions.data?.total ?? 0;
   const rangeLabel = formatDateRangeLabel(dateRange, customRangeLabel);
-
-  // Carry the active range to the full Agent Sessions page so its listing
-  // matches what this tab shows. It reads the same range/from/to params.
-  const viewAllQueryParams: Record<string, string> = customRange
-    ? {
-        assistantId,
-        from: from.toISOString(),
-        to: to.toISOString(),
-      }
-    : { assistantId, range: dateRange };
-
-  if (error) {
-    return (
-      <Text small muted>
-        Couldn't load sessions. {error.message}
-      </Text>
-    );
-  }
+  const hasPrevious = offset > 0;
+  const hasNext = offset + chats.length < total;
 
   return (
     <>
@@ -106,20 +100,25 @@ export function AssistantSessionsList({
           />
         </div>
 
-        {isLoading ? (
-          <Stack align="center" justify="center" className="py-12">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </Stack>
-        ) : (
-          <SessionsContent
-            chats={chats}
-            total={total}
-            rangeLabel={rangeLabel}
-            viewAllQueryParams={viewAllQueryParams}
-            selectedChatId={selectedChatId}
-            onOpenChat={openChat}
-          />
-        )}
+        <SessionSummaryTiles
+          data={summary.data}
+          isLoading={summary.isLoading}
+          error={summary.error}
+        />
+
+        <SessionListResult
+          assistantId={assistantId}
+          chats={chats}
+          total={total}
+          offset={offset}
+          selectedChatId={selectedChatId}
+          isLoading={sessions.isLoading}
+          error={sessions.error}
+          hasPrevious={hasPrevious}
+          hasNext={hasNext}
+          onOpenChat={openChat}
+          onOffsetChange={setOffset}
+        />
       </Stack>
 
       {sheet}
@@ -127,84 +126,174 @@ export function AssistantSessionsList({
   );
 }
 
-function SessionsContent({
+function SessionListResult({
+  assistantId,
   chats,
   total,
-  rangeLabel,
-  viewAllQueryParams,
+  offset,
   selectedChatId,
+  isLoading,
+  error,
+  hasPrevious,
+  hasNext,
   onOpenChat,
+  onOffsetChange,
 }: {
+  assistantId: string;
   chats: ChatOverview[];
   total: number;
-  rangeLabel: string;
-  viewAllQueryParams: Record<string, string>;
+  offset: number;
   selectedChatId: string | null;
+  isLoading: boolean;
+  error: Error | null;
+  hasPrevious: boolean;
+  hasNext: boolean;
   onOpenChat: (chatId: string) => void;
+  onOffsetChange: (offset: number) => void;
 }): JSX.Element {
-  const routes = useRoutes();
+  if (isLoading) {
+    return (
+      <Stack align="center" justify="center" className="py-12">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </Stack>
+    );
+  }
+  if (error) {
+    return (
+      <Text small muted>
+        Couldn't load sessions. {error.message}
+      </Text>
+    );
+  }
 
-  const totals = useMemo(() => {
-    let cost = 0;
-    let tokens = 0;
-    let messages = 0;
-    for (const chat of chats) {
-      cost += chat.totalCost ?? 0;
-      tokens += chat.totalTokens ?? 0;
-      messages += chat.numMessages;
-    }
-    return { cost, tokens, messages };
-  }, [chats]);
+  return (
+    <>
+      <SessionsPage
+        assistantId={assistantId}
+        chats={chats}
+        total={total}
+        offset={offset}
+        selectedChatId={selectedChatId}
+        onOpenChat={onOpenChat}
+      />
+      {(hasPrevious || hasNext) && (
+        <div className="flex items-center justify-center gap-3 border-t pt-3">
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={!hasPrevious}
+            onClick={() =>
+              onOffsetChange(Math.max(0, offset - SESSION_PAGE_LIMIT))
+            }
+          >
+            Previous
+          </Button>
+          <Text small muted className="font-mono tabular-nums">
+            Page {Math.floor(offset / SESSION_PAGE_LIMIT) + 1} of{" "}
+            {Math.ceil(total / SESSION_PAGE_LIMIT)}
+          </Text>
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={!hasNext}
+            onClick={() => onOffsetChange(offset + SESSION_PAGE_LIMIT)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
 
-  // The Sessions tile uses the exact server total; the summed tiles are capped
-  // at the fetched page and disclose it.
-  const metricsSubtext =
-    total > chats.length ? `latest ${chats.length} sessions` : undefined;
-
+function SessionSummaryTiles({
+  data,
+  isLoading,
+  error,
+}: {
+  data:
+    | {
+        sessions: number;
+        messages: number;
+        totalCost: number;
+        totalTokens: number;
+      }
+    | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}): JSX.Element {
+  const displayValue = isLoading ? "—" : undefined;
   return (
     <>
       <Stack gap={0}>
         <StatTileGroup>
           <StatTile
             title="Sessions"
-            value={total}
+            value={data?.sessions ?? 0}
+            displayValue={displayValue}
             format="number"
             tone="information"
           />
           <StatTile
             title="Messages"
-            value={totals.messages}
+            value={data?.messages ?? 0}
+            displayValue={displayValue}
             format="compact"
             tone="information"
-            subtext={metricsSubtext}
           />
         </StatTileGroup>
         <StatTileGroup className="-mt-px">
           <StatTile
             title="Cost"
-            value={totals.cost}
+            value={data?.totalCost ?? 0}
+            displayValue={displayValue}
             format="currency"
             tone="neutral"
-            subtext={metricsSubtext}
           />
           <StatTile
             title="Tokens"
-            value={totals.tokens}
+            value={data?.totalTokens ?? 0}
+            displayValue={displayValue}
             format="compact"
             tone="neutral"
-            subtext={metricsSubtext}
           />
         </StatTileGroup>
       </Stack>
+      {error && (
+        <Text small muted>
+          Couldn't load activity totals. {error.message}
+        </Text>
+      )}
+    </>
+  );
+}
 
+function SessionsPage({
+  assistantId,
+  chats,
+  total,
+  offset,
+  selectedChatId,
+  onOpenChat,
+}: {
+  assistantId: string;
+  chats: ChatOverview[];
+  total: number;
+  offset: number;
+  selectedChatId: string | null;
+  onOpenChat: (chatId: string) => void;
+}): JSX.Element {
+  const routes = useRoutes();
+
+  return (
+    <>
       {chats.length === 0 ? (
         <Text small muted>
-          No sessions in the {rangeLabel}. Conversations with this assistant
-          will appear here.
+          {emptySessionsMessage(offset)}
         </Text>
       ) : (
         <div className="divide-border/60 overflow-hidden border divide-y">
-          {chats.slice(0, PREVIEW_LIMIT).map((chat) => (
+          {chats.map((chat) => (
             <SessionRow
               key={chat.id}
               chat={chat}
@@ -215,9 +304,9 @@ function SessionsContent({
         </div>
       )}
 
-      {total > Math.min(chats.length, PREVIEW_LIMIT) && (
+      {total > 0 && (
         <routes.agentSessions.Link
-          queryParams={viewAllQueryParams}
+          queryParams={{ assistantId }}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
         >
           View all sessions
