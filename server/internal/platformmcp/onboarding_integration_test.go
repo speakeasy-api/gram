@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -83,6 +84,21 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 	readinessVerified, err := service.Get(ctx, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
 	require.True(t, readinessVerified.ReadinessVerified)
+
+	connectionID := connectionIDFromPrincipal(t, principal)
+	newGeneration := uuid.New()
+	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
+		ActiveGeneration: newGeneration,
+		ReauthorizedAt:   timestamp(time.Now().UTC()),
+		ConnectionID:     connectionID,
+		OrganizationID:   principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	principal.Generation = newGeneration.String()
+	require.NoError(t, service.RecordRegistrationSucceeded(ctx, principal, project.ID, registration.ID), "reauthorization records fresh lifecycle evidence instead of conflicting with the previous generation")
+	reauthorized, err := service.Get(ctx, principal.OrganizationID, principal.UserID)
+	require.NoError(t, err)
+	require.True(t, reauthorized.RegistrationSucceeded)
 
 	otherUser := "user_" + uuid.NewString()
 	other, err := service.Get(ctx, principal.OrganizationID, otherUser)
