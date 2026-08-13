@@ -1,5 +1,119 @@
 # server
 
+## 1.9.0
+
+### Minor Changes
+
+- 0e614ac: chat.list accepts a `user_id` filter so callers with project-wide chat visibility can narrow results to a specific Gram user. The Project Assistant dock uses it, together with the dashboard source-kind filter, so "Continue chat" only offers sessions the viewer started from the dashboard.
+- 2b6ebb0: Cache OAuth client ID metadata documents instead of refetching them on every
+  authorization request, honoring upstream `Cache-Control` and `Expires` headers
+  within a 5 minute to 24 hour bound and revalidating with `If-None-Match`. A
+  fetch or validation failure leaves the cached document untouched and fails the
+  request rather than serving a stale one.
+- 6f8d740: Add `userSessionIssuersCimdClients.verifyURL`, which probes a client ID metadata document URL and reports whether it is reachable and spec-compliant without saving anything. Every probe outcome is a successful response distinguishing a malformed URL, an unreachable endpoint, a non-JSON body, and a document that violates the spec, so an operator can fix a URL before adding it rather than discovering the problem when a client fails to authorize. Adding a URL does not fetch the document itself, so configuration never depends on a vendor's host being up; verification is an explicit step taken when it is wanted. The endpoint is rate limited per project, since it is the one place a caller can make Gram fetch a URL of their choosing. The OAuth authorization path is unchanged and still reports these outcomes as a single opaque error, so it cannot be used to probe external hosts.
+- 43107ac: Add compact tool-call rows with separately loaded, persisted two-sentence summaries and risk-first detail expansion.
+- 5ffabf3: Freeze external key identity: `externalKeys.updateAwsKms` and `externalKeys.updateGcpKms` no longer accept `key_arn` / `resource_name` or `algorithm` and cover only `name`, `external_credential_id` and `customer_grant_reference`, so changing what a key is now means deleting it and creating a new one (a breaking change to those two methods). Deleting a key is refused with a conflict while a JSON Web Key Set or published key still references it, and `createGcpKms` now requires a fully-qualified crypto key version path.
+- 3b8d9fc: Catalog entries from external MCP registries now carry the registry's linked source repository and published packages, which the registry client previously dropped. Both are registry declarations — nothing ties a linked repository or package to what a remote endpoint actually runs — and the API descriptions say so. These feed the MCP approval evidence surface and the upcoming artifact pin-and-fetch work.
+- 6f44265: Assistants no longer send every MCP tool schema to the model on every call. MCP tools are discovered on demand through a search tool, MCP servers connect on first use instead of during assistant startup, and dropped MCP connections reseat automatically instead of requiring a reconnect tool call. This keeps provider prompt caching effective for assistants with large toolsets and removes MCP handshakes from assistant cold-start latency.
+- 8f3fb58: Show the supported client that originated an Agent Session routed through LiteLLM while preserving LiteLLM filtering.
+- 6f44265: Assistant runtimes can now run locally: the new `local` runtime provider (the
+  local-development default) starts one Docker container per assistant on demand,
+  reuses it across turns, and automatically replaces idle containers when the
+  runtime image is rebuilt — no Fly.io credentials or registry pushes needed for
+  local image development.
+- fffe50d: Emit the MCP protocol version to OpenTelemetry on all five inbound MCP paths. Traces now carry `gram.mcp.requested_protocol_version` and `gram.mcp.negotiated_protocol_version`, and a new unsampled `mcp.initialize` counter breaks handshakes down by revision, so client version adoption can be measured and a version-specific failure can be diagnosed.
+- 7c02667: Organization names accept punctuation and every script. The old rule allowed
+  only letters, digits, spaces, hyphens and underscores, which turned away
+  "Acme, Inc.", "Bob's Bakery", "Café Zoë", and — more importantly — every
+  company whose name is not written in the Latin alphabet, since a name in
+  Japanese, Chinese, Korean, Cyrillic, Arabic or Hebrew could not clear the rule
+  at all. Names are now capped at 100 characters (counted in characters, so a
+  non-Latin name gets the same room a Latin one does), must carry at least two
+  letters or numbers, and may use anything that renders: control characters, bidi
+  overrides and other invisible formatting are still rejected, and whitespace is
+  normalized. The URL slug is unaffected in shape — it is still derived
+  separately, with a generated fallback for names that contain fewer than two
+  URL-safe characters.
+- c2c59c8: Let organization admins set an organization-wide automatic remote session refresh policy (Disabled, User controlled, or Required) from the MCP Connections page, and surface the effective policy to end users on the OAuth consent screen. Required keeps every eligible connection refreshed and shows the consent control locked; Disabled stops background refresh and states it read-only so users know idle connections will lapse.
+- 530feba: Attach files to the Project Assistant. The composer accepts files from the paperclip or by dropping them anywhere on the chat, and the assistant can read them: images and text-like files (including OpenAPI specs) travel with the turn, and anything it cannot read inline comes with a short-lived download link.
+- 8ae2c53: Revoke Remote Session credentials upstream via RFC 7009. Remote session issuers gain a `revocation_endpoint`, discovered from the issuer's RFC 8414 metadata document during issuer refresh. When a Remote Session is revoked, Gram now posts the stored token to the issuer's revocation endpoint so the upstream authorization server drops it, instead of leaving a live access/refresh pair that keeps working elsewhere until it expires on its own clock.
+
+  This covers every path that ends a session: revoking one session, revoking all of a client's sessions, deleting a client, which cascades a soft-delete to its sessions, and the consent screen's per-provider "Disconnect" — the one an end user drives rather than an admin. Batches run under bounded concurrency and a single budget for the whole batch, since every session on a client shares one upstream host.
+
+  The upstream call is best-effort by construction: it runs after the local revoke has committed, is bounded by a short timeout, and routes through the guardian egress policy. Failures are logged and metered, never surfaced to the caller — the local revoke is the security control the caller asked for and it has already succeeded. Issuers that advertise no revocation endpoint are recorded as a distinct `skipped` metric outcome rather than folded into success or failure, since that is the expected case for a large share of upstreams. A batch that exhausts its budget before reaching every session records the remainder as `dropped` rather than passing them off as done.
+
+- 82f8bbc: Propagate retroactive risk-exclusion changes into ClickHouse: creating, updating, disabling, or deleting an exclusion now rewrites the affected findings' effective state in the ClickHouse store as well as Postgres.
+- a2b272c: Warn when an identity provider duplicates an issuer URL that already exists, at all three tiers and on both create and edit. The warning is advisory and never blocks the write, since duplicating an issuer has legitimate use cases.
+- e8d3459: Score Watchdog signals from the matched risk policy's configured score, and simplify the signal drawer to a single Create-exclusion action.
+
+### Patch Changes
+
+- 37c036b: Stop the admin organizations list from returning a next-page cursor on the last full page. When the number of matching organizations was an exact multiple of the page size, the final page still carried a cursor, so the next page came back empty. The endpoint now reads one row past the page to decide whether a next page exists.
+- 341be47: Attribute Cursor usage events to sessions by decoding conversationId into the standard GenAI conversation attribute.
+- 8f8f280: Stop Codex hooks failing with exit code 127. The hook command Codex caches for
+  a session pointed at one versioned plugin cache directory, so a background
+  plugin refresh that swapped that directory out left the session invoking a
+  bootstrap script that no longer existed — the shell reported "command not
+  found" and Codex surfaced it as `SessionStart`/`UserPromptSubmit` failures. The
+  bootstrap now persists itself and its deployment config together in Codex's
+  version-independent plugin data directory. Once ready, hook commands execute
+  that stable bundle and use the installed payload only to refresh it; the newest
+  cache sibling remains a first-run migration fallback. Unix and Windows both
+  honour the configured install-failure policy with an explanatory diagnostic
+  instead of an opaque missing-command failure.
+
+  Also fixes the trusted-hash computation for Codex hooks: it was serialising the
+  command with Go's HTML escaping, so any command containing `>`, `<`, or `&`
+  hashed differently than Codex computes it and the hook was silently dropped as
+  untrusted.
+
+- 8589630: Fix employee usage pages under-reporting tokens and cost. Ingest attributes a
+  person's telemetry two different ways — hook events resolve the sender's email
+  to a Gram user id and carry both, while the rows that actually carry tokens and
+  cost (Claude/Codex OTEL and the Anthropic, Codex and Cursor usage imports) carry
+  only the provider account's email. The employee-scoped queries matched a single
+  collapsed identifier, so they saw one shape and silently dropped the other: an
+  employee page could show sessions and tool calls next to zero tokens and zero
+  cost.
+
+  The per-user metrics summary, observability overview, time series, tool
+  breakdown and data-flow graph now scope to the employee's whole identity set —
+  their Gram user id, their directory email, and the emails of their linked AI
+  accounts — resolved from the user directory rather than from telemetry row
+  identity, so a stray row cannot hand one person another's usage. Personal
+  accounts benefit most, since they usually sign in with an email that differs
+  from the directory one and previously joined to nothing. The per-user metrics
+  summary also selects cost and cache tokens, which its response has always
+  carried but the query never populated.
+
+- 4556bf0: Serve challenge-log buckets from the pre-aggregated ClickHouse summary and
+  paginate resolved and unresolved results in ClickHouse.
+- 0dd2a37: Serve the hooks@0.3.21 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- abcde04: Logging out now returns `Clear-Site-Data: "cookies", "storage"`, so the browser drops the session cookie across the origin's registrable domain and empties localStorage, sessionStorage, IndexedDB and Cache Storage. Previously teardown relied entirely on an expiring `Set-Cookie` plus a best-effort localStorage sweep, both of which leave data behind when a cookie attribute drifts or a page navigates away mid-logout. The theme preference and project favorites still survive a logout: the dashboard reads them before the request goes out and writes them back once the response lands.
+- f65e1ea: Internal groundwork for the MCP approval workflow: summarise what an MCP tool declares it can do, from its MCP annotations and the shape of its input schema. No user-facing behaviour yet.
+- 8b09caf: Internal groundwork for the MCP approval workflow: resolve an observed MCP server reference — a remote URL or a stdio launch command — into a stable artifact identity, and record whether that reference names an exact version. No user-facing behaviour yet.
+- 3650129: Record an actor display name on audit entries written from organization-less sessions. `sessions.Authenticate` now populates the actor email for sessions with no active organization, and enterprise-trial arming threads the actor email through provisioning so the self-signup callback — which has no auth context — still attributes the `organization:enterprise_trial_armed` entry instead of storing a bare actor id.
+- d553497: Route authorization challenge logging through Pub/Sub before persisting events
+  to ClickHouse. This decouples authorization request paths from ClickHouse
+  availability and makes message redelivery idempotent by challenge ID.
+- b05b32b: Slack tool calls that a caller has to fix are no longer reported as server
+  errors. The Slack Web API answers HTTP 200 with `ok: false` for essentially
+  every argument, permission, and state problem, so a thread timestamp that names
+  no thread, a channel the bot was never invited to, a token missing a scope, or
+  blocks that fail validation all arrived as untyped failures and were logged at
+  error level by the MCP tool layer. A single misconfigured client emitting a few
+  hundred of those an hour was enough to hold the component's error-log anomaly
+  monitor at its threshold for a whole alert window, masking any genuine
+  regression behind it.
+
+  Slack refusals now carry the envelope error code, and the MCP tool boundary
+  answers a caller-attributed failure with a 400 logged at warn — still recorded
+  with the upstream code and the tool name, and no longer marking the request span
+  as errored — while Slack's own failures (`internal_error`, `ratelimited`,
+  5xx responses) keep error severity. `platform_slack_add_reaction` also treats
+  `already_reacted` as the successful no-op it is, since the reaction the caller
+  asked for is already on the message.
+
 ## 1.8.0
 
 ### Minor Changes

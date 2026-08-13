@@ -40,6 +40,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -137,6 +139,12 @@ type ChallengeManager struct {
 	locks     cache.Cache
 	refresher *RefreshService
 	serverURL *url.URL
+
+	// revoker pushes RFC 7009 revocations upstream when the consent screen
+	// disconnects a remote session, so the provider drops the tokens rather
+	// than only Gram forgetting them.
+	revoker *UpstreamRevoker
+
 	// authorizeInterceptors adapt the outgoing upstream authorize request to
 	// per-provider, non-standard requirements (e.g. Google's offline access).
 	// Injected here rather than via a package-global registry.
@@ -145,6 +153,8 @@ type ChallengeManager struct {
 
 func NewChallengeManager(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	policy *guardian.Policy,
@@ -165,6 +175,7 @@ func NewChallengeManager(
 		locks:     cacheImpl,
 		refresher: NewRefreshService(logger, db, enc, policy, cacheImpl),
 		serverURL: serverURL,
+		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
@@ -352,12 +363,20 @@ func (m *ChallengeManager) RefreshRemoteSession(
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one
-// client — the consent screen's per-card "Disconnect". Local only: the
-// upstream grant is not revoked (issuers' revocation endpoints are not even
-// persisted), matching every other revoke path in this package. Returns the
-// number of rows affected; zero means there was nothing to disconnect.
+// client — the consent screen's per-card "Disconnect" — and then asks the
+// upstream authorization server to drop the tokens it still holds.
+//
+// The user asked to disconnect a provider, so leaving a live refresh token at
+// that provider would defeat the action; the upstream revocation is what makes
+// the disconnect mean something outside Gram. It is best-effort in exactly the
+// way the other revoke paths are: the soft delete has already committed by the
+// time it runs, and a provider that is unreachable or refuses is recorded
+// rather than surfaced, because the local disconnect succeeded either way.
+//
+// Returns the number of rows affected; zero means there was nothing to
+// disconnect and nothing is sent upstream.
 func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
-	n, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userSessionIssuerID,
@@ -366,7 +385,16 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 	if err != nil {
 		return 0, fmt.Errorf("disconnect remote session: %w", err)
 	}
-	return n, nil
+
+	for _, row := range disconnected {
+		m.revoker.RevokeDetached(ctx, RevokedCredentials{
+			RemoteSessionClientID: row.RemoteSessionClientID,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+		})
+	}
+
+	return int64(len(disconnected)), nil
 }
 
 // SetRemoteSessionAutoRefresh records the subject's consent-screen

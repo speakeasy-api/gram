@@ -2,7 +2,6 @@ package risk
 
 import (
 	"context"
-	"encoding/base64"
 	"log/slog"
 	"math"
 	"strings"
@@ -133,7 +132,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			if sum, pepperver, err := w.fingerprinter.HS256([]byte(match)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute global fingerprint", attr.SlogError(err))
 			} else {
-				globalHS256 = base64.RawURLEncoding.EncodeToString(sum)
+				globalHS256 = EncodeFingerprint(sum)
 				pepperVersion = pepperver
 			}
 		}
@@ -143,7 +142,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match), WithKeyCache(tenantKeyCache)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute tenant-qualified fingerprint", attr.SlogError(err))
 			} else {
-				tenantHS256 = base64.RawURLEncoding.EncodeToString(sum)
+				tenantHS256 = EncodeFingerprint(sum)
 				pepperVersion = pepperver
 			}
 		}

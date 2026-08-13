@@ -114,13 +114,13 @@ func newPolicyBypassRequestID() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, time.Time, error) {
+func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, string, time.Time, error) {
 	if siteURL == nil {
-		return "", time.Time{}, fmt.Errorf("site url is required")
+		return "", "", time.Time{}, fmt.Errorf("site url is required")
 	}
 	token, expiry, err := GeneratePolicyBypassRequestToken(ctx, c, input, ttl)
 	if err != nil {
-		return "", time.Time{}, err
+		return "", "", time.Time{}, err
 	}
 	requestURL := siteURL.JoinPath("risk-policy-bypass", "request")
 	query := url.Values{}
@@ -134,7 +134,7 @@ func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL 
 	// token to an rpbr2 cache id (AIS-228) did not change this: a short id is
 	// no less a secret, so it still belongs in the fragment.
 	requestURL.Fragment = query.Encode()
-	return requestURL.String(), expiry, nil
+	return requestURL.String(), token, expiry, nil
 }
 
 // GeneratePolicyBypassRequestToken stores the request state in the cache and

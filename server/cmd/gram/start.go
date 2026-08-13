@@ -96,6 +96,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
@@ -473,6 +474,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, svixFlags()...)
+	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -532,6 +534,11 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			clickhouseShutdown = shutdown
+
+			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
+			if err != nil {
+				return err
+			}
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -674,6 +681,7 @@ func newStartCommand() *cli.Command {
 					&background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv},
 					productFeatures,
 					billingTracker,
+					encryptionClient,
 				)
 			}
 
@@ -889,6 +897,8 @@ func newStartCommand() *cli.Command {
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
+				tracerProvider,
+				meterProvider,
 				db,
 				encryptionClient,
 				guardianPolicy,
@@ -1279,6 +1289,7 @@ func newStartCommand() *cli.Command {
 			// not coalesced into the chat-write cooldown.
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
+			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, encryptionClient))
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, siteURL)
 			skills.Attach(mux, skillsService)
@@ -1303,8 +1314,8 @@ func newStartCommand() *cli.Command {
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String()))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
+			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
@@ -1506,46 +1517,48 @@ func newStartCommand() *cli.Command {
 					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						GuardianPolicy:      guardianPolicy,
-						DB:                  db,
-						EncryptionClient:    encryptionClient,
-						FeatureProvider:     featureFlags,
-						AssetStorage:        assetStorage,
-						SlackClient:         slackClient,
-						ChatMessageWriter:   chatWriter,
-						ChatClient:          chatClient,
-						OpenRouter:          openRouter,
-						K8sClient:           k8sClient,
-						ExpectedTargetCNAME: c.String("custom-domain-cname"),
-						SiteURL:             siteURL,
-						BillingTracker:      billingTracker,
-						BillingRepository:   billingRepo,
-						RedisClient:         redisClient,
-						PosthogClient:       posthogClient,
-						FunctionsDeployer:   functionsOrchestrator,
-						FunctionsVersion:    runnerVersion,
-						RagService:          ragService,
-						MCPRegistryClient:   mcpRegistryClient,
-						TelemetryLogger:     telemLogger,
-						ClickhouseConn:      chDB,
-						TelemetryRepo:       telemetryrepo.New(chDB),
-						TriggersApp:         triggerApp,
-						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
-						EmailService:        emailService,
-						AssistantsCore:      assistantsCore,
-						TemporalEnv:         temporalEnv,
-						PIIScanner:          piiScanner,
-						PIScanner:           piScanner,
-						CustomRuleScanner:   customRulesScanner,
-						BuiltinPresets:      builtinPresets,
-						ShadowMCPClient:     shadowMCPClient,
-						AuditLogger:         auditLogger,
-						WorkOSClient:        backgroundWorkOSClient,
-						SvixClient:          svixClient,
-						ProductFeatures:     productFeatures,
-						PluginPublisher:     pluginPublisher,
-						Publishers:          publishers,
-						TrialEmailsService:  trialEmailsService,
+						GuardianPolicy:            guardianPolicy,
+						DB:                        db,
+						EncryptionClient:          encryptionClient,
+						FeatureProvider:           featureFlags,
+						AssetStorage:              assetStorage,
+						SlackClient:               slackClient,
+						ChatMessageWriter:         chatWriter,
+						ChatClient:                chatClient,
+						OpenRouter:                openRouter,
+						K8sClient:                 k8sClient,
+						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+						SiteURL:                   siteURL,
+						BillingTracker:            billingTracker,
+						BillingRepository:         billingRepo,
+						RedisClient:               redisClient,
+						PosthogClient:             posthogClient,
+						FunctionsDeployer:         functionsOrchestrator,
+						FunctionsVersion:          runnerVersion,
+						RagService:                ragService,
+						MCPRegistryClient:         mcpRegistryClient,
+						TelemetryLogger:           telemLogger,
+						ClickhouseConn:            chDB,
+						TelemetryRepo:             telemetryrepo.New(chDB),
+						TriggersApp:               triggerApp,
+						CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+						EmailService:              emailService,
+						AssistantsCore:            assistantsCore,
+						TemporalEnv:               temporalEnv,
+						PIIScanner:                piiScanner,
+						PIScanner:                 piScanner,
+						CustomRuleScanner:         customRulesScanner,
+						BuiltinPresets:            builtinPresets,
+						ShadowMCPClient:           shadowMCPClient,
+						AuditLogger:               auditLogger,
+						WorkOSClient:              backgroundWorkOSClient,
+						SvixClient:                svixClient,
+						ProductFeatures:           productFeatures,
+						PluginPublisher:           pluginPublisher,
+						Publishers:                publishers,
+						TrialEmailsService:        trialEmailsService,
+						RiskFingerprinter:         riskFingerprinter,
+						DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

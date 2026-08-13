@@ -69,6 +69,13 @@ type ListTriggerInstancesResponseBody struct {
 	Triggers []*TriggerInstanceResponseBody `form:"triggers,omitempty" json:"triggers,omitempty" xml:"triggers,omitempty"`
 }
 
+// ListTriggerEventsResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body.
+type ListTriggerEventsResponseBody struct {
+	// The dispatch events for the trigger instance, most recent first.
+	Events []*TriggerEventResponseBody `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+}
+
 // GetTriggerInstanceResponseBody is the type of the "triggers" service
 // "getTriggerInstance" endpoint HTTP response body.
 type GetTriggerInstanceResponseBody struct {
@@ -589,6 +596,192 @@ type ListTriggerInstancesUnexpectedResponseBody struct {
 // service "listTriggerInstances" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListTriggerInstancesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsUnauthorizedResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListTriggerEventsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsForbiddenResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "forbidden" error.
+type ListTriggerEventsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsBadRequestResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "bad_request" error.
+type ListTriggerEventsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsNotFoundResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "not_found" error.
+type ListTriggerEventsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsConflictResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "conflict" error.
+type ListTriggerEventsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsUnsupportedMediaResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListTriggerEventsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsInvalidResponseBody is the type of the "triggers" service
+// "listTriggerEvents" endpoint HTTP response body for the "invalid" error.
+type ListTriggerEventsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsInvariantViolationResponseBody is the type of the
+// "triggers" service "listTriggerEvents" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListTriggerEventsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsUnexpectedResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the "unexpected"
+// error.
+type ListTriggerEventsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTriggerEventsGatewayErrorResponseBody is the type of the "triggers"
+// service "listTriggerEvents" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListTriggerEventsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1799,6 +1992,26 @@ type TriggerInstanceResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// TriggerEventResponseBody is used to define fields on response body types.
+type TriggerEventResponseBody struct {
+	// The trigger event ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The trigger instance that dispatched the event.
+	TriggerInstanceID *string `form:"trigger_instance_id,omitempty" json:"trigger_instance_id,omitempty" xml:"trigger_instance_id,omitempty"`
+	// The processing status of the event.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Number of processing attempts.
+	Attempts *int `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	// The last processing error, if any.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// The conversation the event was routed to.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// Creation timestamp.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Processing completion timestamp.
+	ProcessedAt *string `form:"processed_at,omitempty" json:"processed_at,omitempty" xml:"processed_at,omitempty"`
+}
+
 // NewCreateTriggerInstanceRequestBody builds the HTTP request body from the
 // payload of the "createTriggerInstance" endpoint of the "triggers" service.
 func NewCreateTriggerInstanceRequestBody(p *triggers.CreateTriggerInstancePayload) *CreateTriggerInstanceRequestBody {
@@ -2165,6 +2378,172 @@ func NewListTriggerInstancesUnexpected(body *ListTriggerInstancesUnexpectedRespo
 // NewListTriggerInstancesGatewayError builds a triggers service
 // listTriggerInstances endpoint gateway_error error.
 func NewListTriggerInstancesGatewayError(body *ListTriggerInstancesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsResultOK builds a "triggers" service "listTriggerEvents"
+// endpoint result from a HTTP "OK" response.
+func NewListTriggerEventsResultOK(body *ListTriggerEventsResponseBody) *triggers.ListTriggerEventsResult {
+	v := &triggers.ListTriggerEventsResult{}
+	v.Events = make([]*types.TriggerEvent, len(body.Events))
+	for i, val := range body.Events {
+		if val == nil {
+			v.Events[i] = nil
+			continue
+		}
+		v.Events[i] = unmarshalTriggerEventResponseBodyToTypesTriggerEvent(val)
+	}
+
+	return v
+}
+
+// NewListTriggerEventsUnauthorized builds a triggers service listTriggerEvents
+// endpoint unauthorized error.
+func NewListTriggerEventsUnauthorized(body *ListTriggerEventsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsForbidden builds a triggers service listTriggerEvents
+// endpoint forbidden error.
+func NewListTriggerEventsForbidden(body *ListTriggerEventsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsBadRequest builds a triggers service listTriggerEvents
+// endpoint bad_request error.
+func NewListTriggerEventsBadRequest(body *ListTriggerEventsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsNotFound builds a triggers service listTriggerEvents
+// endpoint not_found error.
+func NewListTriggerEventsNotFound(body *ListTriggerEventsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsConflict builds a triggers service listTriggerEvents
+// endpoint conflict error.
+func NewListTriggerEventsConflict(body *ListTriggerEventsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsUnsupportedMedia builds a triggers service
+// listTriggerEvents endpoint unsupported_media error.
+func NewListTriggerEventsUnsupportedMedia(body *ListTriggerEventsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsInvalid builds a triggers service listTriggerEvents
+// endpoint invalid error.
+func NewListTriggerEventsInvalid(body *ListTriggerEventsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsInvariantViolation builds a triggers service
+// listTriggerEvents endpoint invariant_violation error.
+func NewListTriggerEventsInvariantViolation(body *ListTriggerEventsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsUnexpected builds a triggers service listTriggerEvents
+// endpoint unexpected error.
+func NewListTriggerEventsUnexpected(body *ListTriggerEventsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTriggerEventsGatewayError builds a triggers service listTriggerEvents
+// endpoint gateway_error error.
+func NewListTriggerEventsGatewayError(body *ListTriggerEventsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3244,6 +3623,22 @@ func ValidateListTriggerInstancesResponseBody(body *ListTriggerInstancesResponse
 	return
 }
 
+// ValidateListTriggerEventsResponseBody runs the validations defined on
+// ListTriggerEventsResponseBody
+func ValidateListTriggerEventsResponseBody(body *ListTriggerEventsResponseBody) (err error) {
+	if body.Events == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("events", "body"))
+	}
+	for _, e := range body.Events {
+		if e != nil {
+			if err2 := ValidateTriggerEventResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetTriggerInstanceResponseBody runs the validations defined on
 // GetTriggerInstanceResponseBody
 func ValidateGetTriggerInstanceResponseBody(body *GetTriggerInstanceResponseBody) (err error) {
@@ -3999,6 +4394,246 @@ func ValidateListTriggerInstancesUnexpectedResponseBody(body *ListTriggerInstanc
 // ValidateListTriggerInstancesGatewayErrorResponseBody runs the validations
 // defined on listTriggerInstances_gateway_error_response_body
 func ValidateListTriggerInstancesGatewayErrorResponseBody(body *ListTriggerInstancesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsUnauthorizedResponseBody runs the validations
+// defined on listTriggerEvents_unauthorized_response_body
+func ValidateListTriggerEventsUnauthorizedResponseBody(body *ListTriggerEventsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsForbiddenResponseBody runs the validations defined
+// on listTriggerEvents_forbidden_response_body
+func ValidateListTriggerEventsForbiddenResponseBody(body *ListTriggerEventsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsBadRequestResponseBody runs the validations defined
+// on listTriggerEvents_bad_request_response_body
+func ValidateListTriggerEventsBadRequestResponseBody(body *ListTriggerEventsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsNotFoundResponseBody runs the validations defined
+// on listTriggerEvents_not_found_response_body
+func ValidateListTriggerEventsNotFoundResponseBody(body *ListTriggerEventsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsConflictResponseBody runs the validations defined
+// on listTriggerEvents_conflict_response_body
+func ValidateListTriggerEventsConflictResponseBody(body *ListTriggerEventsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsUnsupportedMediaResponseBody runs the validations
+// defined on listTriggerEvents_unsupported_media_response_body
+func ValidateListTriggerEventsUnsupportedMediaResponseBody(body *ListTriggerEventsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsInvalidResponseBody runs the validations defined on
+// listTriggerEvents_invalid_response_body
+func ValidateListTriggerEventsInvalidResponseBody(body *ListTriggerEventsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsInvariantViolationResponseBody runs the validations
+// defined on listTriggerEvents_invariant_violation_response_body
+func ValidateListTriggerEventsInvariantViolationResponseBody(body *ListTriggerEventsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsUnexpectedResponseBody runs the validations defined
+// on listTriggerEvents_unexpected_response_body
+func ValidateListTriggerEventsUnexpectedResponseBody(body *ListTriggerEventsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTriggerEventsGatewayErrorResponseBody runs the validations
+// defined on listTriggerEvents_gateway_error_response_body
+func ValidateListTriggerEventsGatewayErrorResponseBody(body *ListTriggerEventsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5570,6 +6205,47 @@ func ValidateTriggerInstanceResponseBody(body *TriggerInstanceResponseBody) (err
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTriggerEventResponseBody runs the validations defined on
+// TriggerEventResponseBody
+func ValidateTriggerEventResponseBody(body *TriggerEventResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.TriggerInstanceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_instance_id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Attempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attempts", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.TriggerInstanceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_instance_id", *body.TriggerInstanceID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "processing" || *body.Status == "completed" || *body.Status == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "processing", "completed", "failed"}))
+		}
+	}
+	if body.ChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.ProcessedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.processed_at", *body.ProcessedAt, goa.FormatDateTime))
 	}
 	return
 }

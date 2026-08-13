@@ -51,7 +51,14 @@ export function CategoryLabel({
       title={`${meta.label}: ${meta.description}`}
     >
       <Badge variant="neutral" className="max-w-full">
-        <Badge.Text className="min-w-0 truncate">{meta.label}</Badge.Text>
+        {/* The ellipsis needs overflow:hidden, but Badge.Text's default box
+            hugs the glyph ink (leading-none plus cap/alphabetic
+            text-box-trim), so clipping there shaves the letters themselves.
+            Disable the trim and open up the line box on this truncating
+            instance so the ink never crosses the clip edge. */}
+        <Badge.Text className="min-w-0 truncate leading-normal [text-box-trim:none]">
+          {meta.label}
+        </Badge.Text>
       </Badge>
     </span>
   );
@@ -175,6 +182,7 @@ export function MaskedMatch({
   resultId,
   matchRedacted,
   tone = "default",
+  wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
@@ -184,6 +192,12 @@ export function MaskedMatch({
    * revealed value flips to the backdrop's inverse text color.
    */
   tone?: "default" | "contrast";
+  /**
+   * Soft-wrap the revealed value instead of scrolling it horizontally. Use in
+   * detail surfaces (drawers) where the full value should stay visible; table
+   * cells keep the default single-line scroll so row heights stay stable.
+   */
+  wrap?: boolean;
 }): JSX.Element {
   const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
@@ -257,11 +271,19 @@ export function MaskedMatch({
   }
 
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+    <span
+      className={cn(
+        "inline-flex max-w-full min-w-0 gap-1",
+        wrap ? "items-start" : "items-center",
+      )}
+    >
       <SimpleTooltip tooltip={value}>
         <span
           className={cn(
-            "min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap",
+            "min-w-0 font-mono text-xs",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
             contrast && "text-background",
           )}
         >

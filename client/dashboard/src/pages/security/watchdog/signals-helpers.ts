@@ -52,13 +52,27 @@ export const SEVERITY_GROUP_LABEL: Record<SignalSeverity, string> = {
   low: "Low",
 };
 
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
 /**
- * Window-over-window growth in percent, or null when there is no previous
- * baseline (the UI renders "new" instead of a misleading +100%).
+ * Within-window growth in percent: the last third of the window's sparkline
+ * buckets against the first third, so the number moves with the drawn line
+ * rather than with a previous window the chart never shows. Segment means
+ * (mirroring sparkline-math's trendOf) rather than single endpoint buckets,
+ * which are too noisy to anchor a percentage. Null when the window opens with
+ * no findings — the UI renders "new" instead of a misleading percentage.
  */
-export function trendPercent(current: number, previous: number): number | null {
-  if (previous <= 0) return null;
-  return ((current - previous) / previous) * 100;
+export function trendPercent(sparkline: number[]): number | null {
+  const n = sparkline.length;
+  if (n < 2) return null;
+  const seg = Math.max(1, Math.round(n / 3));
+  const first = mean(sparkline.slice(0, seg));
+  if (first <= 0) return null;
+  const last = mean(sparkline.slice(n - seg));
+  return ((last - first) / first) * 100;
 }
 
 export type SignalGroup = {

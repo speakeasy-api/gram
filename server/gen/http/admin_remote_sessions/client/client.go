@@ -21,6 +21,10 @@ type Client struct {
 	// createGlobalIssuer endpoint.
 	CreateGlobalIssuerDoer goahttp.Doer
 
+	// GetGlobalIssuerDuplicatePreflight Doer is the HTTP client used to make
+	// requests to the getGlobalIssuerDuplicatePreflight endpoint.
+	GetGlobalIssuerDuplicatePreflightDoer goahttp.Doer
+
 	// ListGlobalIssuers Doer is the HTTP client used to make requests to the
 	// listGlobalIssuers endpoint.
 	ListGlobalIssuersDoer goahttp.Doer
@@ -99,6 +103,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateGlobalIssuerDoer:                    doer,
+		GetGlobalIssuerDuplicatePreflightDoer:     doer,
 		ListGlobalIssuersDoer:                     doer,
 		GetGlobalIssuerDoer:                       doer,
 		UpdateGlobalIssuerDoer:                    doer,
@@ -140,6 +145,31 @@ func (c *Client) CreateGlobalIssuer() goa.Endpoint {
 		resp, err := c.CreateGlobalIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("adminRemoteSessions", "createGlobalIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGlobalIssuerDuplicatePreflight returns an endpoint that makes HTTP
+// requests to the adminRemoteSessions service
+// getGlobalIssuerDuplicatePreflight server.
+func (c *Client) GetGlobalIssuerDuplicatePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGlobalIssuerDuplicatePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetGlobalIssuerDuplicatePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGlobalIssuerDuplicatePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGlobalIssuerDuplicatePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminRemoteSessions", "getGlobalIssuerDuplicatePreflight", err)
 		}
 		return decodeResponse(resp)
 	}

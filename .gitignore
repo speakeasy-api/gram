@@ -41,6 +41,7 @@ report.md
 /dev-idp/gen/http/openapi3.yaml
 scratch/
 /local/cache
+/local/lgtm
 /local/ssl
 /local/keys
 /local/functions
@@ -68,7 +69,6 @@ gram.code-workspace
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted
-.vercel
 cover.*
 *gram.deploy.json
 .tmp-melange/

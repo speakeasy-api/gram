@@ -941,3 +941,57 @@ func TestRefreshGlobalIssuerMetadata_RejectsOrgScopedIssuer(t *testing.T) {
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
+
+// Acceptance criterion for RFC 7009 support: an upstream that advertises a
+// revocation endpoint has it persisted, so the revoke path has somewhere to
+// POST to.
+func TestRefreshRemoteSessionIssuerMetadata_PersistsRevocationEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	// The document's own issuer claim is the server URL, so deriving the
+	// revocation endpoint from it keeps the two consistent without needing the
+	// server's address before it starts.
+	upstream := fakeIssuerServer(t, func(doc map[string]any) {
+		issuer, ok := doc["issuer"].(string)
+		require.True(t, ok)
+		doc["revocation_endpoint"] = issuer + "/revoke"
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-revocation", upstream.URL))
+	require.NoError(t, err)
+	require.Nil(t, created.RevocationEndpoint, "create seeded no revocation endpoint")
+
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Issuer.RevocationEndpoint)
+	require.Equal(t, upstream.URL+"/revoke", *result.Issuer.RevocationEndpoint)
+}
+
+// The other half of the criterion. An issuer advertising no revocation endpoint
+// is the common case, so it must leave the column NULL *and* leave the refresh
+// itself succeeding — the field is deliberately not part of the distrust gate
+// that aborts on a missing authorization or token endpoint.
+func TestRefreshRemoteSessionIssuerMetadata_RevocationEndpointStaysNullWhenUnadvertised(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := fakeIssuerServer(t, nil)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-no-revocation", upstream.URL))
+	require.NoError(t, err)
+
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "a missing revocation endpoint must not abort the refresh")
+	require.Nil(t, result.Issuer.RevocationEndpoint)
+}

@@ -2,16 +2,16 @@ package risk
 
 import (
 	"math"
-	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 )
 
-// Signal scoring: deterministic heuristics that place each rule-level signal
-// on the same 0.1-10 severity scale the rest of the risk surfaces use (CVSS
-//-style bands, see severityForScore). The base weight comes from the rule's
-// category; confidence, volume, user spread, recency, and growth nudge it up
-// or down. All weights live here so product tuning is a one-file change.
+// Signal scoring: a signal's score IS the matched policy's configured 0.1-10
+// score — the operator's own severity definition, on the same CVSS-style
+// bands the rest of the risk surfaces use (see severityForScore). Category
+// weights only cover findings with no policy attribution. A richer
+// evidence-weighted formula was prototyped and parked for review; see
+// docs/risk_scores/formula.md in the internal docs repo.
 
 // signalCategoryBaseWeight is the category's starting severity on the 10
 // scale before per-signal adjustments.
@@ -35,45 +35,19 @@ var signalCategoryBaseWeight = map[categories.Category]float64{
 // (pre-classifier rows or future categories).
 const signalDefaultBaseWeight = 5.0
 
-// signalScoreInputs are the aggregate facts one score is computed from.
-type signalScoreInputs struct {
-	category      string
-	avgConfidence float64
-	findings      uint64
-	users         uint64
-	// lastSeen and windowEnd drive the recency bonus; zero lastSeen skips it.
-	lastSeen  time.Time
-	windowEnd time.Time
-	// previousFindings drives the growth bonus; zero skips it.
-	previousFindings uint64
-}
-
-// signalScore maps aggregate facts to a 0.1-10 severity score:
-// base weight scaled by detector confidence (a 0-confidence signal keeps 70%
-// of its base), plus bounded bonuses for volume (log-scaled), user spread
-// (sqrt-scaled), last-24h activity, and >=50% window-over-window growth.
-// Clamped to [0.5, 9.9] so a heuristic score never claims the extremes, and
-// rounded to one decimal to match the CVSS-style display format.
-func signalScore(in signalScoreInputs) float64 {
-	base, ok := signalCategoryBaseWeight[categories.Category(in.category)]
+// signalScore is the matched policy's configured 0.1-10 score, verbatim.
+// policyScore <= 0 means no policy attribution (pre-policy rows), which
+// falls back to the rule category's fixed weight. Rounded to one decimal to
+// match the CVSS-style display format.
+func signalScore(policyScore float64, category string) float64 {
+	if policyScore > 0 {
+		return roundScore(policyScore)
+	}
+	base, ok := signalCategoryBaseWeight[categories.Category(category)]
 	if !ok {
 		base = signalDefaultBaseWeight
 	}
-
-	confidence := math.Max(0, math.Min(1, in.avgConfidence))
-	score := base * (0.7 + 0.3*confidence)
-
-	score += math.Min(1.2, 0.5*math.Log10(1+float64(in.findings)))
-	score += math.Min(1.5, 0.3*math.Sqrt(float64(in.users)))
-
-	if !in.lastSeen.IsZero() && !in.windowEnd.IsZero() && in.windowEnd.Sub(in.lastSeen) <= 24*time.Hour {
-		score += 0.6
-	}
-	if in.previousFindings > 0 && float64(in.findings) >= 1.5*float64(in.previousFindings) {
-		score += 0.5
-	}
-
-	return roundScore(math.Max(0.5, math.Min(9.9, score)))
+	return roundScore(base)
 }
 
 // severityForScore mirrors the dashboard's CVSS-style bands

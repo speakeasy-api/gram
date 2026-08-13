@@ -239,7 +239,7 @@ SELECT a.url
 FROM deployments_functions df
 INNER JOIN assets a ON df.asset_id = a.id
 WHERE
-  a.project_id = $1
+  a.project_id = $1::uuid
   AND df.deployment_id = $2
   AND df.id = $3
   AND a.id = $4
