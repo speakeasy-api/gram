@@ -3732,7 +3732,13 @@ INSERT INTO platform_mcp_onboarding_milestones (
     $6,
     $7
 )
+<<<<<<<
+ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id, connection_generation)
+WHERE attempt_id IS NOT NULL
+DO NOTHING
+=======
 ON CONFLICT DO NOTHING
+>>>>>>>
 `
 
 type RecordPlatformMCPSetupMilestoneParams struct {

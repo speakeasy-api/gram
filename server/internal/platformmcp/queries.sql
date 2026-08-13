@@ -1520,7 +1520,13 @@ INSERT INTO platform_mcp_onboarding_milestones (
     @mcp_key,
     @attempt_id
 )
+<<<<<<<
+ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id, connection_generation)
+WHERE attempt_id IS NOT NULL
+DO NOTHING;
+=======
 ON CONFLICT DO NOTHING;
+>>>>>>>
 
 -- name: HasPlatformMCPOnboardingRegistrationSucceeded :one
 SELECT EXISTS (
