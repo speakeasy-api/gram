@@ -41,6 +41,7 @@ var (
 	McpEndpointV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_endpoint_event_v1", "Emitted when changes to MCP endpoints are made")
 	McpServerV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_server_event_v1", "Emitted when changes to MCP servers are made")
 	ModelProviderKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.model_provider_key_event_v1", "Emitted when changes to customer model provider keys are made")
+	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed or demoted")
