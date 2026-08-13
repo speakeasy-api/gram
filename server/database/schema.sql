@@ -2069,6 +2069,12 @@ WHERE external_chat_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chats_project_id_idx
 ON chats (project_id);
 
+-- FK target for a future chat_messages (chat_id, project_id) composite
+-- foreign key. id is already unique (PK); this index exists so a child can
+-- pin both columns without a table-level UNIQUE constraint.
+CREATE UNIQUE INDEX IF NOT EXISTS chats_id_project_id_key
+ON chats (id, project_id);
+
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -2445,10 +2451,24 @@ ON chat_messages (chat_id, generation, created_at, seq);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_idx
 ON chat_messages (chat_id, created_at);
 
+-- Same listing probes with project_id so a count that filters to this
+-- project's rows stays index-only. The (chat_id, created_at) index above
+-- stays until a later contract migration after listing queries have moved
+-- onto this one.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_project_id_created_at_idx
+ON chat_messages (chat_id, project_id, created_at);
+
 -- Latest non-empty source per chat as a single index-only probe (agent-type
 -- filter options via chats.listSources and the source filter on chats.list).
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
 ON chat_messages (chat_id, created_at) INCLUDE (source)
+WHERE source IS NOT NULL AND source <> '';
+
+-- Source probe with project_id so a sibling-project stamp cannot advertise a
+-- source this project cannot load. Kept alongside the (chat_id, created_at)
+-- source index until listing queries have moved onto this one.
+CREATE INDEX IF NOT EXISTS chat_messages_chat_id_project_id_created_at_source_idx
+ON chat_messages (chat_id, project_id, created_at) INCLUDE (source)
 WHERE source IS NOT NULL AND source <> '';
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
