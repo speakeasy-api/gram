@@ -59,12 +59,22 @@ type testInstance struct {
 func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
+	tracerProvider := testenv.NewTracerProvider(t)
+	// UnsafePolicy with an empty blocklist lets httptest loopback succeed.
+	// SSRF tests that need the production CIDR set use
+	// [newTestAssetsServiceWithPolicy] with [guardian.NewDefaultPolicy].
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	return newTestAssetsServiceWithPolicy(t, guardianPolicy)
+}
+
+func newTestAssetsServiceWithPolicy(t *testing.T, guardianPolicy *guardian.Policy) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
