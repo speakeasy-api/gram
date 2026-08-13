@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
+import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
@@ -41,7 +41,11 @@ export function Toolbar(): JSX.Element {
   // debounce it straight back into the URL.
   if (committed !== lastCommitted) {
     setLastCommitted(committed);
-    setDraft(committed);
+    // The draft reaches the URL trimmed, so the debounce's own commit lands
+    // back here as a change. Repainting on that one would eat a space the
+    // operator just typed. `lastCommitted` still moves either way, or this
+    // block runs on every render.
+    if (draft.trim() !== committed) setDraft(committed);
   }
 
   useEffect(() => {
@@ -93,7 +97,7 @@ export function Toolbar(): JSX.Element {
       <Select
         value={selectedType || "all"}
         onValueChange={(value) =>
-          applyFilter({ type: value === "all" ? undefined : [value] })
+          applyFilter({ type: isAccountType(value) ? [value] : undefined })
         }
       >
         <SelectTrigger

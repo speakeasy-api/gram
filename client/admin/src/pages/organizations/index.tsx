@@ -5,7 +5,12 @@ import { useCallback, useMemo, useState, type JSX } from "react";
 import { DataTable as Table } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { organizationsListQuery } from "@/lib/adminQueries";
-import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
+import {
+  errorMessage,
+  omitUnset,
+  type AdminOrganization,
+  type ListOrganizationsParams,
+} from "@/lib/gramAdminApi";
 import { cn } from "@/lib/utils";
 
 import { ORG_COLUMNS } from "./columns";
@@ -38,12 +43,21 @@ export function OrganizationsList(): JSX.Element {
     () => new Set(),
   );
 
-  const filters = JSON.stringify([
-    search.q,
-    search.type,
-    search.trial,
-    search.disabled,
-  ]);
+  // One object is the source of both the request and the signature below. Two
+  // hand-written lists drift: a slice that adds a filter to the request would
+  // otherwise have to remember to add it to the reset as well.
+  //
+  // A pasted `?q=acme%20` has to reach the API as `acme`, or it is a second
+  // cache entry holding the same rows.
+  const listParams: ListOrganizationsParams = {
+    q: search.q?.trim() || undefined,
+    account_type: search.type?.[0],
+    include_disabled: search.disabled,
+  };
+
+  // omitUnset, not the raw object: the signature has to call a param unset
+  // wherever the request does, or a no-op edit resets the pager.
+  const filters = JSON.stringify(omitUnset(listParams));
   const [pager, setPager] = useState<Pager>({ filters, stack: [] });
   // Reset while rendering, so the query below never asks for the stale cursor.
   // An effect would run after the request had already gone out.
@@ -53,9 +67,7 @@ export function OrganizationsList(): JSX.Element {
 
   const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
     ...organizationsListQuery({
-      q: search.q,
-      account_type: search.type?.[0],
-      include_disabled: search.disabled,
+      ...listParams,
       cursor: pager.cursor,
       limit: PAGE_SIZE,
     }),

@@ -13,9 +13,9 @@ function fmtDateShort(iso?: string): string {
   return d.toLocaleDateString();
 }
 
-// Module scope, so the memoized rows on the page keep their identity while the
-// operator types in the search box. The header of each column doubles as its
-// label in the Columns control.
+// Module scope gives the array one identity for the life of the tab, so the
+// memos on the page that take it as a dependency survive a re-render. The
+// header of each column doubles as its label in the Columns control.
 export const ORG_COLUMNS: Column<AdminOrganization>[] = [
   {
     key: "name",

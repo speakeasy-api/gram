@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { isAccountType, type AccountType } from "@/lib/accountTypes";
 import { OrganizationsList } from "@/pages/organizations/index";
 
 /**
@@ -17,7 +18,7 @@ import { OrganizationsList } from "@/pages/organizations/index";
  */
 export type OrganizationsSearch = {
   q?: string;
-  type?: string[];
+  type?: AccountType[];
   trial?: string;
   disabled?: boolean;
   sort?: string;
@@ -34,11 +35,15 @@ function text(value: unknown): string | undefined {
   return undefined;
 }
 
-function textArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const items = value.filter(
-    (item): item is string => typeof item === "string",
-  );
+// Anything outside the accepted list is dropped, so the URL, the control and
+// the request agree that no type filter is on. Keeping an unknown value would
+// filter the rows while the control read empty.
+//
+// A single type is worth hand-writing as `?type=free`, so a scalar is read as a
+// one-item list rather than ignored.
+function accountTypes(value: unknown): AccountType[] | undefined {
+  const values: unknown[] = Array.isArray(value) ? value : [value];
+  const items = values.map(text).filter(isAccountType);
   return items.length > 0 ? items : undefined;
 }
 
@@ -63,7 +68,7 @@ export function organizationsSearchSchema(
 ): OrganizationsSearch {
   return {
     q: text(search["q"]),
-    type: textArray(search["type"]),
+    type: accountTypes(search["type"]),
     trial: text(search["trial"]),
     disabled: flag(search["disabled"]),
     sort: text(search["sort"]),
