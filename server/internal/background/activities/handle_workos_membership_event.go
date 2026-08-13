@@ -80,7 +80,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 
 	deleted := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipDeleted
 	if deleted || payload.Status == string(usermanagement.Inactive) {
-		return deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
+		effects, err := deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
 			organizationID:     org.ID,
 			gramUserID:         gramUserID,
 			workosUserID:       payload.UserID,
@@ -88,9 +88,16 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 			eventID:            event.ID,
 			eventUpdatedAt:     payload.UpdatedAt,
 		})
+		effects.refreshIdentityMap = err == nil
+		return effects, err
 	}
 
-	return none, upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload)
+	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
+		return none, err
+	}
+	// Membership changes alter which emails resolve in the identity map.
+	none.refreshIdentityMap = true
+	return none, nil
 }
 
 // upsertOrganizationMembership records an active membership and declaratively

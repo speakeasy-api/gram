@@ -1259,6 +1259,7 @@ func newStartCommand() *cli.Command {
 				chatWriter,
 				efficacySignaler,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
+				background.NewIdentityMapRefreshSignaler(temporalEnv, logger),
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
