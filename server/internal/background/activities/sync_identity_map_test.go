@@ -199,7 +199,7 @@ func TestSyncIdentityMap_FoldRules(t *testing.T) {
 // TestReplaceIdentityMap_GenerationSwap exercises the telemetry repo's staging
 // swap directly, covering the behaviors the fold-rule sync never reaches: the
 // duplicate-key rejection (the SQL source provably cannot emit duplicates, so
-// only a direct call can trip it), an insert spanning the 5000-row chunk
+// only a direct call can trip it), an insert spanning the insert-chunk
 // boundary, and a key vanishing with its old generation (deletions propagate
 // by omission).
 //
@@ -230,11 +230,13 @@ func TestReplaceIdentityMap_GenerationSwap(t *testing.T) { //nolint:paralleltest
 	require.ErrorContains(t, err, "duplicate identity map key")
 	requireFoldsTo(t, ctx, chConn, org, seedEmail, "user-a", seedEmail)
 
-	// One entry beyond the insert chunk size (identityMapInsertChunk = 5000):
+	// One entry beyond the insert chunk size, derived from the constant so the
+	// boundary stays exercised if the chunk size ever changes:
 	// rows land on both sides of the chunk boundary, and the seed key is gone
 	// with the generation that carried it.
-	entries := make([]telemetryrepo.IdentityMapEntry, 0, 5001)
-	for i := range 5001 {
+	boundary := telemetryrepo.IdentityMapInsertChunk + 1
+	entries := make([]telemetryrepo.IdentityMapEntry, 0, boundary)
+	for i := range boundary {
 		email := fmt.Sprintf("bulk-%d-%s@example.com", i, org)
 		entries = append(entries, telemetryrepo.IdentityMapEntry{
 			OrgID:           org,
@@ -245,7 +247,7 @@ func TestReplaceIdentityMap_GenerationSwap(t *testing.T) { //nolint:paralleltest
 	}
 	require.NoError(t, repo.ReplaceIdentityMap(ctx, entries))
 
-	for _, i := range []int{0, 4999, 5000} {
+	for _, i := range []int{0, telemetryrepo.IdentityMapInsertChunk - 1, telemetryrepo.IdentityMapInsertChunk} {
 		email := fmt.Sprintf("bulk-%d-%s@example.com", i, org)
 		requireFoldsTo(t, ctx, chConn, org, email, fmt.Sprintf("user-%d", i), email)
 	}

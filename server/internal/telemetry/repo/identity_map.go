@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// identityMapInsertChunk bounds one INSERT's bound-parameter count. The map is
+// IdentityMapInsertChunk bounds one INSERT's bound-parameter count. The map is
 // org-directory scale, so most syncs fit in a single chunk.
-const identityMapInsertChunk = 5000
+const IdentityMapInsertChunk = 5000
 
 // IdentityMapEntry is one row of the employee identity fold map: a normalized
 // email and the directory user it unambiguously resolves to within an org.
@@ -44,8 +44,8 @@ func (q *Queries) ReplaceIdentityMap(ctx context.Context, entries []IdentityMapE
 		return fmt.Errorf("truncate identity_map_staging: %w", err)
 	}
 
-	for start := 0; start < len(entries); start += identityMapInsertChunk {
-		chunk := entries[start:min(start+identityMapInsertChunk, len(entries))]
+	for start := 0; start < len(entries); start += IdentityMapInsertChunk {
+		chunk := entries[start:min(start+IdentityMapInsertChunk, len(entries))]
 		values := make([]string, 0, len(chunk))
 		args := make([]any, 0, len(chunk)*4)
 		for _, entry := range chunk {
