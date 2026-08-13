@@ -313,11 +313,14 @@ function AddServersDialog({
 }): JSX.Element {
   const gramProject = useProjectSlugForRequests();
   const toolsets = useToolsets();
-  const { data: mcpServersResult, isLoading } = useMcpServers(
-    { gramProject },
-    undefined,
-    { throwOnError: false, enabled: open },
-  );
+  const {
+    data: mcpServersResult,
+    isLoading,
+    isError: isServersError,
+  } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+    enabled: open,
+  });
   const {
     data: endpointsResult,
     isLoading: isLoadingEndpoints,
@@ -392,8 +395,8 @@ function AddServersDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <DialogOptionsBody
-            isLoading={isLoading || isLoadingEndpoints}
-            isError={isEndpointsError}
+            isLoading={isLoading || isLoadingEndpoints || toolsets.isLoading}
+            isError={isServersError || isEndpointsError || toolsets.isError}
             options={options}
             selected={selected}
             onToggle={toggle}
@@ -444,8 +447,7 @@ function DialogOptionsBody({
   if (isError) {
     return (
       <Text small muted>
-        Couldn't load the project's MCP endpoints. Close the dialog and try
-        again.
+        Couldn't load the project's MCP servers. Close the dialog and try again.
       </Text>
     );
   }
