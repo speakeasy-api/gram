@@ -986,8 +986,8 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 			"issuer":                                server.URL,
 			"authorization_endpoint":                server.URL + "/authorize",
 			"token_endpoint":                        server.URL + "/token",
-			"registration_endpoint":                 server.URL + "/register",
-			"jwks_uri":                              server.URL + "/jwks",
+			"registration_endpoint":                 "https://idp.example.com/register",
+			"jwks_uri":                              "https://idp.example.com/jwks",
 			"scopes_supported":                      []string{"openid"},
 			"grant_types_supported":                 []string{"authorization_code"},
 			"response_types_supported":              []string{"code"},
@@ -1030,11 +1030,38 @@ func TestDiscoverIssuerMetadataRejectsInsecureRedirect(t *testing.T) {
 func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T) {
 	t.Parallel()
 
+	for name, testCase := range map[string]struct {
+		endpoint string
+		message  string
+	}{
+		"authorization_endpoint": {endpoint: "http://identity.example/authorize", message: "must use HTTPS outside local loopback"},
+		"token_endpoint":         {endpoint: "http://identity.example/token", message: "must use HTTPS outside local loopback"},
+		"jwks_uri":               {endpoint: "http://identity.example/jwks", message: "must use HTTPS"},
+		"registration_endpoint":  {endpoint: "http://identity.example/register", message: "must use HTTPS"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := fakeIssuerServer(t, func(doc map[string]any) {
+				doc[name] = testCase.endpoint
+			})
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+
+			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "issuer metadata "+name+" "+testCase.message)
+		})
+	}
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureLoopbackServerEndpoints(t *testing.T) {
+	t.Parallel()
+
 	for name, endpoint := range map[string]string{
-		"authorization_endpoint": "http://identity.example/authorize",
-		"token_endpoint":         "http://identity.example/token",
-		"jwks_uri":               "http://identity.example/jwks",
-		"registration_endpoint":  "http://identity.example/register",
+		"jwks_uri":              "http://127.0.0.1/jwks",
+		"registration_endpoint": "http://localhost/register",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -1048,7 +1075,7 @@ func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T)
 			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
 
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "issuer metadata "+name+" must use HTTPS outside local loopback")
+			require.Contains(t, err.Error(), "issuer metadata "+name+" must use HTTPS")
 		})
 	}
 }
@@ -1186,8 +1213,8 @@ func TestFetchRemoteSessionIssuerMetadata_OpenIDConfigurationFallback(t *testing
 			"issuer":                 server.URL,
 			"authorization_endpoint": server.URL + "/authorize",
 			"token_endpoint":         server.URL + "/token",
-			"jwks_uri":               server.URL + "/jwks",
-			"registration_endpoint":  server.URL + "/register",
+			"jwks_uri":               "https://idp.example.com/jwks",
+			"registration_endpoint":  "https://idp.example.com/register",
 		})
 	}))
 	t.Cleanup(server.Close)
@@ -1229,8 +1256,8 @@ func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testi
 			"issuer":                 server.URL,
 			"authorization_endpoint": server.URL + "/authorize",
 			"token_endpoint":         server.URL + "/token",
-			"jwks_uri":               server.URL + "/jwks",
-			"registration_endpoint":  server.URL + "/register",
+			"jwks_uri":               "https://idp.example.com/jwks",
+			"registration_endpoint":  "https://idp.example.com/register",
 		})
 	}))
 	t.Cleanup(server.Close)
@@ -1270,8 +1297,8 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 				"issuer":                 server.URL,
 				"authorization_endpoint": server.URL + "/authorize",
 				"token_endpoint":         server.URL + "/token",
-				"jwks_uri":               server.URL + "/jwks",
-				"registration_endpoint":  server.URL + "/register",
+				"jwks_uri":               "https://idp.example.com/jwks",
+				"registration_endpoint":  "https://idp.example.com/register",
 			})
 			return
 		}

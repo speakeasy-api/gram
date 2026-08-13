@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -273,15 +274,35 @@ func hasUnsafeFeedbackPath(value string) bool {
 		if strings.HasPrefix(word, "//") {
 			return true
 		}
-		trimmed := strings.TrimRight(word, ".,;:!?)]}")
-		if slash := strings.IndexByte(trimmed, '/'); slash > 0 && strings.Contains(trimmed[:slash], ".") {
+		trimmed := strings.Trim(word, "([{\"'")
+		trimmed = strings.TrimRight(trimmed, ".,;:!?)]}\"")
+		if trimmed == "" {
+			continue
+		}
+		if parsed, err := url.Parse("//" + trimmed); err == nil && parsed.Host != "" && unsafeFeedbackHost(parsed) {
 			return true
 		}
-		if dot := strings.LastIndexByte(trimmed, '.'); dot > 0 && strings.IndexFunc(trimmed[:dot], unicode.IsLetter) >= 0 && onlyLetters(trimmed[dot+1:]) {
+		if dot := strings.LastIndexByte(trimmed, '.'); dot > 0 && strings.IndexFunc(trimmed[:dot], unicode.IsLetter) >= 0 && onlyLetters(trimmed[dot+1:]) && len([]rune(trimmed[dot+1:])) > 1 {
 			return true
 		}
 	}
 	return false
+}
+
+func unsafeFeedbackHost(parsed *url.URL) bool {
+	host := parsed.Hostname()
+	if host == "" {
+		return false
+	}
+	isIP := net.ParseIP(host) != nil
+	isDottedHost := strings.Contains(host, ".")
+	if isIP {
+		return true
+	}
+	if parsed.Port() != "" {
+		return isDottedHost
+	}
+	return isDottedHost && (parsed.Path != "" || parsed.RawQuery != "")
 }
 
 func onlyLetters(value string) bool {

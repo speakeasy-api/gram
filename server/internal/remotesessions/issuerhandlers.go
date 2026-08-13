@@ -1075,28 +1075,43 @@ func validIssuerDiscoveryURL(u *url.URL) bool {
 }
 
 // validateIssuerMetadataEndpoints rejects endpoints that would weaken the
-// transport guarantee after a valid metadata document has been discovered. The
-// same explicit loopback exception as discovery preserves local development and
-// deterministic tests without permitting plain HTTP for remote issuers.
+// transport guarantee after a valid metadata document has been discovered.
+// Authorization and token endpoints retain the explicit local-loopback
+// exception used by discovery. JWKs and DCR endpoints are fetched server-side,
+// so they must use HTTPS even when discovery itself used local HTTP.
 func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
 	for _, endpoint := range []struct {
-		name string
-		raw  string
+		name         string
+		raw          string
+		requireHTTPS bool
 	}{
 		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint},
 		{name: "token_endpoint", raw: doc.TokenEndpoint},
-		{name: "jwks_uri", raw: doc.JwksURI},
-		{name: "registration_endpoint", raw: doc.RegistrationEndpoint},
+		{name: "jwks_uri", raw: doc.JwksURI, requireHTTPS: true},
+		{name: "registration_endpoint", raw: doc.RegistrationEndpoint, requireHTTPS: true},
 	} {
 		if endpoint.raw == "" {
 			continue
 		}
 		parsed, err := url.Parse(endpoint.raw)
-		if err != nil || !parsed.IsAbs() || !validIssuerDiscoveryURL(parsed) {
+		if err != nil || !validIssuerMetadataEndpointURL(parsed, endpoint.requireHTTPS) {
+			if endpoint.requireHTTPS {
+				return fmt.Errorf("issuer metadata %s must use HTTPS", endpoint.name)
+			}
 			return fmt.Errorf("issuer metadata %s must use HTTPS outside local loopback", endpoint.name)
 		}
 	}
 	return nil
+}
+
+func validIssuerMetadataEndpointURL(parsed *url.URL, requireHTTPS bool) bool {
+	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
+		return false
+	}
+	if requireHTTPS {
+		return parsed.Scheme == "https"
+	}
+	return validIssuerDiscoveryURL(parsed)
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata

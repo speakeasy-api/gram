@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 )
 
@@ -65,6 +66,19 @@ func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallob
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
+	// Match the Default plugin row lock used by distribution and plugin deletion
+	// before taking the distribution advisory lock. The pair prevents a deleted
+	// plugin from receiving selected-use evidence after target revalidation.
+	plugin, err := pluginsrepo.New(tx).GetDefaultPluginForUpdate(ctx, pluginsrepo.GetDefaultPluginForUpdateParams{
+		OrganizationID: observation.OrganizationID,
+		ProjectID:      observation.ProjectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) || plugin.ID != target.DefaultPluginID {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lock platform mcp selected-use default plugin: %w", err)
+	}
 	if err := q.LockPlatformMCPDistribution(ctx, repo.LockPlatformMCPDistributionParams{
 		OrganizationID:  observation.OrganizationID,
 		ProjectID:       observation.ProjectID.String(),

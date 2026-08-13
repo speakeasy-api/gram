@@ -54,10 +54,10 @@ func TestValidateFeedbackInputAcceptsRegisteredIdentityProviderTool(t *testing.T
 func TestFeedbackNoteSafeTextAllowsOrdinaryPunctuationAndRejectsIdentifiers(t *testing.T) {
 	t.Parallel()
 
-	for _, note := range []string{"Note: helpful", "The setup failed.", "v1.2", "5/5", "Useful and/or clear", "Helpful possession details"} {
+	for _, note := range []string{"Note: helpful", "The setup failed.", "v1.2", "5/5", "12:30", "3:1", "Useful and/or clear", "Helpful possession details", "For example, use e.g. the selected project.", "That is i.e. expected."} {
 		require.True(t, feedbackNoteSafeText(note), note)
 	}
-	for _, note := range []string{"https://unsafe.invalid", "unsafe.invalid", "unsafe.invalid/path", "//unsafe.invalid/path", "İCookie: value", "SessionToken copied"} {
+	for _, note := range []string{"https://unsafe.invalid", "unsafe.invalid", "unsafe.invalid/path", "unsafe.invalid:8443", "unsafe.invalid?key=value", "127.0.0.1", "127.0.0.1:8080", "//unsafe.invalid/path", "İCookie: value", "SessionToken copied"} {
 		require.False(t, feedbackNoteSafeText(note), note)
 	}
 }
