@@ -89,15 +89,20 @@ func TestGetAssistantSessionSummary_RangeAndAssistantScoped(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chatIDs, err := queries.ListAssistantSessionSummaryChatIDs(ctx, repo.ListAssistantSessionSummaryChatIDsParams{
-		AssistantID:    assistantID,
-		ProjectID:      ti.projectID,
-		AfterChatID:    uuid.Nil,
-		ExternalUserID: "",
-		UserID:         "",
-		PageLimit:      10,
+	chatRows, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
+		AssistantID:       assistantID,
+		ProjectID:         ti.projectID,
+		BeforeLastEventAt: pgtype.Timestamptz{},
+		BeforeThreadID:    uuid.Nil,
+		ExternalUserID:    "",
+		UserID:            "",
+		PageLimit:         10,
 	})
 	require.NoError(t, err)
+	chatIDs := make([]uuid.UUID, len(chatRows))
+	for i, row := range chatRows {
+		chatIDs[i] = row.ChatID
+	}
 	require.ElementsMatch(t, []uuid.UUID{chatID, oldChatID}, chatIDs)
 
 	result, err := ti.service.GetAssistantSessionSummary(ctx, &gen.GetAssistantSessionSummaryPayload{
@@ -178,27 +183,34 @@ func TestGetAssistantSessionSummary_NotLimitedToChatPageSize(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	firstPage, err := queries.ListAssistantSessionSummaryChatIDs(ctx, repo.ListAssistantSessionSummaryChatIDsParams{
-		AssistantID:    assistantID,
-		ProjectID:      ti.projectID,
-		AfterChatID:    uuid.Nil,
-		ExternalUserID: "",
-		UserID:         "",
-		PageLimit:      100,
+	firstPage, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
+		AssistantID:       assistantID,
+		ProjectID:         ti.projectID,
+		BeforeLastEventAt: pgtype.Timestamptz{},
+		BeforeThreadID:    uuid.Nil,
+		ExternalUserID:    "",
+		UserID:            "",
+		PageLimit:         100,
 	})
 	require.NoError(t, err)
 	require.Len(t, firstPage, 100)
-	secondPage, err := queries.ListAssistantSessionSummaryChatIDs(ctx, repo.ListAssistantSessionSummaryChatIDsParams{
-		AssistantID:    assistantID,
-		ProjectID:      ti.projectID,
-		AfterChatID:    firstPage[len(firstPage)-1],
-		ExternalUserID: "",
-		UserID:         "",
-		PageLimit:      100,
+	firstPageLast := firstPage[len(firstPage)-1]
+	secondPage, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
+		AssistantID:       assistantID,
+		ProjectID:         ti.projectID,
+		BeforeLastEventAt: firstPageLast.LastEventAt,
+		BeforeThreadID:    firstPageLast.ThreadID,
+		ExternalUserID:    "",
+		UserID:            "",
+		PageLimit:         100,
 	})
 	require.NoError(t, err)
 	require.Len(t, secondPage, 1)
-	require.ElementsMatch(t, createdChatIDs, append(firstPage, secondPage...))
+	pageChatIDs := make([]uuid.UUID, 0, 101)
+	for _, row := range append(firstPage, secondPage...) {
+		pageChatIDs = append(pageChatIDs, row.ChatID)
+	}
+	require.ElementsMatch(t, createdChatIDs, pageChatIDs)
 
 	result, err := ti.service.GetAssistantSessionSummary(ctx, &gen.GetAssistantSessionSummaryPayload{
 		SessionToken:     nil,

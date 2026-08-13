@@ -1400,8 +1400,11 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	return last_cursor_id, err
 }
 
-const listAssistantSessionSummaryChatIDs = `-- name: ListAssistantSessionSummaryChatIDs :many
-SELECT DISTINCT at.chat_id
+const listAssistantSessionSummaryChats = `-- name: ListAssistantSessionSummaryChats :many
+SELECT
+  at.chat_id,
+  at.last_event_at,
+  at.id AS thread_id
 FROM assistant_threads at
 JOIN assistants a
   ON a.id = at.assistant_id
@@ -1415,20 +1418,30 @@ WHERE at.assistant_id = $1
   AND at.project_id = $2
   AND at.source_kind <> 'setup'
   AND at.deleted IS FALSE
-  AND at.chat_id > $3
-  AND ($4::text = '' OR c.external_user_id = $4::text)
-  AND ($5::text = '' OR c.user_id = $5::text)
-ORDER BY at.chat_id
-LIMIT $6
+  AND (
+    $3::timestamptz IS NULL
+    OR (at.last_event_at, at.id) < ($3::timestamptz, $4::uuid)
+  )
+  AND ($5::text = '' OR c.external_user_id = $5::text)
+  AND ($6::text = '' OR c.user_id = $6::text)
+ORDER BY at.last_event_at DESC, at.id DESC
+LIMIT $7
 `
 
-type ListAssistantSessionSummaryChatIDsParams struct {
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
-	AfterChatID    uuid.UUID
-	ExternalUserID string
-	UserID         string
-	PageLimit      int32
+type ListAssistantSessionSummaryChatsParams struct {
+	AssistantID       uuid.UUID
+	ProjectID         uuid.UUID
+	BeforeLastEventAt pgtype.Timestamptz
+	BeforeThreadID    uuid.UUID
+	ExternalUserID    string
+	UserID            string
+	PageLimit         int32
+}
+
+type ListAssistantSessionSummaryChatsRow struct {
+	ChatID      uuid.UUID
+	LastEventAt pgtype.Timestamptz
+	ThreadID    uuid.UUID
 }
 
 // Keyset page over every visible runtime chat for an assistant. This is
@@ -1436,11 +1449,18 @@ type ListAssistantSessionSummaryChatIDsParams struct {
 // in range even when its corresponding message was persisted outside the
 // selected range. The endpoint consumes fixed-size pages so it remains
 // uncapped without constructing an unbounded UUID array or ClickHouse IN list.
-func (q *Queries) ListAssistantSessionSummaryChatIDs(ctx context.Context, arg ListAssistantSessionSummaryChatIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listAssistantSessionSummaryChatIDs,
+// Runtime ingestion maps one live thread to a chat for each assistant: the
+// dashboard/setup correlation is the chat id, while other sources derive the
+// chat id from (assistant, correlation), and the live correlation key is
+// unique. Paging by activity time lets Postgres use
+// assistant_threads_project_id_assistant_id_last_event_at_idx; thread id is a
+// stable tie-breaker that needs only an incremental sort within equal times.
+func (q *Queries) ListAssistantSessionSummaryChats(ctx context.Context, arg ListAssistantSessionSummaryChatsParams) ([]ListAssistantSessionSummaryChatsRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantSessionSummaryChats,
 		arg.AssistantID,
 		arg.ProjectID,
-		arg.AfterChatID,
+		arg.BeforeLastEventAt,
+		arg.BeforeThreadID,
 		arg.ExternalUserID,
 		arg.UserID,
 		arg.PageLimit,
@@ -1449,13 +1469,13 @@ func (q *Queries) ListAssistantSessionSummaryChatIDs(ctx context.Context, arg Li
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []ListAssistantSessionSummaryChatsRow
 	for rows.Next() {
-		var chat_id uuid.UUID
-		if err := rows.Scan(&chat_id); err != nil {
+		var i ListAssistantSessionSummaryChatsRow
+		if err := rows.Scan(&i.ChatID, &i.LastEventAt, &i.ThreadID); err != nil {
 			return nil, err
 		}
-		items = append(items, chat_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

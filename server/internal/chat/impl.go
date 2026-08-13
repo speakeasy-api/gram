@@ -466,26 +466,28 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 		TotalCost:   0,
 	}
 	if s.telemetryService != nil {
-		afterChatID := uuid.Nil
+		var beforeLastEventAt pgtype.Timestamptz
+		beforeThreadID := uuid.Nil
 		for {
-			chatIDs, err := s.repo.ListAssistantSessionSummaryChatIDs(ctx, repo.ListAssistantSessionSummaryChatIDsParams{
-				AssistantID:    assistantID,
-				ProjectID:      *authCtx.ProjectID,
-				AfterChatID:    afterChatID,
-				ExternalUserID: externalUserID,
-				UserID:         userID,
-				PageLimit:      assistantSessionSummaryMetricsBatch,
+			chats, err := s.repo.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
+				AssistantID:       assistantID,
+				ProjectID:         *authCtx.ProjectID,
+				BeforeLastEventAt: beforeLastEventAt,
+				BeforeThreadID:    beforeThreadID,
+				ExternalUserID:    externalUserID,
+				UserID:            userID,
+				PageLimit:         assistantSessionSummaryMetricsBatch,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "list assistant sessions for usage summary").LogError(ctx, s.logger)
 			}
-			if len(chatIDs) == 0 {
+			if len(chats) == 0 {
 				break
 			}
 
-			batch := make([]string, len(chatIDs))
-			for i, chatID := range chatIDs {
-				batch[i] = chatID.String()
+			batch := make([]string, len(chats))
+			for i, chat := range chats {
+				batch[i] = chat.ChatID.String()
 			}
 			batchMetrics, err := s.telemetryService.GetChatMetricsSummaryByIDs(ctx, telemetryrepo.GetChatMetricsSummaryByIDsParams{
 				ProjectID: authCtx.ProjectID.String(),
@@ -499,8 +501,10 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 			metrics.TotalTokens += batchMetrics.TotalTokens
 			metrics.TotalCost += batchMetrics.TotalCost
 
-			afterChatID = chatIDs[len(chatIDs)-1]
-			if len(chatIDs) < assistantSessionSummaryMetricsBatch {
+			lastChat := chats[len(chats)-1]
+			beforeLastEventAt = lastChat.LastEventAt
+			beforeThreadID = lastChat.ThreadID
+			if len(chats) < assistantSessionSummaryMetricsBatch {
 				break
 			}
 		}
