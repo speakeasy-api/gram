@@ -54,6 +54,12 @@ func LoadManifest(path string) (*Manifest, error) {
 	if err := decoder.Decode(&manifest); err != nil {
 		return nil, fmt.Errorf("decode email manifest: %w", err)
 	}
+	if err := decoder.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, errors.New("decode email manifest: trailing data after JSON object")
+		}
+		return nil, fmt.Errorf("decode email manifest trailing data: %w", err)
+	}
 	manifest.Dir = filepath.Dir(path)
 	if err := manifest.Validate(); err != nil {
 		return nil, err

@@ -78,10 +78,25 @@ func TestService_Send_UnregisteredTemplateReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, make(TemplateIDs))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"registered": "template-id"}))
 
 	err := svc.Send(t.Context(), "user@example.com", unregisteredTemplate{})
 	require.ErrorIs(t, err, ErrUnregisteredTemplate)
+}
+
+func TestService_Send_DisabledConfigurationDropsEmail(t *testing.T) {
+	t.Parallel()
+
+	sender := newMockSender(t)
+	svc := NewService(testenv.NewLogger(t), sender, make(TemplateIDs))
+
+	err := svc.Send(t.Context(), "user@example.com", TeamInvite{
+		InviteLink:       "https://example.com",
+		InviterName:      "Bob",
+		InviterEmail:     "bob@example.com",
+		OrganizationName: "Example Inc",
+	})
+	require.NoError(t, err)
 }
 
 func TestService_Send_PropagatesSenderError(t *testing.T) {

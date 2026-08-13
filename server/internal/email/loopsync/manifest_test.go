@@ -1,6 +1,7 @@
 package loopsync
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,6 +33,21 @@ func TestManifestValidate_RejectsDuplicateVariables(t *testing.T) {
 	err := manifest.Validate()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "declares variable \"resource_name\" more than once")
+}
+
+func TestLoadManifest_RejectsTrailingJSON(t *testing.T) {
+	t.Parallel()
+
+	manifest := validManifest(t)
+	data, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	data = append(data, []byte(`{"unexpected":true}`)...)
+	path := filepath.Join(manifest.Dir, "manifest.json")
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+
+	_, err = LoadManifest(path)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "trailing data")
 }
 
 func validManifest(t *testing.T) *Manifest {

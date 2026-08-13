@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -130,4 +132,28 @@ func TestClient_TransactionalLifecycle(t *testing.T) {
 	published, err := client.Publish(t.Context(), "id-1")
 	require.NoError(t, err)
 	require.Equal(t, []string{"resource_name"}, published.DataVariables)
+}
+
+func TestClient_DoesNotRetryMutatingRequests(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "temporary failure", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.URL, "test-key", server.Client())
+	_, err := client.CreateTransactionalEmail(t.Context(), "gram.transactional.v2.example_notice")
+	require.Error(t, err)
+	require.Equal(t, int32(1), calls.Load())
+}
+
+func TestRetryDelay_HonorsHTTPDate(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
+	retryAt := now.Add(45 * time.Second)
+	require.Equal(t, 45*time.Second, retryDelay(now, 0, retryAt.Format(http.TimeFormat)))
 }

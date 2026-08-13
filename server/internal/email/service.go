@@ -40,16 +40,22 @@ func NewService(logger *slog.Logger, sender loops.Client, ids TemplateIDs) *Serv
 }
 
 // Send dispatches a transactional email rendered from the supplied template.
-// The template carries the strongly typed variables and the transactional ID
-// it targets, so a misuse such as passing the wrong variable shape is a
-// compile-time error.
+// The template carries strongly typed variables and a stable key resolved
+// against the deployment's environment-specific Loops IDs.
 func (s *Service) Send(ctx context.Context, recipient string, template Template) error {
 	return s.SendIdempotent(ctx, recipient, "", template)
 }
 
+// SendIdempotent dispatches a transactional email with a provider-level
+// idempotency key.
 func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempotencyKey string, template Template) error {
 	if recipient == "" {
 		return ErrEmptyRecipient
+	}
+	// Empty IDs are accepted only when startup has established that Loops is
+	// disabled, preserving the transport's no-op behavior in local development.
+	if len(s.ids) == 0 {
+		return nil
 	}
 
 	key := template.Key()

@@ -132,6 +132,38 @@ func TestReconcile_RecoversUncommittedCreationByManagedName(t *testing.T) {
 	require.Zero(t, api.published)
 }
 
+func TestReconcile_LeavesMatchingPublishedMessageUnchangedWhenDraftExists(t *testing.T) {
+	t.Parallel()
+
+	draftID := "message-draft"
+	publishedID := "message-published"
+	transactional := TransactionalEmail{
+		ID:                      "transactional-existing",
+		Name:                    "gram.transactional.v2.team_invite",
+		DraftEmailMessageID:     &draftID,
+		PublishedEmailMessageID: &publishedID,
+		DataVariables:           []string{"organization_name"},
+	}
+	api := &fakeAPI{
+		listed:        []TransactionalEmail{transactional},
+		transactional: transactional,
+		message: EmailMessage{
+			ID:           publishedID,
+			Subject:      "Join {data.organization_name}",
+			PreviewText:  "Invitation",
+			FromName:     "Speakeasy",
+			FromEmail:    "gram",
+			ReplyToEmail: "gram@speakeasy.com",
+			LMX:          "<Paragraph>Hello {data.organization_name}</Paragraph>",
+		},
+	}
+
+	_, err := (&Reconciler{API: api}).Reconcile(t.Context(), testManifest(), map[string]string{})
+	require.NoError(t, err)
+	require.Zero(t, api.updated)
+	require.Zero(t, api.published)
+}
+
 func TestReconcile_VerifiesPublishedVariablesFromFreshTransactional(t *testing.T) {
 	t.Parallel()
 

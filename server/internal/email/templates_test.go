@@ -44,10 +44,16 @@ func TestTemplateIDs_ValidateRegisteredRejectsMissingAndUnknownKeys(t *testing.T
 
 	require.ErrorIs(t, make(TemplateIDs).ValidateRegistered(), ErrEmptyTemplateIDs)
 
-	ids := make(TemplateIDs, len(RegisteredTemplates)+1)
+	ids := make(TemplateIDs, len(RegisteredTemplates))
 	for _, tmpl := range RegisteredTemplates {
 		ids[tmpl.Key()] = TransactionalID("id-" + string(tmpl.Key()))
 	}
+	ids[TemplateKeyTeamInvite] = ""
+	err := ids.ValidateRegistered()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `no Loops ID for template "team_invite"`)
+
+	ids[TemplateKeyTeamInvite] = "id-team-invite"
 	ids["unknown"] = "id-unknown"
 	require.ErrorIs(t, ids.ValidateRegistered(), ErrUnknownTemplateKey)
 }

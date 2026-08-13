@@ -54,17 +54,31 @@ Use `true` only when the product event deliberately enrolls a known user in the
 Speakeasy audience, matching `TeamInvite` or onboarding semantics; cover that
 choice in a focused test.
 
-Minimal two-variable manifest entry:
+Complete minimal `manifest.json` shape for a repository containing one
+two-variable template:
 
 ```json
-"example_notice": {
-  "managed_name": "gram.transactional.v2.example_notice",
-  "subject": "Action required for {data.resource_name}",
-  "preview_text": "Review the requested change.",
-  "source": "example_notice.lmx",
-  "variables": ["resource_name", "action_url"]
+{
+  "version": 1,
+  "defaults": {
+    "from_name": "Speakeasy",
+    "from_email": "gram",
+    "reply_to_email": "gram@speakeasy.com"
+  },
+  "templates": {
+    "example_notice": {
+      "managed_name": "gram.transactional.v2.example_notice",
+      "subject": "Action required for {data.resource_name}",
+      "preview_text": "Review the requested change.",
+      "source": "example_notice.lmx",
+      "variables": ["resource_name", "action_url"]
+    }
+  }
 }
 ```
+
+In the existing repository manifest, preserve `version`, `defaults`, and all
+existing templates; add only the new object under `templates`.
 
 Identity map:
 

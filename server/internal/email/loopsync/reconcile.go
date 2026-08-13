@@ -84,7 +84,7 @@ func (r *Reconciler) resolve(ctx context.Context, key string, spec TemplateSpec,
 }
 
 func (r *Reconciler) syncOne(ctx context.Context, defaults MessageDefaults, spec TemplateSpec, transactional TransactionalEmail, created bool) (bool, error) {
-	if !created && transactional.DraftEmailMessageID == nil && transactional.PublishedEmailMessageID != nil {
+	if !created && transactional.PublishedEmailMessageID != nil {
 		published, err := r.API.GetEmailMessage(ctx, *transactional.PublishedEmailMessageID)
 		if err != nil {
 			return false, fmt.Errorf("get published message: %w", err)

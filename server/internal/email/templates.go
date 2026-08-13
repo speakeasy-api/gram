@@ -99,8 +99,12 @@ func (ids TemplateIDs) ValidateRegistered() error {
 
 // Template is implemented by every concrete transactional email.
 type Template interface {
+	// Key returns the stable application-owned template identity.
 	Key() TemplateKey
+	// Variables returns the merge data Loops substitutes into the template.
 	Variables() map[string]string
+	// AddToAudience reports whether the recipient should be upserted as a
+	// Loops contact when the email is sent.
 	AddToAudience() bool
 }
 

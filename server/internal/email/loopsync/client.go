@@ -186,11 +186,8 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 			return nil
 		}
 
-		if attempt < 2 && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) {
-			delay := time.Duration(attempt+1) * time.Second
-			if seconds, parseErr := strconv.Atoi(resp.Header.Get("Retry-After")); parseErr == nil && seconds > 0 {
-				delay = time.Duration(seconds) * time.Second
-			}
+		if attempt < 2 && isRetryableMethod(method) && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) {
+			delay := retryDelay(time.Now(), attempt, resp.Header.Get("Retry-After"))
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("wait to retry Loops Content API: %w", ctx.Err())
@@ -209,4 +206,32 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 		return fmt.Errorf("loops Content API %s %s returned HTTP %d: %s", method, path, resp.StatusCode, apiError.Message)
 	}
 	return fmt.Errorf("loops Content API %s %s exhausted retries", method, path)
+}
+
+func isRetryableMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPut, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func retryDelay(now time.Time, attempt int, retryAfter string) time.Duration {
+	delay := time.Duration(attempt+1) * time.Second
+	if seconds, err := strconv.Atoi(retryAfter); err == nil {
+		if seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+		return delay
+	}
+
+	retryAt, err := http.ParseTime(retryAfter)
+	if err != nil {
+		return delay
+	}
+	if wait := retryAt.Sub(now); wait > 0 {
+		return wait
+	}
+	return delay
 }
