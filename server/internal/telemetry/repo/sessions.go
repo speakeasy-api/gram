@@ -264,11 +264,17 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		case attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		case attributeDimScalar:
+			values := f.Values
+			column := dim.column
+			if f.Dimension == "email" {
+				values = normalizedEmailDimensionValues(values)
+				column = "lower(" + column + ")"
+			}
 			if dim.coLocateSessionFilters {
-				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(dim.column, f.Values))
+				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(column, values))
 				continue
 			}
-			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
+			sb = sb.Having(sessionScalarHaving(column, values))
 		case attributeDimArray:
 			sb = sb.Having(sessionArrayHaving(dim.column, f.Values))
 		default:
@@ -598,7 +604,13 @@ func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMe
 			tuplePredicates = append(tuplePredicates, pred)
 			tupleArgs = append(tupleArgs, args...)
 		default:
-			sb = sb.Having(sessionSummaryValuesHaving("s."+dim.column, f.Values))
+			column := "s." + dim.column
+			values := f.Values
+			if f.Dimension == "email" {
+				column = "arrayMap(x -> lower(x), " + column + ")"
+				values = normalizedEmailDimensionValues(values)
+			}
+			sb = sb.Having(sessionSummaryValuesHaving(column, values))
 		}
 	}
 
@@ -640,6 +652,14 @@ func sessionSummaryValuesHaving(colExpr string, values []string) squirrel.Sqlize
 		return nonEmptyPred
 	}
 	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
+func normalizedEmailDimensionValues(values []string) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = strings.ToLower(value)
+	}
+	return out
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule

@@ -733,21 +733,57 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 
 	users := usersRepo.New(s.db)
 	if strings.Contains(identifier, "@") {
-		identity.Emails = append(identity.Emails, conv.NormalizeEmail(identifier))
+		identity.Emails = append(identity.Emails, identifier, conv.NormalizeEmail(identifier))
 
 		// Usage from someone with no directory row still aggregates by email, so
 		// an email that resolves to nobody is not an error.
-		rows, err := users.GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
+		rows, err := users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
 			Emails:         identity.Emails,
 			OrganizationID: orgID,
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve employee email to org user", attr.SlogError(err))
 		}
-		for _, row := range rows {
+		if len(rows) == 1 {
+			row := rows[0]
 			// These rows already carry the directory email, so no lookup by id.
 			identity.UserIDs = append(identity.UserIDs, row.ID)
-			identity.Emails = append(identity.Emails, conv.NormalizeEmail(row.Email))
+			identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
+		}
+
+		// Directory ownership wins. Only reverse-resolve a provider account when
+		// the email has no directory row, and only when one owner claims it.
+		if len(rows) == 0 {
+			accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
+				OrganizationID: orgID,
+				Emails:         identity.Emails,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve employee account email to org user", attr.SlogError(err))
+			}
+			owners := make([]string, 0, len(accounts))
+			for _, account := range accounts {
+				owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
+			}
+			owners = dedupeNonEmpty(owners)
+			if len(owners) == 1 {
+				identity.UserIDs = append(identity.UserIDs, owners[0])
+			}
+		}
+
+		// A linked account email resolves through user_accounts rather than users;
+		// add its owner's directory email before loading the rest of the accounts.
+		if len(identity.UserIDs) > 0 {
+			rows, err = users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
+				Ids:            identity.UserIDs,
+				OrganizationID: orgID,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve employee account owner", attr.SlogError(err))
+			}
+			for _, row := range rows {
+				identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
+			}
 		}
 	} else {
 		identity.UserIDs = append(identity.UserIDs, identifier)
@@ -760,7 +796,7 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 			s.logger.WarnContext(ctx, "failed to resolve employee user id to org user", attr.SlogError(err))
 		}
 		for _, row := range rows {
-			identity.Emails = append(identity.Emails, conv.NormalizeEmail(row.Email))
+			identity.Emails = append(identity.Emails, row.Email, conv.NormalizeEmail(row.Email))
 		}
 	}
 
@@ -773,7 +809,8 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 			s.logger.WarnContext(ctx, "failed to load linked accounts for employee identity", attr.SlogError(err))
 		}
 		for _, account := range accounts {
-			identity.Emails = append(identity.Emails, conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email)))
+			email := conv.FromPGTextOrEmpty[string](account.Email)
+			identity.Emails = append(identity.Emails, email, conv.NormalizeEmail(email))
 		}
 	}
 
@@ -781,6 +818,49 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 	identity.UserIDs = dedupeNonEmpty(identity.UserIDs)
 
 	return identity
+}
+
+// expandEmployeeEmailFilters makes the generic cost analytics endpoints apply
+// the same employee identity fold as the dedicated employee endpoints. Values
+// without an @ are device-hostname buckets and retain literal filter semantics.
+func (s *Service) expandEmployeeEmailFilters(ctx context.Context, orgID string, filters []repo.AttributeMetricsFilter) []repo.AttributeMetricsFilter {
+	resolved := make(map[string][]string)
+	for i := range filters {
+		if filters[i].Dimension != "email" {
+			continue
+		}
+
+		values := make([]string, 0, len(filters[i].Values))
+		for _, value := range filters[i].Values {
+			if !strings.Contains(value, "@") {
+				values = append(values, value)
+				continue
+			}
+			key := conv.NormalizeEmail(value)
+			emails, ok := resolved[key]
+			if !ok {
+				emails = s.resolveEmployeeIdentity(ctx, orgID, value).Emails
+				resolved[key] = emails
+			}
+			values = append(values, emails...)
+		}
+		filters[i].Values = dedupe(values)
+	}
+
+	return filters
+}
+
+func dedupe(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 // dedupeNonEmpty drops blanks and repeats while keeping first-seen order.
