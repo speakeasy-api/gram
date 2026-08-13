@@ -14,8 +14,10 @@ export function useOpenOrganization(): (org: AdminOrganization) => void {
   return useCallback(
     (org: AdminOrganization) => {
       const idOrSlug = org.slug || org.id;
-      // The row already holds the whole record, so the detail page paints and
-      // starts its own queries without a round trip to organization.get.
+      // The row already holds the whole record, so the detail page paints from
+      // it on the first frame instead of showing a spinner. The detail query
+      // still refetches behind that: the snapshot is stale the moment it
+      // lands, and an admin reading a stale record is worse than one request.
       qc.setQueryData(organizationQuery(idOrSlug).queryKey, org);
       void navigate({ to: "/organizations/$idOrSlug", params: { idOrSlug } });
     },

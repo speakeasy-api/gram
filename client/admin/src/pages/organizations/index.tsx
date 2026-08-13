@@ -47,11 +47,10 @@ export function OrganizationsList(): JSX.Element {
   // hand-written lists drift: a slice that adds a filter to the request would
   // otherwise have to remember to add it to the reset as well.
   //
-  // A pasted `?q=acme%20` has to reach the API as `acme`, or it is a second
-  // cache entry holding the same rows.
+  // Every value arrives validated, so nothing is normalised a second time here.
   const listParams: ListOrganizationsParams = {
-    q: search.q?.trim() || undefined,
-    account_type: search.type?.[0],
+    q: search.q,
+    account_type: search.type,
     include_disabled: search.disabled,
   };
 
@@ -141,7 +140,7 @@ export function OrganizationsList(): JSX.Element {
         <div className="rounded-lg border">
           <TableActionBar
             columns={ORG_COLUMNS}
-            hiddenColumns={hiddenColumns}
+            visibleColumns={visibleColumns}
             onToggleColumn={toggleColumn}
           />
 

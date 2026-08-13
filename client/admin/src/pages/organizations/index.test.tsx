@@ -3,10 +3,19 @@ import {
   act,
   cleanup,
   fireEvent,
+  render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 
 import type {
   AdminOrganization,
@@ -18,7 +27,11 @@ import {
   organizationsSearchSchema,
   type OrganizationsSearch,
 } from "@/routes/organizations.index";
+import type { Column } from "@/components/data-table";
 import { renderRouteTree } from "@/test/harness";
+
+import { ORG_COLUMNS } from "./columns";
+import { TableActionBar } from "./Toolbar";
 
 const mocks = vi.hoisted(() => ({
   listOrganizations:
@@ -84,6 +97,15 @@ async function withFakeTimers(
 // lets an assertion name the value the way the schema declares it.
 function currentSearch(router: AnyRouter): string {
   return decodeURIComponent(router.state.location.searchStr);
+}
+
+// A Radix menu and a Radix select both open on pointerdown, not on click.
+function openOn(trigger: HTMLElement): void {
+  fireEvent.pointerDown(trigger, {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
 }
 
 function urlFor(search: Record<string, unknown>): string {
@@ -213,12 +235,7 @@ describe("organizations list", () => {
 
     expect(screen.getByRole("columnheader", { name: "Slug" })).toBeTruthy();
 
-    // The trigger opens on pointerdown, not on click.
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Columns" }), {
-      button: 0,
-      ctrlKey: false,
-      pointerType: "mouse",
-    });
+    openOn(screen.getByRole("button", { name: "Columns" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Slug" }));
 
     // The open menu hides the rest of the page from the accessibility tree, so
@@ -227,11 +244,25 @@ describe("organizations list", () => {
       expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
     });
     expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
+
+    // Reopening reads the menu against the page's own state. Without this the
+    // bar could take a constant and its guard would never fire.
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    expect(
+      screen
+        .getByRole("menuitemcheckbox", { name: "Slug" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("menuitemcheckbox", { name: "Name" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("shows the filters a reloaded URL carries", async () => {
     await renderRouteTree(routeTree, {
-      initialPath: urlFor({ type: ["pro"], disabled: true }),
+      initialPath: urlFor({ type: "pro", disabled: true }),
     });
 
     expect(screen.getByLabelText("Account type").textContent).toContain("pro");
@@ -249,16 +280,11 @@ describe("organizations list", () => {
       initialPath: "/organizations",
     });
 
-    // The trigger opens on pointerdown, not on click.
-    fireEvent.pointerDown(screen.getByLabelText("Account type"), {
-      button: 0,
-      ctrlKey: false,
-      pointerType: "mouse",
-    });
+    openOn(screen.getByLabelText("Account type"));
     fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
 
     await waitFor(() => {
-      expect(currentSearch(router)).toContain('type=["enterprise"]');
+      expect(currentSearch(router)).toContain("type=enterprise");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Show disabled" }));
@@ -266,7 +292,26 @@ describe("organizations list", () => {
     await waitFor(() => {
       expect(currentSearch(router)).toContain("disabled=true");
     });
-    expect(currentSearch(router)).toContain('type=["enterprise"]');
+    expect(currentSearch(router)).toContain("type=enterprise");
+  });
+
+  it("clears the account type filter back to every type", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: "pro" }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().account_type).toBe("pro");
+    });
+
+    openOn(screen.getByLabelText("Account type"));
+    fireEvent.click(await screen.findByRole("option", { name: "All types" }));
+
+    // "All types" is the only route back to an unfiltered list.
+    await waitFor(() => {
+      expect(lastListParams().account_type).toBeUndefined();
+    });
+    expect(currentSearch(router)).not.toContain("type=");
   });
 
   it("sends a pasted term without the whitespace around it", async () => {
@@ -308,22 +353,93 @@ describe("organizations list", () => {
   });
 });
 
+// The bar takes its columns as props, so the last-column case is reachable
+// here without clicking seven items shut through a menu that closes each time.
+describe("TableActionBar", () => {
+  const [FIRST, SECOND] = ORG_COLUMNS;
+  if (!FIRST || !SECOND) throw new Error("ORG_COLUMNS needs two columns");
+
+  function openColumnsMenu(
+    visibleColumns: Column<AdminOrganization>[],
+  ): Mock<(key: string) => void> {
+    const onToggleColumn = vi.fn<(key: string) => void>();
+    render(
+      <TableActionBar
+        columns={ORG_COLUMNS}
+        visibleColumns={visibleColumns}
+        onToggleColumn={onToggleColumn}
+      />,
+    );
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    return onToggleColumn;
+  }
+
+  // Found by the name an operator reads, so the query goes through the same
+  // accessible name a screen reader would announce. A header is a node in
+  // general, and only a string carries a name this query can match.
+  function itemFor(column: Column<AdminOrganization>): HTMLElement {
+    const { header } = column;
+    if (typeof header !== "string") {
+      throw new Error(`column ${String(column.key)} needs a text header`);
+    }
+    return screen.getByRole("menuitemcheckbox", { name: header });
+  }
+
+  it("stops the operator hiding the last visible column", () => {
+    const onToggleColumn = openColumnsMenu([FIRST]);
+
+    const item = itemFor(FIRST);
+    fireEvent.click(item);
+    expect(onToggleColumn).not.toHaveBeenCalled();
+
+    // Marked rather than disabled. Radix drops a disabled item out of the
+    // menu's roving focus, and a screen reader then never reaches it.
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.hasAttribute("data-disabled")).toBe(false);
+  });
+
+  it("still unhides a column while only one is visible", () => {
+    const onToggleColumn = openColumnsMenu([FIRST]);
+
+    fireEvent.click(itemFor(SECOND));
+
+    // The lock holds the last visible column, not the whole menu. Locking the
+    // menu would trap the operator in the state the lock exists to prevent.
+    expect(onToggleColumn).toHaveBeenCalledWith(String(SECOND.key));
+  });
+
+  it("hides a column while a second one is still visible", () => {
+    const onToggleColumn = openColumnsMenu([FIRST, SECOND]);
+
+    fireEvent.click(itemFor(FIRST));
+    expect(onToggleColumn).toHaveBeenCalledWith(String(FIRST.key));
+  });
+});
+
 // A param the schema drops is absent from the parsed search, so every expected
 // value below is the whole object the route sees.
 describe("organizationsSearchSchema", () => {
   const cases: [string, Record<string, unknown>, OrganizationsSearch][] = [
-    ["reads a hand-written scalar type", { type: "free" }, { type: ["free"] }],
-    ["drops a type the API does not accept", { type: ["startup"] }, {}],
+    ["reads a hand-written type", { type: "free" }, { type: "free" }],
+    ["drops a type the API does not accept", { type: "startup" }, {}],
     [
-      "keeps the accepted types out of a mixed list",
-      { type: ["startup", "pro"] },
-      { type: ["pro"] },
+      "drops a list, which the request cannot honour",
+      { type: ["pro", "enterprise"] },
+      {},
     ],
     ["reads an all-digit term the router coerced", { q: 123 }, { q: "123" }],
+    ["reads a boolean term the router coerced", { q: true }, { q: "true" }],
+    ["reads a null term the router coerced", { q: null }, { q: "null" }],
+    ["drops a term that is a list, not a word", { q: ["acme"] }, {}],
+    ["drops a term that is only whitespace", { q: "   " }, {}],
+    ["trims the term a pasted link carries", { q: "  acme  " }, { q: "acme" }],
     ["reads a direction in the union", { dir: "desc" }, { dir: "desc" }],
     ["drops a direction outside the union", { dir: "sideways" }, {}],
+    ["keeps the disabled flag", { disabled: true }, { disabled: true }],
+    ["drops the disabled flag when it is off", { disabled: false }, {}],
     ["drops page 1, which is the default", { page: 1 }, {}],
     ["drops a page below 1", { page: 0 }, {}],
+    ["drops a page between two whole ones", { page: 2.5 }, {}],
     ["keeps a page past the first", { page: 2 }, { page: 2 }],
   ];
 

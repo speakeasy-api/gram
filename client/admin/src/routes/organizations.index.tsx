@@ -18,7 +18,7 @@ import { OrganizationsList } from "@/pages/organizations/index";
  */
 export type OrganizationsSearch = {
   q?: string;
-  type?: AccountType[];
+  type?: AccountType;
   trial?: string;
   disabled?: boolean;
   sort?: string;
@@ -27,11 +27,23 @@ export type OrganizationsSearch = {
   page?: number;
 };
 
-// The router decodes `?q=123` to the number 123 before this runs, so a numeric
-// search term arrives typed as a number rather than as text.
+// The router parses a param that reads as a JSON literal before this runs, so
+// a hand-written `?q=123` arrives as a number, `?q=true` as a boolean and
+// `?q=null` as null. All three are terms someone can put in a link, so all
+// three come back as text. A list or an object is not a term, and is dropped.
 function text(value: unknown): string | undefined {
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string" && value !== "") return value;
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null
+  ) {
+    return String(value);
+  }
+  // This is the one place that normalises the term. `?q=acme%20` and `?q=acme`
+  // have to reach the API alike, or they are two cache entries holding the same
+  // rows, and a term that is only whitespace must reach neither the control nor
+  // the request.
+  if (typeof value === "string") return value.trim() || undefined;
   return undefined;
 }
 
@@ -39,12 +51,12 @@ function text(value: unknown): string | undefined {
 // the request agree that no type filter is on. Keeping an unknown value would
 // filter the rows while the control read empty.
 //
-// A single type is worth hand-writing as `?type=free`, so a scalar is read as a
-// one-item list rather than ignored.
-function accountTypes(value: unknown): AccountType[] | undefined {
-  const values: unknown[] = Array.isArray(value) ? value : [value];
-  const items = values.map(text).filter(isAccountType);
-  return items.length > 0 ? items : undefined;
+// One value rather than a list: the API takes a single account_type and the
+// control offers a single choice, so a list would let a link advertise more
+// than the request sends.
+function accountType(value: unknown): AccountType | undefined {
+  const item = text(value);
+  return isAccountType(item) ? item : undefined;
 }
 
 function flag(value: unknown): true | undefined {
@@ -68,7 +80,7 @@ export function organizationsSearchSchema(
 ): OrganizationsSearch {
   return {
     q: text(search["q"]),
-    type: accountTypes(search["type"]),
+    type: accountType(search["type"]),
     trial: text(search["trial"]),
     disabled: flag(search["disabled"]),
     sort: text(search["sort"]),

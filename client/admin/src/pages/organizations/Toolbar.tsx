@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
+import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
 const ROUTE_ID = "/organizations/";
@@ -80,7 +81,7 @@ export function Toolbar(): JSX.Element {
     });
   };
 
-  const selectedType = search.type?.[0] ?? "";
+  const selectedType = search.type ?? "";
 
   return (
     <div className="mb-2 flex items-center gap-2">
@@ -97,7 +98,7 @@ export function Toolbar(): JSX.Element {
       <Select
         value={selectedType || "all"}
         onValueChange={(value) =>
-          applyFilter({ type: isAccountType(value) ? [value] : undefined })
+          applyFilter({ type: isAccountType(value) ? value : undefined })
         }
       >
         <SelectTrigger
@@ -135,13 +136,20 @@ export function Toolbar(): JSX.Element {
  */
 export function TableActionBar({
   columns,
-  hiddenColumns,
+  visibleColumns,
   onToggleColumn,
 }: {
   columns: Column<AdminOrganization>[];
-  hiddenColumns: ReadonlySet<string>;
+  visibleColumns: Column<AdminOrganization>[];
   onToggleColumn: (key: string) => void;
 }): JSX.Element {
+  // The keys come from the array the table renders, not from a second walk of
+  // the same predicate, so the menu cannot disagree with the table about how
+  // many columns are left.
+  const visibleKeys = new Set(
+    visibleColumns.map((column) => String(column.key)),
+  );
+
   return (
     <div className="flex items-center gap-3 border-b px-3 py-2">
       <span className="text-muted-foreground text-xs">Nothing selected</span>
@@ -155,11 +163,28 @@ export function TableActionBar({
         <DropdownMenuContent align="end">
           {columns.map((column) => {
             const key = String(column.key);
+            const checked = visibleKeys.has(key);
+            // Hiding the last one leaves a header with no cells above rows with
+            // no cells. This menu still lists every column, so the operator can
+            // climb back out, but the table is unreadable until they do.
+            const locked = checked && visibleKeys.size === 1;
             return (
               <DropdownMenuCheckboxItem
                 key={key}
-                checked={!hiddenColumns.has(key)}
-                onCheckedChange={() => onToggleColumn(key)}
+                checked={checked}
+                // Radix drops a `disabled` item out of the menu's roving focus,
+                // so a keyboard or a screen reader never reaches it. Marking it
+                // instead keeps it reachable, and moves the dimming here.
+                aria-disabled={locked}
+                className={cn(locked && "opacity-50")}
+                // Radix fires onCheckedChange even when onSelect prevents the
+                // default, so the guard has to sit on both.
+                onSelect={(event) => {
+                  if (locked) event.preventDefault();
+                }}
+                onCheckedChange={() => {
+                  if (!locked) onToggleColumn(key);
+                }}
               >
                 {column.header}
               </DropdownMenuCheckboxItem>

@@ -51,4 +51,12 @@ describe("organizationQuery", () => {
       "org-a",
     );
   });
+
+  // A list row seeds this entry so the detail page paints on the first frame.
+  // That snapshot is as old as the list fetch behind it, so this query must not
+  // take the staleTime adminSessionQuery does, or the seed becomes the record
+  // an admin reads and acts on.
+  it("leaves a seeded record open to a refetch", () => {
+    expect(organizationQuery("org-a").staleTime).toBeUndefined();
+  });
 });
