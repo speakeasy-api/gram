@@ -992,7 +992,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			cause:        fmt.Errorf("decode discovery document: %w", err),
 		}
 	}
-	if err := validateIssuerMetadataEndpoints(doc); err != nil {
+	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
@@ -1080,11 +1080,7 @@ func validIssuerDiscoveryURL(u *url.URL) bool {
 // exception used by discovery. JWKs and DCR endpoints are fetched server-side,
 // so they require HTTPS except for an endpoint on the exact same explicit
 // loopback origin as a local HTTP issuer.
-func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
-	issuer, err := url.Parse(doc.Issuer)
-	if err != nil {
-		return errors.New("issuer metadata issuer is invalid")
-	}
+func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.URL) error {
 	for _, endpoint := range []struct {
 		name         string
 		raw          string
@@ -1099,7 +1095,7 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
 			continue
 		}
 		parsed, err := url.Parse(endpoint.raw)
-		if err != nil || !validIssuerMetadataEndpointURL(parsed, issuer, endpoint.requireHTTPS) {
+		if err != nil || !validIssuerMetadataEndpointURL(parsed, requestedIssuer, endpoint.requireHTTPS) {
 			if endpoint.requireHTTPS {
 				return fmt.Errorf("issuer metadata %s must use HTTPS or the same local loopback origin", endpoint.name)
 			}
@@ -1109,7 +1105,7 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
 	return nil
 }
 
-func validIssuerMetadataEndpointURL(parsed, issuer *url.URL, requireHTTPS bool) bool {
+func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {
 	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
 		return false
 	}
@@ -1119,7 +1115,7 @@ func validIssuerMetadataEndpointURL(parsed, issuer *url.URL, requireHTTPS bool) 
 	if parsed.Scheme == "https" {
 		return true
 	}
-	return parsed.Scheme == "http" && validIssuerDiscoveryURL(parsed) && validIssuerDiscoveryURL(issuer) && parsed.Host == issuer.Host
+	return parsed.Scheme == "http" && validIssuerDiscoveryURL(parsed) && validIssuerDiscoveryURL(requestedIssuer) && parsed.Host == requestedIssuer.Host
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata
