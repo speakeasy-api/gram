@@ -38,15 +38,29 @@ present=(
   "reporting-endpoints"
 )
 
-response="$(curl --silent --show-error --output /dev/null --dump-header - \
+dump="$(mktemp)"
+trap 'rm -f "$dump"' EXIT
+
+code="$(curl --silent --show-error --output /dev/null \
+  --dump-header "$dump" --write-out '%{http_code}' \
   --connect-timeout 5 --max-time 20 "$url")"
 
-status="$(printf '%s\n' "$response" | head -n1 | tr -d '\r')"
-headers="$(printf '%s\n' "$response" | tr -d '\r' | tr '[:upper:]' '[:lower:]')"
+headers="$(tr -d '\r' <"$dump" | tr '[:upper:]' '[:lower:]')"
 
 echo "GET $url"
-echo "$status"
+echo "HTTP $code"
 echo
+
+# Stop on a non-2xx response. An error page or a redirect can carry the full
+# header set while serving nobody, so accepting one would report success for
+# a broken host. Redirects matter here: the CDN host answers / with a 301
+# that no configured header ever reaches. Do not follow it, and do not pass
+# it either.
+if [[ "$code" != 2* ]]; then
+  echo "FAILED   want a 2xx response, got $code"
+  echo "         check the URL a browser loads, not a redirect or an error page"
+  exit 1
+fi
 
 failures=0
 
