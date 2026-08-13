@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // serveHandoff drives the public serving handler the way the router would,
@@ -85,6 +86,13 @@ func TestCreateSessionHandoff_MintsAndServesOnce(t *testing.T) {
 	// Burn-after-read: the same token is dead on the second fetch.
 	second := serveHandoff(t, ti, token)
 	require.Equal(t, http.StatusNotFound, second.Code)
+
+	// Burning the link also destroys the server's copy: the row survives for
+	// its consumed_at bookkeeping, but the transcript does not outlive the read.
+	burned, err := testrepo.New(ti.conn).GetSessionHandoffLinkFixture(ctx, token)
+	require.NoError(t, err)
+	require.Empty(t, burned.Content, "consumed handoff must not retain the document")
+	require.True(t, burned.ConsumedAt.Valid, "consumed handoff must record when it was burned")
 }
 
 // The fleet-shared org install key must not be able to upload content and
@@ -159,6 +167,22 @@ func TestCreateSessionHandoff_TTLClamped(t *testing.T) {
 	highExpires, err := time.Parse(time.RFC3339, high.ExpiresAt)
 	require.NoError(t, err)
 	require.WithinDuration(t, time.Now().Add(time.Hour), highExpires, time.Minute)
+
+	// A lifetime absurd enough to overflow the nanosecond conversion must still
+	// land on the floor: clamping after the multiplication would wrap this past
+	// the minimum and hand back the maximum instead.
+	overflow, err := ti.service.CreateSessionHandoff(userCtx, &gen.CreateSessionHandoffPayload{
+		SessionID:     uuid.NewString(),
+		Content:       "# doc",
+		SourceSurface: nil,
+		TTLSeconds:    conv.PtrEmpty(-1 << 40),
+		SerialNumber:  nil,
+		Hostname:      nil,
+	})
+	require.NoError(t, err)
+	overflowExpires, err := time.Parse(time.RFC3339, overflow.ExpiresAt)
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now().Add(time.Minute), overflowExpires, 30*time.Second)
 }
 
 // An expired row is a 404 indistinguishable from a bogus token, and malformed
@@ -183,4 +207,6 @@ func TestServeSessionHandoff_ExpiredAndMalformed(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, expiredToken).Code)
 	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, "short").Code)
 	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, strings.Repeat("z", 200)).Code)
+	// Right length, wrong alphabet: rejected on shape, never looked up.
+	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, strings.Repeat("z", 64)).Code)
 }

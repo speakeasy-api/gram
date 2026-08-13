@@ -215,21 +215,42 @@ WHERE c.id = @id
 -- name: InsertSessionHandoffLink :one
 -- Mint a session-handoff capability link. The token is the capability; TTL
 -- and burn-after-read (consumed_at) bound a leaked link's exposure window.
+-- Minting goes through the tenant-qualified project so a caller whose project
+-- and organization disagree, or whose project is soft-deleted, gets no row
+-- rather than a live capability URL.
 INSERT INTO session_handoff_links (
   project_id, organization_id, session_id, token, content, created_by_email, expires_at
-) VALUES (
-  @project_id, @organization_id, @session_id, @token, @content, @created_by_email, @expires_at
 )
+SELECT p.id, p.organization_id, @session_id, @token, @content, @created_by_email, @expires_at
+FROM projects p
+WHERE p.id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
 RETURNING id, expires_at;
 
 -- name: ConsumeSessionHandoffLink :one
 -- Atomically claim a link on read: exactly one caller can flip consumed_at,
 -- so a raced second fetch loses and gets no rows — burn-after-read without a
--- separate lock. Expired or already-consumed links also return no rows;
--- callers must serve all three cases as an indistinguishable 404.
-UPDATE session_handoff_links
-SET consumed_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE token = @token
-  AND consumed_at IS NULL
-  AND expires_at > clock_timestamp()
-RETURNING content;
+-- separate lock. Expired, already-consumed, and links whose project has since
+-- been soft-deleted all return no rows; callers must serve every case as an
+-- indistinguishable 404.
+--
+-- The claim reads the document out of a locked subquery and blanks the stored
+-- copy in the same statement, so burning a link also destroys the server's
+-- copy of the transcript instead of leaving it in Postgres forever. RETURNING
+-- reads from the subquery because the outer UPDATE's own RETURNING would hand
+-- back the blanked value.
+UPDATE session_handoff_links s
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), content = ''
+FROM (
+  SELECT l.id, l.content
+  FROM session_handoff_links l
+  JOIN projects p ON p.id = l.project_id
+  WHERE l.token = @token
+    AND l.consumed_at IS NULL
+    AND l.expires_at > clock_timestamp()
+    AND p.deleted IS FALSE
+  FOR UPDATE OF l
+) claimed
+WHERE s.id = claimed.id
+RETURNING claimed.content;

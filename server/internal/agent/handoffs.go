@@ -26,9 +26,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// handoffRoutePrefix is the public serving path. It must stay in lockstep
-// with the ingress allowlist (k8s/ingress_provisioner.go) and the route
-// attached in Attach.
+// handoffRoutePrefix is the public serving path. Links are always minted
+// against serverURL, so this is served on the primary app domain only — it is
+// deliberately absent from the custom-domain ingress allowlist in
+// k8s/ingress_provisioner.go, which exists so customer domains can serve skill
+// share pages. It must stay in lockstep with the route attached in Attach and
+// with the token-redaction prefixes in middleware.logSafeURL.
 const handoffRoutePrefix = "/shared/handoffs/"
 
 const (
@@ -82,7 +85,12 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 
 	ttl := defaultHandoffTTL
 	if payload.TTLSeconds != nil {
-		ttl = min(max(time.Duration(*payload.TTLSeconds)*time.Second, minHandoffTTL), maxHandoffTTL)
+		// Clamp in seconds, before widening to a Duration: converting first
+		// lets an absurd request overflow the nanosecond multiplication and
+		// wrap past the floor, so a hostile -1e10 would mint an hour-long link
+		// instead of the one-minute minimum.
+		seconds := min(max(*payload.TTLSeconds, int(minHandoffTTL/time.Second)), int(maxHandoffTTL/time.Second))
+		ttl = time.Duration(seconds) * time.Second
 	}
 
 	tokenBytes := make([]byte, handoffTokenBytes)
@@ -114,7 +122,13 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		CreatedByEmail: createdBy,
 		ExpiresAt:      conv.ToPGTimestamptz(expiresAt),
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// The insert selects through the tenant-qualified project, so no row
+		// means the key's project and organization disagree or the project is
+		// soft-deleted. Unreachable from a well-formed auth context.
+		return nil, oops.E(oops.CodeNotFound, err, "project not found")
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
 	}
 
@@ -154,7 +168,9 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 // indistinguishable 404 with no timing or body difference for a prober.
 func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) error {
 	token := chi.URLParam(r, "token")
-	if len(token) != 2*handoffTokenBytes {
+	// Shape check before the lookup: only hex of exactly the minted length can
+	// name a link, so malformed probes never reach Postgres.
+	if _, err := hex.DecodeString(token); len(token) != hex.EncodedLen(handoffTokenBytes) || err != nil {
 		http.NotFound(w, r)
 		return nil
 	}

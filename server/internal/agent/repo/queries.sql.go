@@ -28,18 +28,33 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 }
 
 const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
-UPDATE session_handoff_links
-SET consumed_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE token = $1
-  AND consumed_at IS NULL
-  AND expires_at > clock_timestamp()
-RETURNING content
+UPDATE session_handoff_links s
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), content = ''
+FROM (
+  SELECT l.id, l.content
+  FROM session_handoff_links l
+  JOIN projects p ON p.id = l.project_id
+  WHERE l.token = $1
+    AND l.consumed_at IS NULL
+    AND l.expires_at > clock_timestamp()
+    AND p.deleted IS FALSE
+  FOR UPDATE OF l
+) claimed
+WHERE s.id = claimed.id
+RETURNING claimed.content
 `
 
 // Atomically claim a link on read: exactly one caller can flip consumed_at,
 // so a raced second fetch loses and gets no rows — burn-after-read without a
-// separate lock. Expired or already-consumed links also return no rows;
-// callers must serve all three cases as an indistinguishable 404.
+// separate lock. Expired, already-consumed, and links whose project has since
+// been soft-deleted all return no rows; callers must serve every case as an
+// indistinguishable 404.
+//
+// The claim reads the document out of a locked subquery and blanks the stored
+// copy in the same statement, so burning a link also destroys the server's
+// copy of the transcript instead of leaving it in Postgres forever. RETURNING
+// reads from the subquery because the outer UPDATE's own RETURNING would hand
+// back the blanked value.
 func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
 	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
 	var content string
@@ -270,20 +285,23 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
 INSERT INTO session_handoff_links (
   project_id, organization_id, session_id, token, content, created_by_email, expires_at
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
 )
+SELECT p.id, p.organization_id, $1, $2, $3, $4, $5
+FROM projects p
+WHERE p.id = $6
+  AND p.organization_id = $7
+  AND p.deleted IS FALSE
 RETURNING id, expires_at
 `
 
 type InsertSessionHandoffLinkParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
 	SessionID      string
 	Token          string
 	Content        string
 	CreatedByEmail string
 	ExpiresAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 type InsertSessionHandoffLinkRow struct {
@@ -293,15 +311,18 @@ type InsertSessionHandoffLinkRow struct {
 
 // Mint a session-handoff capability link. The token is the capability; TTL
 // and burn-after-read (consumed_at) bound a leaked link's exposure window.
+// Minting goes through the tenant-qualified project so a caller whose project
+// and organization disagree, or whose project is soft-deleted, gets no row
+// rather than a live capability URL.
 func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessionHandoffLinkParams) (InsertSessionHandoffLinkRow, error) {
 	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
-		arg.ProjectID,
-		arg.OrganizationID,
 		arg.SessionID,
 		arg.Token,
 		arg.Content,
 		arg.CreatedByEmail,
 		arg.ExpiresAt,
+		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	var i InsertSessionHandoffLinkRow
 	err := row.Scan(&i.ID, &i.ExpiresAt)

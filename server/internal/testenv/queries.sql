@@ -373,3 +373,10 @@ WHERE s.project_id = @project_id
     NOT @found_only::boolean
     OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
   );
+
+-- name: GetSessionHandoffLinkFixture :one
+-- Test-only inspection of a minted session-handoff link, so tests can assert a
+-- consumed link keeps its burn bookkeeping without keeping the document.
+SELECT content, consumed_at
+FROM session_handoff_links
+WHERE token = @token;
