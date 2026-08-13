@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -229,7 +230,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 			UserID:      requester.UserID,
 			UserEmail:   fromPGText(requester.UserEmail),
 			Note:        fromPGText(requester.Note),
-			RequestedAt: requester.RequestedAt.Time.Format(timeFormat),
+			RequestedAt: conv.FromPGTimestamptz(requester.RequestedAt),
 		})
 	}
 
