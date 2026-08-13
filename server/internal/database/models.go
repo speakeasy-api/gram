@@ -2110,7 +2110,7 @@ type SessionHandoffLink struct {
 	OrganizationID string
 	SessionID      string
 	Token          string
-	Content        string
+	BlobUrl        string
 	CreatedByEmail string
 	ExpiresAt      pgtype.Timestamptz
 	ConsumedAt     pgtype.Timestamptz

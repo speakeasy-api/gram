@@ -88,10 +88,11 @@ func TestCreateSessionHandoff_MintsAndServesOnce(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, second.Code)
 
 	// Burning the link also destroys the server's copy: the row survives for
-	// its consumed_at bookkeeping, but the transcript does not outlive the read.
+	// its consumed_at bookkeeping, but the blob pointer does not outlive the
+	// read — and the blob itself is deleted from object storage.
 	burned, err := testrepo.New(ti.conn).GetSessionHandoffLinkFixture(ctx, token)
 	require.NoError(t, err)
-	require.Empty(t, burned.Content, "consumed handoff must not retain the document")
+	require.Empty(t, burned.BlobUrl, "consumed handoff must not retain the blob pointer")
 	require.True(t, burned.ConsumedAt.Valid, "consumed handoff must record when it was burned")
 }
 
@@ -198,7 +199,7 @@ func TestServeSessionHandoff_ExpiredAndMalformed(t *testing.T) {
 		OrganizationID: ti.orgID,
 		SessionID:      uuid.NewString(),
 		Token:          expiredToken,
-		Content:        "# stale",
+		BlobUrl:        "file://unused/expired.md",
 		CreatedByEmail: "dev@acme.corp",
 		ExpiresAt:      conv.ToPGTimestamptz(time.Now().Add(-time.Minute)),
 	})

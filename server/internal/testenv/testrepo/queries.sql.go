@@ -554,22 +554,22 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 }
 
 const getSessionHandoffLinkFixture = `-- name: GetSessionHandoffLinkFixture :one
-SELECT content, consumed_at
+SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = $1
 `
 
 type GetSessionHandoffLinkFixtureRow struct {
-	Content    string
+	BlobUrl    string
 	ConsumedAt pgtype.Timestamptz
 }
 
 // Test-only inspection of a minted session-handoff link, so tests can assert a
-// consumed link keeps its burn bookkeeping without keeping the document.
+// consumed link keeps its burn bookkeeping without keeping the blob pointer.
 func (q *Queries) GetSessionHandoffLinkFixture(ctx context.Context, token string) (GetSessionHandoffLinkFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getSessionHandoffLinkFixture, token)
 	var i GetSessionHandoffLinkFixtureRow
-	err := row.Scan(&i.Content, &i.ConsumedAt)
+	err := row.Scan(&i.BlobUrl, &i.ConsumedAt)
 	return i, err
 }
 

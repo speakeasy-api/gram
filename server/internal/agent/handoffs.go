@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -107,8 +109,33 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 
 	chatID := chat.SessionIDToChatID(sessionID)
 
+	// The document goes to object storage, never the row: the row keeps the
+	// capability token, tenancy, and the atomic consume claim. Written before
+	// the transaction so a failed insert can only leak an unreferenced blob
+	// (cleaned up below; bucket lifecycle is the backstop) — never a live
+	// capability with no document behind it.
+	blobW, blobURL, err := s.blobStore.Write(ctx, "session-handoffs/"+token+".md", "text/markdown", int64(len(payload.Content)))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
+	}
+	if _, err := io.WriteString(blobW, payload.Content); err != nil {
+		_ = blobW.Close()
+		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
+	}
+	if err := blobW.Close(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
+	}
+	// The blob URL is a second capability: it must reach the database and
+	// nothing else — never the response, the audit trail, or a log line.
+	cleanupBlob := func() {
+		if err := s.blobStore.Delete(context.WithoutCancel(ctx), blobURL); err != nil {
+			s.logger.WarnContext(ctx, "orphaned handoff blob not deleted", attr.SlogError(err))
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
+		cleanupBlob()
 		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
@@ -118,7 +145,7 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		OrganizationID: authCtx.ActiveOrganizationID,
 		SessionID:      sessionID,
 		Token:          token,
-		Content:        payload.Content,
+		BlobUrl:        blobURL.String(),
 		CreatedByEmail: createdBy,
 		ExpiresAt:      conv.ToPGTimestamptz(expiresAt),
 	})
@@ -127,8 +154,10 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		// The insert selects through the tenant-qualified project, so no row
 		// means the key's project and organization disagree or the project is
 		// soft-deleted. Unreachable from a well-formed auth context.
+		cleanupBlob()
 		return nil, oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
+		cleanupBlob()
 		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
 	}
 
@@ -168,14 +197,20 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 // indistinguishable 404 with no timing or body difference for a prober.
 func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) error {
 	token := chi.URLParam(r, "token")
-	// Shape check before the lookup: only hex of exactly the minted length can
-	// name a link, so malformed probes never reach Postgres.
-	if _, err := hex.DecodeString(token); len(token) != hex.EncodedLen(handoffTokenBytes) || err != nil {
+	// Shape check before the lookup: length first, so an attacker-sized path
+	// segment is rejected before hex.DecodeString allocates for it, then the
+	// now-fixed-size decode. Only hex of exactly the minted length can name a
+	// link, so malformed probes never reach Postgres.
+	if len(token) != hex.EncodedLen(handoffTokenBytes) {
+		http.NotFound(w, r)
+		return nil
+	}
+	if _, err := hex.DecodeString(token); err != nil {
 		http.NotFound(w, r)
 		return nil
 	}
 
-	content, err := s.repo.ConsumeSessionHandoffLink(r.Context(), token)
+	rawBlobURL, err := s.repo.ConsumeSessionHandoffLink(r.Context(), token)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		http.NotFound(w, r)
@@ -184,14 +219,35 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "resolve handoff link").LogError(r.Context(), s.logger)
 	}
 
+	// The claim is already burned in Postgres; everything past this point is
+	// delivery. The blob URL is internal — it must never surface in the
+	// response or an error body, so failures log it out-of-band and the
+	// caller sees a generic error.
+	blobURL, err := url.Parse(rawBlobURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve handoff document").LogError(r.Context(), s.logger)
+	}
+	rdr, err := s.blobStore.Read(r.Context(), blobURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read handoff document").LogError(r.Context(), s.logger)
+	}
+	defer o11y.LogDefer(r.Context(), s.logger, func() error { return rdr.Close() })
+
 	// no-store on a single-use document: any cache replaying it would defeat
 	// burn-after-read; noindex belt-and-braces against crawler ingestion.
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if _, err := w.Write([]byte(content)); err != nil {
+	if _, err := io.Copy(w, rdr); err != nil {
 		s.logger.DebugContext(r.Context(), "write handoff response", attr.SlogError(err))
+	}
+
+	// Burn the document itself, best-effort: the row's claim already makes the
+	// link dead, so a failed delete only means the bucket lifecycle policy
+	// collects the orphan later.
+	if err := s.blobStore.Delete(context.WithoutCancel(r.Context()), blobURL); err != nil {
+		s.logger.WarnContext(r.Context(), "consumed handoff blob not deleted", attr.SlogError(err))
 	}
 	return nil
 }

@@ -29,19 +29,20 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 
 const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
 UPDATE session_handoff_links s
-SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), content = ''
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), blob_url = ''
 FROM (
-  SELECT l.id, l.content
+  SELECT l.id, l.blob_url
   FROM session_handoff_links l
   JOIN projects p ON p.id = l.project_id
   WHERE l.token = $1
     AND l.consumed_at IS NULL
     AND l.expires_at > clock_timestamp()
     AND p.deleted IS FALSE
+    AND p.organization_id = l.organization_id
   FOR UPDATE OF l
 ) claimed
 WHERE s.id = claimed.id
-RETURNING claimed.content
+RETURNING claimed.blob_url
 `
 
 // Atomically claim a link on read: exactly one caller can flip consumed_at,
@@ -50,16 +51,17 @@ RETURNING claimed.content
 // been soft-deleted all return no rows; callers must serve every case as an
 // indistinguishable 404.
 //
-// The claim reads the document out of a locked subquery and blanks the stored
-// copy in the same statement, so burning a link also destroys the server's
-// copy of the transcript instead of leaving it in Postgres forever. RETURNING
-// reads from the subquery because the outer UPDATE's own RETURNING would hand
-// back the blanked value.
+// The claim returns the blob URL and blanks the stored pointer in the same
+// statement; the caller reads the document from object storage and deletes
+// the blob best-effort (bucket lifecycle is the backstop). RETURNING reads
+// from the subquery because the outer UPDATE's own RETURNING would hand back
+// the blanked value. The join also pins l.organization_id to the project's
+// real owner as a fail-closed consistency guard.
 func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
 	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
-	var content string
-	err := row.Scan(&content)
-	return content, err
+	var blob_url string
+	err := row.Scan(&blob_url)
+	return blob_url, err
 }
 
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
@@ -284,7 +286,7 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 
 const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
 INSERT INTO session_handoff_links (
-  project_id, organization_id, session_id, token, content, created_by_email, expires_at
+  project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at
 )
 SELECT p.id, p.organization_id, $1, $2, $3, $4, $5
 FROM projects p
@@ -297,7 +299,7 @@ RETURNING id, expires_at
 type InsertSessionHandoffLinkParams struct {
 	SessionID      string
 	Token          string
-	Content        string
+	BlobUrl        string
 	CreatedByEmail string
 	ExpiresAt      pgtype.Timestamptz
 	ProjectID      uuid.UUID
@@ -318,7 +320,7 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
 		arg.SessionID,
 		arg.Token,
-		arg.Content,
+		arg.BlobUrl,
 		arg.CreatedByEmail,
 		arg.ExpiresAt,
 		arg.ProjectID,

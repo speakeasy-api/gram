@@ -20,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -54,6 +55,7 @@ type Service struct {
 	audit           *audit.Logger
 	productFeatures ProductFeaturesClient
 	serverURL       string
+	blobStore       assets.BlobStore
 }
 
 var (
@@ -71,6 +73,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	productFeatures ProductFeaturesClient,
 	serverURL string,
+	blobStore assets.BlobStore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -83,6 +86,7 @@ func NewService(
 		audit:           auditLogger,
 		productFeatures: productFeatures,
 		serverURL:       serverURL,
+		blobStore:       blobStore,
 	}
 }
 

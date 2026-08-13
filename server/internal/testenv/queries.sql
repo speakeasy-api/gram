@@ -376,7 +376,7 @@ WHERE s.project_id = @project_id
 
 -- name: GetSessionHandoffLinkFixture :one
 -- Test-only inspection of a minted session-handoff link, so tests can assert a
--- consumed link keeps its burn bookkeeping without keeping the document.
-SELECT content, consumed_at
+-- consumed link keeps its burn bookkeeping without keeping the blob pointer.
+SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
