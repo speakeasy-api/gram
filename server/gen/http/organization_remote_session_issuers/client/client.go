@@ -34,6 +34,10 @@ type Client struct {
 	// the getIssuerDeletePreflight endpoint.
 	GetIssuerDeletePreflightDoer goahttp.Doer
 
+	// GetIssuerDuplicatePreflight Doer is the HTTP client used to make requests to
+	// the getIssuerDuplicatePreflight endpoint.
+	GetIssuerDuplicatePreflightDoer goahttp.Doer
+
 	// UpdateIssuer Doer is the HTTP client used to make requests to the
 	// updateIssuer endpoint.
 	UpdateIssuerDoer goahttp.Doer
@@ -83,22 +87,23 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateIssuerDoer:              doer,
-		ListIssuersDoer:               doer,
-		GetIssuerDoer:                 doer,
-		GetIssuerDeletePreflightDoer:  doer,
-		UpdateIssuerDoer:              doer,
-		DeleteIssuerDoer:              doer,
-		MoveIssuerDoer:                doer,
-		GetIssuerMigratePreflightDoer: doer,
-		MigrateIssuerDoer:             doer,
-		FetchIssuerMetadataDoer:       doer,
-		RefreshIssuerMetadataDoer:     doer,
-		RestoreResponseBody:           restoreBody,
-		scheme:                        scheme,
-		host:                          host,
-		decoder:                       dec,
-		encoder:                       enc,
+		CreateIssuerDoer:                doer,
+		ListIssuersDoer:                 doer,
+		GetIssuerDoer:                   doer,
+		GetIssuerDeletePreflightDoer:    doer,
+		GetIssuerDuplicatePreflightDoer: doer,
+		UpdateIssuerDoer:                doer,
+		DeleteIssuerDoer:                doer,
+		MoveIssuerDoer:                  doer,
+		GetIssuerMigratePreflightDoer:   doer,
+		MigrateIssuerDoer:               doer,
+		FetchIssuerMetadataDoer:         doer,
+		RefreshIssuerMetadataDoer:       doer,
+		RestoreResponseBody:             restoreBody,
+		scheme:                          scheme,
+		host:                            host,
+		decoder:                         dec,
+		encoder:                         enc,
 	}
 }
 
@@ -193,6 +198,31 @@ func (c *Client) GetIssuerDeletePreflight() goa.Endpoint {
 		resp, err := c.GetIssuerDeletePreflightDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getIssuerDeletePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetIssuerDuplicatePreflight returns an endpoint that makes HTTP requests to
+// the organizationRemoteSessionIssuers service getIssuerDuplicatePreflight
+// server.
+func (c *Client) GetIssuerDuplicatePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetIssuerDuplicatePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetIssuerDuplicatePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetIssuerDuplicatePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetIssuerDuplicatePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getIssuerDuplicatePreflight", err)
 		}
 		return decodeResponse(resp)
 	}

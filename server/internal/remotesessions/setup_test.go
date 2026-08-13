@@ -105,6 +105,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
+		testenv.NewMeterProvider(t),
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),

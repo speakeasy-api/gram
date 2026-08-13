@@ -554,13 +554,6 @@ func DecodeEnsureServerReviewRequest(mux goahttp.Muxer, decoder func(*http.Reque
 				payload.ProjectSlugInput = &cred
 			}
 		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
 
 		return payload, nil
 	}
@@ -791,13 +784,6 @@ func DecodeCreateRequestRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				payload.ProjectSlugInput = &cred
 			}
 		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
 
 		return payload, nil
 	}
@@ -1026,13 +1012,6 @@ func DecodePromoteRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -1486,6 +1465,8 @@ func marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(v *mcpappr
 		for i, val := range v.GrantedPrincipalUrns {
 			res.GrantedPrincipalUrns[i] = val
 		}
+	} else {
+		res.GrantedPrincipalUrns = []string{}
 	}
 
 	return res

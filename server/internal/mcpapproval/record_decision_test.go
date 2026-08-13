@@ -230,8 +230,7 @@ func TestRecordDecision_DecisionsExposeTheirFrozenEvidence(t *testing.T) {
 	authority, ok := frozen["authority"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "api_key", authority["mode"])
-	require.NotNil(t, detail.Decisions[0].EvidenceVersion)
-	require.Equal(t, 3, *detail.Decisions[0].EvidenceVersion)
+	require.Equal(t, 3, detail.Decisions[0].EvidenceVersion)
 }
 
 // A decision writes one audit entry in the same transaction as the decision

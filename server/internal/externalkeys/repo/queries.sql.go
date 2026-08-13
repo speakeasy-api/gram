@@ -115,6 +115,59 @@ func (q *Queries) CreateGcpKmsKey(ctx context.Context, arg CreateGcpKmsKeyParams
 	return i, err
 }
 
+const externalKeyHasJsonWebKeyReferences = `-- name: ExternalKeyHasJsonWebKeyReferences :one
+SELECT EXISTS (
+  SELECT 1
+  FROM json_web_key_sets
+  WHERE organization_id = $1::text
+    AND external_key_id = $2::uuid
+    AND deleted IS FALSE
+  UNION ALL
+  SELECT 1
+  FROM json_web_keys
+  WHERE organization_id = $1::text
+    AND external_key_id = $2::uuid
+    AND deleted IS FALSE
+) AS referenced
+`
+
+type ExternalKeyHasJsonWebKeyReferencesParams struct {
+	OrganizationID string
+	ExternalKeyID  uuid.UUID
+}
+
+// Reports whether any live JSON Web Key Set or published JSON Web Key still
+// references the external key. Run inside the delete transaction, after
+// LockExternalKeyForDelete.
+//
+// Soft-deleted references do not count. Both JWKS tables use the same
+// deleted_at / generated deleted pattern as external_keys, a revoked key is
+// soft-deleted, and soft-deleting a set cascade-soft-deletes its keys (AIS-240),
+// so `deleted IS FALSE` is the live-reference test on both sides. The sets arm
+// is not redundant with the keys arm: a set that has published no keys yet, or
+// whose keys were all revoked, still references the external key.
+//
+// The database will not enforce this. Both foreign keys omit ON DELETE, which is
+// NO ACTION (end-of-statement) rather than RESTRICT (immediate) — a distinction
+// that is load-bearing, because organization deletion cascades into external_keys
+// and json_web_key_sets in one statement and NO ACTION survives that ordering
+// while RESTRICT would abort it. Neither variant fires on the soft-delete path
+// anyway, since `deleted` is a generated column.
+// The parameters are explicitly cast because both tables carry an
+// organization_id / external_key_id column, which leaves sqlc unable to infer a
+// named parameter's type from the column reference alone. The two arms are one
+// EXISTS over a UNION ALL rather than two OR'd EXISTS so the result is a
+// non-nullable bool: sqlc types `EXISTS(...) OR EXISTS(...)` as pgtype.Bool,
+// which would make an unset value read as "not referenced" and fail this guard
+// open. UNION ALL is still short-circuiting here, since EXISTS stops at the
+// first row.
+func (q *Queries) ExternalKeyHasJsonWebKeyReferences(ctx context.Context, arg ExternalKeyHasJsonWebKeyReferencesParams) (bool, error) {
+	row := q.db.QueryRow(ctx, externalKeyHasJsonWebKeyReferences, arg.OrganizationID, arg.ExternalKeyID)
+	var referenced bool
+	err := row.Scan(&referenced)
+	return referenced, err
+}
+
 const getAwsKmsKey = `-- name: GetAwsKmsKey :one
 SELECT ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted, aws.external_key_id, aws.external_keys_provider, aws.key_arn, aws.created_at, aws.updated_at
 FROM external_keys AS ek
@@ -283,6 +336,37 @@ func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysPara
 	return items, nil
 }
 
+const lockExternalKeyForDelete = `-- name: LockExternalKeyForDelete :one
+SELECT id
+FROM external_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND provider = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockExternalKeyForDeleteParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	Provider       string
+}
+
+// Locks the external key row so the JWKS reference check below cannot be raced
+// by a concurrent JWKS write. FOR UPDATE is load-bearing and must not be
+// weakened to FOR NO KEY UPDATE: inserting a json_web_key_sets / json_web_keys
+// row takes FOR KEY SHARE on this parent row, which conflicts with FOR UPDATE
+// but NOT with FOR NO KEY UPDATE. Downgrading the lock mode would silently
+// reopen the TOCTOU window where a JWKS insert commits between the reference
+// check and the soft delete. The JWKS create path takes the counterpart
+// FOR SHARE on this row (AIS-240).
+func (q *Queries) LockExternalKeyForDelete(ctx context.Context, arg LockExternalKeyForDeleteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockExternalKeyForDelete, arg.ID, arg.OrganizationID, arg.Provider)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const softDeleteExternalKey = `-- name: SoftDeleteExternalKey :one
 UPDATE external_keys
 SET deleted_at = clock_timestamp()
@@ -319,61 +403,36 @@ func (q *Queries) SoftDeleteExternalKey(ctx context.Context, arg SoftDeleteExter
 	return i, err
 }
 
-const updateAwsKmsKey = `-- name: UpdateAwsKmsKey :one
-UPDATE aws_kms_keys
-SET key_arn = $1,
-    updated_at = clock_timestamp()
-WHERE external_key_id = $2
-RETURNING external_key_id, external_keys_provider, key_arn, created_at, updated_at
-`
-
-type UpdateAwsKmsKeyParams struct {
-	KeyArn        string
-	ExternalKeyID uuid.UUID
-}
-
-// Subtype update: keyed on external_key_id only. Callers must first verify org +
-// provider ownership via GetAwsKmsKey (scoped by organization_id, provider, and
-// deleted IS FALSE) in the same transaction.
-func (q *Queries) UpdateAwsKmsKey(ctx context.Context, arg UpdateAwsKmsKeyParams) (AwsKmsKey, error) {
-	row := q.db.QueryRow(ctx, updateAwsKmsKey, arg.KeyArn, arg.ExternalKeyID)
-	var i AwsKmsKey
-	err := row.Scan(
-		&i.ExternalKeyID,
-		&i.ExternalKeysProvider,
-		&i.KeyArn,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const updateExternalKey = `-- name: UpdateExternalKey :one
 UPDATE external_keys
 SET external_credential_id = $1,
-    algorithm = $2,
-    name = $3,
-    customer_grant_reference = $4,
+    name = $2,
+    customer_grant_reference = $3,
     updated_at = clock_timestamp()
-WHERE id = $5
-  AND organization_id = $6
+WHERE id = $4
+  AND organization_id = $5
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateExternalKeyParams struct {
 	ExternalCredentialID   uuid.UUID
-	Algorithm              string
 	Name                   string
 	CustomerGrantReference pgtype.Text
 	ID                     uuid.UUID
 	OrganizationID         pgtype.Text
 }
 
+// Updates only the mutable columns. algorithm is absent on purpose, alongside
+// the subtype identity columns (aws_kms_keys.key_arn, gcp_kms_keys.resource_name)
+// which have no update query at all: an external_keys row must identify exactly
+// one signable key permanently, because json_web_keys pins each published kid to
+// the row it was minted from. There is deliberately no subtype update query to
+// pair with this one, so aws_kms_keys / gcp_kms_keys rows are write-once and
+// their updated_at always equals created_at.
 func (q *Queries) UpdateExternalKey(ctx context.Context, arg UpdateExternalKeyParams) (ExternalKey, error) {
 	row := q.db.QueryRow(ctx, updateExternalKey,
 		arg.ExternalCredentialID,
-		arg.Algorithm,
 		arg.Name,
 		arg.CustomerGrantReference,
 		arg.ID,
@@ -393,35 +452,6 @@ func (q *Queries) UpdateExternalKey(ctx context.Context, arg UpdateExternalKeyPa
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
-	)
-	return i, err
-}
-
-const updateGcpKmsKey = `-- name: UpdateGcpKmsKey :one
-UPDATE gcp_kms_keys
-SET resource_name = $1,
-    updated_at = clock_timestamp()
-WHERE external_key_id = $2
-RETURNING external_key_id, external_keys_provider, resource_name, created_at, updated_at
-`
-
-type UpdateGcpKmsKeyParams struct {
-	ResourceName  string
-	ExternalKeyID uuid.UUID
-}
-
-// Subtype update: keyed on external_key_id only. Callers must first verify org +
-// provider ownership via GetGcpKmsKey (scoped by organization_id, provider, and
-// deleted IS FALSE) in the same transaction.
-func (q *Queries) UpdateGcpKmsKey(ctx context.Context, arg UpdateGcpKmsKeyParams) (GcpKmsKey, error) {
-	row := q.db.QueryRow(ctx, updateGcpKmsKey, arg.ResourceName, arg.ExternalKeyID)
-	var i GcpKmsKey
-	err := row.Scan(
-		&i.ExternalKeyID,
-		&i.ExternalKeysProvider,
-		&i.ResourceName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }

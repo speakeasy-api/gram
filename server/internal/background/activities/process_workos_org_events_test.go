@@ -199,36 +199,76 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 	require.Equal(t, "event_01HZGOOD", cursor)
 }
 
-func TestProcessWorkOSOrganizationEvents_OrganizationCreateRejectsEmptySlug(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameHasNoSlug(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_org_empty_slug")
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_generated_slug")
 	logger := testenv.NewLogger(t)
 
-	const workosOrgID = "org_01HZEMPTYSLUG"
+	const workosOrgID = "org_01HZNOSLUG"
+	const orgName = "顶尖科技"
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
 			{
-				ID:        "event_01HZEMPTYSLUG",
+				ID:        "event_01HZNOSLUG",
 				Event:     "organization.created",
 				CreatedAt: time.Now(),
-				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"!!!",` +
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"` + orgName + `",` +
 					`"updated_at":"2026-05-06T12:00:00Z"}`),
 			},
 		},
 	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
-	require.Error(t, err)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZNOSLUG", res.LastEventID)
 
-	_, err = orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, orgName, row.Name)
+	require.Equal(t, "org-01hznoslug", row.Slug)
 
-	_, err = workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZNOSLUG", cursor)
+}
+
+// A single URL-safe character is too little to identify an organization by, so
+// a name yielding one falls back to the WorkOS ID like an empty one does.
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameYieldsOneCharacter(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_one_char_slug")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZONECHAR"
+	const orgName = "X 顶尖科技"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZONECHAR",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"` + orgName + `",` +
+					`"updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZONECHAR", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, orgName, row.Name)
+	require.Equal(t, "org-01hzonechar", row.Slug)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCreates(t *testing.T) {

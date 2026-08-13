@@ -186,15 +186,11 @@ func TestService_Login(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		orgName := "Bob's Bakery"
+		orgName := "Acme Inc\t"
 		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
 		require.Error(t, err)
 		require.Nil(t, result)
 		require.Contains(t, err.Error(), "organization name contains invalid characters")
-		// Nothing is asserted about Redis here: on the error path Login returns
-		// no state param, so the test has no nonce to look a key up by. The
-		// no-orphan-nonce property comes from validating before the mint, which
-		// Step 4 enforces by ordering.
 	})
 
 	t.Run("login with an over-long org name errors", func(t *testing.T) {
@@ -313,7 +309,35 @@ func TestService_Login(t *testing.T) {
 	})
 }
 
-func TestService_LoginRejectsOrgNameWithShortSlug(t *testing.T) {
+func TestService_LoginStoresNormalizedUnicodeOrganizationName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "normalizes spaces", input: " Acme\u00a0 Inc ", want: "Acme Inc"},
+		{name: "preserves non-Latin script", input: "アクメ株式会社", want: "アクメ株式会社"},
+	}
+
+	for _, tt := range tests {
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &tt.input})
+		require.NoError(t, err, tt.name)
+
+		nonce := nonceFromLocation(t, result.Location)
+		var intent struct {
+			OrgName string
+		}
+		require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent), tt.name)
+		require.Equal(t, tt.want, intent.OrgName, tt.name)
+	}
+}
+
+func TestService_LoginRejectsOrgNameWithTooFewLetters(t *testing.T) {
 	t.Parallel()
 
 	userInfo := defaultMockUserInfo()

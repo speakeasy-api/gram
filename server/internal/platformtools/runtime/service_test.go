@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -14,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -312,4 +317,62 @@ func TestService_ExecuteTool_PlanExecutorOverrideSurfacesError(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "boom")
 	require.True(t, exec.called)
+}
+
+// slackRedirectTransport sends a Slack tool's outbound call to a local test
+// server, since the tools pin the real slack.com base URL.
+type slackRedirectTransport struct {
+	host string
+}
+
+func (t *slackRedirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rewritten := req.Clone(req.Context())
+	rewritten.URL.Scheme = "http"
+	rewritten.URL.Host = t.host
+
+	resp, err := http.DefaultTransport.RoundTrip(rewritten)
+	if err != nil {
+		return nil, fmt.Errorf("roundtrip to test slack: %w", err)
+	}
+	return resp, nil
+}
+
+// Slack answers a thread timestamp that names no thread with HTTP 200 and an
+// ok=false envelope. That refusal must remain attributable to the caller after
+// the runtime wraps it, so the MCP boundary logs it at warn instead of driving
+// the component's error rate with an ordinary caller mistake.
+func TestService_ExecuteTool_KeepsSlackRefusalAttributedToCaller(t *testing.T) {
+	t.Parallel()
+
+	slack := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"ok":false,"error":"thread_not_found"}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer slack.Close()
+
+	slackURL, err := url.Parse(slack.URL)
+	require.NoError(t, err)
+
+	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
+	projectID := uuid.New()
+	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-1",
+		ProjectID:            &projectID,
+	})
+
+	tool := platformslack.NewReadThreadMessagesTool(&http.Client{
+		Transport: &slackRedirectTransport{host: slackURL.Host},
+	})
+
+	env := toolconfig.ToolCallEnv{
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+	}
+	env.SystemEnv.Set("SLACK_BOT_TOKEN", "xoxb-test")
+
+	_, err = svc.ExecuteTool(ctx, overridePlan(projectID, tool), env, strings.NewReader(`{"channel_id":"C1","thread_ts":"1.2"}`))
+	require.ErrorContains(t, err, "thread_not_found")
+	require.True(t, oops.IsClientFault(err), "a thread the caller named that does not exist is the caller's to fix")
 }

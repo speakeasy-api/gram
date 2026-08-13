@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,9 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
-
-// timeFormat is how timestamps cross the API boundary.
-const timeFormat = time.RFC3339
 
 // summaryView projects a request row into its API shape.
 //
@@ -42,8 +38,8 @@ func summaryView(request requestFields) *gen.ApprovalRequestSummary {
 		VersionPinned:  request.VersionPinned,
 		Status:         request.Status,
 		RequesterCount: int(request.RequesterCount),
-		CreatedAt:      request.CreatedAt.Time.Format(timeFormat),
-		UpdatedAt:      request.UpdatedAt.Time.Format(timeFormat),
+		CreatedAt:      conv.FromPGTimestamptz(request.CreatedAt),
+		UpdatedAt:      conv.FromPGTimestamptz(request.UpdatedAt),
 	}
 }
 
@@ -91,16 +87,24 @@ func fromTargetRow(row repo.GetApprovalRequestByTargetRow) requestFields {
 }
 
 func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
+	// The column is NOT NULL with an array default, but the field is required
+	// at the API boundary, so a nil scan result must still surface as an
+	// empty set rather than fail response validation.
+	granted := decision.GrantedPrincipalUrns
+	if granted == nil {
+		granted = []string{}
+	}
+
 	return &gen.ApprovalDecision{
 		ID:                   decision.ID.String(),
 		Decision:             decision.Decision,
 		DecidedBy:            decision.DecidedBy,
 		Rationale:            fromPGText(decision.Rationale),
-		GrantedPrincipalUrns: decision.GrantedPrincipalUrns,
+		GrantedPrincipalUrns: granted,
 		ResearchReportID:     nullUUIDString(decision.McpResearchReportID),
 		Evidence:             rawEvidence(decision.EvidenceSnapshot),
-		EvidenceVersion:      evidenceVersion(decision.EvidenceVersion),
-		DecidedAt:            decision.DecidedAt.Time.Format(timeFormat),
+		EvidenceVersion:      int(decision.EvidenceVersion),
+		DecidedAt:            conv.FromPGTimestamptz(decision.DecidedAt),
 	}
 }
 
@@ -116,7 +120,7 @@ func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
 		StartedAt:     optionalTime(report.StartedAt),
 		CompletedAt:   optionalTime(report.CompletedAt),
 		Error:         fromPGText(report.Error),
-		CreatedAt:     report.CreatedAt.Time.Format(timeFormat),
+		CreatedAt:     conv.FromPGTimestamptz(report.CreatedAt),
 	}
 }
 
@@ -177,12 +181,14 @@ func fromPGText(value pgtype.Text) *string {
 	return conv.FromPGText[string](value)
 }
 
+// optionalTime normalizes an optional timestamp for the API boundary. Like the
+// required fields it goes through conv.FromPGTimestamptz, so a row whose
+// timestamptz carries a non-UTC offset serializes as the same UTC instant
+// everywhere instead of leaking whichever zone the connection handed back.
 func optionalTime(value pgtype.Timestamptz) *string {
 	if !value.Valid {
 		return nil
 	}
 
-	formatted := value.Time.Format(timeFormat)
-
-	return &formatted
+	return conv.PtrEmpty(conv.FromPGTimestamptz(value))
 }

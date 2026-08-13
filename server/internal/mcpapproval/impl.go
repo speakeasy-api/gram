@@ -762,7 +762,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 			UserID:      requester.UserID,
 			UserEmail:   fromPGText(requester.UserEmail),
 			Note:        fromPGText(requester.Note),
-			RequestedAt: requester.RequestedAt.Time.Format(timeFormat),
+			RequestedAt: conv.FromPGTimestamptz(requester.RequestedAt),
 		})
 	}
 

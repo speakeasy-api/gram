@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -112,8 +113,10 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		authzEngine,
 		audit.NewLogger(),
 		guardianPolicy,
+		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
+		ratelimit.NewRedisStore(redisClient),
 	)
 
 	return ctx, &testInstance{

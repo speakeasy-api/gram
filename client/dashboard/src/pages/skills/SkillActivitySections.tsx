@@ -25,9 +25,6 @@ ChartJS.register(
   Legend,
 );
 
-export const SKILL_ADOPTION_SECTION_ID = "adoption";
-export const SKILL_TIMELINE_SECTION_ID = "timeline";
-
 const utcMonthDayFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
@@ -123,7 +120,7 @@ export function SkillActivitySections({
 
   return (
     <>
-      <SettingsSection id={SKILL_ADOPTION_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Adoption and drift</SettingsSection.Title>
           <SettingsSection.Description>
@@ -181,7 +178,7 @@ export function SkillActivitySections({
         </div>
       </SettingsSection>
 
-      <SettingsSection id={SKILL_TIMELINE_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Activation timeline</SettingsSection.Title>
           <SettingsSection.Description>

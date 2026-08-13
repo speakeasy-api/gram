@@ -137,6 +137,29 @@ function ModelCard({
   );
 }
 
+// "+10%" / "-15%": the sign is the information — an unsigned "10%" wouldn't
+// say which way the rates moved.
+function formatSignedPct(pct: number): string {
+  return `${pct > 0 ? "+" : ""}${pct.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+}
+
+// Reads the annual gap between the two models. PAYG undercutting the
+// committed contract is a modelling error at list rates — but the expected
+// outcome of a big enough negotiated discount — so the two cases have to read
+// differently, or a deliberate discount gets reported as a pricing bug.
+function paygDeltaMessage(delta: number, rateAdjustPct: number): string {
+  if (delta > 0) {
+    return `Pay-as-you-go costs ${formatUSD(delta)}/yr more than the committed contract at this volume — the number to point at in a "should we commit?" conversation.`;
+  }
+  if (delta < 0 && rateAdjustPct !== 0) {
+    return `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here at the adjusted rates (${formatSignedPct(rateAdjustPct)} vs list).`;
+  }
+  if (delta < 0) {
+    return `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here, which the model isn't meant to allow — check the platform fee against the baseline.`;
+  }
+  return "Both models price identically at this volume.";
+}
+
 // How hard the account team should be looking at this contract. Steady
 // accounts run overage at a fraction of their base; once overage rivals the
 // base contract the customer is better off upsizing the baseline than paying
@@ -188,6 +211,7 @@ export function ContractPriceEstimator({
   const [basisOverride, setBasisOverride] = useState<VolumeBasis | null>(null);
   const [customVolume, setCustomVolume] = useState("");
   const [feeOverride, setFeeOverride] = useState("");
+  const [paygAdjustment, setPaygAdjustment] = useState("");
 
   // Deliberately not memoized on `cycles`. Whether the projection is even
   // offered depends on how much of the cycle has elapsed, so a `now` captured
@@ -230,6 +254,17 @@ export function ContractPriceEstimator({
       ? parsedFee
       : derivedFee;
 
+  // Negotiated swing on the PAYG list rates. Bounded below at -100% — past
+  // that a rate would go negative — and an invalid or out-of-range entry
+  // falls back to list rates rather than blanking the card mid-keystroke.
+  const parsedAdjust = Number(paygAdjustment);
+  const paygRateAdjustPct =
+    paygAdjustment.trim() !== "" &&
+    Number.isFinite(parsedAdjust) &&
+    parsedAdjust > -100
+      ? parsedAdjust
+      : 0;
+
   const committed = useMemo(() => {
     if (
       monthlyTokens == null ||
@@ -258,7 +293,7 @@ export function ContractPriceEstimator({
 
   const payg = useMemo(() => {
     if (monthlyTokens == null) return null;
-    const lines = paygLines(monthlyTokens);
+    const lines = paygLines(monthlyTokens, paygRateAdjustPct);
     const monthly = sumLines(lines);
     const annual = monthly * 12;
     return {
@@ -267,7 +302,7 @@ export function ContractPriceEstimator({
       annual,
       rate: effectiveRatePerMillion(annual, monthlyTokens),
     };
-  }, [monthlyTokens]);
+  }, [monthlyTokens, paygRateAdjustPct]);
 
   const signal =
     committed?.share != null ? overageSignal(committed.share) : null;
@@ -353,6 +388,26 @@ export function ContractPriceEstimator({
             How is the fee defaulted?
           </span>
         </SimpleTooltip>
+
+        <Stack gap={2}>
+          <Label htmlFor="contract-payg-adjustment">
+            PAYG rate adjustment (%)
+          </Label>
+          <Input
+            id="contract-payg-adjustment"
+            type="number"
+            min={-100}
+            placeholder="e.g. 10 or -15"
+            value={paygAdjustment}
+            onChange={setPaygAdjustment}
+          />
+        </Stack>
+
+        <SimpleTooltip tooltip="Scales every pay-as-you-go band rate by this percentage — positive for an uplift, negative for a discount. Band boundaries don't move, and the committed model is unaffected. Estimate only.">
+          <span className="text-muted-foreground pb-2.5 text-xs">
+            How does the adjustment apply?
+          </span>
+        </SimpleTooltip>
       </div>
 
       {/* What the selected basis actually measures. Load-bearing for the
@@ -416,7 +471,11 @@ export function ContractPriceEstimator({
 
             <ModelCard
               title="Pay As You Go"
-              subtitle="No commitment — every token billed by volume tier"
+              subtitle={
+                paygRateAdjustPct === 0
+                  ? "No commitment — every token billed by volume tier"
+                  : `No commitment — volume-tier rates ${formatSignedPct(paygRateAdjustPct)} vs list`
+              }
             >
               {payg && (
                 <>
@@ -449,11 +508,7 @@ export function ContractPriceEstimator({
 
           {delta != null && (
             <Text muted small>
-              {delta > 0
-                ? `Pay-as-you-go costs ${formatUSD(delta)}/yr more than the committed contract at this volume — the number to point at in a "should we commit?" conversation.`
-                : delta < 0
-                  ? `Pay-as-you-go is ${formatUSD(-delta)}/yr cheaper here, which the model isn't meant to allow — check the platform fee against the baseline.`
-                  : "Both models price identically at this volume."}
+              {paygDeltaMessage(delta, paygRateAdjustPct)}
             </Text>
           )}
         </>

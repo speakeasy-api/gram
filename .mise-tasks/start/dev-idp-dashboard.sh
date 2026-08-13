@@ -10,4 +10,4 @@ if [ -z "${GRAM_DEVIDP_EXTERNAL_URL:-}" ]; then
   exit 1
 fi
 
-exec pnpm --filter ./dev-idp-dashboard dev
+exec aube run --filter ./dev-idp-dashboard dev

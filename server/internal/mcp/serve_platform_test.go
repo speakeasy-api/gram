@@ -52,6 +52,32 @@ func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T
 	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
 }
 
+// The swap cuts both ways: an org on the platformmcp variant must lose the
+// legacy toolset, not merely gain the platform one.
+func TestServePlatformToolset_ManagedToolsetRejectedOnPlatformMCPVariant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
+
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	require.Error(t, err, "the legacy toolset must stay hidden on the platformmcp variant")
+	require.Contains(t, err.Error(), "not found")
+}
+
 func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	t.Parallel()
 
@@ -260,8 +286,9 @@ func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte,
 }
 
 // The Platform MCP read toolset is rollout-gated: the managed assistant
-// reaches it only when the assistant-platform-mcp flag is on for the org.
-func TestServePlatformToolset_PlatformMCPReadFlagOnListsTools(t *testing.T) {
+// reaches it only when the assistant-platform-mcp flag resolves to the
+// platformmcp variant for the org.
+func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -277,7 +304,7 @@ func TestServePlatformToolset_PlatformMCPReadFlagOnListsTools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
@@ -290,7 +317,7 @@ func TestServePlatformToolset_PlatformMCPReadFlagOnListsTools(t *testing.T) {
 	require.Contains(t, body, platformtools.ToolNameGetMCP)
 }
 
-func TestServePlatformToolset_PlatformMCPReadFlagOffRejected(t *testing.T) {
+func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -308,7 +335,7 @@ func TestServePlatformToolset_PlatformMCPReadFlagOffRejected(t *testing.T) {
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "the platform toolset must stay hidden while the flag is off")
+	require.Error(t, err, "the platform toolset must stay hidden on the legacy variant")
 	require.Contains(t, err.Error(), "not found")
 }
 
@@ -328,13 +355,13 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	otherID := createAssistant(t, ti, authCtx, "Other")
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.Error(t, err, "a non-managed assistant must not reach the platform toolset even with the flag on")
+	require.Error(t, err, "a non-managed assistant must not reach the platform toolset even on the platformmcp variant")
 	require.Contains(t, err.Error(), "not found")
 }
 
@@ -356,7 +383,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 

@@ -338,6 +338,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, orgProvisionOptions{
 				Whitelisted:    true,
 				ProvisionTrial: true,
+				ActorEmail:     userInfo.Email,
 			})
 			if err != nil {
 				return s.redirectSignupError(ctx, err)
@@ -509,11 +510,15 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// nonce behind — and so a bad name fails before the identity-provider hop
 	// rather than after it. Only when the parameter is present: a malformed
 	// value must never be able to block an ordinary login.
-	orgName := strings.TrimSpace(conv.PtrValOr(payload.OrgName, ""))
-	if orgName != "" {
-		if err := validateOrgName(orgName); err != nil {
+	orgName := conv.PtrValOr(payload.OrgName, "")
+	if strings.TrimSpace(orgName) != "" {
+		validated, err := validateOrgName(orgName)
+		if err != nil {
 			return nil, err
 		}
+		orgName = validated
+	} else {
+		orgName = ""
 	}
 
 	// An email means the sign-up page collected one to pre-fill on the identity
@@ -933,6 +938,12 @@ type orgProvisionOptions struct {
 	// ProvisionTrial arms a 14-day enterprise trial in the same transaction
 	// that creates the organization.
 	ProvisionTrial bool
+
+	// ActorEmail names the human this provisioning is attributed to in the
+	// audit log. It travels explicitly because the signup path runs on the
+	// unauthenticated callback, which has no auth context to read it from.
+	// Empty stores no display name, leaving the entry showing a bare actor id.
+	ActorEmail string
 }
 
 // provisionOrgForUser creates an organization and attaches a user to it as the
@@ -946,7 +957,11 @@ type orgProvisionOptions struct {
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
 
-	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
+	base, err := orgslug.Base(orgName)
+	if err != nil {
+		return empty, fmt.Errorf("derive slug base: %w", err)
+	}
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, base)
 	if err != nil {
 		return empty, fmt.Errorf("find unique slug: %w", err)
 	}
@@ -982,13 +997,15 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("user already has an active organization"), "user already has an active organization")
 	}
 
-	if err := validateOrgName(payload.OrgName); err != nil {
+	orgName, err := validateOrgName(payload.OrgName)
+	if err != nil {
 		return err
 	}
 
-	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, orgProvisionOptions{
+	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, orgName, orgProvisionOptions{
 		Whitelisted:    true,
 		ProvisionTrial: true,
+		ActorEmail:     conv.PtrValOr(authCtx.Email, ""),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
@@ -1014,6 +1031,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, orgProvisionOptions{
 		Whitelisted:    true,
 		ProvisionTrial: false,
+		ActorEmail:     userInfo.Email,
 	})
 	if err != nil {
 		return "", err
@@ -1106,7 +1124,7 @@ func (s *Service) persistProvisionedOrganization(
 	}
 
 	if opts.ProvisionTrial {
-		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID); err != nil {
+		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID, opts.ActorEmail); err != nil {
 			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("arm enterprise trial: %w", err)
 		}
 	}
@@ -1357,10 +1375,6 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
 	if s.cfg.Environment == "local" {
 		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
-	}
-
-	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
-		returnAddress = "https://" + requestCtx.Host
 	}
 
 	return returnAddress + "/rpc/auth.callback"
