@@ -95,6 +95,7 @@ func TestClient_TransactionalLifecycle(t *testing.T) {
 				return
 			}
 			assert.Equal(t, "revision-1", input.ExpectedRevisionID)
+			assert.Equal(t, "styled", input.EmailFormat)
 			assert.Equal(t, "<Paragraph>{data.resource_name}</Paragraph>", input.LMX)
 			_, _ = w.Write([]byte(`{"id":"message-1","contentRevisionId":"revision-2"}`))
 		default:
@@ -133,6 +134,7 @@ func TestClient_TransactionalLifecycle(t *testing.T) {
 		FromName:           "Speakeasy",
 		FromEmail:          "gram",
 		ReplyToEmail:       "gram@speakeasy.com",
+		EmailFormat:        "styled",
 		LMX:                "<Paragraph>{data.resource_name}</Paragraph>",
 	})
 	require.NoError(t, err)
@@ -183,6 +185,7 @@ func TestClient_RetriesRevisionGuardedUpdate(t *testing.T) {
 		FromName:           "Example Sender",
 		FromEmail:          "notifications",
 		ReplyToEmail:       "person@example.com",
+		EmailFormat:        "styled",
 		LMX:                "<Paragraph>Example</Paragraph>",
 	})
 	require.NoError(t, err)

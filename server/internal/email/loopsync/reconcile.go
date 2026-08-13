@@ -98,6 +98,7 @@ func (r *Reconciler) syncOne(ctx context.Context, defaults MessageDefaults, spec
 		FromName:           defaults.FromName,
 		FromEmail:          defaults.FromEmail,
 		ReplyToEmail:       defaults.ReplyToEmail,
+		EmailFormat:        "styled",
 		LMX:                spec.LMX,
 	})
 	if err != nil {
