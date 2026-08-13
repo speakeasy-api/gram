@@ -318,14 +318,14 @@ function AddServersDialog({
     undefined,
     { throwOnError: false, enabled: open },
   );
-  const { data: endpointsResult } = useMcpEndpoints(
-    { gramProject },
-    undefined,
-    {
-      throwOnError: false,
-      enabled: open,
-    },
-  );
+  const {
+    data: endpointsResult,
+    isLoading: isLoadingEndpoints,
+    isError: isEndpointsError,
+  } = useMcpEndpoints({ gramProject }, undefined, {
+    throwOnError: false,
+    enabled: open,
+  });
   const [selected, setSelected] = useState<Map<string, AttachedRef>>(new Map());
 
   const attachedKeys = useMemo(
@@ -391,33 +391,13 @@ function AddServersDialog({
         </Dialog.Description>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {isLoading ? (
-            <Text small muted>
-              Loading servers…
-            </Text>
-          ) : options.length === 0 ? (
-            <Text small muted>
-              Every MCP server in this project is already attached.
-            </Text>
-          ) : (
-            <Stack gap={1}>
-              {options.map((ref) => {
-                const key = `${ref.kind}:${ref.slug}`;
-                return (
-                  <label
-                    key={key}
-                    className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 border border-transparent px-2 py-1.5"
-                  >
-                    <Checkbox
-                      checked={selected.has(key)}
-                      onCheckedChange={() => toggle(ref)}
-                    />
-                    <code className="truncate text-xs">{ref.slug}</code>
-                  </label>
-                );
-              })}
-            </Stack>
-          )}
+          <DialogOptionsBody
+            isLoading={isLoading || isLoadingEndpoints}
+            isError={isEndpointsError}
+            options={options}
+            selected={selected}
+            onToggle={toggle}
+          />
         </div>
 
         <Dialog.Footer>
@@ -436,5 +416,63 @@ function AddServersDialog({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+// Endpoint eligibility is unknowable while the endpoints query is loading or
+// failed, so those states must not masquerade as "everything attached".
+function DialogOptionsBody({
+  isLoading,
+  isError,
+  options,
+  selected,
+  onToggle,
+}: {
+  isLoading: boolean;
+  isError: boolean;
+  options: AttachedRef[];
+  selected: Map<string, AttachedRef>;
+  onToggle: (ref: AttachedRef) => void;
+}): JSX.Element {
+  if (isLoading) {
+    return (
+      <Text small muted>
+        Loading servers…
+      </Text>
+    );
+  }
+  if (isError) {
+    return (
+      <Text small muted>
+        Couldn't load the project's MCP endpoints. Close the dialog and try
+        again.
+      </Text>
+    );
+  }
+  if (options.length === 0) {
+    return (
+      <Text small muted>
+        Every MCP server in this project is already attached.
+      </Text>
+    );
+  }
+  return (
+    <Stack gap={1}>
+      {options.map((ref) => {
+        const key = `${ref.kind}:${ref.slug}`;
+        return (
+          <label
+            key={key}
+            className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 border border-transparent px-2 py-1.5"
+          >
+            <Checkbox
+              checked={selected.has(key)}
+              onCheckedChange={() => onToggle(ref)}
+            />
+            <code className="truncate text-xs">{ref.slug}</code>
+          </label>
+        );
+      })}
+    </Stack>
   );
 }
