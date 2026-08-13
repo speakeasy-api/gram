@@ -1176,15 +1176,15 @@ jobs:
             ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
           path: ${{ env.UV_CACHE_DIR }}
 
-      - name: Fetch main branch
-        run: git fetch --depth=1 origin main
+      - name: Fetch base branch
+        run: git fetch --depth=1 origin "${{ github.base_ref || 'main' }}"
 
-      # buf breaking against main is what catches a wire-incompatible proto
-      # change (field renumbering, type change) that would corrupt already
-      # published messages — including outbox rows, which store marshaled bytes
-      # and republish them verbatim after a deploy.
+      # buf breaking against the PR base is what catches a wire-incompatible
+      # proto change (field renumbering, type change) that would corrupt
+      # already published messages. Stacked PRs compare against their feature
+      # base; that base's own PR re-checks the full stack against main.
       - name: Lint proto files
-        run: mise run lint:infra --against ".git#ref=origin/main"
+        run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
 
       - name: Install uv dependencies
         run: mise run install:uv --all-packages --locked
