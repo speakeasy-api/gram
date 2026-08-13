@@ -39,8 +39,12 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		Issuer:                conv.Default(doc.Issuer, issuerURL),
 		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
 		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		RegistrationEndpoint:  conv.PtrEmpty(doc.RegistrationEndpoint),
-		JwksURI:               conv.PtrEmpty(doc.JwksURI),
+		// Revocation endpoints that are not HTTPS are filtered out: tokens are
+		// sensitive credentials that must not be transmitted in plaintext. Only
+		// https:// revocation endpoints are accepted.
+		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
+		RegistrationEndpoint: conv.PtrEmpty(doc.RegistrationEndpoint),
+		JwksURI:              conv.PtrEmpty(doc.JwksURI),
 		// The issuer controls these and downstream surfaces render them as
 		// links, so a value that is not an absolute http(s) URL is discarded
 		// rather than carried into the draft the create form submits back.
@@ -179,8 +183,17 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		// history rather than on what the issuer advertises right now.
 		AuthorizationEndpoint: doc.AuthorizationEndpoint,
 		TokenEndpoint:         doc.TokenEndpoint,
-		RegistrationEndpoint:  doc.RegistrationEndpoint,
-		JwksUri:               doc.JwksURI,
+		// Deliberately absent from the distrust gate above: an issuer that
+		// advertises no revocation endpoint is the common case, not a signal
+		// that the document is untrustworthy. It clears to NULL like any other
+		// endpoint the issuer has stopped advertising, and revoking a session
+		// against such an issuer stays a local soft-delete.
+		//
+		// Revocation endpoints that are not HTTPS are filtered out: tokens are
+		// sensitive credentials that must not be transmitted in plaintext.
+		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
+		RegistrationEndpoint: doc.RegistrationEndpoint,
+		JwksUri:              doc.JwksURI,
 		// Downstream surfaces render these as links, so a value that is not an
 		// absolute http(s) URL is dropped rather than stored — matching how the
 		// create-time draft filters them.

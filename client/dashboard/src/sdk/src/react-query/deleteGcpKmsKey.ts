@@ -53,7 +53,7 @@ export type DeleteGcpKmsKeyMutationError =
  * deleteGcpKmsKey externalKeys
  *
  * @remarks
- * Soft-delete a GCP KMS external key by ID. Requires org:admin.
+ * Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
  */
 export function useDeleteGcpKmsKeyMutation(
   options?: MutationHookOptions<

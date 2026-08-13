@@ -272,7 +272,11 @@ var ApprovalDecision = Type("ApprovalDecision", func() {
 	Attribute("evidence_version", Int, "Shape version of the frozen evidence payload, copied from the request at decision time.")
 	Attribute("decided_at", String, "When the decision was made.", func() { Format(FormatDateTime) })
 
-	Required("id", "decision", "decided_by", "decided_at")
+	// Rationale stays optional because its column is nullable, and evidence
+	// stays optional because an undecodable snapshot must surface as absent
+	// rather than as an empty document. The version and principal set are NOT
+	// NULL at the source and always written, so consumers can rely on them.
+	Required("id", "decision", "decided_by", "granted_principal_urns", "evidence_version", "decided_at")
 })
 
 var ResearchReport = Type("ResearchReport", func() {

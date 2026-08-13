@@ -30,6 +30,7 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		ClientSetupDocumentationURL:       conv.FromPGText[string](row.ClientSetupDocumentationUrl),
 		AuthorizationEndpoint:             conv.FromPGText[string](row.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.FromPGText[string](row.TokenEndpoint),
+		RevocationEndpoint:                conv.FromPGText[string](row.RevocationEndpoint),
 		RegistrationEndpoint:              conv.FromPGText[string](row.RegistrationEndpoint),
 		JwksURI:                           conv.FromPGText[string](row.JwksUri),
 		ServiceDocumentation:              conv.FromPGText[string](row.ServiceDocumentation),

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,6 +47,61 @@ func TestAddReactionTool_PostsToReactionsAdd(t *testing.T) {
 	require.Equal(t, "123.456", requestPayload.Get("timestamp"))
 	require.Equal(t, "thumbsup", requestPayload.Get("name"))
 	require.JSONEq(t, `{"ok":true}`, out.String())
+}
+
+func TestAddReactionTool_TreatsAlreadyReactedAsSuccess(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"ok":false,"error":"already_reacted"}`))
+		if err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	tool := &slackTool{
+		descriptor: NewAddReactionTool(nil).Descriptor(),
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callAddReaction,
+	}
+
+	var out bytes.Buffer
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
+		"channel_id":"C123",
+		"timestamp":"123.456",
+		"name":"thumbsup"
+	}`), &out)
+	require.NoError(t, err, "the reaction the caller asked for is already present")
+	require.JSONEq(t, `{"ok":true,"already_reacted":true}`, out.String())
+}
+
+func TestAddReactionTool_SurfacesOtherSlackRefusals(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"ok":false,"error":"message_not_found"}`))
+		if err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	tool := &slackTool{
+		descriptor: NewAddReactionTool(nil).Descriptor(),
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callAddReaction,
+	}
+
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
+		"channel_id":"C123",
+		"timestamp":"123.456",
+		"name":"thumbsup"
+	}`), &bytes.Buffer{})
+	require.ErrorContains(t, err, "message_not_found")
+	require.True(t, oops.IsClientFault(err), "a message the caller named that does not exist is the caller's to fix")
 }
 
 func TestAddReactionTool_RequiresFields(t *testing.T) {

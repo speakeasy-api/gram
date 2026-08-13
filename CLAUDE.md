@@ -78,9 +78,9 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 <commands>
 
-- `pnpm -F dashboard type-check`: Type-check the dashboard
-- `pnpm -F dashboard build`: Build the dashboard
-- `pnpm -F dashboard dev`: Run dev server
+- `aube run -F dashboard type-check`: Type-check the dashboard
+- `aube run -F dashboard build`: Build the dashboard
+- `aube run -F dashboard dev`: Run dev server
 
 </commands>
 

@@ -7,6 +7,7 @@ import anyio
 import pytest
 
 from pystreams.risk import scanner as scanner_mod
+from pystreams.risk.presidiofp.retired import RETIRED_RECOGNIZERS
 from pystreams.risk.scanner import (
     Detection,
     ProcessPoolScanner,
@@ -178,6 +179,47 @@ async def test_us_driver_license_is_dropped():
     entity_types = {d.entity_type for d in detections}
     assert "US_DRIVER_LICENSE" not in entity_types
     assert entity_types == {"PERSON", "EMAIL_ADDRESS"}
+
+
+def test_retired_recognizers_match_scanner_drops():
+    """Keep the two halves of a retirement in agreement. The live scanner refuses
+    these entity types outright (``_FINDING_LEVEL_DROP``) while presidiofp
+    classifies their stored findings as false positives, which is what lets the
+    offline sweep clear the rows written before the live drop landed. A type in
+    one list and not the other means history and live behaviour have diverged.
+    """
+    assert set(RETIRED_RECOGNIZERS) == set(scanner_mod._FINDING_LEVEL_DROP)
+
+
+async def test_uk_nhs_needs_context():
+    """Regression for AIS-494. Presidio's ``NhsRecognizer`` validates a mod-11
+    check digit and, on success, reports the match at maximum confidence without
+    consulting its own context words — so roughly one in eleven Confluence page
+    ids, Unix timestamps and order numbers surfaced as a UK National Health
+    Service number. A ten-digit run now only survives when the payload carries a
+    health-care signal.
+    """
+    # A Confluence page id that happens to pass the check digit.
+    content = "see https://acme.atlassian.net/wiki/spaces/ENG/pages/4010232137/Runbook"
+    start = content.index("4010232137")
+    analyzer = FakeAnalyzer(
+        {content: [_Result("UK_NHS", start=start, end=start + 10, score=1.0)]}
+    )
+    assert await _scanner(analyzer).scan(content, None, 0.75) == [], (
+        "a ten-digit page id with no health-care context is not an NHS number"
+    )
+
+    # The same digits in a payload that talks about patients still report.
+    content = '{"patient": {"nhsNumber": "4010232137"}}'
+    start = content.index("4010232137")
+    analyzer = FakeAnalyzer(
+        {content: [_Result("UK_NHS", start=start, end=start + 10, score=1.0)]}
+    )
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
+
+    assert len(detections) == 1, "an NHS number in health-care context still reports"
+    assert detections[0].entity_type == "UK_NHS"
+    assert detections[0].match == "4010232137"
 
 
 async def test_nothing_recognized_yields_no_detections():

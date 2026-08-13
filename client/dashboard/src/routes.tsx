@@ -18,7 +18,14 @@ import OrgMemory from "./components/observe/OrgMemory";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
-import SkillDetail from "./pages/skills/SkillDetail";
+import SkillContent from "./pages/skills/SkillContent";
+import SkillDetailRoot from "./pages/skills/SkillDetailRoot";
+import SkillFeedback from "./pages/skills/SkillFeedback";
+import SkillOverview from "./pages/skills/SkillOverview";
+import SkillScoredSessions from "./pages/skills/SkillScoredSessions";
+import SkillSettings from "./pages/skills/SkillSettings";
+import SkillUsage from "./pages/skills/SkillUsage";
+import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -88,6 +95,7 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminFeatures from "./pages/platform-admin/Features";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
+import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -383,7 +391,51 @@ const ROUTE_STRUCTURE = {
       detail: {
         title: "Skill",
         url: ":skillId",
-        component: SkillDetail,
+        component: SkillDetailRoot,
+        subPages: {
+          overview: {
+            title: "Skill Overview",
+            url: "overview",
+            component: SkillOverview,
+          },
+          content: {
+            title: "Skill Content",
+            url: "content",
+            component: SkillContent,
+          },
+          usage: {
+            title: "Skill Usage",
+            url: "usage",
+            component: SkillUsage,
+          },
+          scoredSessions: {
+            title: "Scored Sessions",
+            url: "scored-sessions",
+            component: SkillScoredSessions,
+          },
+          feedback: {
+            title: "Agent Feedback",
+            url: "feedback",
+            component: SkillFeedback,
+          },
+          versions: {
+            title: "Skill Version History",
+            url: "versions",
+            component: SkillVersionHistory,
+            subPages: {
+              version: {
+                title: "Skill Version",
+                url: ":versionId",
+                component: SkillVersionHistory,
+              },
+            },
+          },
+          settings: {
+            title: "Settings",
+            url: "settings",
+            component: SkillSettings,
+          },
+        },
       },
     },
   },
@@ -1112,6 +1164,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "platform-admin/onboarding",
     icon: "mail",
     component: PlatformAdminOnboarding,
+  },
+  platformAdminOpenRouterKeys: {
+    title: "OpenRouter Keys",
+    url: "platform-admin/openrouter-keys",
+    icon: "key-round",
+    component: PlatformAdminOpenRouterKeys,
   },
   deviceAgent: {
     title: "Device Agent",

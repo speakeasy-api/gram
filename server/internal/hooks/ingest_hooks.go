@@ -42,6 +42,7 @@ type AuthenticatedIngestOptions struct {
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
 	OutputToolCalls              []any
+	OriginatingClient            string
 }
 
 // ResolvedActor is the exact actor selected by canonical hook attribution.
@@ -63,6 +64,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
 		OutputToolCalls:              nil,
+		OriginatingClient:            "",
 	}
 }
 
@@ -157,6 +159,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
 	ctx, riskScanned := withRiskScanTracker(ctx)
+	ctx, blockEffects := withBlockEffectCollector(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
@@ -270,7 +273,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
-			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture),
+			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
 			Actor:  ResolvedActor(actor),
 		}, nil
 	}
@@ -774,6 +777,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 			ToolName:        toolName,
 			ToolInput:       toolInput,
 			RiskPolicyID:    policy.ID,
+			PolicyName:      policy.Name,
 		})
 		// Retried deliveries still get the deny decision, but must not mint
 		// another block row (and a second block URL) for the same call.
@@ -796,6 +800,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 				ChatMessageID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
+				setBlockEffectBlockURL(ctx, bURL)
 			}
 		}
 		return auditReason, userReason
@@ -1380,6 +1385,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return false, nil
 	}
+	// Proxied events flag the chat whether or not their transcript row
+	// survives: natively captured sessions suppress proxied rows as
+	// duplicates, so the marker is the only durable trace that the session
+	// was routed through LiteLLM. Deferred so the flag lands after whichever
+	// persistence path created the chat row; when no chat exists yet the
+	// update is a no-op and a later event in the session sets it.
+	if proxiedTranscriptSource(hookSource) {
+		defer s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
+	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ChatID:           sessionIDToUUID(sessionID),
@@ -1400,7 +1414,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			CompletionTokens: 0,
 			TotalTokens:      0,
 			Origin:           conv.ToPGTextEmpty(""),
-			UserAgent:        conv.ToPGTextEmpty(""),
+			UserAgent:        conv.ToPGTextEmpty(authenticatedIngestOptions(ctx).OriginatingClient),
 			IpAddress:        conv.ToPGTextEmpty(""),
 			Source:           conv.ToPGTextEmpty(hookSource),
 			ContentHash:      nil,
@@ -1427,7 +1441,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
 		} else {
-			uncorrelatedPrompt = strings.EqualFold(strings.TrimSpace(hookSource), "litellm") || usesNativeTranscriptFallback(payload.Source.Adapter)
+			uncorrelatedPrompt = proxiedTranscriptSource(hookSource) || usesNativeTranscriptFallback(payload.Source.Adapter)
 			nativePrompt = usesNativeTranscriptFallback(payload.Source.Adapter)
 		}
 		titleContent = content
@@ -1436,6 +1450,20 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		outputToolCalls := authenticatedIngestOptions(ctx).OutputToolCalls
 		if strings.TrimSpace(content) == "" && len(outputToolCalls) == 0 {
 			return false, nil
+		}
+		// The proxy observes the same completion the session's own hook stream
+		// reports as its assistant turn. Prompts carry a turn identity that
+		// collapses the two observations into one row; assistant turns carry
+		// none, so a proxied row for a natively captured session is dropped
+		// instead of persisted alongside the native one.
+		if proxiedTranscriptSource(hookSource) {
+			duplicate, err := s.proxiedTurnDuplicatesNativeStream(ctx, metadata, sessionIDToUUID(sessionID), *authCtx.ProjectID)
+			if err != nil {
+				return false, err
+			}
+			if duplicate {
+				return false, nil
+			}
 		}
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
@@ -1488,9 +1516,48 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	return stored && msg.Role == "user", err
 }
 
+func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
+	err := chatRepo.New(s.db).MarkChatLiteLLMProxied(ctx, chatRepo.MarkChatLiteLLMProxiedParams{
+		ID:        chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to mark chat as LiteLLM proxied",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
+}
+
 func usesNativeTranscriptFallback(adapter string) bool {
 	switch strings.ToLower(strings.TrimSpace(adapter)) {
 	case "claude", "claude-code", "claude-code-desktop", "cowork", "cursor":
+		return true
+	default:
+		return false
+	}
+}
+
+// proxiedTranscriptSource reports whether a conversation row's source is the
+// LiteLLM proxy rather than an agent's own hook stream. The proxy sees every
+// turn it routes, so its transcript rows are only authoritative for sessions
+// no native stream captured.
+func proxiedTranscriptSource(source string) bool {
+	return strings.EqualFold(strings.TrimSpace(source), "litellm")
+}
+
+// nativeAssistantTurnSource reports whether a source identifies a hook stream
+// that reports an assistant turn of its own for every turn it captures, which
+// is what makes a proxied row for the same turn a duplicate. Claude's Stop hook
+// always carries the turn's final assistant message. Cursor is excluded because
+// its afterAgentResponse hook does not fire reliably outside interactive
+// sessions, and Codex and OpenCode because their final-message hooks depend on a
+// transcript read that can come back empty; dropping the proxy's copy for those
+// would leave turns with no assistant text at all.
+func nativeAssistantTurnSource(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "claude", "claude-code", "claude-code-desktop", "cowork":
 		return true
 	default:
 		return false

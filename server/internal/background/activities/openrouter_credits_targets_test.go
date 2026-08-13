@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
@@ -37,7 +38,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 	_, err = orKeys.CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "chat",
-		Key:            "sk-chat",
+		Key:            conv.ToPGText("sk-chat"),
 		KeyHash:        "hash-chat",
 		MonthlyCredits: 100,
 	})
@@ -45,7 +46,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 	_, err = orKeys.CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "internal",
-		Key:            "sk-internal",
+		Key:            conv.ToPGText("sk-internal"),
 		KeyHash:        "hash-internal",
 		MonthlyCredits: 100,
 	})
@@ -59,7 +60,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 		if row.OrganizationID != orgID {
 			continue
 		}
-		byKeyType[row.KeyType] = row.ApiKey
+		byKeyType[row.KeyType] = row.ApiKey.String
 	}
 	require.Equal(t, map[string]string{
 		"chat":     "sk-chat",
@@ -73,12 +74,12 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 		KeyType:        "chat",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-chat", chatKey.Key)
+	require.Equal(t, "sk-chat", chatKey.Key.String)
 
 	internalKey, err := orKeys.GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "internal",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-internal", internalKey.Key)
+	require.Equal(t, "sk-internal", internalKey.Key.String)
 }

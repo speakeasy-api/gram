@@ -24,7 +24,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 		cache:     cache.NoopCache,
 	}
 
-	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
 		OrganizationID:  "org_test",
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		RequesterUserID: "user_test",
@@ -39,6 +39,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
 	})
 	require.True(t, ok)
+	requestURL := link.URL
 
 	parsed, err := url.Parse(requestURL)
 	require.NoError(t, err)
@@ -52,6 +53,10 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	require.NotContains(t, requestURL, "?request_token=")
 	require.Contains(t, fragment.Get("request_token"), "rpbr2.")
 	require.Less(t, len(requestURL), 120, "approval link should be a short cache-backed id, not embedded state")
+	require.Equal(t, fragment.Get("request_token"), link.Token, "returned token must match the one embedded in the fragment")
+	require.False(t, link.ExpiresAt.IsZero())
+	require.Equal(t, "mcp.example.com", link.ServerName)
+	require.Equal(t, "https://mcp.example.com/sse", link.ServerURL)
 }
 
 func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
@@ -89,7 +94,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 		cache:     cache.NoopCache,
 	}
 
-	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
 		OrganizationID:  "org_test",
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		RequesterUserID: "user_test",
@@ -103,7 +108,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
 	})
 	require.True(t, ok)
-	require.Contains(t, requestURL, "/risk-policy-bypass/request#request_token=rpbr2.")
+	require.Contains(t, link.URL, "/risk-policy-bypass/request#request_token=rpbr2.")
 }
 
 func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
@@ -130,4 +135,38 @@ func TestObservedShadowMCPName_PrefersURLHostOverServerIdentity(t *testing.T) {
 
 	require.NotNil(t, name)
 	require.Equal(t, "mcp.calendly.com", *name)
+}
+
+// The machine-readable channel must not re-expose credentials or query
+// parameters the deny prose never carried: server_url follows the inventory
+// convention (scheme/host/path only).
+func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
+	t.Parallel()
+
+	siteURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	service := &Service{
+		logger:    testenv.NewLogger(t),
+		siteURL:   siteURL,
+		jwtSecret: "test-jwt-secret",
+		cache:     cache.NoopCache,
+	}
+
+	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+		OrganizationID:  "org_test",
+		ProjectID:       "00000000-0000-0000-0000-000000000001",
+		RequesterUserID: "user_test",
+		AuditReason:     "blocked",
+		Evidence: shadowmcp.AccessEvidence{
+			FullURL:        "https://user:hunter2@mcp.example.com/sse?api_key=sk-123#frag",
+			URLHost:        "",
+			ServerIdentity: "",
+		},
+		ToolName:     "search",
+		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
+	})
+	require.True(t, ok)
+	require.Equal(t, "https://mcp.example.com/sse", link.ServerURL)
+	require.NotContains(t, link.ServerURL, "hunter2")
+	require.NotContains(t, link.ServerURL, "api_key")
 }

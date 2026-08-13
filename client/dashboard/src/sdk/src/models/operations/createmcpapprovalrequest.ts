@@ -10,19 +10,9 @@ import {
   CreateRequestRequestBody$outboundSchema,
 } from "../components/createrequestrequestbody.js";
 
-export type CreateMcpApprovalRequestSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type CreateMcpApprovalRequestSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
 export type CreateMcpApprovalRequestSecurity = {
-  option1?: CreateMcpApprovalRequestSecurityOption1 | undefined;
-  option2?: CreateMcpApprovalRequestSecurityOption2 | undefined;
+  projectSlugHeaderGramProject?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type CreateMcpApprovalRequestRequest = {
@@ -42,79 +32,9 @@ export type CreateMcpApprovalRequestRequest = {
 };
 
 /** @internal */
-export type CreateMcpApprovalRequestSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const CreateMcpApprovalRequestSecurityOption1$outboundSchema:
-  z.ZodMiniType<
-    CreateMcpApprovalRequestSecurityOption1$Outbound,
-    CreateMcpApprovalRequestSecurityOption1
-  > = z.pipe(
-    z.object({
-      projectSlugHeaderGramProject: z.string(),
-      sessionHeaderGramSession: z.string(),
-    }),
-    z.transform((v) => {
-      return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-        sessionHeaderGramSession: "session_header_Gram-Session",
-      });
-    }),
-  );
-
-export function createMcpApprovalRequestSecurityOption1ToJSON(
-  createMcpApprovalRequestSecurityOption1:
-    CreateMcpApprovalRequestSecurityOption1,
-): string {
-  return JSON.stringify(
-    CreateMcpApprovalRequestSecurityOption1$outboundSchema.parse(
-      createMcpApprovalRequestSecurityOption1,
-    ),
-  );
-}
-
-/** @internal */
-export type CreateMcpApprovalRequestSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const CreateMcpApprovalRequestSecurityOption2$outboundSchema:
-  z.ZodMiniType<
-    CreateMcpApprovalRequestSecurityOption2$Outbound,
-    CreateMcpApprovalRequestSecurityOption2
-  > = z.pipe(
-    z.object({
-      apikeyHeaderGramKey: z.string(),
-      projectSlugHeaderGramProject: z.string(),
-    }),
-    z.transform((v) => {
-      return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      });
-    }),
-  );
-
-export function createMcpApprovalRequestSecurityOption2ToJSON(
-  createMcpApprovalRequestSecurityOption2:
-    CreateMcpApprovalRequestSecurityOption2,
-): string {
-  return JSON.stringify(
-    CreateMcpApprovalRequestSecurityOption2$outboundSchema.parse(
-      createMcpApprovalRequestSecurityOption2,
-    ),
-  );
-}
-
-/** @internal */
 export type CreateMcpApprovalRequestSecurity$Outbound = {
-  Option1?: CreateMcpApprovalRequestSecurityOption1$Outbound | undefined;
-  Option2?: CreateMcpApprovalRequestSecurityOption2$Outbound | undefined;
+  "project_slug_header_Gram-Project"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -123,17 +43,13 @@ export const CreateMcpApprovalRequestSecurity$outboundSchema: z.ZodMiniType<
   CreateMcpApprovalRequestSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(
-      z.lazy(() => CreateMcpApprovalRequestSecurityOption1$outboundSchema),
-    ),
-    option2: z.optional(
-      z.lazy(() => CreateMcpApprovalRequestSecurityOption2$outboundSchema),
-    ),
+    projectSlugHeaderGramProject: z.optional(z.string()),
+    sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );

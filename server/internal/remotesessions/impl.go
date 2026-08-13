@@ -12,6 +12,7 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -57,6 +58,7 @@ type Service struct {
 	auditLogger  *audit.Logger
 	serverURL    *url.URL
 	refresher    *RefreshService
+	revoker      *UpstreamRevoker
 }
 
 var (
@@ -76,7 +78,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
@@ -92,6 +94,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auditLogger:  auditLogger,
 		serverURL:    serverURL,
 		refresher:    refresher,
+		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 	}
 }
 

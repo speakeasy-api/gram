@@ -3092,6 +3092,453 @@ paths:
       x-speakeasy-name-override: verifyGcpIam
       x-speakeasy-react-hook:
         name: VerifyGcpIamPlatformCredential
+  /rpc/adminOpenRouterKeys.disableKey:
+    post:
+      description: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.
+      operationId: disableAdminOpenRouterKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisableOpenRouterKeyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOpenRouterKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: disableKey adminOpenRouterKeys
+      tags:
+        - adminOpenRouterKeys
+      x-speakeasy-name-override: disableKey
+      x-speakeasy-react-hook:
+        name: DisableAdminOpenRouterKey
+  /rpc/adminOpenRouterKeys.enableKey:
+    post:
+      description: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.
+      operationId: enableAdminOpenRouterKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableOpenRouterKeyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOpenRouterKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: enableKey adminOpenRouterKeys
+      tags:
+        - adminOpenRouterKeys
+      x-speakeasy-name-override: enableKey
+      x-speakeasy-react-hook:
+        name: EnableAdminOpenRouterKey
+  /rpc/adminOpenRouterKeys.encryptKey:
+    post:
+      description: 'Encrypt an organization''s stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.'
+      operationId: encryptAdminOpenRouterKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptOpenRouterKeyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOpenRouterKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: encryptKey adminOpenRouterKeys
+      tags:
+        - adminOpenRouterKeys
+      x-speakeasy-name-override: encryptKey
+      x-speakeasy-react-hook:
+        name: EncryptAdminOpenRouterKey
+  /rpc/adminOpenRouterKeys.getKeyUsage:
+    get:
+      description: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.
+      operationId: getAdminOpenRouterKeyUsage
+      parameters:
+        - allowEmptyValue: true
+          description: Organization that owns the key.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization that owns the key.
+            type: string
+        - allowEmptyValue: true
+          description: Key type to inspect.
+          in: query
+          name: key_type
+          required: true
+          schema:
+            description: Key type to inspect.
+            enum:
+              - chat
+              - internal
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetKeyUsageResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getKeyUsage adminOpenRouterKeys
+      tags:
+        - adminOpenRouterKeys
+      x-speakeasy-name-override: getKeyUsage
+      x-speakeasy-react-hook:
+        name: AdminOpenRouterKeyUsage
+  /rpc/adminOpenRouterKeys.listKeys:
+    get:
+      description: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+      operationId: listAdminOpenRouterKeys
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListKeysResponseBody2'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listKeys adminOpenRouterKeys
+      tags:
+        - adminOpenRouterKeys
+      x-speakeasy-name-override: listKeys
+      x-speakeasy-react-hook:
+        name: AdminOpenRouterKeys
   /rpc/adminRemoteSessions.createGlobalClient:
     post:
       description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -3712,6 +4159,100 @@ paths:
       x-speakeasy-name-override: getGlobalIssuer
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionIssuer
+  /rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight:
+    get:
+      description: |-
+        Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+
+        Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+
+        The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
+      operationId: getGlobalRemoteSessionIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGlobalIssuerDuplicatePreflight adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: getGlobalIssuerDuplicatePreflight
+      x-speakeasy-react-hook:
+        name: GlobalRemoteSessionIssuerDuplicatePreflight
   /rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight:
     get:
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.'
@@ -10258,6 +10799,102 @@ paths:
       x-speakeasy-name-override: summarize
       x-speakeasy-react-hook:
         name: SummarizeChat
+  /rpc/chat.summarizeToolCall:
+    post:
+      description: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.
+      operationId: summarizeToolCall
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeToolCallRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeToolCallResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: summarizeToolCall chat
+      tags:
+        - chat
+      x-speakeasy-name-override: summarizeToolCall
+      x-speakeasy-react-hook:
+        name: SummarizeToolCall
   /rpc/chatSessions.create:
     post:
       description: Creates a new chat session token
@@ -16217,7 +16854,7 @@ paths:
         name: CreateGcpKmsKey
   /rpc/externalKeys.deleteAwsKms:
     delete:
-      description: Soft-delete an AWS KMS external key by ID. Requires org:admin.
+      description: Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
       operationId: deleteAwsKmsKey
       parameters:
         - allowEmptyValue: true
@@ -16304,7 +16941,7 @@ paths:
         name: DeleteAwsKmsKey
   /rpc/externalKeys.deleteGcpKms:
     delete:
-      description: Soft-delete a GCP KMS external key by ID. Requires org:admin.
+      description: Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
       operationId: deleteGcpKmsKey
       parameters:
         - allowEmptyValue: true
@@ -16829,7 +17466,7 @@ paths:
         name: ListGcpKmsKeys
   /rpc/externalKeys.updateAwsKms:
     post:
-      description: Replace an AWS KMS external key's configuration. Requires org:admin.
+      description: 'Update an AWS KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.'
       operationId: updateAwsKmsKey
       parameters:
         - allowEmptyValue: true
@@ -16917,7 +17554,7 @@ paths:
         name: UpdateAwsKmsKey
   /rpc/externalKeys.updateGcpKms:
     post:
-      description: Replace a GCP KMS external key's configuration. Requires org:admin.
+      description: 'Update a GCP KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.'
       operationId: updateGcpKmsKey
       parameters:
         - allowEmptyValue: true
@@ -19307,8 +19944,6 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
         - {}
       summary: createRequest mcpApproval
       tags:
@@ -19412,8 +20047,6 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
         - {}
       summary: ensureServerReview mcpApproval
       tags:
@@ -19738,8 +20371,6 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
         - {}
       summary: promote mcpApproval
       tags:
@@ -24587,6 +25218,108 @@ paths:
       x-speakeasy-name-override: getDeletePreflight
       x-speakeasy-react-hook:
         name: OrganizationRemoteSessionIssuerDeletePreflight
+  /rpc/organizationRemoteSessionIssuers.getDuplicatePreflight:
+    get:
+      description: |-
+        Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+
+        Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+
+        Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.
+      operationId: getOrganizationRemoteSessionIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getIssuerDuplicatePreflight organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: getDuplicatePreflight
+      x-speakeasy-react-hook:
+        name: OrganizationRemoteSessionIssuerDuplicatePreflight
   /rpc/organizationRemoteSessionIssuers.getMigratePreflight:
     get:
       description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.'
@@ -32757,6 +33490,117 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RemoteSessionIssuer
+  /rpc/remoteSessionIssuers.getDuplicatePreflight:
+    get:
+      description: |-
+        Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+
+        Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+
+        Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.
+      operationId: getRemoteSessionIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getRemoteSessionIssuerDuplicatePreflight remoteSessionIssuers
+      tags:
+        - remoteSessionIssuers
+      x-speakeasy-name-override: getDuplicatePreflight
+      x-speakeasy-react-hook:
+        name: RemoteSessionIssuerDuplicatePreflight
   /rpc/remoteSessionIssuers.list:
     get:
       description: List remote_session_issuers in the caller's project.
@@ -34080,6 +34924,13 @@ paths:
           schema:
             description: Session header
             type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
       requestBody:
         content:
           application/json:
@@ -34149,6 +35000,7 @@ paths:
           description: 'gateway_error: an unexpected error occurred'
       security:
         - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
         - {}
       summary: createRiskPolicyBypassRequest risk
       tags:
@@ -48718,6 +49570,116 @@ paths:
       x-speakeasy-name-override: listDefinitions
       x-speakeasy-react-hook:
         name: TriggerDefinitions
+  /rpc/triggers.listEvents:
+    get:
+      description: List recent dispatch events for a trigger instance.
+      operationId: listTriggerEvents
+      parameters:
+        - allowEmptyValue: true
+          description: The trigger instance ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The trigger instance ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of events to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of events to return.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTriggerEventsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listTriggerEvents triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: listEvents
+      x-speakeasy-react-hook:
+        name: TriggerEvents
   /rpc/triggers.pause:
     post:
       description: Pause a trigger instance.
@@ -51990,7 +52952,7 @@ paths:
         name: UpdateUserSessionIssuer
   /rpc/userSessionIssuersCimdClients.create:
     post:
-      description: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.
+      description: 'Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor''s host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.'
       operationId: createUserSessionIssuerCimdClient
       parameters:
         - allowEmptyValue: true
@@ -52536,6 +53498,111 @@ paths:
       x-speakeasy-name-override: listPresets
       x-speakeasy-react-hook:
         name: CimdClientPresets
+  /rpc/userSessionIssuersCimdClients.verifyURL:
+    post:
+      description: 'Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.'
+      operationId: verifyUserSessionIssuerCimdClientURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyURLRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyCimdURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: verifyURL userSessionIssuersCimdClients
+      tags:
+        - userSessionIssuersCimdClients
+      x-speakeasy-name-override: verifyURL
+      x-speakeasy-react-hook:
+        name: VerifyUserSessionIssuerCimdClientURL
   /rpc/userSessions.list:
     get:
       description: List issued user_sessions in the caller's project. refresh_token_hash is never returned.
@@ -53943,6 +55010,58 @@ components:
           description: The page of organizations.
       required:
         - organizations
+    AdminOpenRouterKey:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the key row was created.
+          format: date-time
+        disabled:
+          type: boolean
+          description: Whether the key is locked down (refused locally and disabled upstream).
+        encryption_status:
+          type: string
+          description: Storage state of the key material.
+          enum:
+            - plaintext
+            - encrypted_with_plaintext
+            - encrypted
+        gram_account_type:
+          type: string
+          description: The organization's Gram account type (e.g. free, pro, enterprise).
+        key_type:
+          type: string
+          description: 'Which upstream key this row provisions: ''chat'' pays for customer-facing completions, ''internal'' pays for platform-initiated LLM usage.'
+        monthly_credits:
+          type: integer
+          description: Monthly credit ceiling last mirrored from OpenRouter.
+          format: int64
+        organization_id:
+          type: string
+          description: Organization that owns the key.
+        organization_name:
+          type: string
+          description: Display name of the owning organization.
+        organization_slug:
+          type: string
+          description: Slug of the owning organization.
+        updated_at:
+          type: string
+          description: When the key row was last updated.
+          format: date-time
+      description: One organization's platform OpenRouter key of a given type, without its key material.
+      required:
+        - organization_id
+        - organization_name
+        - organization_slug
+        - gram_account_type
+        - key_type
+        - monthly_credits
+        - disabled
+        - encryption_status
+        - created_at
+        - updated_at
     AdminOrganization:
       type: object
       properties:
@@ -54227,6 +55346,8 @@ components:
         - id
         - decision
         - decided_by
+        - granted_principal_urns
+        - evidence_version
         - decided_at
     ApprovalRequestDetail:
       type: object
@@ -55455,6 +56576,9 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        litellm_proxied:
+          type: boolean
+          description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
         match_segments:
           type: array
           items:
@@ -55473,6 +56597,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        originating_client:
+          type: string
+          description: The supported client that originated a chat routed through the source, when known
         pinned:
           type: boolean
           description: True when the chat is pinned
@@ -55691,10 +56818,16 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        litellm_proxied:
+          type: boolean
+          description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
         num_messages:
           type: integer
           description: The number of messages in the chat
           format: int64
+        originating_client:
+          type: string
+          description: The supported client that originated a chat routed through the source, when known
         pinned:
           type: boolean
           description: True when the chat is pinned
@@ -56643,6 +57776,9 @@ components:
           items:
             type: string
           description: Response types advertised by the issuer.
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
         scopes_supported:
           type: array
           items:
@@ -57054,6 +58190,9 @@ components:
           items:
             type: string
           description: Response types advertised by the issuer.
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
         scopes_supported:
           type: array
           items:
@@ -57682,10 +58821,7 @@ components:
       properties:
         client:
           $ref: '#/components/schemas/UserSessionIssuerCimdClient'
-        probe_warning:
-          type: string
-          description: Set when Gram could not fetch or validate the document at this URL. The entry was still saved; the URL will be admitted, but a client presenting it will fail at authorization time until the document is reachable and valid.
-      description: Result of allowing a CIMD document URL, including any non-fatal probe warning.
+      description: Result of allowing a CIMD document URL. Reachability is not reported here — call verifyURL for that.
       required:
         - client
     CreateUserSessionIssuerForm:
@@ -58526,6 +59662,21 @@ components:
       description: Outcome of probing the provider with the stored credentials.
       required:
         - ok
+    DisableOpenRouterKeyRequestBody:
+      type: object
+      properties:
+        key_type:
+          type: string
+          description: Key type to disable.
+          enum:
+            - chat
+            - internal
+        organization_id:
+          type: string
+          description: Organization that owns the key.
+      required:
+        - organization_id
+        - key_type
     DiscoverProtectedResourceMetadataRequestBody:
       type: object
       properties:
@@ -58634,6 +59785,36 @@ components:
         - tier
         - label
         - total_calls
+    EnableOpenRouterKeyRequestBody:
+      type: object
+      properties:
+        key_type:
+          type: string
+          description: Key type to enable.
+          enum:
+            - chat
+            - internal
+        organization_id:
+          type: string
+          description: Organization that owns the key.
+      required:
+        - organization_id
+        - key_type
+    EncryptOpenRouterKeyRequestBody:
+      type: object
+      properties:
+        key_type:
+          type: string
+          description: Key type to encrypt.
+          enum:
+            - chat
+            - internal
+        organization_id:
+          type: string
+          description: Organization that owns the key.
+      required:
+        - organization_id
+        - key_type
     EnsureServerReviewRequestBody:
       type: object
       properties:
@@ -58990,6 +60171,61 @@ components:
         - header_name
         - required
         - secret
+    ExternalMCPPackage:
+      type: object
+      properties:
+        environment_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPPackageEnvironmentVariable'
+          description: Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.
+        file_sha256:
+          type: string
+          description: SHA-256 of the packaged artifact, when the registry publishes one
+        identifier:
+          type: string
+          description: Package identifier, scope included
+        registry_base_url:
+          type: string
+          description: Registry base URL when the package lives outside the default public registry
+          format: uri
+        registry_type:
+          type: string
+          description: Package registry the artifact is published to, such as npm or pypi
+        runtime_hint:
+          type: string
+          description: Launcher the publisher suggests, such as npx or uvx
+        transport_type:
+          type: string
+          description: Execution transport the package declares, such as stdio
+        version:
+          type: string
+          description: Published version
+      description: A published package that runs this server, as declared by the registry
+      required:
+        - registry_type
+        - identifier
+        - version
+    ExternalMCPPackageEnvironmentVariable:
+      type: object
+      properties:
+        description:
+          type: string
+          description: The publisher's explanation of the variable. Untrusted text.
+        is_required:
+          type: boolean
+          description: Whether an install cannot proceed without it
+        is_secret:
+          type: boolean
+          description: Whether the publisher marked the value sensitive
+        name:
+          type: string
+          description: Variable name the install must populate
+      description: An environment variable a package declares its install requires
+      required:
+        - name
+        - is_secret
+        - is_required
     ExternalMCPRemote:
       type: object
       properties:
@@ -59059,6 +60295,22 @@ components:
           type: boolean
           description: Whether this variable value should be treated as secret
       description: A URL template variable for a remote MCP server
+    ExternalMCPRepository:
+      type: object
+      properties:
+        source:
+          type: string
+          description: Hosting service the repository lives on, such as github
+        subfolder:
+          type: string
+          description: Path within the repository holding the server, for monorepos
+        url:
+          type: string
+          description: Repository URL
+          format: uri
+      description: 'The source repository a registry entry links for its server. A registry declaration: nothing verifies the endpoint runs this code.'
+      required:
+        - url
     ExternalMCPServer:
       type: object
       properties:
@@ -59136,6 +60388,11 @@ components:
           type: string
           description: ID of the internal collection registry this server came from
           format: uuid
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPPackage'
+          description: Published packages that run this server, when the registry declares any
         registry_id:
           type: string
           description: ID of the external MCP registry this server came from
@@ -59149,6 +60406,8 @@ components:
           items:
             $ref: '#/components/schemas/ExternalMCPRemote'
           description: Available remote endpoints for the server
+        repository:
+          $ref: '#/components/schemas/ExternalMCPRepository'
         supports_dcr:
           type: boolean
           description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
@@ -60090,6 +61349,25 @@ components:
       properties:
         integration:
           $ref: '#/components/schemas/Integration'
+    GetKeyUsageResponseBody:
+      type: object
+      properties:
+        credits_used:
+          type: number
+          description: Credits spent this month, rounded to cents.
+          format: double
+        monthly_credits:
+          type: integer
+          description: Monthly credit ceiling recorded locally.
+          format: int64
+        upstream_limit:
+          type: integer
+          description: Monthly limit as configured upstream; absent when OpenRouter reports an unlimited key.
+          format: int64
+      description: Live usage as reported by OpenRouter at request time.
+      required:
+        - credits_used
+        - monthly_credits
     GetLatestDeploymentResult:
       type: object
       properties:
@@ -62375,6 +63653,16 @@ components:
           description: The model provider keys configured for the project.
       required:
         - keys
+    ListKeysResponseBody2:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOpenRouterKey'
+          description: Every live platform OpenRouter key, ordered by organization slug then key type.
+      required:
+        - keys
     ListKeysResult:
       type: object
       properties:
@@ -63250,6 +64538,16 @@ components:
           description: The available trigger definitions.
       required:
         - definitions
+    ListTriggerEventsResult:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerEvent'
+          description: The dispatch events for the trigger instance, most recent first.
+      required:
+        - events
     ListTriggerInstancesResult:
       type: object
       properties:
@@ -66756,6 +68054,9 @@ components:
           type: array
           items:
             type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
         scopes_supported:
           type: array
           items:
@@ -66831,6 +68132,9 @@ components:
           type: array
           items:
             type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
         scopes_supported:
           type: array
           items:
@@ -66852,6 +68156,51 @@ components:
         - passthrough
         - client_id_metadata_document_supported
         - discovery_warnings
+    RemoteSessionIssuerDuplicateMatch:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The matching remote_session_issuer id.
+          format: uuid
+        issuer:
+          type: string
+          description: The matching issuer's stored upstream URL. May differ in spelling from the URL that was looked up, since canonicalization is applied to the supplied URL only.
+        name:
+          type: string
+          description: The matching issuer's display name. Empty when it has none, in which case a caller should fall back to the slug.
+        project_name:
+          type: string
+          description: The owning project's name, for a project-specific match an organization administrator may not otherwise be able to place. Empty for organization-level and platform-level matches, and for project-specific matches returned to a caller already scoped to that project.
+        slug:
+          type: string
+          description: The matching issuer's slug.
+        tier:
+          type: string
+          description: 'Which tenancy tier owns the match: project-specific, organization-level, or platform-level.'
+          enum:
+            - project-specific
+            - organization-level
+            - platform-level
+      description: An existing remote_session_issuer that already describes the upstream authorization server a caller is about to add.
+      required:
+        - id
+        - slug
+        - name
+        - issuer
+        - tier
+        - project_name
+    RemoteSessionIssuerDuplicatePreflight:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSessionIssuerDuplicateMatch'
+          description: 'The matching issuers in resolution order: project-specific first, then organization-level, then platform-level, and oldest first within a tier. The first entry is therefore the issuer this caller would resolve the URL to today. Empty when nothing describes the URL yet, and empty when the supplied URL is not a usable issuer identifier. Truncated to a fixed cap, since a warning only has to establish that duplicates exist and name a few.'
+      description: 'Existing remote_session_issuers that already describe an upstream issuer URL. Advisory: a non-empty result never blocks a create or an update.'
+      required:
+        - matches
     RemoteSessionIssuerRefresh:
       type: object
       properties:
@@ -71611,6 +72960,43 @@ components:
           default: false
       required:
         - id
+    SummarizeToolCallRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the chat containing the tool call
+          format: uuid
+        message_id:
+          type: string
+          description: The ID of the assistant message containing the tool call
+          format: uuid
+        tool_call_id:
+          type: string
+          description: The provider-assigned ID of the tool call
+      required:
+        - id
+        - message_id
+        - tool_call_id
+    SummarizeToolCallResult:
+      type: object
+      properties:
+        cached:
+          type: boolean
+          description: True when a stored summary was returned without calling the model
+        impact:
+          type: string
+          description: Whether the tool call only read data or could change state
+          enum:
+            - read_only
+            - destructive
+        summary:
+          type: string
+          description: A concise two-sentence description of the tool call and its effect
+      required:
+        - summary
+        - impact
+        - cached
     SyncedAgentUser:
       type: object
       properties:
@@ -73361,6 +74747,50 @@ components:
       required:
         - name
         - required
+    TriggerEvent:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          description: Number of processing attempts.
+          format: int64
+        chat_id:
+          type: string
+          description: The conversation the event was routed to.
+          format: uuid
+        created_at:
+          type: string
+          description: Creation timestamp.
+          format: date-time
+        id:
+          type: string
+          description: The trigger event ID.
+          format: uuid
+        last_error:
+          type: string
+          description: The last processing error, if any.
+        processed_at:
+          type: string
+          description: Processing completion timestamp.
+          format: date-time
+        status:
+          type: string
+          description: The processing status of the event.
+          enum:
+            - pending
+            - processing
+            - completed
+            - failed
+        trigger_instance_id:
+          type: string
+          description: The trigger instance that dispatched the event.
+          format: uuid
+      required:
+        - id
+        - trigger_instance_id
+        - status
+        - attempts
+        - created_at
     TriggerInstance:
       type: object
       properties:
@@ -73992,37 +75422,42 @@ components:
       required:
         - id
         - name
+    UpdateAwsKmsKeyForm:
+      type: object
+      properties:
+        customer_grant_reference:
+          type: string
+          description: Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.
+        external_credential_id:
+          type: string
+          description: The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key.
+      required:
+        - external_credential_id
+        - name
     UpdateAwsKmsKeyRequestBody:
       type: object
       properties:
-        algorithm:
-          type: string
-          description: The signing algorithm of the key.
-          enum:
-            - RS256
-            - ES256
         customer_grant_reference:
           type: string
-          description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+          description: The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
           format: uuid
         id:
           type: string
           description: The ID of the key to update.
           format: uuid
-        key_arn:
-          type: string
-          description: The ARN of the AWS KMS key.
         name:
           type: string
           description: A human-readable name for the key.
       required:
         - id
-        - key_arn
         - external_credential_id
-        - algorithm
         - name
     UpdateConfigurationRequestBody:
       type: object
@@ -74169,21 +75604,31 @@ components:
       required:
         - id
         - name
+    UpdateGcpKmsKeyForm:
+      type: object
+      properties:
+        customer_grant_reference:
+          type: string
+          description: Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
+        external_credential_id:
+          type: string
+          description: The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key.
+      required:
+        - external_credential_id
+        - name
     UpdateGcpKmsKeyRequestBody:
       type: object
       properties:
-        algorithm:
-          type: string
-          description: The signing algorithm of the key.
-          enum:
-            - RS256
-            - ES256
         customer_grant_reference:
           type: string
-          description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+          description: The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
           format: uuid
         id:
           type: string
@@ -74192,14 +75637,9 @@ components:
         name:
           type: string
           description: A human-readable name for the key.
-        resource_name:
-          type: string
-          description: The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
       required:
         - id
-        - resource_name
         - external_credential_id
-        - algorithm
         - name
     UpdateInviteRoleRequestBody:
       type: object
@@ -74550,6 +75990,9 @@ components:
           type: array
           items:
             type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint.
         scopes_supported:
           type: array
           items:
@@ -75930,6 +77373,39 @@ components:
         - organization
         - projects
         - scopes
+    VerifyCimdURLResult:
+      type: object
+      properties:
+        client_name:
+          type: string
+          description: The document's client_name, set only when verified. Lets an operator confirm the URL names the client they intended.
+        detail:
+          type: string
+          description: Human-readable explanation, safe to display to the operator.
+        http_status:
+          type: integer
+          description: Status the document endpoint returned; omitted when no response was received.
+          format: int64
+        outcome:
+          type: string
+          description: Why the probe ended as it did.
+          enum:
+            - valid
+            - invalid_url
+            - unreachable
+            - unparseable
+            - invalid_document
+        reason:
+          type: string
+          description: Stable machine label for the rule that rejected the document, e.g. client_id_mismatch. Set only for invalid_url and invalid_document.
+        verified:
+          type: boolean
+          description: True when the document was fetched and passed every check the authorization server applies. A client presenting this URL will not be rejected for its document.
+      description: Outcome of probing a CIMD document URL. Nothing is persisted.
+      required:
+        - verified
+        - outcome
+        - detail
     VerifyCredentialResult:
       type: object
       properties:
@@ -76000,6 +77476,14 @@ components:
       required:
         - url
         - transport_type
+    VerifyURLRequestBody:
+      type: object
+      properties:
+        client_id_metadata_uri:
+          type: string
+          description: The https URL to probe.
+      required:
+        - client_id_metadata_uri
     VerifyURLResult:
       type: object
       properties:
@@ -76201,6 +77685,8 @@ tags:
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: adminOpenRouterKeys
+    description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features

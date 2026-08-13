@@ -62,10 +62,10 @@ var _ = Service("agent", func() {
 			Param("email")
 			// Carried as headers rather than query params: a serial is a
 			// durable hardware identifier and a hostname frequently embeds a
-			// person's name, and the request logger records URLs (see
-			// middleware/logging.go) but not these headers. `email` is already
-			// a query param for compatibility; that is not a reason to widen
-			// what lands in access logs.
+			// person's name, and the request logger records URLs but not
+			// headers. `email` remains a query param for compatibility with
+			// deployed agents; the request logging middleware redacts it from
+			// logged URLs.
 			Header("serial_number:Gram-Device-Serial")
 			Header("hostname:Gram-Device-Hostname")
 			Response(StatusOK)
