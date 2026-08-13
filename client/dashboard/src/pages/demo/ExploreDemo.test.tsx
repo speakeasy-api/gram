@@ -2,12 +2,7 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import {
-  DEMO_LANDING_PATH,
-  DEMO_ORG_SLUG,
-  DEMO_PROJECT_SLUG,
-  PRE_DEMO_ORG_KEY,
-} from "@/lib/demo";
+import { DEMO_LANDING_PATH, DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 
 const mocks = vi.hoisted(() => ({
   enterDemo: vi.fn(),
@@ -57,9 +52,7 @@ describe("ExploreDemo", () => {
     await waitFor(() => {
       expect(replace).toHaveBeenCalledWith(DEMO_LANDING_PATH);
     });
-    expect(DEMO_LANDING_PATH).toBe(
-      `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`,
-    );
+    expect(DEMO_LANDING_PATH).toBe("/acme-demo/projects/default");
     expect(localStorage.getItem(PRE_DEMO_ORG_KEY)).toBe("org-1");
   });
 
