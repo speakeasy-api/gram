@@ -53,6 +53,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/shared/skills/",
 		},
 		{
+			name: "shared handoff path segment redacted",
+			in:   "/shared/handoffs/aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+			want: "/shared/handoffs/REDACTED",
+		},
+		{
 			name: "unrelated shared path untouched",
 			in:   "/shared/other/value",
 			want: "/shared/other/value",

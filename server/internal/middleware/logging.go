@@ -86,13 +86,17 @@ func logSafeURL(u *url.URL) string {
 	safe := *u
 	changed := false
 
-	if rest, ok := strings.CutPrefix(safe.Path, "/shared/skills/"); ok && rest != "" {
+	for _, prefix := range []string{"/shared/skills/", "/shared/handoffs/"} {
+		rest, ok := strings.CutPrefix(safe.Path, prefix)
+		if !ok || rest == "" {
+			continue
+		}
 		if i := strings.IndexByte(rest, '/'); i >= 0 {
 			rest = "REDACTED" + rest[i:]
 		} else {
 			rest = "REDACTED"
 		}
-		safe.Path = "/shared/skills/" + rest
+		safe.Path = prefix + rest
 		safe.RawPath = ""
 		changed = true
 	}
