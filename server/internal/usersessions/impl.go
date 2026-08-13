@@ -32,8 +32,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
@@ -56,14 +59,29 @@ type Service struct {
 	// serverURL is the public base URL used to stamp the JWT issuer claim
 	// on mintUserSession output. Matches the issuer URL /token would emit.
 	serverURL string
-	// cimdResolver backs the soft probe run when an operator adds a custom
-	// CIMD document URL to an issuer. Guardian-backed, so probing an
-	// operator-supplied URL cannot be turned into an SSRF primitive against
-	// internal addresses. Its attempts land on the same cimd.fetch.*
-	// instruments as authorize-time resolutions — a probe genuinely is a
-	// resolve attempt, and the volume (one per manual config change) is
-	// negligible against the OAuth surface.
+	// cimdResolver backs the VerifyURL handler, which probes an
+	// operator-supplied CIMD document URL on demand. Guardian-backed, so the
+	// probe cannot be turned into an SSRF primitive against internal
+	// addresses. Its attempts land on the same cimd.fetch.* instruments as
+	// authorize-time resolutions — a probe genuinely is a resolve attempt —
+	// but note this is now an on-demand button rather than the one-shot
+	// create-time probe those instruments were sized for, so the origin
+	// attribute is tenant-driven at whatever rate the caller chooses.
 	cimdResolver *cimd.Resolver
+
+	// revoker cascades a user-session revoke into the subject's upstream
+	// grants. A revoked session whose provider tokens keep working is only
+	// half a revocation, so the two are driven together.
+	revoker *remotesessions.UpstreamRevoker
+
+	// verifyLimiter bounds the VerifyURL handler, keyed per project. That
+	// endpoint is the only one that makes Gram issue an outbound request to
+	// a caller-chosen host, and the resolver's guardian client carries no
+	// resilience layer of its own (WithResilience is opt-in and unused
+	// here), so without this a project:write holder could loop it into a
+	// scanner wearing Gram's egress IPs, or pin goroutines against a
+	// slowloris host for fetchTimeout apiece.
+	verifyLimiter *ratelimit.Limiter
 }
 
 var (
@@ -85,7 +103,7 @@ var (
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, signer *Signer, serverURL string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -99,6 +117,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		signer:       signer,
 		serverURL:    serverURL,
 		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy),
+		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
+			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 	}
 }
 

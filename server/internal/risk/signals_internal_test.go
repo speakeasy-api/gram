@@ -2,7 +2,6 @@ package risk
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -10,81 +9,20 @@ import (
 func TestSignalScore_GoldenValues(t *testing.T) {
 	t.Parallel()
 
-	windowEnd := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	// A matched policy's configured score is the signal score, verbatim.
+	require.InDelta(t, 2.0, signalScore(2.0, "secrets"), 0.001)
+	require.InDelta(t, 9.6, signalScore(9.6, "pii"), 0.001)
 
-	// Full-confidence secrets signal, active in the last 24h, tripled
-	// window-over-window: base 8.5 + volume 0.30 + spread 0.42 + recency 0.6 +
-	// growth 0.5 clamps at the 9.9 ceiling.
-	require.InDelta(t, 9.9, signalScore(signalScoreInputs{
-		category:         "secrets",
-		avgConfidence:    1,
-		findings:         3,
-		users:            2,
-		lastSeen:         windowEnd.Add(-2 * time.Hour),
-		windowEnd:        windowEnd,
-		previousFindings: 1,
-	}), 0.001)
+	// No policy attribution falls back to the category weight, verbatim.
+	require.InDelta(t, 8.5, signalScore(0, "secrets"), 0.001)
+	require.InDelta(t, 5.5, signalScore(0, "pii"), 0.001)
+	require.InDelta(t, 4.5, signalScore(0, "off_policy"), 0.001)
 
-	// Quiet single-user PII signal with no recency or growth bonus:
-	// 5.5 + 0.5*log10(4) + 0.3*sqrt(1) = 6.101 -> 6.1.
-	require.InDelta(t, 6.1, signalScore(signalScoreInputs{
-		category:         "pii",
-		avgConfidence:    1,
-		findings:         3,
-		users:            1,
-		lastSeen:         windowEnd.Add(-30 * time.Hour),
-		windowEnd:        windowEnd,
-		previousFindings: 0,
-	}), 0.001)
+	// Unknown categories fall back to the default weight.
+	require.InDelta(t, 5.0, signalScore(0, "not_a_category"), 0.001)
 
-	// Zero confidence keeps 70% of the base weight: 4.5*0.7 = 3.15, plus
-	// volume 0.5*log10(2) = 0.151 -> 3.3.
-	require.InDelta(t, 3.3, signalScore(signalScoreInputs{
-		category:         "off_policy",
-		avgConfidence:    0,
-		findings:         1,
-		users:            0,
-		lastSeen:         time.Time{},
-		windowEnd:        windowEnd,
-		previousFindings: 0,
-	}), 0.001)
-
-	// Unknown categories fall back to the default base weight (5.0).
-	require.InDelta(t, 5.0*(0.7+0.3*0.5)+0.5*0.30103+0.3, signalScore(signalScoreInputs{
-		category:         "not_a_category",
-		avgConfidence:    0.5,
-		findings:         1,
-		users:            1,
-		lastSeen:         time.Time{},
-		windowEnd:        windowEnd,
-		previousFindings: 0,
-	}), 0.05)
-}
-
-func TestSignalScore_FloorAndCeiling(t *testing.T) {
-	t.Parallel()
-
-	// The floor holds even for an implausibly weak signal.
-	require.GreaterOrEqual(t, signalScore(signalScoreInputs{
-		category:         "off_policy",
-		avgConfidence:    0,
-		findings:         0,
-		users:            0,
-		lastSeen:         time.Time{},
-		windowEnd:        time.Time{},
-		previousFindings: 0,
-	}), 0.5)
-
-	// The ceiling holds for a maxed-out signal.
-	require.LessOrEqual(t, signalScore(signalScoreInputs{
-		category:         "secrets",
-		avgConfidence:    1,
-		findings:         100000,
-		users:            10000,
-		lastSeen:         time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
-		windowEnd:        time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
-		previousFindings: 1,
-	}), 9.9)
+	// Scores are normalized to one decimal.
+	require.InDelta(t, 7.3, signalScore(7.25001, "secrets"), 0.001)
 }
 
 func TestSeverityForScore_BandsMatchDashboard(t *testing.T) {

@@ -505,6 +505,249 @@ func DecodeCreateUserSessionIssuerCimdClientResponse(decoder func(*http.Response
 	}
 }
 
+// BuildVerifyURLRequest instantiates a HTTP request object with method and
+// path set to call the "userSessionIssuersCimdClients" service "verifyURL"
+// endpoint
+func (c *Client) BuildVerifyURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyURLUserSessionIssuersCimdClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessionIssuersCimdClients", "verifyURL", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyURLRequest returns an encoder for requests sent to the
+// userSessionIssuersCimdClients verifyURL server.
+func EncodeVerifyURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessionissuerscimdclients.VerifyURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessionIssuersCimdClients", "verifyURL", "*usersessionissuerscimdclients.VerifyURLPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewVerifyURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("userSessionIssuersCimdClients", "verifyURL", err)
+		}
+		return nil
+	}
+}
+
+// DecodeVerifyURLResponse returns a decoder for responses returned by the
+// userSessionIssuersCimdClients verifyURL endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeVerifyURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			res := NewVerifyURLVerifyCimdURLResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VerifyURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+				}
+				err = ValidateVerifyURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+				}
+				return nil, NewVerifyURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+				}
+				err = ValidateVerifyURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+				}
+				return nil, NewVerifyURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessionIssuersCimdClients", "verifyURL", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			err = ValidateVerifyURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuersCimdClients", "verifyURL", err)
+			}
+			return nil, NewVerifyURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessionIssuersCimdClients", "verifyURL", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListUserSessionIssuerCimdClientsRequest instantiates a HTTP request
 // object with method and path set to call the "userSessionIssuersCimdClients"
 // service "listUserSessionIssuerCimdClients" endpoint

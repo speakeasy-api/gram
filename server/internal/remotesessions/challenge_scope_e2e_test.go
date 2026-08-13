@@ -65,6 +65,8 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 			require.NoError(t, err)
 			mgr := remotesessions.NewChallengeManager(
 				logger,
+				testenv.NewTracerProvider(t),
+				testenv.NewMeterProvider(t),
 				ti.conn,
 				enc,
 				policy,
@@ -159,6 +161,8 @@ func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
 	require.NoError(t, err)
 	mgr := remotesessions.NewChallengeManager(
 		logger,
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		enc,
 		policy,

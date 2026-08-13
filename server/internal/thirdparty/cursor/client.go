@@ -78,6 +78,7 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 
 type UsageEvent struct {
 	Timestamp        time.Time  `json:"timestamp"`
+	ConversationID   string     `json:"conversationId"`
 	Model            string     `json:"model"`
 	Kind             string     `json:"kind"`
 	ChargedCents     float64    `json:"chargedCents"`

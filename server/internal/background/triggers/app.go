@@ -764,16 +764,19 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {
+		a.clearSlackThreadStatus(ctx, instance, envMap, *result.Event)
 		return nil, fmt.Errorf("process event: %w", err)
 	}
 	result.Task = task
 	if task == nil {
+		a.clearSlackThreadStatus(ctx, instance, envMap, *result.Event)
 		return result, nil
 	}
 
 	a.ackSlackThreadStatus(ctx, instance, envMap, *result.Event)
 
 	if err := ExecuteTriggerDispatchWorkflow(ctx, a.temporalEnv, TriggerDispatchWorkflowInput{Task: *task}); err != nil {
+		a.clearSlackThreadStatus(ctx, instance, envMap, *result.Event)
 		return nil, fmt.Errorf("execute trigger dispatch workflow: %w", err)
 	}
 
@@ -789,6 +792,16 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 // the indicator until Slack's two-minute timeout.
 // Best-effort: a failure here only costs the indicator.
 func (a *App) ackSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope) {
+	a.setSlackThreadStatus(ctx, instance, env, event, slackThinkingStatus, slackInitialLoadingMessages)
+}
+
+// clearSlackThreadStatus removes a stale loading indicator when ingress cannot
+// dispatch an event that Slack expects the assistant to answer.
+func (a *App) clearSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope) {
+	a.setSlackThreadStatus(ctx, instance, env, event, "", nil)
+}
+
+func (a *App) setSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope, status string, loadingMessages []string) {
 	if a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
 		return
 	}
@@ -806,8 +819,8 @@ func (a *App) ackSlackThreadStatus(ctx context.Context, instance triggerrepo.Tri
 	if err := a.slackClient.SetThreadStatus(ctx, token, slackclient.SlackSetThreadStatusInput{
 		ChannelID:       channelID,
 		ThreadTS:        threadTS,
-		Status:          slackThinkingStatus,
-		LoadingMessages: slackInitialLoadingMessages,
+		Status:          status,
+		LoadingMessages: loadingMessages,
 	}); err != nil {
 		a.logger.WarnContext(ctx, "set slack thread status", attr.SlogError(err))
 	}

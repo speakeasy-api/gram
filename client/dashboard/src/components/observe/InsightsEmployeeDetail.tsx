@@ -430,17 +430,25 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     member?.email ??
     (resolvedUserId?.includes("@") ? resolvedUserId : "Unknown email");
 
-  const totalTokens = getTotalTokens(summary);
-  const totalCost = summary?.totalCost ?? 0;
+  // The stat tiles read the per-user metrics query rather than the
+  // employees-list summary: the list groups a person's rows by identity, so it
+  // reports one identity's slice of their usage, while this query aggregates
+  // them ungrouped (DNO-827).
+  const totalTokens = getTotalTokens(metrics);
+  const totalCost = metrics?.totalCost ?? 0;
   const isLoading =
     membersLoading ||
     (member == null && fallbackUserQuery.isLoading) ||
     (resolvedUserId != null && summaryQuery.isLoading) ||
+    metricsQuery.isLoading ||
     // When an account is scoped, the metric cards read the scoped summary — wait
     // on it too, else they briefly render zeros before it resolves.
     (selectedOrgId !== "" && scopedSummaryQuery.isLoading);
+  // metricsQuery has throwOnError disabled, so without it here a failed usage
+  // query would render as a legitimate-looking zero on the tiles.
   const error =
     summaryQuery.error ??
+    metricsQuery.error ??
     (selectedOrgId !== "" ? scopedSummaryQuery.error : null) ??
     fallbackUserQuery.error ??
     membersError;
@@ -541,15 +549,15 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
                 <StatTile
                   title="Tool Calls"
-                  value={summary?.totalToolCalls ?? 0}
+                  value={metrics?.totalToolCalls ?? 0}
                   tone="information"
                   icon="wrench"
-                  subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                  subtext={`${(metrics?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(metrics?.toolCallFailure ?? 0).toLocaleString()} failed`}
                   link={toolLogsHref}
                 />
                 <StatTile
                   title="Agent Sessions"
-                  value={summary?.totalChats ?? 0}
+                  value={metrics?.totalChats ?? 0}
                   tone="information"
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}

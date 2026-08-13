@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -242,6 +243,27 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "log user session client revocation").LogError(ctx, logger)
 	}
 
+	// Tombstone the upstream grants of every subject whose session just
+	// cascaded, deduplicated: one client can hold a session per user, and a
+	// subject's grants hang off (subject, issuer) rather than off the session,
+	// so without this the same grants would be soft-deleted — and revoked
+	// upstream — once per session the subject held.
+	seenSubjects := make(map[string]struct{}, len(revokedSessions))
+	var revokedUpstream []remotesessions.RevokedCredentials
+	for _, session := range revokedSessions {
+		key := session.SubjectUrn.String() + "\x00" + session.UserSessionIssuerID.String()
+		if _, seen := seenSubjects[key]; seen {
+			continue
+		}
+		seenSubjects[key] = struct{}{}
+
+		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
+		}
+		revokedUpstream = append(revokedUpstream, creds...)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -282,6 +304,14 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		}
 		pushed++
 	}
+
+	// Strictly after the jti pushes, and attempted even when some failed. This
+	// fan-out is synchronous, so running it first would hold every one of the
+	// client's already-issued access tokens valid for the length of the batch
+	// budget — a slow issuer would delay Gram's own security control. The two
+	// are independent, so a cache outage must not also cost the upstream
+	// revocations.
+	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
 
 	// Surfaced rather than logged and swallowed: the client and its sessions
 	// are already gone from the database, so reporting success here would tell

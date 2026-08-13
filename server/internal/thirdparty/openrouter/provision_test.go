@@ -64,7 +64,7 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
 	provisioner.baseURL = upstream.URL
 
 	const workers = 8
@@ -92,6 +92,6 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-or-race-1", row.Key)
+	require.Equal(t, "sk-or-race-1", row.Key.String)
 	require.Equal(t, "hash-1", row.KeyHash)
 }

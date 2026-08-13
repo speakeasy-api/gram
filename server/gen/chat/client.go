@@ -23,12 +23,13 @@ type Client struct {
 	DeleteChatEndpoint        goa.Endpoint
 	SetPinnedEndpoint         goa.Endpoint
 	SummarizeEndpoint         goa.Endpoint
+	SummarizeToolCallEndpoint goa.Endpoint
 	SubmitFeedbackEndpoint    goa.Endpoint
 	ListSourcesEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, submitFeedback, listSources goa.Endpoint) *Client {
+func NewClient(listChats, getWorkUnitsTrend, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, summarizeToolCall, submitFeedback, listSources goa.Endpoint) *Client {
 	return &Client{
 		ListChatsEndpoint:         listChats,
 		GetWorkUnitsTrendEndpoint: getWorkUnitsTrend,
@@ -38,6 +39,7 @@ func NewClient(listChats, getWorkUnitsTrend, loadChat, generateTitle, creditUsag
 		DeleteChatEndpoint:        deleteChat,
 		SetPinnedEndpoint:         setPinned,
 		SummarizeEndpoint:         summarize,
+		SummarizeToolCallEndpoint: summarizeToolCall,
 		SubmitFeedbackEndpoint:    submitFeedback,
 		ListSourcesEndpoint:       listSources,
 	}
@@ -210,6 +212,29 @@ func (c *Client) Summarize(ctx context.Context, p *SummarizePayload) (res *Summa
 		return
 	}
 	return ires.(*SummarizeChatResult), nil
+}
+
+// SummarizeToolCall calls the "summarizeToolCall" endpoint of the "chat"
+// service.
+// SummarizeToolCall may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SummarizeToolCall(ctx context.Context, p *SummarizeToolCallPayload) (res *SummarizeToolCallResult, err error) {
+	var ires any
+	ires, err = c.SummarizeToolCallEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SummarizeToolCallResult), nil
 }
 
 // SubmitFeedback calls the "submitFeedback" endpoint of the "chat" service.

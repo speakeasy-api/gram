@@ -182,6 +182,15 @@ echo -e "\n⏳ Cleaning up stale processes and Temporal state"
 interactive_only mise run zero:cleanup
 echo "✅ Cleaned up stale state"
 
+# Compile the server/worker/streams binary while the steps below wait on
+# Docker and the database. Those steps are IO-bound, so the build is nearly
+# free in wall-clock terms, and it saves `mise run start` from doing three
+# concurrent copies of the same cold compile. Backgrounded rather than
+# depended on: a build failure must surface from the daemon that needs it, not
+# abort the stack before infra is even up.
+mise run build:server-cache &
+server_cache_pid=$!
+
 echo -e "\n⏳ Starting infra"
 mise infra:start
 
@@ -215,8 +224,19 @@ else
 fi
 
 if $started; then
+    # Let the build cache finish before the daemons race for it. `|| true`
+    # because a failed build must not abort the boot here -- the daemon that
+    # needs it rebuilds and reports the error where it is actionable.
+    wait "$server_cache_pid" || true
+
     mise run "$start_task"
     mise run seed
+else
+    # Nothing will consume the cache, so stop paying for it: without this the
+    # build runs to completion in the background of a `./zero` the user
+    # declined to start, and is never reaped.
+    kill "$server_cache_pid" 2>/dev/null || true
+    wait "$server_cache_pid" 2>/dev/null || true
 fi
 
 mise run zero:summary

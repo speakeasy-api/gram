@@ -218,7 +218,7 @@ type RecordDecisionResponseBody struct {
 	// Why. Written to be cited when explaining the decision to the requester.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
-	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
 	// The research report this decision cited, when one informed it.
 	ResearchReportID *string `form:"research_report_id,omitempty" json:"research_report_id,omitempty" xml:"research_report_id,omitempty"`
 	// The evidence as it stood when this decision was made. Frozen at decision
@@ -227,7 +227,7 @@ type RecordDecisionResponseBody struct {
 	Evidence any `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
 	// Shape version of the frozen evidence payload, copied from the request at
 	// decision time.
-	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
+	EvidenceVersion int `form:"evidence_version" json:"evidence_version" xml:"evidence_version"`
 	// When the decision was made.
 	DecidedAt string `form:"decided_at" json:"decided_at" xml:"decided_at"`
 }
@@ -1582,7 +1582,7 @@ type ApprovalDecisionResponseBody struct {
 	// Why. Written to be cited when explaining the decision to the requester.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 	// Principals the approval covers. Empty for a denial.
-	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
 	// The research report this decision cited, when one informed it.
 	ResearchReportID *string `form:"research_report_id,omitempty" json:"research_report_id,omitempty" xml:"research_report_id,omitempty"`
 	// The evidence as it stood when this decision was made. Frozen at decision
@@ -1591,7 +1591,7 @@ type ApprovalDecisionResponseBody struct {
 	Evidence any `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
 	// Shape version of the frozen evidence payload, copied from the request at
 	// decision time.
-	EvidenceVersion *int `form:"evidence_version,omitempty" json:"evidence_version,omitempty" xml:"evidence_version,omitempty"`
+	EvidenceVersion int `form:"evidence_version" json:"evidence_version" xml:"evidence_version"`
 	// When the decision was made.
 	DecidedAt string `form:"decided_at" json:"decided_at" xml:"decided_at"`
 }
@@ -1815,6 +1815,8 @@ func NewRecordDecisionResponseBody(res *mcpapproval.ApprovalDecision) *RecordDec
 		for i, val := range res.GrantedPrincipalUrns {
 			body.GrantedPrincipalUrns[i] = val
 		}
+	} else {
+		body.GrantedPrincipalUrns = []string{}
 	}
 	return body
 }
