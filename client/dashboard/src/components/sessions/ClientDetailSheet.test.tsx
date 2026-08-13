@@ -8,21 +8,29 @@ import { ClientDetailSheet } from "./ClientDetailSheet";
 const {
   useUserSessionClient,
   setUserSessionClientData,
+  invalidateUserSessionClient,
   invalidateAllUserSessionClients,
   refreshMutate,
   hasScope,
+  refreshHookOptions,
 } = vi.hoisted(() => ({
   useUserSessionClient: vi.fn(),
   setUserSessionClientData: vi.fn(),
+  invalidateUserSessionClient: vi.fn(),
   invalidateAllUserSessionClients: vi.fn(),
   refreshMutate: vi.fn(),
   hasScope: vi.fn(),
+  refreshHookOptions: {} as {
+    options?: { onError?: (error: unknown) => Promise<void> };
+  },
 }));
 
 vi.mock("@gram/client/react-query/userSessionClient.js", () => ({
   useUserSessionClient: (...args: unknown[]) => useUserSessionClient(...args),
   setUserSessionClientData: (...args: unknown[]) =>
     setUserSessionClientData(...args),
+  invalidateUserSessionClient: (...args: unknown[]) =>
+    invalidateUserSessionClient(...args),
 }));
 
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
@@ -31,10 +39,15 @@ vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/refreshUserSessionClientCIMD.js", () => ({
-  useRefreshUserSessionClientCIMDMutation: () => ({
-    mutate: (...args: unknown[]) => refreshMutate(...args),
-    isPending: false,
-  }),
+  useRefreshUserSessionClientCIMDMutation: (options?: {
+    onError?: (error: unknown) => Promise<void>;
+  }) => {
+    refreshHookOptions.options = options;
+    return {
+      mutate: (...args: unknown[]) => refreshMutate(...args),
+      isPending: false,
+    };
+  },
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -164,6 +177,18 @@ describe("ClientDetailSheet", () => {
       screen.queryByRole("button", { name: "Refresh metadata" }),
     ).toBeNull();
     expect(hasScope).toHaveBeenCalledWith("project:write", "project-1");
+  });
+
+  it("refetches the client after a failed refresh so purged state shows", async () => {
+    // The backend commits the purge before fetching, so a failed re-read has
+    // still cleared the cache; the sheet must refetch rather than keep
+    // rendering the pre-purge copy.
+    renderSheet(cimdClient());
+
+    await refreshHookOptions.options?.onError?.(new Error("boom"));
+
+    expect(invalidateUserSessionClient).toHaveBeenCalled();
+    expect(invalidateAllUserSessionClients).toHaveBeenCalled();
   });
 
   it("prefers the freshly fetched detail over the listing row", () => {

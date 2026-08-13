@@ -208,10 +208,9 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 
 	queries := repo.New(s.db)
 
-	// Establishes project ownership before anything mutates:
-	// PurgeUserSessionClientCIMDCache is deliberately not project-scoped (it
-	// is also run by hand against bare ids), so the guard lives here, on the
-	// same project-scoped read the get endpoint uses.
+	// Establishes project ownership and loads the fields the cooldown check
+	// and audit entry need, through the same project-scoped read the get
+	// endpoint uses. The mutations below carry their own project guard too.
 	row, err := queries.GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
@@ -259,7 +258,10 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 
 	txRepo := repo.New(dbtx)
 
-	if _, err := txRepo.PurgeUserSessionClientCIMDCache(ctx, row.ID); err != nil {
+	if _, err := txRepo.PurgeUserSessionClientCIMDCache(ctx, repo.PurgeUserSessionClientCIMDCacheParams{
+		ID:        row.ID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// The row stopped being a live CIMD row between the read above and
 			// this write (revoked concurrently).
@@ -317,6 +319,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	// operator just watched someone revoke.
 	fresh, err := queries.UpdateUserSessionClientFromCIMD(ctx, repo.UpdateUserSessionClientFromCIMDParams{
 		ID:                   row.ID,
+		ProjectID:            *authCtx.ProjectID,
 		ClientName:           result.Document.ClientName,
 		RedirectUris:         result.Document.RedirectURIs,
 		CacheTtlSeconds:      result.TTL.Seconds(),

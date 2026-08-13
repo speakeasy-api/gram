@@ -538,13 +538,18 @@ RETURNING *;
 -- Revoking the client purges its cache as a side effect, since the lookup
 -- behind every authorize filters on deleted IS FALSE and a miss forces an
 -- unconditional fetch. This query exists for the case where the client should
--- keep working and only its stored document is suspect. It has no endpoint
--- yet and is run by hand; AIS-211 wires it to a per-client refresh action.
+-- keep working and only its stored document is suspect. It backs the
+-- refreshUserSessionClientCIMD endpoint and is also run by hand.
+--
+-- Project-scoped like every management-API mutation in this file, so the
+-- generated method cannot touch another tenant's row even if a future caller
+-- skips the ownership read.
 UPDATE user_session_clients
 SET client_id_metadata_cache_expires_at = NULL,
     client_id_metadata_etag = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND project_id = @project_id
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
 RETURNING *;
@@ -556,7 +561,8 @@ RETURNING *;
 -- upsert instead would re-insert — and thereby silently resurrect — a client
 -- revoked between the refresh's purge and this write, because the conflict
 -- target is a partial unique index that only sees live rows. The guards
--- mirror UpdateUserSessionClientCIMDCache's; a miss surfaces as no-rows,
+-- mirror UpdateUserSessionClientCIMDCache's plus the project scoping every
+-- management-API mutation in this file carries; a miss surfaces as no-rows,
 -- which the refresh handler maps to not-found.
 UPDATE user_session_clients
 SET client_name = @client_name,
@@ -566,6 +572,7 @@ SET client_name = @client_name,
     client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND project_id = @project_id
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   AND deleted IS FALSE
@@ -582,6 +589,7 @@ UPDATE user_session_clients
 SET client_id_metadata_fetched_at = @fetched_at
 WHERE id = @id
   AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: CreateUserSession :one

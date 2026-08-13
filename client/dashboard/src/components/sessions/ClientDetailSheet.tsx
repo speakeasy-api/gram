@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import { useRefreshUserSessionClientCIMDMutation } from "@gram/client/react-query/refreshUserSessionClientCIMD.js";
 import {
+  invalidateUserSessionClient,
   setUserSessionClientData,
   useUserSessionClient,
 } from "@gram/client/react-query/userSessionClient.js";
@@ -125,8 +126,22 @@ function CimdMetadataPanel({
       });
       toast.success("Client metadata refreshed");
     },
-    onError: (error) => {
+    onError: async (error) => {
       toast.error(refreshErrorMessage(error));
+      // A rejected refresh may still have mutated the row: the purge commits
+      // before the fetch, deliberately, so a failed re-read leaves the cache
+      // cleared. Refetch so the panel shows the server's actual state (no
+      // expiry, no validator) instead of the pre-purge copy. Pre-purge
+      // rejections (cooldown, DCR, missing) refetch unchanged data, which is
+      // harmless.
+      await Promise.all([
+        invalidateUserSessionClient(queryClient, [{ id: client.id }], {
+          refetchType: "all",
+        }),
+        invalidateAllUserSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
     },
   });
 

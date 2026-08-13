@@ -1301,10 +1301,16 @@ SET client_id_metadata_cache_expires_at = NULL,
     client_id_metadata_etag = NULL,
     updated_at = clock_timestamp()
 WHERE id = $1
+  AND project_id = $2
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
 RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
 `
+
+type PurgeUserSessionClientCIMDCacheParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
 
 // Forces the next authorize to re-read, re-parse, and re-validate a CIMD
 // client's metadata document instead of serving the stored copy.
@@ -1320,10 +1326,14 @@ RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash,
 // Revoking the client purges its cache as a side effect, since the lookup
 // behind every authorize filters on deleted IS FALSE and a miss forces an
 // unconditional fetch. This query exists for the case where the client should
-// keep working and only its stored document is suspect. It has no endpoint
-// yet and is run by hand; AIS-211 wires it to a per-client refresh action.
-func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, id uuid.UUID) (UserSessionClient, error) {
-	row := q.db.QueryRow(ctx, purgeUserSessionClientCIMDCache, id)
+// keep working and only its stored document is suspect. It backs the
+// refreshUserSessionClientCIMD endpoint and is also run by hand.
+//
+// Project-scoped like every management-API mutation in this file, so the
+// generated method cannot touch another tenant's row even if a future caller
+// skips the ownership read.
+func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg PurgeUserSessionClientCIMDCacheParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, purgeUserSessionClientCIMDCache, arg.ID, arg.ProjectID)
 	var i UserSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -1523,6 +1533,7 @@ UPDATE user_session_clients
 SET client_id_metadata_fetched_at = $1
 WHERE id = $2
   AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
 RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
 `
 
@@ -1759,6 +1770,7 @@ SET client_name = $1,
     client_id_metadata_etag = $4,
     updated_at = clock_timestamp()
 WHERE id = $5
+  AND project_id = $6
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   AND deleted IS FALSE
@@ -1771,6 +1783,7 @@ type UpdateUserSessionClientFromCIMDParams struct {
 	CacheTtlSeconds      float64
 	ClientIDMetadataEtag pgtype.Text
 	ID                   uuid.UUID
+	ProjectID            uuid.UUID
 }
 
 // Persists a freshly re-read metadata document onto an EXISTING CIMD row,
@@ -1779,7 +1792,8 @@ type UpdateUserSessionClientFromCIMDParams struct {
 // upsert instead would re-insert — and thereby silently resurrect — a client
 // revoked between the refresh's purge and this write, because the conflict
 // target is a partial unique index that only sees live rows. The guards
-// mirror UpdateUserSessionClientCIMDCache's; a miss surfaces as no-rows,
+// mirror UpdateUserSessionClientCIMDCache's plus the project scoping every
+// management-API mutation in this file carries; a miss surfaces as no-rows,
 // which the refresh handler maps to not-found.
 func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg UpdateUserSessionClientFromCIMDParams) (UserSessionClient, error) {
 	row := q.db.QueryRow(ctx, updateUserSessionClientFromCIMD,
@@ -1788,6 +1802,7 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 		arg.CacheTtlSeconds,
 		arg.ClientIDMetadataEtag,
 		arg.ID,
+		arg.ProjectID,
 	)
 	var i UserSessionClient
 	err := row.Scan(
