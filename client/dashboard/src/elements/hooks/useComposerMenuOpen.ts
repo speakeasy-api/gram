@@ -14,11 +14,23 @@ export function useComposerMenuOpen(
   ref: RefObject<HTMLElement | null>,
 ): void {
   useEffect(() => {
+    if (!open) return;
     const root = ref.current?.getRootNode();
     const host = root instanceof ShadowRoot ? root.host : null;
     if (!(host instanceof HTMLElement)) return;
 
-    host.toggleAttribute("data-composer-menu-open", open);
-    return () => host.removeAttribute("data-composer-menu-open");
+    // Counted, because more than one menu can be open at once (a slash command
+    // and an @-mention in the same draft). A plain attribute would let the
+    // first one to close strip the clip-lift from the one still on screen.
+    openMenus.set(host, (openMenus.get(host) ?? 0) + 1);
+    host.toggleAttribute("data-composer-menu-open", true);
+    return () => {
+      const remaining = (openMenus.get(host) ?? 1) - 1;
+      openMenus.set(host, Math.max(remaining, 0));
+      if (remaining <= 0) host.removeAttribute("data-composer-menu-open");
+    };
   }, [open, ref]);
 }
+
+/** Open menus per shadow host. */
+const openMenus = new WeakMap<HTMLElement, number>();

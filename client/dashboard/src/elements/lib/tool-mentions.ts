@@ -45,6 +45,21 @@ export interface ComposerSegment {
  *  and a word before `@` is an email address. */
 const TOKEN_PATTERN = /(?<![\w@/:])([@/])([\w.-]+)/g;
 
+/** Anything that reads as a link. A URL's own punctuation (`?next=/skill`,
+ *  `#@tool`) otherwise looks exactly like a reference boundary — and a chip
+ *  there would silently attach a skill the user only meant to link to. */
+const URL_PATTERN = /\b(?:[a-z][a-z\d+.-]*:\/\/|www\.)\S+/gi;
+
+function urlSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let match: RegExpExecArray | null;
+  URL_PATTERN.lastIndex = 0;
+  while ((match = URL_PATTERN.exec(text)) !== null) {
+    spans.push([match.index, match.index + match[0].length]);
+  }
+  return spans;
+}
+
 /**
  * Splits draft text into plain runs and reference runs so the composer can
  * paint each kind in its own color. Only tokens that resolve to something the
@@ -63,11 +78,14 @@ export function splitComposerSegments(
   );
   const skills = new Set(skillNames.map((name) => name.toLowerCase()));
   const segments: ComposerSegment[] = [];
+  const links = urlSpans(text);
   let consumed = 0;
   let match: RegExpExecArray | null;
 
   TOKEN_PATTERN.lastIndex = 0;
   while ((match = TOKEN_PATTERN.exec(text)) !== null) {
+    const at = match.index;
+    if (links.some(([start, end]) => at >= start && at < end)) continue;
     const kind = referenceKind(match[1]!, match[2]!.toLowerCase(), {
       toolNames,
       skills,

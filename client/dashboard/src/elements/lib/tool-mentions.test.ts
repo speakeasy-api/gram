@@ -65,3 +65,20 @@ describe("removeToken", () => {
     ).toBe("why is it slow");
   });
 });
+
+describe("splitComposerSegments and URLs", () => {
+  it("leaves a reference-shaped URL query value alone", () => {
+    const draft = "see https://example.com/docs?next=/latency-triage now";
+    expect(splitComposerSegments(draft, TOOLS, SKILLS)).toEqual([
+      { text: draft, kind: "text" },
+    ]);
+  });
+
+  it("still marks a reference after ordinary punctuation", () => {
+    expect(splitComposerSegments("(@search_docs)", TOOLS, SKILLS)).toEqual([
+      { text: "(", kind: "text" },
+      { text: "@search_docs", kind: "tool" },
+      { text: ")", kind: "text" },
+    ]);
+  });
+});

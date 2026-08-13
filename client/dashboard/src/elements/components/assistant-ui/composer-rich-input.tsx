@@ -5,6 +5,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type FC,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -50,8 +51,12 @@ export interface ComposerRichInputProps {
  * reports edits back as a string, and restores the caret by character offset
  * after each controlled re-render — so nothing downstream learns about the tree.
  */
-/** How many recent local drafts to remember; keystrokes in flight at once. */
-const REPORTED_HISTORY = 16;
+/** Cap on un-echoed local drafts; keystrokes in flight at once. */
+const ECHO_QUEUE_LIMIT = 16;
+
+/** How long after the last keystroke a token may redraw. Long enough to clear
+ *  a burst of queued input, short enough to read as immediate. */
+const TYPING_SETTLE_MS = 120;
 
 /**
  * The token layout only — which references exist, and in what order. Plain runs
@@ -87,24 +92,46 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
   const segments = splitComposerSegments(text, tools, skillNames);
   const signature = tokenSignature(segments);
   const renderedSignature = useRef<string | null>(null);
-  /** The recent drafts this input itself reported. Anything else arriving as
-   *  `text` came from outside (dictation, prompt recall, the context picker)
-   *  and is authoritative over what is currently in the DOM.
+  /** Drafts this input reported and has not yet seen come back, oldest first.
    *
-   *  A list, not just the last one: several keystrokes can land before the
-   *  render for the first of them arrives, and that render carries a string
-   *  this input DID report, just not most recently. Mistaking it for an
-   *  outside edit rebuilds the tree from it and eats the newer keystrokes. */
-  const reported = useRef<string[]>([]);
+   *  A queue, not a single value: several keystrokes can land before the render
+   *  for the first of them arrives, and that render carries a string this input
+   *  DID report, just not most recently — mistaking it for an outside edit
+   *  rebuilds the tree from it and eats the newer keystrokes. Each render
+   *  CONSUMES its entry, so a later external draft that happens to equal
+   *  something typed earlier is still recognised as external. */
+  const awaitingEcho = useRef<string[]>([]);
+
+  /** Set while keystrokes are still arriving; a rebuild waits for the lull. */
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [idleTick, setIdleTick] = useState(0);
 
   const handleInput = useCallback(() => {
     const element = ref.current;
     if (!element || composing.current) return;
     const next = readPlainText(element);
     pendingCaret.current = caretOffset(element);
-    reported.current = [...reported.current.slice(-REPORTED_HISTORY), next];
+    awaitingEcho.current = [
+      ...awaitingEcho.current.slice(-ECHO_QUEUE_LIMIT),
+      next,
+    ];
+    // Rebuilding while keystrokes are still queued destroys the very nodes the
+    // browser is about to apply them to, and those characters are simply lost.
+    // Every keystroke pushes the rebuild out; it runs once typing settles.
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => {
+      typingTimer.current = null;
+      setIdleTick((tick) => tick + 1);
+    }, TYPING_SETTLE_MS);
     aui.composer().setText(next);
   }, [aui]);
+
+  useEffect(
+    () => () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    },
+    [],
+  );
 
   // React must NOT own these children. The browser edits this subtree directly
   // on every keystroke, so React's picture of the DOM goes stale immediately
@@ -114,6 +141,10 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || composing.current) return;
+    // Nothing redraws mid-burst, whoever asked for it: replacing these nodes
+    // while keystrokes are still queued against them loses those characters.
+    // The timer's own tick re-runs this the moment typing settles.
+    if (typingTimer.current) return;
 
     // Whose string is newer. A draft this input reported can arrive back
     // several keystrokes late — the browser has already applied them to the
@@ -121,7 +152,10 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
     // `text` would swallow them. Only a change from elsewhere (dictation,
     // prompt recall, an inserted token) outranks what is on screen.
     const domText = readPlainText(element);
-    const fromOutside = !reported.current.includes(text);
+    const echoed = awaitingEcho.current.indexOf(text);
+    if (echoed !== -1)
+      awaitingEcho.current = awaitingEcho.current.slice(echoed + 1);
+    const fromOutside = echoed === -1;
     const source = fromOutside ? text : domText;
     const sourceSegments = fromOutside
       ? segments
@@ -132,7 +166,6 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
       pendingCaret.current = null;
       return;
     }
-
     element.replaceChildren(
       ...sourceSegments.map((segment) => {
         if (segment.kind === "text") {
@@ -149,7 +182,7 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
       }),
     );
     renderedSignature.current = sourceSignature;
-    reported.current = [source];
+    awaitingEcho.current = [];
     // The runtime still owns the draft, so a rebuild from the DOM has to report
     // what it rendered — otherwise state keeps the older string forever.
     if (source !== text) aui.composer().setText(source);
@@ -161,7 +194,7 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
       root instanceof ShadowRoot ? root.activeElement : document.activeElement;
     if (active !== element) return;
     setCaret(element, Math.min(target, source.length));
-  }, [aui, segments, signature, skillNames, text, tools]);
+  }, [aui, idleTick, segments, signature, skillNames, text, tools]);
 
   useEffect(() => {
     if (autoFocus) ref.current?.focus();

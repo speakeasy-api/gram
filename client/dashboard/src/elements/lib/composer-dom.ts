@@ -15,9 +15,14 @@
  * exactly that, and counting it would report an empty draft as `"\n"`: no
  * placeholder, and a sendable message made of one newline.
  */
-export function readPlainText(root: HTMLElement): string {
+export function readPlainText(
+  root: HTMLElement,
+  { skipTrailingBreak = true }: { skipTrailingBreak?: boolean } = {},
+): string {
   const trailingBreak =
-    root.lastChild?.nodeName === "BR" ? root.lastChild : null;
+    skipTrailingBreak && root.lastChild?.nodeName === "BR"
+      ? root.lastChild
+      : null;
   let text = "";
   const walk = (node: Node) => {
     for (const child of node.childNodes) {
@@ -53,7 +58,10 @@ export function offsetOf(
   range.setEnd(node, nodeOffset);
   const holder = document.createElement("div");
   holder.appendChild(range.cloneContents());
-  return readPlainText(holder).length;
+  // A caret sitting just after a newline clones that `<br>` in as the holder's
+  // last child, where the editor's own trailing-break rule would discard it and
+  // report the offset a character early — at the start of every wrapped line.
+  return readPlainText(holder, { skipTrailingBreak: false }).length;
 }
 
 /** Chrome scopes selection to the shadow root; other engines answer from the
