@@ -466,17 +466,15 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 		TotalCost:   0,
 	}
 	if s.telemetryService != nil {
-		var beforeLastEventAt pgtype.Timestamptz
-		beforeThreadID := uuid.Nil
+		afterCorrelationID := ""
 		for {
 			chats, err := s.repo.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
-				AssistantID:       assistantID,
-				ProjectID:         *authCtx.ProjectID,
-				BeforeLastEventAt: beforeLastEventAt,
-				BeforeThreadID:    beforeThreadID,
-				ExternalUserID:    externalUserID,
-				UserID:            userID,
-				PageLimit:         assistantSessionSummaryMetricsBatch,
+				AssistantID:        assistantID,
+				ProjectID:          *authCtx.ProjectID,
+				AfterCorrelationID: afterCorrelationID,
+				ExternalUserID:     externalUserID,
+				UserID:             userID,
+				PageLimit:          assistantSessionSummaryMetricsBatch,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "list assistant sessions for usage summary").LogError(ctx, s.logger)
@@ -502,8 +500,7 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 			metrics.TotalCost += batchMetrics.TotalCost
 
 			lastChat := chats[len(chats)-1]
-			beforeLastEventAt = lastChat.LastEventAt
-			beforeThreadID = lastChat.ThreadID
+			afterCorrelationID = lastChat.CorrelationID
 			if len(chats) < assistantSessionSummaryMetricsBatch {
 				break
 			}

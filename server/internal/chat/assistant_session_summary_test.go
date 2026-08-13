@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -90,13 +92,12 @@ func TestGetAssistantSessionSummary_RangeAndAssistantScoped(t *testing.T) {
 	require.NoError(t, err)
 
 	chatRows, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
-		AssistantID:       assistantID,
-		ProjectID:         ti.projectID,
-		BeforeLastEventAt: pgtype.Timestamptz{},
-		BeforeThreadID:    uuid.Nil,
-		ExternalUserID:    "",
-		UserID:            "",
-		PageLimit:         10,
+		AssistantID:        assistantID,
+		ProjectID:          ti.projectID,
+		AfterCorrelationID: "",
+		ExternalUserID:     "",
+		UserID:             "",
+		PageLimit:          10,
 	})
 	require.NoError(t, err)
 	chatIDs := make([]uuid.UUID, len(chatRows))
@@ -166,13 +167,13 @@ func TestGetAssistantSessionSummary_NotLimitedToChatPageSize(t *testing.T) {
 	now := time.Now().UTC()
 	createdChatIDs := make([]uuid.UUID, 0, 101)
 
-	for range 101 {
+	for i := range 101 {
 		chatID := seedChat(t, ctx, ti, "", "", "summary session")
 		createdChatIDs = append(createdChatIDs, chatID)
 		require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
 			AssistantID:   assistantID,
 			ProjectID:     ti.projectID,
-			CorrelationID: uuid.NewString(),
+			CorrelationID: fmt.Sprintf("correlation-%03d", i),
 			ChatID:        chatID,
 		}))
 		_, err := queries.SeedChatMessage(ctx, repo.SeedChatMessageParams{
@@ -184,25 +185,34 @@ func TestGetAssistantSessionSummary_NotLimitedToChatPageSize(t *testing.T) {
 	}
 
 	firstPage, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
-		AssistantID:       assistantID,
-		ProjectID:         ti.projectID,
-		BeforeLastEventAt: pgtype.Timestamptz{},
-		BeforeThreadID:    uuid.Nil,
-		ExternalUserID:    "",
-		UserID:            "",
-		PageLimit:         100,
+		AssistantID:        assistantID,
+		ProjectID:          ti.projectID,
+		AfterCorrelationID: "",
+		ExternalUserID:     "",
+		UserID:             "",
+		PageLimit:          100,
 	})
 	require.NoError(t, err)
 	require.Len(t, firstPage, 100)
+	// Activity can update an unvisited thread between pages. Correlation stays
+	// immutable, so the second page must still return that chat.
+	_, err = assistantsrepo.New(ti.conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     ti.projectID,
+		CorrelationID: "correlation-100",
+		ChatID:        createdChatIDs[100],
+		SourceKind:    "cron",
+		SourceRefJson: []byte(`{}`),
+	})
+	require.NoError(t, err)
 	firstPageLast := firstPage[len(firstPage)-1]
 	secondPage, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
-		AssistantID:       assistantID,
-		ProjectID:         ti.projectID,
-		BeforeLastEventAt: firstPageLast.LastEventAt,
-		BeforeThreadID:    firstPageLast.ThreadID,
-		ExternalUserID:    "",
-		UserID:            "",
-		PageLimit:         100,
+		AssistantID:        assistantID,
+		ProjectID:          ti.projectID,
+		AfterCorrelationID: firstPageLast.CorrelationID,
+		ExternalUserID:     "",
+		UserID:             "",
+		PageLimit:          100,
 	})
 	require.NoError(t, err)
 	require.Len(t, secondPage, 1)

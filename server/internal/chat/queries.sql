@@ -873,16 +873,15 @@ FROM activity;
 -- in range even when its corresponding message was persisted outside the
 -- selected range. The endpoint consumes fixed-size pages so it remains
 -- uncapped without constructing an unbounded UUID array or ClickHouse IN list.
--- Runtime ingestion maps one live thread to a chat for each assistant: the
--- dashboard/setup correlation is the chat id, while other sources derive the
--- chat id from (assistant, correlation), and the live correlation key is
--- unique. Paging by activity time lets Postgres use
--- assistant_threads_project_id_assistant_id_last_event_at_idx; thread id is a
--- stable tie-breaker that needs only an incremental sort within equal times.
+-- Runtime ingestion maps each live assistant correlation to exactly one chat:
+-- the dashboard correlation is the server-minted chat id, while other sources
+-- derive the chat id from (assistant, correlation), and the live correlation
+-- key is unique. Correlation is immutable after insertion, so it is also a
+-- stable cursor while activity updates the thread. The keyset is backed by
+-- assistant_threads_project_id_assistant_id_correlation_id_key.
 SELECT
   at.chat_id,
-  at.last_event_at,
-  at.id AS thread_id
+  at.correlation_id
 FROM assistant_threads at
 JOIN assistants a
   ON a.id = at.assistant_id
@@ -896,13 +895,10 @@ WHERE at.assistant_id = @assistant_id
   AND at.project_id = @project_id
   AND at.source_kind <> 'setup'
   AND at.deleted IS FALSE
-  AND (
-    sqlc.narg('before_last_event_at')::timestamptz IS NULL
-    OR (at.last_event_at, at.id) < (sqlc.narg('before_last_event_at')::timestamptz, @before_thread_id::uuid)
-  )
+  AND at.correlation_id > @after_correlation_id
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
   AND (@user_id::text = '' OR c.user_id = @user_id::text)
-ORDER BY at.last_event_at DESC, at.id DESC
+ORDER BY at.correlation_id
 LIMIT @page_limit;
 
 -- name: ListChatSources :many
