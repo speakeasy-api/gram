@@ -1037,6 +1037,8 @@ func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T)
 		"registration_endpoint":  "http://identity.example/register",
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			server := fakeIssuerServer(t, func(doc map[string]any) {
 				doc[name] = endpoint
 			})
