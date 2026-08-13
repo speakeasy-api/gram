@@ -506,7 +506,7 @@ func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principa
 	if err != nil {
 		return err
 	}
-	if registration.ID == uuid.Nil || registration.ProjectID == uuid.Nil || registration.CatalogProvider == "" || registration.CatalogReference == "" || handoffID == uuid.Nil {
+	if registration.ID == uuid.Nil || registration.ProjectID == uuid.Nil || registration.CatalogProvider == "" || registration.CatalogReference == "" || handoffID == uuid.Nil || !isSetupMilestone(milestone) {
 		return ErrReadinessInvalid
 	}
 	if err := q.RecordPlatformMCPSetupMilestone(ctx, platformrepo.RecordPlatformMCPSetupMilestoneParams{
@@ -521,6 +521,15 @@ func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principa
 		return fmt.Errorf("record platform mcp setup milestone: %w", err)
 	}
 	return nil
+}
+
+func isSetupMilestone(value string) bool {
+	switch value {
+	case "provider_setup_started", "provider_setup_failed", "provider_setup_succeeded", "platform_flow_ready":
+		return true
+	default:
+		return false
+	}
 }
 
 func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, principal Principal, projectID, registrationID uuid.UUID) (platformrepo.PlatformMcpCatalogRegistration, error) {
