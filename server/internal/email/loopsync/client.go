@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-const DefaultBaseURL = "https://app.loops.so/api/v1"
+const (
+	DefaultBaseURL = "https://app.loops.so/api/v1"
+	maxRetryDelay  = 30 * time.Second
+)
 
 type TransactionalEmail struct {
 	ID                                 string   `json:"id"`
@@ -77,6 +80,11 @@ type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+type requestOptions struct {
+	expectedStatus int
+	retryable      bool
+}
+
 func NewClient(baseURL, apiKey string, httpClient HTTPDoer) *Client {
 	return &Client{baseURL: strings.TrimRight(baseURL, "/"), apiKey: apiKey, httpClient: httpClient}
 }
@@ -95,7 +103,7 @@ func (c *Client) ListTransactionalEmails(ctx context.Context) ([]TransactionalEm
 			} `json:"pagination"`
 			Data []TransactionalEmail `json:"data"`
 		}
-		if err := c.do(ctx, http.MethodGet, "/transactional-emails?"+query.Encode(), nil, &page, http.StatusOK); err != nil {
+		if err := c.do(ctx, http.MethodGet, "/transactional-emails?"+query.Encode(), nil, &page, requestOptions{expectedStatus: http.StatusOK, retryable: true}); err != nil {
 			return nil, err
 		}
 		result = append(result, page.Data...)
@@ -108,47 +116,49 @@ func (c *Client) ListTransactionalEmails(ctx context.Context) ([]TransactionalEm
 
 func (c *Client) GetTransactionalEmail(ctx context.Context, id string) (TransactionalEmail, error) {
 	var result TransactionalEmail
-	err := c.do(ctx, http.MethodGet, "/transactional-emails/"+url.PathEscape(id), nil, &result, http.StatusOK)
+	err := c.do(ctx, http.MethodGet, "/transactional-emails/"+url.PathEscape(id), nil, &result, requestOptions{expectedStatus: http.StatusOK, retryable: true})
 	return result, err
 }
 
 func (c *Client) CreateTransactionalEmail(ctx context.Context, name string) (TransactionalEmail, error) {
 	var result TransactionalEmail
-	err := c.do(ctx, http.MethodPost, "/transactional-emails", map[string]string{"name": name}, &result, http.StatusCreated)
+	err := c.do(ctx, http.MethodPost, "/transactional-emails", map[string]string{"name": name}, &result, requestOptions{expectedStatus: http.StatusCreated, retryable: false})
 	return result, err
 }
 
 func (c *Client) EnsureDraft(ctx context.Context, id string) (TransactionalEmail, error) {
 	var result TransactionalEmail
-	err := c.do(ctx, http.MethodPost, "/transactional-emails/"+url.PathEscape(id)+"/draft", nil, &result, http.StatusOK)
+	err := c.do(ctx, http.MethodPost, "/transactional-emails/"+url.PathEscape(id)+"/draft", nil, &result, requestOptions{expectedStatus: http.StatusOK, retryable: false})
 	return result, err
 }
 
 func (c *Client) GetEmailMessage(ctx context.Context, id string) (EmailMessage, error) {
 	var result EmailMessage
-	err := c.do(ctx, http.MethodGet, "/email-messages/"+url.PathEscape(id), nil, &result, http.StatusOK)
+	err := c.do(ctx, http.MethodGet, "/email-messages/"+url.PathEscape(id), nil, &result, requestOptions{expectedStatus: http.StatusOK, retryable: true})
 	return result, err
 }
 
 func (c *Client) UpdateEmailMessage(ctx context.Context, id string, input UpdateEmailMessageInput) (EmailMessage, error) {
 	var result EmailMessage
-	err := c.do(ctx, http.MethodPost, "/email-messages/"+url.PathEscape(id), input, &result, http.StatusOK)
+	// The expected revision makes replay safe: a completed first attempt causes
+	// the retry to fail closed with a revision conflict instead of overwriting.
+	err := c.do(ctx, http.MethodPost, "/email-messages/"+url.PathEscape(id), input, &result, requestOptions{expectedStatus: http.StatusOK, retryable: true})
 	return result, err
 }
 
 func (c *Client) Guardian(ctx context.Context, id string) (GuardianResult, error) {
 	var result GuardianResult
-	err := c.do(ctx, http.MethodGet, "/email-messages/"+url.PathEscape(id)+"/guardian", nil, &result, http.StatusOK)
+	err := c.do(ctx, http.MethodGet, "/email-messages/"+url.PathEscape(id)+"/guardian", nil, &result, requestOptions{expectedStatus: http.StatusOK, retryable: true})
 	return result, err
 }
 
 func (c *Client) Publish(ctx context.Context, id string) (TransactionalEmail, error) {
 	var result TransactionalEmail
-	err := c.do(ctx, http.MethodPost, "/transactional-emails/"+url.PathEscape(id)+"/publish", nil, &result, http.StatusOK)
+	err := c.do(ctx, http.MethodPost, "/transactional-emails/"+url.PathEscape(id)+"/publish", nil, &result, requestOptions{expectedStatus: http.StatusOK, retryable: false})
 	return result, err
 }
 
-func (c *Client) do(ctx context.Context, method, path string, input, output any, expectedStatus int) error {
+func (c *Client) do(ctx context.Context, method, path string, input, output any, options requestOptions) error {
 	var payload []byte
 	var err error
 	if input != nil {
@@ -176,7 +186,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 			return fmt.Errorf("read Loops Content API response: %w", readErr)
 		}
 
-		if resp.StatusCode == expectedStatus {
+		if resp.StatusCode == options.expectedStatus {
 			if output == nil || len(body) == 0 {
 				return nil
 			}
@@ -186,7 +196,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 			return nil
 		}
 
-		if attempt < 2 && isRetryableMethod(method) && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) {
+		if attempt < 2 && options.retryable && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) {
 			delay := retryDelay(time.Now(), attempt, resp.Header.Get("Retry-After"))
 			select {
 			case <-ctx.Done():
@@ -208,20 +218,11 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 	return fmt.Errorf("loops Content API %s %s exhausted retries", method, path)
 }
 
-func isRetryableMethod(method string) bool {
-	switch method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPut, http.MethodDelete:
-		return true
-	default:
-		return false
-	}
-}
-
 func retryDelay(now time.Time, attempt int, retryAfter string) time.Duration {
 	delay := time.Duration(attempt+1) * time.Second
 	if seconds, err := strconv.Atoi(retryAfter); err == nil {
-		if seconds > 0 {
-			return time.Duration(seconds) * time.Second
+		if seconds >= 0 {
+			return min(time.Duration(seconds)*time.Second, maxRetryDelay)
 		}
 		return delay
 	}
@@ -231,7 +232,7 @@ func retryDelay(now time.Time, attempt int, retryAfter string) time.Duration {
 		return delay
 	}
 	if wait := retryAt.Sub(now); wait > 0 {
-		return wait
+		return min(wait, maxRetryDelay)
 	}
 	return delay
 }

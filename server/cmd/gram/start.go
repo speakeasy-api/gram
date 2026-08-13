@@ -669,8 +669,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			loopsEnabled := loops.IsConfigured(c.String("loops-api-key"))
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient, templateIDs)
+			emailService := email.NewService(logger, loopsClient, templateIDs, loopsEnabled)
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {

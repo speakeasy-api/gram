@@ -471,8 +471,9 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			loopsEnabled := loops.IsConfigured(c.String("loops-api-key"))
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient, templateIDs)
+			emailService := email.NewService(logger, loopsClient, templateIDs, loopsEnabled)
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {

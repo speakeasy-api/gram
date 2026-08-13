@@ -134,7 +134,7 @@ func TestClient_TransactionalLifecycle(t *testing.T) {
 	require.Equal(t, []string{"resource_name"}, published.DataVariables)
 }
 
-func TestClient_DoesNotRetryMutatingRequests(t *testing.T) {
+func TestClient_DoesNotRetryCreate(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
@@ -150,10 +150,47 @@ func TestClient_DoesNotRetryMutatingRequests(t *testing.T) {
 	require.Equal(t, int32(1), calls.Load())
 }
 
-func TestRetryDelay_HonorsHTTPDate(t *testing.T) {
+func TestClient_RetriesRevisionGuardedUpdate(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "temporary failure", http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"message-1","contentRevisionId":"revision-2"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.URL, "test-key", server.Client())
+	message, err := client.UpdateEmailMessage(t.Context(), "message-1", UpdateEmailMessageInput{
+		ExpectedRevisionID: "revision-1",
+		Subject:            "Example notice",
+		PreviewText:        "Review this notice.",
+		FromName:           "Example Sender",
+		FromEmail:          "notifications",
+		ReplyToEmail:       "person@example.com",
+		LMX:                "<Paragraph>Example</Paragraph>",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "revision-2", message.ContentRevisionID)
+	require.Equal(t, int32(2), calls.Load())
+}
+
+func TestRetryDelay_HonorsHTTPDateBelowCap(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
-	retryAt := now.Add(45 * time.Second)
-	require.Equal(t, 45*time.Second, retryDelay(now, 0, retryAt.Format(http.TimeFormat)))
+	retryAt := now.Add(15 * time.Second)
+	require.Equal(t, 15*time.Second, retryDelay(now, 0, retryAt.Format(http.TimeFormat)))
+}
+
+func TestRetryDelay_CapsServerDelay(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, "3600"))
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, now.Add(time.Hour).Format(http.TimeFormat)))
 }

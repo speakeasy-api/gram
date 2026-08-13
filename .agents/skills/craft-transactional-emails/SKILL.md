@@ -16,9 +16,11 @@ updates Loops records and relays environment-specific IDs through gram-infra.
 - The checked-in gram-infra release workflow with `SYNC_LOOPS_EMAILS=true` is the
   approved automated publish path. Do not set it for local runs or call the live
   API while developing.
-- Never use customer or production names, IDs, domains, addresses, URLs, or
-  figures in source, temporary previews, screenshots, logs, or test sends. Use
-  `Example Organization`, `person@example.com`, and `<ORG_ID>`.
+- Never use customer or private production names, IDs, domains, addresses,
+  URLs, or figures in source, temporary previews, screenshots, logs, or test
+  sends. Use `Example Organization`, `person@example.com`, and `<ORG_ID>`.
+  The public Speakeasy font and favicon URLs in the approved starter are the
+  only production-asset exception; copy them unchanged when using that starter.
 - Keep transactional content operational. No marketing copy or unsubscribe UI.
 
 ## Discover the contract
@@ -61,9 +63,9 @@ two-variable template:
 {
   "version": 1,
   "defaults": {
-    "from_name": "Speakeasy",
-    "from_email": "gram",
-    "reply_to_email": "gram@speakeasy.com"
+    "from_name": "Example Organization",
+    "from_email": "example",
+    "reply_to_email": "person@example.com"
   },
   "templates": {
     "example_notice": {
@@ -79,6 +81,8 @@ two-variable template:
 
 In the existing repository manifest, preserve `version`, `defaults`, and all
 existing templates; add only the new object under `templates`.
+`from_email` is the sender local-part configured in Loops, so the neutral
+`example` value is intentionally not a complete address.
 
 Identity map:
 

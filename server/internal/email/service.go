@@ -23,19 +23,22 @@ var ErrUnregisteredTemplate = errors.New("email: template has no configured tran
 // Callers depend on this type instead of the underlying transport so we can
 // swap providers without touching feature code.
 type Service struct {
-	logger *slog.Logger
-	sender loops.Client
-	ids    TemplateIDs
+	logger  *slog.Logger
+	sender  loops.Client
+	ids     TemplateIDs
+	enabled bool
 }
 
 // NewService returns an email Service backed by the supplied Loops client.
 // The sender is expected to be a usable client — pass loops.New(...) which
-// returns a no-op when the API key is unset.
-func NewService(logger *slog.Logger, sender loops.Client, ids TemplateIDs) *Service {
+// returns a no-op when the API key is unset. Enabled must reflect whether that
+// API key configures real delivery; disabled services intentionally drop sends.
+func NewService(logger *slog.Logger, sender loops.Client, ids TemplateIDs, enabled bool) *Service {
 	return &Service{
-		logger: logger.With(attr.SlogComponent("email")),
-		sender: sender,
-		ids:    ids,
+		logger:  logger.With(attr.SlogComponent("email")),
+		sender:  sender,
+		ids:     ids,
+		enabled: enabled,
 	}
 }
 
@@ -52,9 +55,7 @@ func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempote
 	if recipient == "" {
 		return ErrEmptyRecipient
 	}
-	// Empty IDs are accepted only when startup has established that Loops is
-	// disabled, preserving the transport's no-op behavior in local development.
-	if len(s.ids) == 0 {
+	if !s.enabled {
 		return nil
 	}
 

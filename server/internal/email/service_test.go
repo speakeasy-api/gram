@@ -32,7 +32,7 @@ func TestService_Send_TranslatesTemplateToLoopsInput(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}), true)
 
 	tmpl := TeamInvite{
 		InviteLink:       "https://app.gram.sh/invite?token=xyz",
@@ -63,7 +63,7 @@ func TestService_Send_EmptyRecipientReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}), true)
 
 	err := svc.Send(t.Context(), "", TeamInvite{
 		InviteLink:       "https://example.com",
@@ -78,7 +78,7 @@ func TestService_Send_UnregisteredTemplateReturnsSentinel(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"registered": "template-id"}))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"registered": "template-id"}), true)
 
 	err := svc.Send(t.Context(), "user@example.com", unregisteredTemplate{})
 	require.ErrorIs(t, err, ErrUnregisteredTemplate)
@@ -88,7 +88,7 @@ func TestService_Send_DisabledConfigurationDropsEmail(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, make(TemplateIDs))
+	svc := NewService(testenv.NewLogger(t), sender, make(TemplateIDs), false)
 
 	err := svc.Send(t.Context(), "user@example.com", TeamInvite{
 		InviteLink:       "https://example.com",
@@ -99,11 +99,26 @@ func TestService_Send_DisabledConfigurationDropsEmail(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestService_Send_EnabledConfigurationRejectsEmptyIDs(t *testing.T) {
+	t.Parallel()
+
+	sender := newMockSender(t)
+	svc := NewService(testenv.NewLogger(t), sender, make(TemplateIDs), true)
+
+	err := svc.Send(t.Context(), "user@example.com", TeamInvite{
+		InviteLink:       "https://example.com",
+		InviterName:      "Bob",
+		InviterEmail:     "bob@example.com",
+		OrganizationName: "Example Inc",
+	})
+	require.ErrorIs(t, err, ErrUnregisteredTemplate)
+}
+
 func TestService_Send_PropagatesSenderError(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"team_invite": "team-invite-id"}), true)
 
 	transportErr := errors.New("transport boom")
 	sender.On("SendTransactional", mock.Anything, mock.Anything).Return(transportErr).Once()
@@ -123,7 +138,7 @@ func TestService_Send_RespectsTemplateAddToAudienceFlag(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"no-audience": "no-audience-id"}))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"no-audience": "no-audience-id"}), true)
 
 	sender.On("SendTransactional", mock.Anything, mock.MatchedBy(func(in loops.SendTransactionalInput) bool {
 		return !in.AddToAudience && in.TransactionalID == "no-audience-id"
@@ -137,7 +152,7 @@ func TestService_Send_NilVariablesAreForwarded(t *testing.T) {
 	t.Parallel()
 
 	sender := newMockSender(t)
-	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"nil-vars": "nil-vars-id"}))
+	svc := NewService(testenv.NewLogger(t), sender, NewTemplateIDs(map[string]string{"nil-vars": "nil-vars-id"}), true)
 
 	sender.On("SendTransactional", mock.Anything, mock.MatchedBy(func(in loops.SendTransactionalInput) bool {
 		return in.DataVariables == nil

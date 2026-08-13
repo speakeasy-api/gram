@@ -39,7 +39,7 @@ func setupOpenRouterCreditsAlertsTest(t *testing.T, dbName string) (*activities.
 		email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 			"openrouter_chat_credits_threshold":     "chat-credits-test-id",
 			"openrouter_internal_credits_threshold": "internal-credits-test-id",
-		})),
+		}), true),
 		testenv.NewMeterProvider(t),
 	)
 
