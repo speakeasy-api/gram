@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -192,4 +194,60 @@ func TestSyncIdentityMap_FoldRules(t *testing.T) {
 	for _, absent := range []string{sharedEmail, dupeLower, davePersonal, "frank-" + suffix + "@example.com", "gina-" + suffix + "@example.com", henryPersonal, orphanEmail} {
 		requireAbsent(t, ctx, chConn, org1, absent)
 	}
+}
+
+// TestReplaceIdentityMap_GenerationSwap exercises the telemetry repo's staging
+// swap directly, covering the behaviors the fold-rule sync never reaches: the
+// duplicate-key rejection (the SQL source provably cannot emit duplicates, so
+// only a direct call can trip it), an insert spanning the 5000-row chunk
+// boundary, and a key vanishing with its old generation (deletions propagate
+// by omission).
+//
+// Deliberately not parallel: identity_map is one package-global ClickHouse
+// table, and a full-refresh swap here would race the joinGet assertions in
+// TestSyncIdentityMap_FoldRules if the two tests overlapped.
+func TestReplaceIdentityMap_GenerationSwap(t *testing.T) { //nolint:paralleltest // Swaps the ClickHouse identity_map shared with TestSyncIdentityMap_FoldRules.
+	ctx := t.Context()
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	repo := telemetryrepo.New(chConn)
+	org := "org-" + uuid.NewString()[:8]
+	seedEmail := "seed-" + uuid.NewString()[:8] + "@example.com"
+
+	require.NoError(t, repo.ReplaceIdentityMap(ctx, []telemetryrepo.IdentityMapEntry{
+		{OrgID: org, EmailLower: seedEmail, CanonicalUserID: "user-a", CanonicalEmail: seedEmail},
+	}))
+	requireFoldsTo(t, ctx, chConn, org, seedEmail, "user-a", seedEmail)
+
+	// A duplicate (org, email) key is rejected before either table is touched,
+	// so the previous complete generation keeps serving.
+	err = repo.ReplaceIdentityMap(ctx, []telemetryrepo.IdentityMapEntry{
+		{OrgID: org, EmailLower: seedEmail, CanonicalUserID: "user-a", CanonicalEmail: seedEmail},
+		{OrgID: org, EmailLower: seedEmail, CanonicalUserID: "user-b", CanonicalEmail: seedEmail},
+	})
+	require.ErrorContains(t, err, "duplicate identity map key")
+	requireFoldsTo(t, ctx, chConn, org, seedEmail, "user-a", seedEmail)
+
+	// One entry beyond the insert chunk size (identityMapInsertChunk = 5000):
+	// rows land on both sides of the chunk boundary, and the seed key is gone
+	// with the generation that carried it.
+	entries := make([]telemetryrepo.IdentityMapEntry, 0, 5001)
+	for i := range 5001 {
+		email := fmt.Sprintf("bulk-%d-%s@example.com", i, org)
+		entries = append(entries, telemetryrepo.IdentityMapEntry{
+			OrgID:           org,
+			EmailLower:      email,
+			CanonicalUserID: fmt.Sprintf("user-%d", i),
+			CanonicalEmail:  email,
+		})
+	}
+	require.NoError(t, repo.ReplaceIdentityMap(ctx, entries))
+
+	for _, i := range []int{0, 4999, 5000} {
+		email := fmt.Sprintf("bulk-%d-%s@example.com", i, org)
+		requireFoldsTo(t, ctx, chConn, org, email, fmt.Sprintf("user-%d", i), email)
+	}
+	requireAbsent(t, ctx, chConn, org, seedEmail)
 }
