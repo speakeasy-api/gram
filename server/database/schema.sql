@@ -1587,6 +1587,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   refresh_token_hash TEXT NOT NULL,
   refresh_expires_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL,
+  -- Tool selection the subject chose on the consent screen, carried across
+  -- refresh-grant slides. NULL means all tools. Shape and mode values are
+  -- validated in application code.
+  tool_selection JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1609,6 +1613,12 @@ WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
+WHERE deleted IS FALSE;
+
+-- Serve-path tool-selection lookup: sessions are addressed by issuer + jti on
+-- every runtime request.
+CREATE INDEX IF NOT EXISTS user_sessions_user_session_issuer_id_jti_idx
+ON user_sessions (user_session_issuer_id, jti)
 WHERE deleted IS FALSE;
 
 -- Remote Session Issuers are references to external authorization servers
