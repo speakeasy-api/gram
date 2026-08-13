@@ -16,9 +16,13 @@ import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 import { cn } from "@/lib/utils";
 import {
-  getOrganization,
-  listOrganizationProjects,
-  listOrganizationMembers,
+  organizationMembersQuery,
+  organizationProjectsQuery,
+  organizationQuery,
+  organizationsListQuery,
+} from "@/lib/adminQueries";
+import {
+  errorMessage,
   updateOrganization,
   type AdminOrganization,
   type AdminProject,
@@ -50,9 +54,8 @@ export function OrganizationDetail(): JSX.Element {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const navigate = useNavigate();
 
-  const { data, isLoading, isError, error } = useQuery<AdminOrganization>({
-    queryKey: ["gram-admin-organization", idOrSlug],
-    queryFn: () => getOrganization(idOrSlug),
+  const { data, isLoading, isError, error } = useQuery({
+    ...organizationQuery(idOrSlug),
     enabled: !!idOrSlug,
   });
 
@@ -82,7 +85,7 @@ export function OrganizationDetail(): JSX.Element {
         )}
         {isError && (
           <span className="text-muted-foreground text-sm">
-            Error: {(error as Error).message}
+            Error: {errorMessage(error)}
           </span>
         )}
 
@@ -123,9 +126,11 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
       }),
     onSuccess: (updated) => {
       setDraft({});
-      qc.setQueryData(["gram-admin-organization", org.id], updated);
-      qc.setQueryData(["gram-admin-organization", org.slug], updated);
-      void qc.invalidateQueries({ queryKey: ["gram-admin-organizations"] });
+      qc.setQueryData(organizationQuery(org.id).queryKey, updated);
+      qc.setQueryData(organizationQuery(org.slug).queryKey, updated);
+      void qc.invalidateQueries({
+        queryKey: organizationsListQuery().queryKey,
+      });
     },
   });
 
@@ -250,7 +255,7 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
           </Button>
           {mut.isError && (
             <span className="text-muted-foreground text-sm">
-              Error: {(mut.error as Error).message}
+              Error: {errorMessage(mut.error)}
             </span>
           )}
         </div>
@@ -325,8 +330,7 @@ const PROJECT_COLUMNS: Column<AdminProject>[] = [
 function OrgProjectsPanel({ orgID }: { orgID: string }) {
   const navigate = useNavigate();
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["gram-admin-organization-projects", orgID],
-    queryFn: () => listOrganizationProjects(orgID),
+    ...organizationProjectsQuery(orgID),
     enabled: !!orgID,
   });
 
@@ -406,8 +410,7 @@ function membersMessage(isLoading: boolean, isError: boolean): string {
 
 function OrgMembersPanel({ orgID }: { orgID: string }) {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["gram-admin-organization-members", orgID],
-    queryFn: () => listOrganizationMembers(orgID),
+    ...organizationMembersQuery(orgID),
     enabled: !!orgID,
   });
 
