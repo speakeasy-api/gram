@@ -1,21 +1,17 @@
 ---
 name: craft-transactional-emails
-description: Use when creating, restyling, reviewing, validating, syncing, or previewing Gram/Speakeasy transactional emails in Loops, LMX, or MJML, including email templates, branded email, Loops Content API, email screenshots, desktop/mobile QA, logical template IDs, or files under server/internal/email/loops/.
+description: Use when creating, restyling, reviewing, validating, or previewing Gram/Speakeasy transactional emails in LMX or MJML, including branded email, email screenshots, desktop/mobile QA, or files under server/internal/email/loops/.
 ---
 
 # Craft transactional emails
 
 LMX in `server/internal/email/loops/` is the production delivery source. The
-inline MJML starter is the approved visual specification. Release CI creates or
-updates Loops records and relays environment-specific IDs through gram-infra.
+inline MJML starter is the approved visual specification.
 
 ## Authorization and confidentiality
 
 - Repository edits do not authorize manual Loops reads, mutations, previews,
   test-sends, or publishes. Resolve each external action separately.
-- The checked-in gram-infra release workflow with `SYNC_LOOPS_EMAILS=true` is the
-  approved automated publish path. Do not set it for local runs or call the live
-  API while developing.
 - Never use customer or private production names, IDs, domains, addresses,
   URLs, or figures in source, temporary previews, screenshots, logs, or test
   sends. Use `Example Organization`, `person@example.com`, and `<ORG_ID>`.
@@ -29,8 +25,8 @@ updates Loops records and relays environment-specific IDs through gram-infra.
 2. Inspect `server/internal/email/template_<name>.go`, `templates.go`,
    `loops/manifest.json`, and the matching `.lmx` file.
 3. For an existing email, reuse its logical key. For a new email, choose one
-   snake-case key and use it unchanged in Go, manifest, managed name, and runtime
-   lookup. Never add a variable only in LMX or only in Go.
+   snake-case key and use it unchanged in Go, manifest, and managed name. Never
+   add a variable only in LMX or only in Go.
 4. Treat the inline MJML starter below as the approved visual source of truth.
    Preserve its spectrum rail, light canvas, Speakeasy wordmark, restrained mono
    labels, Tobias editorial headline, square black CTA, and dashed pale footer.
@@ -47,8 +43,7 @@ New-template checklist:
    `RegisteredTemplates` in `templates.go`.
 3. Copy `loops/transactional_base.lmx` to `loops/<key>.lmx`, specialize the
    message, and replace every generic variable with the typed contract.
-4. Add `manifest.json` metadata. This entry enrolls the template in merge-driven
-   creation; no provider ID belongs in Gram.
+4. Add `manifest.json` metadata. No provider ID belongs in Gram.
 
 `AddToAudience()` controls whether Loops also creates/updates a contact for the
 recipient. Default to `false` for operational alerts and one-off recipients.
@@ -86,12 +81,10 @@ existing templates; add only the new object under `templates`.
 
 Identity map:
 
-| Identity     | Example                                | Owner              | Human edit?      |
-| ------------ | -------------------------------------- | ------------------ | ---------------- |
-| Logical key  | `example_notice`                       | Gram Go + manifest | Yes, when adding |
-| Managed name | `gram.transactional.v2.example_notice` | Manifest/Loops     | Manifest only    |
-| Remote ID    | `cm...`                                | Loops              | Never            |
-| Key → ID map | `email-templates-dev.yaml`             | gram-infra CI      | Never            |
+| Identity     | Example                                | Owner              |
+| ------------ | -------------------------------------- | ------------------ |
+| Logical key  | `example_notice`                       | Gram Go + manifest |
+| Managed name | `gram.transactional.v2.example_notice` | Manifest/Loops     |
 
 - New managed names are `gram.transactional.v2.<logical_key>`.
 - Add the LMX file and a `manifest.json` entry with subject, preview, source, and
@@ -108,10 +101,7 @@ Identity map:
 - State the event or action directly. Delete vague lead-ins such as “a clear read
   on how your organization is tracking.” Prefer one verb-led CTA.
 - Use conditional `<Section>` blocks for variants. Do not invent fallback syntax.
-- Keep condition-only variables in the Go and manifest contract. Loops omits
-  variables used only by a Section `if` attribute from its published
-  `dataVariables` metadata; repository reconciliation accounts for that provider
-  behavior while continuing to verify every rendered variable exactly.
+- Keep condition-only variables in the Go and manifest contract.
 - LMX cannot embed raw HTML. Send scalar variables and compose the layout in LMX.
 - `<Image src>` must be a Loops-hosted upload. Do not use a repo-local or public
   URL as `src`; use a text masthead until an upload is deliberately managed.
@@ -368,16 +358,15 @@ git diff --check
 
 This checks manifest structure, XML well-formedness and explicit provider
 attribute ranges across every `.lmx` file recursively, declared/used variables,
-Go contracts, API reconciliation behavior, and runtime ID resolution. Merge CI
-then uses Loops compilation, optimistic revisions, Guardian, and publish; any
-Guardian error blocks the release preparation.
+and Go contracts.
 
 ## Screenshots and visual QA
 
 For every new template or layout change, create a temporary MJML specialization
-from the approved `transactional_base.mjml`. It is the canonical visual—not a
-proxy derived from LMX. Use the same copy/sections and generic sample values.
-Do not commit the proxy. A copy-only change using an already-reviewed
+from the approved `transactional_base.mjml` to review the intended design. These
+screenshots are design-spec previews, not renders of the production LMX in
+Loops. Use the same copy/sections and generic sample values. Do not commit the
+preview. A copy-only change using an already-reviewed
 layout may reuse existing shell references in `.playwright-cli/email-previews/`.
 If repo artifact writes are not authorized, keep everything under `/tmp/<task>/`.
 
@@ -396,61 +385,11 @@ kill "$preview_pid"
 
 This is **local visual-spec QA**. Inspect both PNGs with the image viewer. Reject overflow, weak hierarchy, empty
 blocks, broken images, unresolved variables, non-placeholder identity, or excess
-whitespace. MJML is a visual proxy, not proof that production LMX is identical.
-Passing local QA means the proxy compiles and both screenshots pass inspection;
-this satisfies repository-source QA. Report **production-render QA** as
+whitespace. Passing local QA means the design preview compiles and both
+screenshots pass inspection; it does not prove that production LMX renders
+identically. Report **production-render QA** as
 unverified unless a separately authorized Loops preview was also inspected.
 
 LMX has no local renderer. Production-render QA requires a separately authorized
 Loops draft preview; if unavailable, report it as incomplete. Guardian proves
 semantic validity, not Gmail/Outlook appearance.
-
-## CI and runtime behavior
-
-A push to Gram `main` runs `.github/workflows/pr.yaml`, which dispatches
-gram-infra’s `Prepare Release`. The checked-out manifest is sufficient to trigger
-create/update, Guardian, publish, ID-overlay generation, and the release PR.
-
-Delivery timeline:
-
-1. Gram `main` dispatches a dev prepare after its CI and images pass.
-2. Prepare reconciles/publishes in dev and opens/updates the gram-infra dev
-   release PR with `email-templates-dev.yaml`.
-3. Merging that PR lets ArgoCD deploy the image and ID map to dev GKE.
-4. The merge triggers promotion. Each target prepare independently reconciles
-   its Loops environment, writes that environment's IDs, and opens its promotion
-   PR; merging it lets ArgoCD deploy the target map.
-
-Confirm success from the workflow summary, generated overlay diff, green pod
-startup, and the expected `GRAM_EMAIL_TEMPLATE_IDS` key count. A template-source
-task stops here. If the request also introduces a new sending event, wire its
-`email.Service.Send` call and add a focused event-path test in the same change.
-
-- First sync creates/reuses only the exact v2 managed name; legacy emails remain
-  untouched for rollback. Duplicate managed names fail closed.
-- A committed ID is authoritative. If it belongs to another name, CI stops.
-- A partial run is recoverable by exact managed name before its ID is committed.
-- gram-infra writes non-secret IDs to `email-templates-<env>.yaml`; Helm injects
-  JSON as `GRAM_EMAIL_TEMPLATE_IDS` into server and worker.
-- With Loops enabled, application startup rejects missing or unknown keys.
-- Do not hand-edit generated IDs or store them in Postgres.
-
-Recovery is safe and rerunnable:
-
-| Failure                       | Result / action                                              |
-| ----------------------------- | ------------------------------------------------------------ |
-| Created before ID commit      | Rerun; exact managed name recovers it                        |
-| Update/publish failure        | Rerun; existing draft is reconciled                          |
-| Guardian error                | Fix source; rerun release                                    |
-| Duplicate managed name        | Remove/rename duplicate in Loops with authorization          |
-| Revision conflict             | Rerun to fetch current revision; reconcile intentional edits |
-| Committed ID points elsewhere | Stop; repair generated mapping/provider state deliberately   |
-
-## Common failures
-
-- Uploading MJML through the Content API: automation requires LMX.
-- Adopting or renaming legacy Loops records instead of creating v2 records.
-- Treating the starter as runtime inheritance.
-- Committing an LMX variable absent from the Go template, or leaving dead backend
-  merge variables for raw HTML LMX cannot render.
-- Running live sync locally or exposing the API key in argv, output, or Git.

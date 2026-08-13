@@ -11,20 +11,20 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
-	DefaultBaseURL = "https://app.loops.so/api/v1"
-	maxRetryDelay  = 30 * time.Second
+	DefaultBaseURL         = "https://app.loops.so/api/v1"
+	maxRetryDelay          = 30 * time.Second
+	mutationRequestSpacing = 3 * time.Second
 )
 
 type TransactionalEmail struct {
-	ID                                 string   `json:"id"`
-	Name                               string   `json:"name"`
-	DraftEmailMessageID                *string  `json:"draftEmailMessageId"`
-	DraftEmailMessageContentRevisionID *string  `json:"draftEmailMessageContentRevisionId"`
-	PublishedEmailMessageID            *string  `json:"publishedEmailMessageId"`
-	DataVariables                      []string `json:"dataVariables"`
+	ID                  string  `json:"id"`
+	Name                string  `json:"name"`
+	DraftEmailMessageID *string `json:"draftEmailMessageId"`
 }
 
 type EmailMessage struct {
@@ -57,7 +57,7 @@ type API interface {
 	GetEmailMessage(context.Context, string) (EmailMessage, error)
 	UpdateEmailMessage(context.Context, string, UpdateEmailMessageInput) (EmailMessage, error)
 	Guardian(context.Context, string) (GuardianResult, error)
-	Publish(context.Context, string) (TransactionalEmail, error)
+	Publish(context.Context, string) error
 }
 
 type UpdateEmailMessageInput struct {
@@ -71,9 +71,10 @@ type UpdateEmailMessageInput struct {
 }
 
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient HTTPDoer
+	baseURL         string
+	apiKey          string
+	httpClient      HTTPDoer
+	mutationLimiter *rate.Limiter
 }
 
 type HTTPDoer interface {
@@ -86,7 +87,12 @@ type requestOptions struct {
 }
 
 func NewClient(baseURL, apiKey string, httpClient HTTPDoer) *Client {
-	return &Client{baseURL: strings.TrimRight(baseURL, "/"), apiKey: apiKey, httpClient: httpClient}
+	return &Client{
+		baseURL:         strings.TrimRight(baseURL, "/"),
+		apiKey:          apiKey,
+		httpClient:      httpClient,
+		mutationLimiter: rate.NewLimiter(rate.Every(mutationRequestSpacing), 1),
+	}
 }
 
 func (c *Client) ListTransactionalEmails(ctx context.Context) ([]TransactionalEmail, error) {
@@ -152,10 +158,8 @@ func (c *Client) Guardian(ctx context.Context, id string) (GuardianResult, error
 	return result, err
 }
 
-func (c *Client) Publish(ctx context.Context, id string) (TransactionalEmail, error) {
-	var result TransactionalEmail
-	err := c.do(ctx, http.MethodPost, "/transactional-emails/"+url.PathEscape(id)+"/publish", nil, &result, requestOptions{expectedStatus: http.StatusOK, retryable: false})
-	return result, err
+func (c *Client) Publish(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodPost, "/transactional-emails/"+url.PathEscape(id)+"/publish", nil, nil, requestOptions{expectedStatus: http.StatusOK, retryable: false})
 }
 
 func (c *Client) do(ctx context.Context, method, path string, input, output any, options requestOptions) error {
@@ -169,6 +173,12 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 	}
 
 	for attempt := range 3 {
+		if method != http.MethodGet {
+			if err := c.mutationLimiter.Wait(ctx); err != nil {
+				return fmt.Errorf("wait for Loops Content API mutation rate limit: %w", err)
+			}
+		}
+
 		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(payload))
 		if err != nil {
 			return fmt.Errorf("build Loops request: %w", err)
@@ -197,7 +207,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 		}
 
 		if attempt < 2 && options.retryable && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) {
-			delay := retryDelay(time.Now(), attempt, resp.Header.Get("Retry-After"))
+			delay := retryDelay(time.Now(), attempt, resp.Header.Get("Retry-After"), resp.StatusCode)
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("wait to retry Loops Content API: %w", ctx.Err())
@@ -218,8 +228,11 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any,
 	return fmt.Errorf("loops Content API %s %s exhausted retries", method, path)
 }
 
-func retryDelay(now time.Time, attempt int, retryAfter string) time.Duration {
+func retryDelay(now time.Time, attempt int, retryAfter string, statusCode int) time.Duration {
 	delay := time.Duration(attempt+1) * time.Second
+	if statusCode == http.StatusTooManyRequests {
+		delay = maxRetryDelay
+	}
 	if seconds, err := strconv.Atoi(retryAfter); err == nil {
 		if seconds >= 0 {
 			maxSeconds := int(maxRetryDelay / time.Second)

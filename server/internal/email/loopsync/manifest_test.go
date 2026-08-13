@@ -149,7 +149,7 @@ func TestManifestValidate_ValidatesNestedUnregisteredLMXFiles(t *testing.T) {
 	require.ErrorContains(t, err, `Paragraph attribute "fontSize" must be an integer between 12 and 64 (got "10")`)
 }
 
-func TestManifestValidate_SeparatesConditionOnlyPublishedVariables(t *testing.T) {
+func TestManifestValidate_AcceptsConditionVariable(t *testing.T) {
 	t.Parallel()
 
 	manifest := validManifest(t)
@@ -160,9 +160,6 @@ func TestManifestValidate_SeparatesConditionOnlyPublishedVariables(t *testing.T)
 	require.NoError(t, os.WriteFile(filepath.Join(manifest.Dir, "example_notice.lmx"), []byte(lmx), 0o600))
 
 	require.NoError(t, manifest.Validate())
-	spec = manifest.Templates["example_notice"]
-	require.Equal(t, []string{"resource_name", "show_resource"}, spec.SourceVariables)
-	require.Equal(t, []string{"resource_name"}, spec.PublishedVariables)
 }
 
 func validManifest(t *testing.T) *Manifest {
@@ -180,15 +177,13 @@ func validManifest(t *testing.T) *Manifest {
 		},
 		Templates: map[string]TemplateSpec{
 			"example_notice": {
-				ManagedName:        "gram.transactional.v2.example_notice",
-				Subject:            "Example notice",
-				PreviewText:        "Review this notice.",
-				Source:             "example_notice.lmx",
-				Variables:          []string{"resource_name"},
-				UnusedVariables:    nil,
-				LMX:                "",
-				SourceVariables:    nil,
-				PublishedVariables: nil,
+				ManagedName:     "gram.transactional.v2.example_notice",
+				Subject:         "Example notice",
+				PreviewText:     "Review this notice.",
+				Source:          "example_notice.lmx",
+				Variables:       []string{"resource_name"},
+				UnusedVariables: nil,
+				LMX:             "",
 			},
 		},
 		Dir: dir,

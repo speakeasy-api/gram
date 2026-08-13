@@ -12,7 +12,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
+
+func newTestClient(baseURL, apiKey string, httpClient HTTPDoer) *Client {
+	client := NewClient(baseURL, apiKey, httpClient)
+	client.mutationLimiter = rate.NewLimiter(rate.Inf, 1)
+	return client
+}
+
+func TestNewClient_ConfiguresMutationPacing(t *testing.T) {
+	t.Parallel()
+
+	client := NewClient("https://example.com", "test-key", nil)
+	require.InDelta(t, float64(rate.Every(mutationRequestSpacing)), float64(client.mutationLimiter.Limit()), 0.000_001)
+	require.Equal(t, 1, client.mutationLimiter.Burst())
+}
 
 func TestClient_ListsAndCreatesTransactionalEmails(t *testing.T) {
 	t.Parallel()
@@ -42,17 +57,13 @@ func TestClient_ListsAndCreatesTransactionalEmails(t *testing.T) {
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
-	client := NewClient(server.URL+"/api/v1", "test-key", server.Client())
+	client := newTestClient(server.URL+"/api/v1", "test-key", server.Client())
 
 	listed, err := client.ListTransactionalEmails(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, []TransactionalEmail{{
-		ID:                                 "id-1",
-		Name:                               "gram.transactional.v2.team_invite",
-		DraftEmailMessageID:                nil,
-		DraftEmailMessageContentRevisionID: nil,
-		PublishedEmailMessageID:            nil,
-		DataVariables:                      nil,
+		ID:   "id-1",
+		Name: "gram.transactional.v2.team_invite",
 	}}, listed)
 
 	created, err := client.CreateTransactionalEmail(t.Context(), "gram.transactional.v2.team_invite")
@@ -101,7 +112,7 @@ func TestClient_TransactionalLifecycle(t *testing.T) {
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
-	client := NewClient(server.URL+"/api/v1", "test-key", server.Client())
+	client := newTestClient(server.URL+"/api/v1", "test-key", server.Client())
 
 	transactional, err := client.GetTransactionalEmail(t.Context(), "id-1")
 	require.NoError(t, err)
@@ -131,9 +142,7 @@ func TestClient_TransactionalLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, guardian.Errors)
 
-	published, err := client.Publish(t.Context(), "id-1")
-	require.NoError(t, err)
-	require.Equal(t, []string{"resource_name"}, published.DataVariables)
+	require.NoError(t, client.Publish(t.Context(), "id-1"))
 }
 
 func TestClient_DoesNotRetryCreate(t *testing.T) {
@@ -146,7 +155,7 @@ func TestClient_DoesNotRetryCreate(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, "test-key", server.Client())
+	client := newTestClient(server.URL, "test-key", server.Client())
 	_, err := client.CreateTransactionalEmail(t.Context(), "gram.transactional.v2.example_notice")
 	require.Error(t, err)
 	require.Equal(t, int32(1), calls.Load())
@@ -166,7 +175,7 @@ func TestClient_RetriesRevisionGuardedUpdate(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, "test-key", server.Client())
+	client := newTestClient(server.URL, "test-key", server.Client())
 	message, err := client.UpdateEmailMessage(t.Context(), "message-1", UpdateEmailMessageInput{
 		ExpectedRevisionID: "revision-1",
 		Subject:            "Example notice",
@@ -186,14 +195,22 @@ func TestRetryDelay_HonorsHTTPDateBelowCap(t *testing.T) {
 
 	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
 	retryAt := now.Add(15 * time.Second)
-	require.Equal(t, 15*time.Second, retryDelay(now, 0, retryAt.Format(http.TimeFormat)))
+	require.Equal(t, 15*time.Second, retryDelay(now, 0, retryAt.Format(http.TimeFormat), http.StatusTooManyRequests))
 }
 
 func TestRetryDelay_CapsServerDelay(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
-	require.Equal(t, maxRetryDelay, retryDelay(now, 0, "3600"))
-	require.Equal(t, maxRetryDelay, retryDelay(now, 0, strconv.Itoa(math.MaxInt)))
-	require.Equal(t, maxRetryDelay, retryDelay(now, 0, now.Add(time.Hour).Format(http.TimeFormat)))
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, "3600", http.StatusTooManyRequests))
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, strconv.Itoa(math.MaxInt), http.StatusTooManyRequests))
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, now.Add(time.Hour).Format(http.TimeFormat), http.StatusTooManyRequests))
+}
+
+func TestRetryDelay_RateLimitWithoutHeaderUsesCap(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, "", http.StatusTooManyRequests))
+	require.Equal(t, time.Second, retryDelay(now, 0, "", http.StatusInternalServerError))
 }
