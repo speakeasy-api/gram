@@ -65,7 +65,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
-	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
@@ -665,13 +664,10 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
-			templateIDs, err := loadEmailTemplateIDs(c)
+			emailService, err := newEmailService(ctx, c, logger, guardianPolicy)
 			if err != nil {
 				return err
 			}
-			loopsEnabled := loops.IsConfigured(c.String("loops-api-key"))
-			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient, templateIDs, loopsEnabled)
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {

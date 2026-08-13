@@ -2,8 +2,10 @@ package loopsync
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -192,5 +194,6 @@ func TestRetryDelay_CapsServerDelay(t *testing.T) {
 
 	now := time.Date(2026, time.August, 13, 12, 0, 0, 0, time.UTC)
 	require.Equal(t, maxRetryDelay, retryDelay(now, 0, "3600"))
+	require.Equal(t, maxRetryDelay, retryDelay(now, 0, strconv.Itoa(math.MaxInt)))
 	require.Equal(t, maxRetryDelay, retryDelay(now, 0, now.Add(time.Hour).Format(http.TimeFormat)))
 }

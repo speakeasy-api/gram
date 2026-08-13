@@ -222,7 +222,8 @@ func retryDelay(now time.Time, attempt int, retryAfter string) time.Duration {
 	delay := time.Duration(attempt+1) * time.Second
 	if seconds, err := strconv.Atoi(retryAfter); err == nil {
 		if seconds >= 0 {
-			return min(time.Duration(seconds)*time.Second, maxRetryDelay)
+			maxSeconds := int(maxRetryDelay / time.Second)
+			return time.Duration(min(seconds, maxSeconds)) * time.Second
 		}
 		return delay
 	}
