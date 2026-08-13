@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -374,7 +375,7 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 // result or logs.
 func identityProviderDynamicRegistrationError(err error) error {
 	var registrationErr *remotesessions.DynamicClientRegistrationError
-	if errors.As(err, &registrationErr) && registrationErr.StatusCode >= 400 && registrationErr.StatusCode < 500 {
+	if errors.As(err, &registrationErr) && registrationErr.StatusCode >= 400 && registrationErr.StatusCode < 500 && registrationErr.StatusCode != http.StatusRequestTimeout && registrationErr.StatusCode != http.StatusTooManyRequests {
 		return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnsupported)
 	}
 	return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnavailable)

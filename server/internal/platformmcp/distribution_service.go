@@ -184,7 +184,10 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		return Distribution{}, fmt.Errorf("get live platform mcp plugin attachment: %w", err)
 	}
 
-	created := false
+	// Preserve the ownership fact across reauthorization. A live attachment that
+	// was originally created by this workflow remains removable by this workflow;
+	// a pre-existing attachment remains administration-owned.
+	created := found && existing.AttachmentWasCreated
 	if errors.Is(err, pgx.ErrNoRows) {
 		pluginServerID, attached, err := s.attach(ctx, tx, distributionAuthContext(principal), principal.OrganizationID, target.ProjectID, target.McpServerID.UUID, distributionDisplayName(target))
 		if err != nil {
@@ -196,7 +199,12 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		live.ID = pluginServerID
 		created = true
 	}
-	if found && existing.State == distributionStateAttached && existing.PluginServerID.Valid && existing.PluginServerID.UUID == live.ID {
+	if found &&
+		existing.State == distributionStateAttached &&
+		existing.PluginServerID.Valid &&
+		existing.PluginServerID.UUID == live.ID &&
+		existing.ConnectionID == connectionID &&
+		existing.ConnectionGeneration == generation {
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution: %w", err)
 		}
@@ -294,13 +302,16 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Distribution{}, fmt.Errorf("get live platform mcp plugin attachment for removal: %w", err)
 	}
-	if errors.Is(err, pgx.ErrNoRows) && found && existing.State == distributionStateRemoved {
+	if found && existing.State == distributionStateRemoved && (errors.Is(err, pgx.ErrNoRows) || !existing.AttachmentWasCreated) {
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution removal: %w", err)
 		}
-		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: false, PublicationState: existing.PublicationState}, nil
+		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: err == nil, PublicationState: existing.PublicationState}, nil
 	}
-	if err == nil {
+	// A Default plugin may already have contained this MCP when Platform MCP
+	// began tracking the onboarding distribution. Only remove attachments this
+	// workflow created; pre-existing administration-owned attachments remain live.
+	if err == nil && existing.AttachmentWasCreated {
 		removed, err := pluginQueries.RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: live.ID, PluginID: plugin.ID})
 		if err != nil {
 			return Distribution{}, fmt.Errorf("remove platform mcp plugin attachment: %w", err)
@@ -340,7 +351,12 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp distribution removal: %w", err)
 	}
-	return s.publishCommittedDistribution(ctx, principal, row, "Remove Platform MCP from Default plugin")
+	if _, err := s.publishCommittedDistribution(ctx, principal, row, "Remove Platform MCP from Default plugin"); err != nil {
+		return Distribution{}, err
+	}
+	// Current reads the attachment authority after publication, including an
+	// administration-owned attachment intentionally preserved above.
+	return s.Current(ctx, principal, input.ProjectSlug)
 }
 
 // RepairPublication replays the same post-commit desired-state publication

@@ -30,7 +30,6 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 		Name:        "search_mcp_catalog",
 		Title:       "Search MCP Catalog",
 		Description: "Search reviewed catalog MCP candidates available for Platform onboarding. The results do not install or distribute an MCP.",
-		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

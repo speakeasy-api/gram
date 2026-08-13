@@ -93,13 +93,35 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.EqualValues(t, 1, repeated.Version)
 	require.True(t, repeated.AttachmentLive)
 
-	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: repeated.Version})
+	connectionID := connectionIDFromPrincipal(t, principal)
+	newGeneration := uuid.New()
+	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
+		ActiveGeneration: newGeneration,
+		ReauthorizedAt:   timestamp(time.Now().UTC()),
+		ConnectionID:     connectionID,
+		OrganizationID:   principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	principal.Generation = newGeneration.String()
+	_, err = store.RecordReadiness(ctx, principal, ReadinessBinding{
+		ProjectID:                        project.ID,
+		RegistrationID:                   registration.ID,
+		ProviderAuthorizationFingerprint: "fixture-readiness-reauthorized",
+	}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
+	require.NoError(t, err)
+
+	reauthorized, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: repeated.Version})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, reauthorized.Version, "a reauthorized connection must own current distribution state")
+	require.True(t, reauthorized.AttachmentLive)
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: reauthorized.Version})
 	require.NoError(t, err)
 	require.Equal(t, distributionStateRemoved, removed.State)
-	require.EqualValues(t, 2, removed.Version)
+	require.EqualValues(t, 3, removed.Version)
 	require.False(t, removed.AttachmentLive)
 	require.Equal(t, publicationStateCurrent, removed.PublicationState)
-	require.Equal(t, 2, published)
+	require.Equal(t, 3, published)
 
 	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
 		PluginID:    defaultPlugin.ID,
@@ -113,9 +135,50 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	redistributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: removed.Version})
 	require.NoError(t, err)
 	require.Equal(t, distributionStateAttached, redistributed.State)
-	require.EqualValues(t, 3, redistributed.Version)
+	require.EqualValues(t, 4, redistributed.Version)
 	require.Equal(t, publicationStateCurrent, redistributed.PublicationState)
-	require.Equal(t, 3, published)
+	require.Equal(t, 4, published)
+}
+
+func TestDistributionServicePreservesPreexistingAttachmentOnRemoval(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_preexisting_attachment")
+	require.NoError(t, err)
+
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	target, err := platformrepo.New(conn).GetPlatformMCPOnboardingDistributionTarget(ctx, platformrepo.GetPlatformMCPOnboardingDistributionTargetParams{
+		OrganizationID:       principal.OrganizationID,
+		InitiatingSubjectUrn: userSubjectURN(principal.UserID),
+	})
+	require.NoError(t, err)
+	require.True(t, target.McpServerID.Valid)
+
+	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	preexisting, err := pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID:    plugin.ID,
+		McpServerID: target.McpServerID,
+		DisplayName: "Admin-managed MCP",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	service := NewDistributionService(conn, nil, testExistingDefaultPluginAttacher(principal.OrganizationID), func(context.Context, uuid.UUID, string, string) error { return nil })
+	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.True(t, distributed.AttachmentLive)
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.Equal(t, distributionStateRemoved, removed.State)
+	require.True(t, removed.AttachmentLive, "removing onboarding state must not delete a pre-existing plugin attachment")
+
+	live, err := pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{PluginID: plugin.ID, McpServerID: target.McpServerID})
+	require.NoError(t, err)
+	require.Equal(t, preexisting.ID, live.ID)
 }
 
 func TestDistributionServicePreservesAttachmentWhenPublicationFails(t *testing.T) {

@@ -136,6 +136,16 @@ func (s *RegistrationService) WithDashboardURL(dashboardURL *url.URL) *Registrat
 	return s
 }
 
+// RegistrationCatalogIdentity resolves the server-owned catalog identity for a
+// lifecycle-bound registration. It keeps management adapters from depending on
+// RegistrationService persistence internals.
+func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error) {
+	if s == nil || s.store == nil {
+		return CatalogCandidate{}, ErrRegistrationUnavailable
+	}
+	return s.store.ResolveRegistrationCatalogIdentity(ctx, principal, project, registrationID)
+}
+
 // DashboardSetupURL returns the existing Remote MCP server Authentication
 // settings page for a browser-catalogue registration. This is the browser-only
 // fallback for provider attachment; callers cannot provide an endpoint, source,

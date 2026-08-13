@@ -724,6 +724,12 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp remote source: %w", err)
 	}
 	for _, header := range configuration.headers {
+		// Secret header values are collected only by the secure dashboard path.
+		// Reject a plaintext secret here rather than persisting it through the
+		// non-encrypting repository directly.
+		if header.secret && header.value != "" {
+			return platformrepo.PlatformMcpCatalogRegistration{}, ErrCatalogConfigurationRejected
+		}
 		if _, err := remotemcprepo.New(tx).CreateServerHeader(ctx, remotemcprepo.CreateServerHeaderParams{
 			Name:                   header.name,
 			Description:            optionalText(header.description),

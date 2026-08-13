@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,6 +27,18 @@ func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	service := &CatalogIdentityProviderAttachmentService{}
 	_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{"", "  "})
 
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
+func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: status})
+		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable, status)
+	}
+
+	err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: http.StatusBadRequest})
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
 

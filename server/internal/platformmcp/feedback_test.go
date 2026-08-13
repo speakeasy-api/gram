@@ -40,6 +40,17 @@ func TestValidateFeedbackInputRejectsSensitiveOrOutOfBoundsValues(t *testing.T) 
 	}
 }
 
+func TestValidateFeedbackInputAcceptsRegisteredIdentityProviderTool(t *testing.T) {
+	t.Parallel()
+
+	err := validateFeedbackInput(testPrincipal(), FeedbackInput{
+		Category:       "success",
+		ToolName:       "attach_platform_mcp_identity_provider",
+		IdempotencyKey: "feedback-identity-provider",
+	})
+	require.NoError(t, err)
+}
+
 func TestFeedbackNoteSafeTextAllowsOrdinaryPunctuationAndRejectsIdentifiers(t *testing.T) {
 	t.Parallel()
 
