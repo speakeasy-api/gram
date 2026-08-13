@@ -48381,6 +48381,116 @@ paths:
       x-speakeasy-name-override: listDefinitions
       x-speakeasy-react-hook:
         name: TriggerDefinitions
+  /rpc/triggers.listEvents:
+    get:
+      description: List recent dispatch events for a trigger instance.
+      operationId: listTriggerEvents
+      parameters:
+        - allowEmptyValue: true
+          description: The trigger instance ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The trigger instance ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of events to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of events to return.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTriggerEventsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listTriggerEvents triggers
+      tags:
+        - triggers
+      x-speakeasy-name-override: listEvents
+      x-speakeasy-react-hook:
+        name: TriggerEvents
   /rpc/triggers.pause:
     post:
       description: Pause a trigger instance.
@@ -62921,6 +63031,16 @@ components:
           description: The available trigger definitions.
       required:
         - definitions
+    ListTriggerEventsResult:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerEvent'
+          description: The dispatch events for the trigger instance, most recent first.
+      required:
+        - events
     ListTriggerInstancesResult:
       type: object
       properties:
@@ -73001,6 +73121,50 @@ components:
       required:
         - name
         - required
+    TriggerEvent:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          description: Number of processing attempts.
+          format: int64
+        chat_id:
+          type: string
+          description: The conversation the event was routed to.
+          format: uuid
+        created_at:
+          type: string
+          description: Creation timestamp.
+          format: date-time
+        id:
+          type: string
+          description: The trigger event ID.
+          format: uuid
+        last_error:
+          type: string
+          description: The last processing error, if any.
+        processed_at:
+          type: string
+          description: Processing completion timestamp.
+          format: date-time
+        status:
+          type: string
+          description: The processing status of the event.
+          enum:
+            - pending
+            - processing
+            - completed
+            - failed
+        trigger_instance_id:
+          type: string
+          description: The trigger instance that dispatched the event.
+          format: uuid
+      required:
+        - id
+        - trigger_instance_id
+        - status
+        - attempts
+        - created_at
     TriggerInstance:
       type: object
       properties:

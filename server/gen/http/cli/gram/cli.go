@@ -152,7 +152,7 @@ func UsageCommands() []string {
 		"token-exchange exchange",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
-		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
+		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
@@ -2953,6 +2953,12 @@ func ParseEndpoint(
 		triggersListTriggerInstancesSessionTokenFlag     = triggersListTriggerInstancesFlags.String("session-token", "", "")
 		triggersListTriggerInstancesProjectSlugInputFlag = triggersListTriggerInstancesFlags.String("project-slug-input", "", "")
 
+		triggersListTriggerEventsFlags                = flag.NewFlagSet("list-trigger-events", flag.ExitOnError)
+		triggersListTriggerEventsIDFlag               = triggersListTriggerEventsFlags.String("id", "REQUIRED", "")
+		triggersListTriggerEventsLimitFlag            = triggersListTriggerEventsFlags.String("limit", "50", "")
+		triggersListTriggerEventsSessionTokenFlag     = triggersListTriggerEventsFlags.String("session-token", "", "")
+		triggersListTriggerEventsProjectSlugInputFlag = triggersListTriggerEventsFlags.String("project-slug-input", "", "")
+
 		triggersGetTriggerInstanceFlags                = flag.NewFlagSet("get-trigger-instance", flag.ExitOnError)
 		triggersGetTriggerInstanceIDFlag               = triggersGetTriggerInstanceFlags.String("id", "REQUIRED", "")
 		triggersGetTriggerInstanceSessionTokenFlag     = triggersGetTriggerInstanceFlags.String("session-token", "", "")
@@ -3858,6 +3864,7 @@ func ParseEndpoint(
 	triggersFlags.Usage = triggersUsage
 	triggersListTriggerDefinitionsFlags.Usage = triggersListTriggerDefinitionsUsage
 	triggersListTriggerInstancesFlags.Usage = triggersListTriggerInstancesUsage
+	triggersListTriggerEventsFlags.Usage = triggersListTriggerEventsUsage
 	triggersGetTriggerInstanceFlags.Usage = triggersGetTriggerInstanceUsage
 	triggersCreateTriggerInstanceFlags.Usage = triggersCreateTriggerInstanceUsage
 	triggersUpdateTriggerInstanceFlags.Usage = triggersUpdateTriggerInstanceUsage
@@ -5794,6 +5801,9 @@ func ParseEndpoint(
 			case "list-trigger-instances":
 				epf = triggersListTriggerInstancesFlags
 
+			case "list-trigger-events":
+				epf = triggersListTriggerEventsFlags
+
 			case "get-trigger-instance":
 				epf = triggersGetTriggerInstanceFlags
 
@@ -7714,6 +7724,9 @@ func ParseEndpoint(
 			case "list-trigger-instances":
 				endpoint = c.ListTriggerInstances()
 				data, err = triggersc.BuildListTriggerInstancesPayload(*triggersListTriggerInstancesSessionTokenFlag, *triggersListTriggerInstancesProjectSlugInputFlag)
+			case "list-trigger-events":
+				endpoint = c.ListTriggerEvents()
+				data, err = triggersc.BuildListTriggerEventsPayload(*triggersListTriggerEventsIDFlag, *triggersListTriggerEventsLimitFlag, *triggersListTriggerEventsSessionTokenFlag, *triggersListTriggerEventsProjectSlugInputFlag)
 			case "get-trigger-instance":
 				endpoint = c.GetTriggerInstance()
 				data, err = triggersc.BuildGetTriggerInstancePayload(*triggersGetTriggerInstanceIDFlag, *triggersGetTriggerInstanceSessionTokenFlag, *triggersGetTriggerInstanceProjectSlugInputFlag)
@@ -20082,6 +20095,7 @@ func triggersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-trigger-definitions: List static trigger definitions available to a project.`)
 	fmt.Fprintln(os.Stderr, `    list-trigger-instances: List trigger instances for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-trigger-events: List recent dispatch events for a trigger instance.`)
 	fmt.Fprintln(os.Stderr, `    get-trigger-instance: Get a trigger instance by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-trigger-instance: Create a trigger instance.`)
 	fmt.Fprintln(os.Stderr, `    update-trigger-instance: Update a trigger instance.`)
@@ -20130,6 +20144,30 @@ func triggersListTriggerInstancesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func triggersListTriggerEventsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] triggers list-trigger-events", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List recent dispatch events for a trigger instance.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers list-trigger-events --id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersGetTriggerInstanceUsage() {

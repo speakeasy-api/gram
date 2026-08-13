@@ -508,6 +508,7 @@ trackedFiles:
   src/funcs/triggersGet.ts: {}
   src/funcs/triggersList.ts: {}
   src/funcs/triggersListDefinitions.ts: {}
+  src/funcs/triggersListEvents.ts: {}
   src/funcs/triggersPause.ts: {}
   src/funcs/triggersResume.ts: {}
   src/funcs/triggersUpdate.ts: {}
@@ -922,6 +923,7 @@ trackedFiles:
   src/models/components/listtoolusagetracesresult.ts: {}
   src/models/components/listtoolvariationgroupsresult.ts: {}
   src/models/components/listtriggerdefinitionsresult.ts: {}
+  src/models/components/listtriggereventsresult.ts: {}
   src/models/components/listtriggerinstancesresult.ts: {}
   src/models/components/listtunneledmcpserversresult.ts: {}
   src/models/components/listunknownskillactivationsresult.ts: {}
@@ -1253,6 +1255,7 @@ trackedFiles:
   src/models/components/triggeranalysisresponsebody.ts: {}
   src/models/components/triggerdefinition.ts: {}
   src/models/components/triggerenvrequirement.ts: {}
+  src/models/components/triggerevent.ts: {}
   src/models/components/triggerinstance.ts: {}
   src/models/components/triggerriskanalysisrequestbody.ts: {}
   src/models/components/triggerskillsuggestionrequestbody.ts: {}
@@ -1708,6 +1711,7 @@ trackedFiles:
   src/models/operations/listtoolusagetraces.ts: {}
   src/models/operations/listtoolvariationgroups.ts: {}
   src/models/operations/listtriggerdefinitions.ts: {}
+  src/models/operations/listtriggerevents.ts: {}
   src/models/operations/listtriggerinstances.ts: {}
   src/models/operations/listtunneledmcpserverconnections.ts: {}
   src/models/operations/listtunneledmcpservers.ts: {}
@@ -2555,6 +2559,8 @@ trackedFiles:
   src/react-query/triggerChatAnalysis.ts: {}
   src/react-query/triggerDefinitions.core.ts: {}
   src/react-query/triggerDefinitions.ts: {}
+  src/react-query/triggerEvents.core.ts: {}
+  src/react-query/triggerEvents.ts: {}
   src/react-query/triggerSkillSuggestion.ts: {}
   src/react-query/triggers.core.ts: {}
   src/react-query/triggers.ts: {}
@@ -6697,6 +6703,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listTriggerEvents:
+    speakeasy-default-list-trigger-events:
+      parameters:
+        query:
+          id: "707996ff-98a4-4a74-ac01-bee75b474508"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"events": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listTriggerInstances:
     speakeasy-default-list-trigger-instances:
       responses:

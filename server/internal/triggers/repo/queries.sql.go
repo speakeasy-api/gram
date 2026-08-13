@@ -355,6 +355,74 @@ func (q *Queries) ListActiveTriggerInstancesByTarget(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listTriggerEvents = `-- name: ListTriggerEvents :many
+SELECT
+    e.id,
+    e.trigger_instance_id,
+    e.status,
+    e.attempts,
+    e.last_error,
+    e.created_at,
+    e.processed_at,
+    t.chat_id
+FROM assistant_thread_events e
+LEFT JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = $1
+    AND t.deleted IS FALSE
+WHERE e.project_id = $1
+  AND e.trigger_instance_id = $2
+  AND e.deleted IS FALSE
+ORDER BY e.created_at DESC
+LIMIT $3
+`
+
+type ListTriggerEventsParams struct {
+	ProjectID         uuid.UUID
+	TriggerInstanceID uuid.NullUUID
+	RowLimit          int32
+}
+
+type ListTriggerEventsRow struct {
+	ID                uuid.UUID
+	TriggerInstanceID uuid.NullUUID
+	Status            string
+	Attempts          int64
+	LastError         pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	ProcessedAt       pgtype.Timestamptz
+	ChatID            uuid.NullUUID
+}
+
+func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]ListTriggerEventsRow, error) {
+	rows, err := q.db.Query(ctx, listTriggerEvents, arg.ProjectID, arg.TriggerInstanceID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTriggerEventsRow
+	for rows.Next() {
+		var i ListTriggerEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TriggerInstanceID,
+			&i.Status,
+			&i.Attempts,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.ProcessedAt,
+			&i.ChatID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTriggerInstances = `-- name: ListTriggerInstances :many
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
