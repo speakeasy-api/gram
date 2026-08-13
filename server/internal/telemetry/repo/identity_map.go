@@ -24,7 +24,22 @@ type IdentityMapEntry struct {
 // generations and never observe a partial rebuild. A full replace rather than
 // an incremental update: deletions and unlinks in Postgres propagate by simply
 // not being in the next generation.
+//
+// Entries must be unique per (org, email) key: the ANY Join engine silently
+// keeps the first row per key, which would make the fold target insertion-order
+// dependent. The rejection below turns a caller violating that contract into a
+// failed sync — the previous complete generation stays live — instead of an
+// arbitrary owner.
 func (q *Queries) ReplaceIdentityMap(ctx context.Context, entries []IdentityMapEntry) error {
+	seen := make(map[[2]string]struct{}, len(entries))
+	for _, entry := range entries {
+		key := [2]string{entry.OrgID, entry.EmailLower}
+		if _, dup := seen[key]; dup {
+			return fmt.Errorf("duplicate identity map key for email %q", entry.EmailLower)
+		}
+		seen[key] = struct{}{}
+	}
+
 	if err := q.conn.Exec(ctx, "TRUNCATE TABLE identity_map_staging"); err != nil {
 		return fmt.Errorf("truncate identity_map_staging: %w", err)
 	}
