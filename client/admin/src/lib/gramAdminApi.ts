@@ -21,14 +21,63 @@ export class GramAdminError extends Error {
   }
 }
 
-// gramAdminFetch is a thin wrapper around fetch that:
-// - normalises the path to a root-relative URL,
-// - redirects into the OIDC flow on 401,
-// - throws on non-2xx with a typed error containing status + parsed body.
-export async function gramAdminFetch<T>(
+// A 4xx body names what the operator has to fix, such as "at least one of
+// account_type or whitelisted must be supplied". A 5xx body carries whatever
+// verb phrase the handler passed to oops.E, such as "list organizations"
+// (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
+// than the status line. So trust the body below 500 and nowhere else.
+export function errorMessage(e: unknown): string {
+  if (
+    e instanceof GramAdminError &&
+    e.status < 500 &&
+    e.body &&
+    typeof e.body === "object"
+  ) {
+    const message = (e.body as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+export type QueryParams = Record<
+  string,
+  string | number | boolean | string[] | undefined
+>;
+
+// Values the admin API reads as unset. Every boolean it takes is an opt-in
+// flag, so `false` is the same request as no flag at all.
+//
+// A cache key runs through this too, so the key and the request agree on what
+// "unset" means. Without that, `{type: []}` and `{}` send one request and cache
+// two entries.
+export function omitUnset(params: QueryParams): QueryParams {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return value !== undefined && value !== "" && value !== false;
+    }),
+  );
+}
+
+// An array becomes a repeated key (`type=free&type=pro`). Goa parses that into
+// a slice; a comma-joined value would arrive as one string.
+export function toSearchParams(params: QueryParams): URLSearchParams {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(omitUnset(params))) {
+    if (Array.isArray(value)) {
+      for (const item of value) qs.append(key, item);
+    } else {
+      qs.append(key, String(value));
+    }
+  }
+  return qs;
+}
+
+async function gramAdminRequest(
   path: string,
-  init?: RequestInit,
-): Promise<T> {
+  init: RequestInit | undefined,
+  redirectOnUnauthorized: boolean,
+): Promise<Response> {
   const url = path.startsWith("/") ? path : `/${path}`;
   // Accept is a default, not an override: a caller that sets its own wins.
   const headers = new Headers(init?.headers);
@@ -37,7 +86,7 @@ export async function gramAdminFetch<T>(
   }
   const res = await fetch(url, { ...init, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && redirectOnUnauthorized) {
     // Top-level redirect into the OIDC flow. Use prompt=none so the identity
     // provider returns silently when the operator already has a session with
     // it. The gram admin backend falls back to interactive login if the
@@ -53,8 +102,10 @@ export async function gramAdminFetch<T>(
     const returnTo = encodeURIComponent(
       window.location.pathname + window.location.search,
     );
+    redirectingToLogin = true;
     window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=none`;
-    // Caller never sees a resolved value; throw to unwind the in-flight call.
+    // Setting window.location starts the navigation but does not stop the code
+    // that follows it. Throw to unwind the in-flight call.
     throw new GramAdminError(401, null, "redirecting to admin login");
   }
 
@@ -72,7 +123,35 @@ export async function gramAdminFetch<T>(
     );
   }
 
+  return res;
+}
+
+export async function gramAdminFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await gramAdminRequest(path, init, true);
   return (await res.json()) as T;
+}
+
+// For an endpoint that answers 204. A mutation reports its own failure rather
+// than taking the 401 redirect, which would sign the operator back in behind
+// the action they just took.
+async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
+  await gramAdminRequest(path, init, false);
+}
+
+// True once gramAdminFetch has sent the browser to the login page. The document
+// is on its way out, so no caller should report the failure that caused it.
+//
+// The module records the navigation instead of reading it back off the failed
+// query, because React Query clears the error of a query that holds no data on
+// the next refetch, and a refetch on window focus would then reopen the gate
+// while the browser is still leaving.
+let redirectingToLogin = false;
+
+export function isRedirectingToLogin(): boolean {
+  return redirectingToLogin;
 }
 
 // Identity of the admin operator that owns the current session. The backend
@@ -89,22 +168,13 @@ export function getSession(): Promise<AdminSessionInfo> {
 
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
-// The endpoint answers 204, so this cannot use gramAdminFetch, which always
-// parses a JSON body. The endpoint also deletes only the server-side record and
-// leaves the `gram_admin` cookie in the browser. The next request would
-// therefore 401, and the 401 handler retries with prompt=none, which the
-// identity provider honours silently and signs the operator straight back in.
-// Asking for select_account instead forces the account chooser, so logging out
-// is visible.
+// The endpoint deletes only the server-side record and leaves the `gram_admin`
+// cookie in the browser. The next request would therefore 401, and the 401
+// handler retries with prompt=none, which the identity provider honours
+// silently and signs the operator straight back in. Asking for select_account
+// instead forces the account chooser, so logging out is visible.
 export async function logout(): Promise<void> {
-  const res = await fetch("/admin/auth.logout", { method: "POST" });
-  if (!res.ok) {
-    throw new GramAdminError(
-      res.status,
-      null,
-      `gram admin logout ${res.status} ${res.statusText}`,
-    );
-  }
+  await gramAdminSend("/admin/auth.logout", { method: "POST" });
   window.location.href = "/admin/auth.login?prompt=select_account";
 }
 
@@ -141,15 +211,9 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
-  const qs = new URLSearchParams();
-  if (params.q) qs.set("q", params.q);
-  if (params.account_type) qs.set("account_type", params.account_type);
-  if (params.include_disabled) qs.set("include_disabled", "true");
-  if (params.cursor) qs.set("cursor", params.cursor);
-  if (params.limit !== undefined) qs.set("limit", String(params.limit));
-  const query = qs.toString();
+  const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
-    `/admin/organizations.list${query ? `?${query}` : ""}`,
+    `/admin/organizations.list${qs ? `?${qs}` : ""}`,
   );
 }
 
@@ -171,12 +235,12 @@ export type AdminProjectDetail = {
 };
 
 export function getProject(idOrSlug: string): Promise<AdminProjectDetail> {
-  const qs = new URLSearchParams({ id_or_slug: idOrSlug });
+  const qs = toSearchParams({ id_or_slug: idOrSlug });
   return gramAdminFetch<AdminProjectDetail>(`/admin/project.get?${qs}`);
 }
 
 export function getOrganization(idOrSlug: string): Promise<AdminOrganization> {
-  const qs = new URLSearchParams({ id_or_slug: idOrSlug });
+  const qs = toSearchParams({ id_or_slug: idOrSlug });
   return gramAdminFetch<AdminOrganization>(`/admin/organization.get?${qs}`);
 }
 
@@ -211,7 +275,7 @@ export type ListOrganizationProjectsResult = {
 export function listOrganizationProjects(
   organizationID: string,
 ): Promise<ListOrganizationProjectsResult> {
-  const qs = new URLSearchParams({ organization_id: organizationID });
+  const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationProjectsResult>(
     `/admin/organization.projects?${qs}`,
   );
@@ -233,7 +297,7 @@ export type ListOrganizationMembersResult = {
 export function listOrganizationMembers(
   organizationID: string,
 ): Promise<ListOrganizationMembersResult> {
-  const qs = new URLSearchParams({ organization_id: organizationID });
+  const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationMembersResult>(
     `/admin/organization.members?${qs}`,
   );

@@ -1,0 +1,28 @@
+<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="" buttonBodyXPadding="16" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="4" buttonTextColor="" buttonTextFormat="0" buttonTextFontSize="16" dividerColor="" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="#FFFFFF" heading2FontSize="30" heading2LineHeight="115" heading2LetterSpacing="-1" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
+<Columns gap="12" widths="65,35" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="21" lineHeight="100"><Strong>speakeasy</Strong></Paragraph>
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
+  </ColumnItem>
+</Columns>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#C83228">ALLOWANCE EXCEEDED · </Strong>{data.organization_name}</Paragraph>
+<H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.threshold_percent}% of allowance used</H1>
+<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} has used {data.usage_tokens} against an allowance of {data.token_limit}.</Paragraph>
+<Section blockColor="#121212" paddingTop="28" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#BABABA">OVER ALLOWANCE</Strong></Paragraph>
+  <H2 paddingTop="10">{data.overage_tokens}</H2>
+</Section>
+<Columns gap="12" paddingRight="40" paddingBottom="32" paddingLeft="40">
+  <ColumnItem>
+    <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24"><Strong textColor="#757575">CYCLE START</Strong><Br />{data.cycle_start}</Paragraph>
+  </ColumnItem>
+  <ColumnItem>
+    <Paragraph fontSize="12" lineHeight="140" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24"><Strong textColor="#757575">CYCLE END</Strong><Br />{data.cycle_end}</Paragraph>
+  </ColumnItem>
+</Columns>
+<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">This is an automated billing usage alert.</Paragraph>
+</Section>

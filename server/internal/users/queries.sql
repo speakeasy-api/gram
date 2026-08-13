@@ -83,9 +83,31 @@ WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id;
 
+-- name: GetConnectedUsersMatchingEmails :many
+-- Returns every connected row matching the emails case-insensitively. Callers
+-- that assign ownership use this to reject ambiguous case-variant identities.
+SELECT u.* FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND u.deleted_at IS NULL
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+ORDER BY lower(u.email), u.created_at, u.id;
+
 -- name: GetUsersByIDs :many
 SELECT * FROM users
 WHERE id = ANY(@ids::text[]);
+
+-- name: GetConnectedUsersByIDs :many
+-- The org-scoped counterpart to GetConnectedUsersByEmails: resolves gram user
+-- ids to the directory rows they own. Callers hold a user id from a client
+-- payload, so the org join is what keeps one org's ids from resolving against
+-- another org's directory.
+SELECT u.* FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.id = ANY(@ids::text[])
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL;
 
 -- name: SetUserWorkosID :exec
 UPDATE users

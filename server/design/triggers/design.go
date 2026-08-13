@@ -56,6 +56,40 @@ var _ = Service("triggers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Triggers"}`)
 	})
 
+	Method("listTriggerEvents", func() {
+		Description("List recent dispatch events for a trigger instance.")
+
+		Payload(func() {
+			Attribute("id", String, "The trigger instance ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int, "Maximum number of events to return.", func() {
+				Minimum(1)
+				Maximum(200)
+				Default(50)
+			})
+			Required("id")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListTriggerEventsResult)
+
+		HTTP(func() {
+			GET("/rpc/triggers.listEvents")
+			Param("id")
+			Param("limit")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listTriggerEvents")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEvents")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TriggerEvents"}`)
+	})
+
 	Method("getTriggerInstance", func() {
 		Description("Get a trigger instance by ID.")
 
@@ -261,4 +295,9 @@ var ListTriggerDefinitionsResult = Type("ListTriggerDefinitionsResult", func() {
 var ListTriggerInstancesResult = Type("ListTriggerInstancesResult", func() {
 	Attribute("triggers", ArrayOf(shared.TriggerInstance), "The trigger instances for the current project.")
 	Required("triggers")
+})
+
+var ListTriggerEventsResult = Type("ListTriggerEventsResult", func() {
+	Attribute("events", ArrayOf(shared.TriggerEvent), "The dispatch events for the trigger instance, most recent first.")
+	Required("events")
 })

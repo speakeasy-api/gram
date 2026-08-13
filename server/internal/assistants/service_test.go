@@ -28,12 +28,19 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var assistantsInfra *testenv.Environment
 
 func newTestAuditLogger() *audit.Logger { return audit.NewLogger() }
+
+type wakeCancellerFunc func(ctx context.Context, projectID, assistantID uuid.UUID) error
+
+func (f wakeCancellerFunc) CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error {
+	return f(ctx, projectID, assistantID)
+}
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
@@ -1569,6 +1576,76 @@ func TestServiceCoreDeleteAssistantReapsRuntimes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, assistant.DeletedAt.Valid)
+}
+
+func TestServiceCoreDeleteAssistantDeletesTriggersWithoutDeletingWakes(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "delete_assistant_triggers")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
+	trigger, err := triggerrepo.New(conn).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: bgtriggers.DefinitionSlugSlack,
+		Name:           "Slack",
+		EnvironmentID:  uuid.NullUUID{},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{"event_types":["message"]}`),
+		Status:         bgtriggers.StatusActive,
+	})
+	require.NoError(t, err)
+	wake, err := triggerrepo.New(conn).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: bgtriggers.DefinitionSlugWake,
+		Name:           "Wake",
+		EnvironmentID:  uuid.NullUUID{},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{"fire_at":"2099-01-01T00:00:00Z","correlation_id":"test"}`),
+		Status:         bgtriggers.StatusActive,
+	})
+	require.NoError(t, err)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger())
+	wakeCancellationCalled := false
+	core.SetWakeCanceller(wakeCancellerFunc(func(ctx context.Context, gotProjectID, gotAssistantID uuid.UUID) error {
+		wakeCancellationCalled = true
+		if gotProjectID != projectID || gotAssistantID != assistantID {
+			return fmt.Errorf("unexpected wake cancellation target")
+		}
+		preservedWake, err := triggerrepo.New(conn).GetTriggerInstanceByID(ctx, triggerrepo.GetTriggerInstanceByIDParams{
+			ID:        wake.ID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get wake during cancellation: %w", err)
+		}
+		if preservedWake.Status != bgtriggers.StatusActive {
+			return fmt.Errorf("wake status during cancellation: %s", preservedWake.Status)
+		}
+		return nil
+	}))
+	require.NoError(t, core.DeleteAssistant(t.Context(), projectID, assistantID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
+	require.True(t, wakeCancellationCalled)
+
+	_, err = triggerrepo.New(conn).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{
+		ID:        trigger.ID,
+		ProjectID: projectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	preservedWake, err := triggerrepo.New(conn).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{
+		ID:        wake.ID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, bgtriggers.StatusActive, preservedWake.Status)
 }
 
 func TestServiceCoreDeleteAssistantSucceedsEvenWhenReapErrors(t *testing.T) {

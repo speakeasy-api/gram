@@ -2,6 +2,7 @@
 SELECT
   action,
   project_id,
+  actor_display_name,
   subject_type,
   subject_display_name,
   subject_slug,

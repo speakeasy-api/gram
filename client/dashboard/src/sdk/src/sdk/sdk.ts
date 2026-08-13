@@ -6,6 +6,7 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
 import { AdminExternalCredentials } from "./adminexternalcredentials.js";
+import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
@@ -85,6 +86,13 @@ export class Gram extends ClientSDK {
   private _adminExternalCredentials?: AdminExternalCredentials;
   get adminExternalCredentials(): AdminExternalCredentials {
     return (this._adminExternalCredentials ??= new AdminExternalCredentials(
+      this._options,
+    ));
+  }
+
+  private _adminOpenRouterKeys?: AdminOpenRouterKeys;
+  get adminOpenRouterKeys(): AdminOpenRouterKeys {
+    return (this._adminOpenRouterKeys ??= new AdminOpenRouterKeys(
       this._options,
     ));
   }

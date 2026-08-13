@@ -46,6 +46,60 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// UserIdentity is every identity one employee's telemetry rows can be attributed
+// to. Ingest writes two different row shapes for the same person: hook events
+// resolve the sender's email to a gram user id and carry both, while the rows
+// that actually carry tokens and cost (Claude/Codex OTEL, and the Anthropic,
+// Codex and Cursor usage imports) only ever carry the provider account's email
+// — see telemetry.UserInfoByEmail at those call sites. Emails are normalized
+// lowercase; ids are gram user ids.
+//
+// Matching on a single identifier finds one shape and silently drops the other,
+// which is why the employee page could show sessions and tool calls with no
+// tokens or cost (DNO-827).
+type UserIdentity struct {
+	UserIDs []string
+	Emails  []string
+}
+
+// IsEmpty reports whether the caller is scoping to a user at all. An empty
+// identity applies no user filter, so it matches every row rather than none.
+func (u UserIdentity) IsEmpty() bool {
+	return len(u.UserIDs) == 0 && len(u.Emails) == 0
+}
+
+// withUserIdentityFilter scopes a query to one employee across every identity
+// their rows carry. An empty identity is a no-op.
+//
+// A row is attributed by its user_id whenever it has one, and only falls back to
+// its email when it does not — the same precedence userIdentifierExpr applies,
+// widened from a single identifier to the employee's whole identity set. Keeping
+// that precedence is what stops a stray row pairing this employee's email with
+// another person's user id from being counted on both people's pages (DNO-509);
+// a plain "id matches OR email matches" would count it twice.
+//
+// user_email is compared lowercased on both sides because ingest stores the
+// provider's casing verbatim while the directory emails callers resolve are
+// normalized.
+func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity) squirrel.SelectBuilder {
+	if identity.IsEmpty() {
+		return sb
+	}
+
+	var match squirrel.Or
+	if len(identity.UserIDs) > 0 {
+		match = append(match, squirrel.Eq{"telemetry_logs.user_id": identity.UserIDs})
+	}
+	if len(identity.Emails) > 0 {
+		match = append(match, squirrel.And{
+			squirrel.Eq{"telemetry_logs.user_id": ""},
+			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails},
+		})
+	}
+
+	return sb.Where(match)
+}
+
 // withAccountTypeFilter applies the shared account-type filter semantics:
 // "personal" is an exact match, while "team" matches everything not personal —
 // unclassified (empty) rows count as team so the team view keeps
@@ -2144,17 +2198,17 @@ type GetTimeSeriesMetricsParams struct {
 	GramProjectID     string
 	TimeStart         int64
 	TimeEnd           int64
-	IntervalSeconds   int64  // Bucket interval in seconds
-	UserID            string // Optional filter
-	ExternalUserID    string // Optional filter
-	APIKeyID          string // Optional filter
-	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string // Optional filter - filters by mcp_server_id
-	EventSource       string // Optional filter - filters by event_source
-	HookSource        string // Optional filter - filters by hook_source
-	AccountType       string // Optional filter - filters by account_type
-	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
+	IntervalSeconds   int64        // Bucket interval in seconds
+	User              UserIdentity // Optional filter - scopes to one employee across all their identities
+	ExternalUserID    string       // Optional filter
+	APIKeyID          string       // Optional filter
+	ToolsetSlug       string       // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string       // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string       // Optional filter - filters by mcp_server_id
+	EventSource       string       // Optional filter - filters by event_source
+	HookSource        string       // Optional filter - filters by hook_source
+	AccountType       string       // Optional filter - filters by account_type
+	ExternalOrgID     string       // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -2201,9 +2255,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
-	}
+	sb = withUserIdentityFilter(sb, arg.User)
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
@@ -2266,16 +2318,16 @@ type GetToolMetricsBreakdownParams struct {
 	GramProjectID     string
 	TimeStart         int64
 	TimeEnd           int64
-	UserID            string // Optional filter
-	ExternalUserID    string // Optional filter
-	APIKeyID          string // Optional filter
-	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string // Optional filter - filters by mcp_server_id
-	EventSource       string // Optional filter - filters by event_source
-	HookSource        string // Optional filter - filters by hook_source
-	AccountType       string // Optional filter - filters by account_type
-	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
+	User              UserIdentity // Optional filter - scopes to one employee across all their identities
+	ExternalUserID    string       // Optional filter
+	APIKeyID          string       // Optional filter
+	ToolsetSlug       string       // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string       // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string       // Optional filter - filters by mcp_server_id
+	EventSource       string       // Optional filter - filters by event_source
+	HookSource        string       // Optional filter - filters by hook_source
+	AccountType       string       // Optional filter - filters by account_type
+	ExternalOrgID     string       // Optional filter - scopes to a single account by provider org id
 	Limit             int
 	SortBy            string // "count" or "failure_rate"
 }
@@ -2302,9 +2354,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
-	}
+	sb = withUserIdentityFilter(sb, arg.User)
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
@@ -2371,16 +2421,16 @@ type GetOverviewSummaryParams struct {
 	GramProjectID     string
 	TimeStart         int64
 	TimeEnd           int64
-	UserID            string // Optional filter
-	ExternalUserID    string // Optional filter
-	APIKeyID          string // Optional filter
-	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string // Optional filter - filters by mcp_server_id
-	EventSource       string // Optional filter - filters by event_source
-	HookSource        string // Optional filter - filters by hook_source
-	AccountType       string // Optional filter - filters by account_type
-	ExternalOrgID     string // Optional filter - scopes to a single account by provider org id
+	User              UserIdentity // Optional filter - scopes to one employee across all their identities
+	ExternalUserID    string       // Optional filter
+	APIKeyID          string       // Optional filter
+	ToolsetSlug       string       // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string       // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string       // Optional filter - filters by mcp_server_id
+	EventSource       string       // Optional filter - filters by event_source
+	HookSource        string       // Optional filter - filters by hook_source
+	AccountType       string       // Optional filter - filters by account_type
+	ExternalOrgID     string       // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -2389,7 +2439,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
+	hasFilters := !arg.User.IsEmpty() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -2490,9 +2540,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
-	}
+	sb = withUserIdentityFilter(sb, arg.User)
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
@@ -3114,12 +3162,12 @@ type GetUserMetricsSummaryParams struct {
 	GramProjectID  string
 	TimeStart      int64
 	TimeEnd        int64
-	UserID         string // user_id (mutually exclusive with ExternalUserID)
-	ExternalUserID string // external_user_id (mutually exclusive with UserID)
-	EventSource    string // Optional filter - filters by event_source
-	HookSource     string // Optional filter - filters by hook_source
-	AccountType    string // Optional filter - filters by account_type
-	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
+	User           UserIdentity // the employee's identities (mutually exclusive with ExternalUserID)
+	ExternalUserID string       // external_user_id (mutually exclusive with User)
+	EventSource    string       // Optional filter - filters by event_source
+	HookSource     string       // Optional filter - filters by hook_source
+	AccountType    string       // Optional filter - filters by account_type
+	ExternalOrgID  string       // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -3143,7 +3191,13 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
 		totalTokensExpr+" AS total_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
+
+		// Cost lives on MetricsSummaryRow but was never selected here, so callers
+		// wanting a user's cost had to read it from the grouped employees list.
+		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
 		// Chat request metrics
 		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
@@ -3180,10 +3234,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
 	// Filter by user ID (one of these must be set)
-	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
-	} else if arg.ExternalUserID != "" {
+	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	} else {
+		sb = withUserIdentityFilter(sb, arg.User)
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -3252,7 +3306,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		&metrics.TotalInputTokens,
 		&metrics.TotalOutputTokens,
 		&metrics.TotalTokens,
+		&metrics.CacheReadInputTokens,
+		&metrics.CacheCreationInputTokens,
 		&metrics.AvgTokensPerReq,
+		&metrics.TotalCost,
 		&metrics.TotalChatRequests,
 		&metrics.AvgChatDurationMs,
 		&metrics.FinishReasonStop,
@@ -3282,10 +3339,10 @@ type GetEmployeeDataFlowGraphParams struct {
 	GramProjectID  string
 	TimeStart      int64
 	TimeEnd        int64
-	UserID         string // user_id (mutually exclusive with ExternalUserID)
-	ExternalUserID string // external_user_id (mutually exclusive with UserID)
-	AccountType    string // Optional filter - filters by account_type
-	ExternalOrgID  string // Optional filter - scopes to a single account by provider org id
+	User           UserIdentity // the employee's identities (mutually exclusive with ExternalUserID)
+	ExternalUserID string       // external_user_id (mutually exclusive with User)
+	AccountType    string       // Optional filter - filters by account_type
+	ExternalOrgID  string       // Optional filter - scopes to a single account by provider org id
 }
 
 const employeeDataFlowMaxPathTuples uint64 = 100
@@ -3380,10 +3437,10 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where(exprs.isCall)
 
-	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
-	} else if arg.ExternalUserID != "" {
+	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	} else {
+		sb = withUserIdentityFilter(sb, arg.User)
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {

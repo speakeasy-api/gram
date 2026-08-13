@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { getSession, logout } from "@/lib/gramAdminApi";
+import { adminSessionQuery } from "@/lib/adminQueries";
+import { logout } from "@/lib/gramAdminApi";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -21,7 +22,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSkeleton,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -39,26 +39,13 @@ function initials(name: string): string {
 export function NavUser(): JSX.Element {
   const { isMobile } = useSidebar();
 
-  const session = useQuery({
-    queryKey: ["adminSession"],
-    queryFn: getSession,
-    staleTime: Infinity,
-  });
+  const session = useQuery(adminSessionQuery);
 
   const logoutMutation = useMutation({ mutationFn: logout });
 
-  if (session.isPending) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuSkeleton showIcon />
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
-
-  // A failed background refetch keeps the last session, so the menu only gives
-  // up when it holds nothing to render.
+  // AuthGate settles the session before the router mounts, so there is no
+  // loading state to render here. A failed background refetch keeps the last
+  // session, so the menu only gives up when it holds nothing to render.
   if (!session.data) {
     return (
       <SidebarMenu>

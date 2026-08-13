@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/select";
 import { DataTable as Table, type Column } from "@/components/data-table";
 import { cn } from "@/lib/utils";
-import { listOrganizations, type AdminOrganization } from "@/lib/gramAdminApi";
+import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
 import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 
 function fmtDateShort(iso?: string): string {
@@ -148,24 +149,14 @@ export function OrganizationsList(): JSX.Element {
     return () => clearTimeout(t);
   }, [search, debouncedSearch, resetPaging]);
 
-  const queryKey = useMemo(
-    () => [
-      "gram-admin-organizations",
-      { q: debouncedSearch, accountType, includeDisabled, cursor },
-    ],
-    [debouncedSearch, accountType, includeDisabled, cursor],
-  );
-
   const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
-    queryKey,
-    queryFn: () =>
-      listOrganizations({
-        q: debouncedSearch || undefined,
-        account_type: accountType || undefined,
-        include_disabled: includeDisabled || undefined,
-        cursor,
-        limit: 50,
-      }),
+    ...organizationsListQuery({
+      q: debouncedSearch,
+      account_type: accountType,
+      include_disabled: includeDisabled,
+      cursor,
+      limit: 50,
+    }),
     // Every filter and every page is a separate cache entry. Without this the
     // table empties on each change and the rows jump.
     placeholderData: keepPreviousData,
@@ -190,7 +181,7 @@ export function OrganizationsList(): JSX.Element {
       const idOrSlug = org.slug || org.id;
       // The row already holds the whole record, so the detail page paints and
       // starts its own queries without a round trip to organization.get.
-      qc.setQueryData(["gram-admin-organization", idOrSlug], org);
+      qc.setQueryData(organizationQuery(idOrSlug).queryKey, org);
       void navigate({ to: "/organizations/$idOrSlug", params: { idOrSlug } });
     },
     [navigate, qc],
@@ -259,8 +250,7 @@ export function OrganizationsList(): JSX.Element {
             outside the empty state or the operator reads stale data as fresh. */}
         {isError && (
           <div className="text-muted-foreground mb-2 text-sm">
-            Could not refresh organizations:{" "}
-            {(error as Error)?.message ?? "unknown error"}
+            Could not refresh organizations: {errorMessage(error)}
           </div>
         )}
 
