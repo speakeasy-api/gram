@@ -167,6 +167,17 @@ func TestOrganizationGateRequiresPlatformMCPRolloutAndCapability(t *testing.T) {
 		require.False(t, enabled)
 	})
 
+	t.Run("fails closed when the organization slug is empty", func(t *testing.T) {
+		t.Parallel()
+
+		rollout := &testRolloutProvider{enabled: true}
+		enabled, err := newGate(testCapabilityChecker{enabled: true}, rollout, testOrganizationSlugResolver{}).Enabled(t.Context(), organizationID)
+
+		require.ErrorIs(t, err, ErrUnavailable)
+		require.False(t, enabled)
+		require.Zero(t, rollout.flag)
+	})
+
 	t.Run("requires an organization", func(t *testing.T) {
 		t.Parallel()
 

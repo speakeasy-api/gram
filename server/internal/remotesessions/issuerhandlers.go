@@ -992,6 +992,13 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			cause:        fmt.Errorf("decode discovery document: %w", err),
 		}
 	}
+	if err := validateIssuerMetadataEndpoints(doc); err != nil {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        err,
+		}
+	}
 
 	return doc, nil
 }
@@ -1065,6 +1072,29 @@ func validIssuerDiscoveryURL(u *url.URL) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// validateIssuerMetadataEndpoints rejects endpoints that would weaken the
+// transport guarantee after a valid metadata document has been discovered. The
+// same explicit loopback exception as discovery preserves local development and
+// deterministic tests without permitting plain HTTP for remote issuers.
+func validateIssuerMetadataEndpoints(doc rfc8414Document) error {
+	for _, endpoint := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint},
+		{name: "token_endpoint", raw: doc.TokenEndpoint},
+	} {
+		if endpoint.raw == "" {
+			continue
+		}
+		parsed, err := url.Parse(endpoint.raw)
+		if err != nil || !parsed.IsAbs() || !validIssuerDiscoveryURL(parsed) {
+			return fmt.Errorf("issuer metadata %s must use HTTPS outside local loopback", endpoint.name)
+		}
+	}
+	return nil
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata

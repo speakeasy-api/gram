@@ -6,6 +6,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestInMemoryGitHubPublisherCreatesEmptyMainBranch(t *testing.T) {
+	t.Parallel()
+
+	publisher := NewInMemoryGitHubPublisher()
+	require.NoError(t, publisher.CreateRepo(t.Context(), 1, "local", "fixture", true))
+
+	files, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main")
+	require.NoError(t, err)
+	require.Empty(t, files)
+}
+
 func TestInMemoryGitHubPublisherStoresDefensiveCopies(t *testing.T) {
 	t.Parallel()
 

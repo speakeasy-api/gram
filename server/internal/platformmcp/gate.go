@@ -66,6 +66,9 @@ func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (
 	if err != nil {
 		return false, fmt.Errorf("resolve organization for platform mcp rollout: %w", err)
 	}
+	if organizationSlug == "" {
+		return false, ErrUnavailable
+	}
 	rollout, err := g.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
 	if err != nil {
 		return false, fmt.Errorf("check platform mcp rollout: %w", err)

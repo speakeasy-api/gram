@@ -26,7 +26,13 @@ func NewInMemoryGitHubPublisher() *InMemoryGitHubPublisher {
 	return &InMemoryGitHubPublisher{files: make(map[string]map[string][]byte), collaborators: make(map[string]bool)}
 }
 
-func (p *InMemoryGitHubPublisher) CreateRepo(context.Context, int64, string, string, bool) error {
+func (p *InMemoryGitHubPublisher) CreateRepo(_ context.Context, _ int64, owner, repo string, _ bool) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	key := p.key(owner, repo, "main")
+	if _, ok := p.files[key]; !ok {
+		p.files[key] = make(map[string][]byte)
+	}
 	return nil
 }
 
