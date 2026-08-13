@@ -7,11 +7,21 @@
  * means the input component stays about rendering and the walk stays testable.
  */
 
-/** The draft as a plain string: text nodes in order, `<br>` as a newline. */
+/**
+ * The draft as a plain string: text nodes in order, `<br>` as a newline.
+ *
+ * The final `<br>` of the element is skipped. Browsers park one at the end of a
+ * contenteditable to keep the last line selectable — clearing the field leaves
+ * exactly that, and counting it would report an empty draft as `"\n"`: no
+ * placeholder, and a sendable message made of one newline.
+ */
 export function readPlainText(root: HTMLElement): string {
+  const trailingBreak =
+    root.lastChild?.nodeName === "BR" ? root.lastChild : null;
   let text = "";
   const walk = (node: Node) => {
     for (const child of node.childNodes) {
+      if (child === trailingBreak) continue;
       if (child.nodeType === Node.TEXT_NODE) {
         text += child.nodeValue ?? "";
       } else if (child.nodeName === "BR") {
@@ -70,9 +80,15 @@ export function selectionOffsets(
   const selection = selectionIn(root);
   const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
   if (!range || !root.contains(range.startContainer)) return null;
+  // A selection that starts here can run past the composer and into the page.
+  // Its end is then measured against a tree this element does not own, so clamp
+  // it to the draft rather than report an offset beyond the text.
+  const end = root.contains(range.endContainer)
+    ? offsetOf(root, range.endContainer, range.endOffset)
+    : readPlainText(root).length;
   return {
     start: offsetOf(root, range.startContainer, range.startOffset),
-    end: offsetOf(root, range.endContainer, range.endOffset),
+    end,
   };
 }
 
@@ -97,6 +113,19 @@ export function positionAt(
         }
         remaining -= 1;
         last = { node: current, offset: indexOfChild(current, child) + 1 };
+      } else if (isReference(child)) {
+        // A reference chip is `contentEditable={false}`, so a caret placed in
+        // its text node is not a position the user can be in — the browser
+        // would drop it somewhere of its own choosing. Land on the boundary
+        // beside the chip instead.
+        const length = readPlainText(child).length;
+        const index = indexOfChild(current, child);
+        if (remaining < length) {
+          const after = remaining * 2 >= length;
+          return { node: current, offset: after ? index + 1 : index };
+        }
+        remaining -= length;
+        last = { node: current, offset: index + 1 };
       } else {
         const hit = walk(child);
         if (hit) return hit;
@@ -106,6 +135,10 @@ export function positionAt(
   };
 
   return walk(root) ?? last;
+}
+
+function isReference(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && node.hasAttribute("data-reference");
 }
 
 function indexOfChild(parent: Node, child: Node): number {

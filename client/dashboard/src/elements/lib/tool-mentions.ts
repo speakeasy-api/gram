@@ -37,9 +37,13 @@ export interface ComposerSegment {
   kind: ComposerSegmentKind;
 }
 
-/** `@tool` and `/skill` tokens, but only where a reference can start — the
- *  lookbehind is what keeps the `//` in a pasted URL from reading as a skill. */
-const TOKEN_PATTERN = /(?<=^|\s)([@/])([\w.-]+)/g;
+/** `@tool` and `/skill` tokens, but only where a reference can start.
+ *
+ *  Punctuation may precede one — `(@tool` is still a mention — so the
+ *  lookbehind rejects only the characters that make a sigil part of something
+ *  else: a word or `:`/`/` before it is a URL's scheme, host, or path segment,
+ *  and a word before `@` is an email address. */
+const TOKEN_PATTERN = /(?<![\w@/:])([@/])([\w.-]+)/g;
 
 /**
  * Splits draft text into plain runs and reference runs so the composer can

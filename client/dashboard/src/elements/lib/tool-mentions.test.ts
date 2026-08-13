@@ -41,6 +41,21 @@ describe("splitComposerSegments", () => {
       { text: draft, kind: "text" },
     ]);
   });
+
+  it("marks a reference that follows punctuation", () => {
+    expect(splitComposerSegments("ask (@search_docs)", TOOLS, SKILLS)).toEqual([
+      { text: "ask (", kind: "text" },
+      { text: "@search_docs", kind: "tool" },
+      { text: ")", kind: "text" },
+    ]);
+  });
+
+  it("leaves an email address alone", () => {
+    const draft = "mail someone@search_docs about it";
+    expect(splitComposerSegments(draft, TOOLS, SKILLS)).toEqual([
+      { text: draft, kind: "text" },
+    ]);
+  });
 });
 
 describe("removeToken", () => {

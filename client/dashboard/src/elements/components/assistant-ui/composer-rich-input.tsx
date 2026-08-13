@@ -19,6 +19,7 @@ import {
 import { REFERENCE_TOKEN_CLASSES } from "@/elements/lib/reference-token-classes";
 import {
   splitComposerSegments,
+  type ComposerSegment,
   type ToolRecord,
 } from "@/elements/lib/tool-mentions";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,22 @@ export interface ComposerRichInputProps {
  * reports edits back as a string, and restores the caret by character offset
  * after each controlled re-render — so nothing downstream learns about the tree.
  */
+/** How many recent local drafts to remember; keystrokes in flight at once. */
+const REPORTED_HISTORY = 16;
+
+/**
+ * The token layout only — which references exist, and in what order. Plain runs
+ * are deliberately left out: including them would make every keystroke a
+ * rebuild, and a rebuilt subtree carries no undo history, so Cmd+Z would stop
+ * working in the composer.
+ */
+function tokenSignature(segments: ComposerSegment[]): string {
+  return segments
+    .filter((segment) => segment.kind !== "text")
+    .map((segment) => `${segment.kind}:${segment.text}`)
+    .join("\u0000");
+}
+
 export const ComposerRichInput: FC<ComposerRichInputProps> = ({
   placeholder,
   className,
@@ -68,24 +85,24 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
   const composing = useRef(false);
 
   const segments = splitComposerSegments(text, tools, skillNames);
-  // What the tree should look like, as a string. Rebuilding only when THIS
-  // changes keeps ordinary typing off the imperative path, so the browser's own
-  // undo stack and IME survive.
-  const signature = segments
-    .map((segment) => `${segment.kind}:${segment.text}`)
-    .join("\u0000");
+  const signature = tokenSignature(segments);
   const renderedSignature = useRef<string | null>(null);
-  /** The last draft this input itself reported. Anything else arriving as
+  /** The recent drafts this input itself reported. Anything else arriving as
    *  `text` came from outside (dictation, prompt recall, the context picker)
-   *  and is authoritative over what is currently in the DOM. */
-  const lastReported = useRef<string | null>(null);
+   *  and is authoritative over what is currently in the DOM.
+   *
+   *  A list, not just the last one: several keystrokes can land before the
+   *  render for the first of them arrives, and that render carries a string
+   *  this input DID report, just not most recently. Mistaking it for an
+   *  outside edit rebuilds the tree from it and eats the newer keystrokes. */
+  const reported = useRef<string[]>([]);
 
   const handleInput = useCallback(() => {
     const element = ref.current;
     if (!element || composing.current) return;
     const next = readPlainText(element);
     pendingCaret.current = caretOffset(element);
-    lastReported.current = next;
+    reported.current = [...reported.current.slice(-REPORTED_HISTORY), next];
     aui.composer().setText(next);
   }, [aui]);
 
@@ -98,16 +115,26 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
     const element = ref.current;
     if (!element || composing.current) return;
 
-    const stale =
-      renderedSignature.current !== signature ||
-      readPlainText(element) !== text;
-    if (!stale) {
+    // Whose string is newer. A draft this input reported can arrive back
+    // several keystrokes late — the browser has already applied them to the
+    // tree — so for local edits the DOM is the truth and rebuilding from
+    // `text` would swallow them. Only a change from elsewhere (dictation,
+    // prompt recall, an inserted token) outranks what is on screen.
+    const domText = readPlainText(element);
+    const fromOutside = !reported.current.includes(text);
+    const source = fromOutside ? text : domText;
+    const sourceSegments = fromOutside
+      ? segments
+      : splitComposerSegments(source, tools, skillNames);
+    const sourceSignature = tokenSignature(sourceSegments);
+
+    if (sourceSignature === renderedSignature.current && domText === source) {
       pendingCaret.current = null;
       return;
     }
 
     element.replaceChildren(
-      ...segments.map((segment) => {
+      ...sourceSegments.map((segment) => {
         if (segment.kind === "text") {
           return document.createTextNode(segment.text);
         }
@@ -121,17 +148,20 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
         return chip;
       }),
     );
-    renderedSignature.current = signature;
-    lastReported.current = text;
+    renderedSignature.current = sourceSignature;
+    reported.current = [source];
+    // The runtime still owns the draft, so a rebuild from the DOM has to report
+    // what it rendered — otherwise state keeps the older string forever.
+    if (source !== text) aui.composer().setText(source);
 
-    const target = pendingCaret.current ?? text.length;
+    const target = pendingCaret.current ?? source.length;
     pendingCaret.current = null;
     const root = element.getRootNode();
     const active =
       root instanceof ShadowRoot ? root.activeElement : document.activeElement;
     if (active !== element) return;
-    setCaret(element, Math.min(target, text.length));
-  }, [segments, signature, text]);
+    setCaret(element, Math.min(target, source.length));
+  }, [aui, segments, signature, skillNames, text, tools]);
 
   useEffect(() => {
     if (autoFocus) ref.current?.focus();

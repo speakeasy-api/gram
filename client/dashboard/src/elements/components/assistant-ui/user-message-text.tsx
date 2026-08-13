@@ -11,6 +11,8 @@ import {
   CollapsibleTrigger,
 } from "@/elements/components/ui/collapsible";
 import { ReferenceText } from "@/elements/components/assistant-ui/reference-token";
+import { REFERENCE_TOKEN_CLASSES } from "@/elements/lib/reference-token-classes";
+import { skillTokensIn } from "@/elements/lib/tool-mentions";
 import { cn } from "@/lib/utils";
 
 import {
@@ -69,12 +71,31 @@ const UserMessageTextImpl: TextMessagePartComponent = ({ text }) => {
       </p>
     );
   }
-  // Skill blocks are not shown: the `/skill` token left in the message text
-  // already names them, and a pill beside it read as the same skill attached
-  // twice.
+  // A skill named by a `/skill` token in the text needs no pill: that would
+  // read as the same skill attached twice. One that isn't named — a turn
+  // persisted before the composer wrote tokens, or sent by another client —
+  // would otherwise leave no trace at all, so it gets a label of its own.
+  const attachedSkills = blocks.flatMap((block) =>
+    block.skillName ? [block.skillName] : [],
+  );
+  const named = new Set(
+    skillTokensIn(rest, attachedSkills).map((name) => name.toLowerCase()),
+  );
+  const unnamedSkills = attachedSkills.filter(
+    (name) => !named.has(name.toLowerCase()),
+  );
   const disclosureBlocks = blocks.filter((block) => !block.skillName);
   return (
     <div className="aui-user-message-text-with-context">
+      {unnamedSkills.length > 0 && (
+        <div className="aui-user-message-skills mb-1.5 flex flex-wrap gap-1">
+          {unnamedSkills.map((name) => (
+            <span key={name} className={REFERENCE_TOKEN_CLASSES.surface.skill}>
+              /{name}
+            </span>
+          ))}
+        </div>
+      )}
       {disclosureBlocks.length > 0 ? (
         <ContextDisclosure blocks={disclosureBlocks} />
       ) : null}

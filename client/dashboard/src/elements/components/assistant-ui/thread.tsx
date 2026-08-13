@@ -80,6 +80,7 @@ import { useChatId } from "@/elements/contexts/ChatIdContext";
 import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useThreadMeta } from "@/elements/contexts/ThreadMetaContext";
 import { useAuth } from "@/elements/hooks/useAuth";
+import { useComposerMenuOpen } from "@/elements/hooks/useComposerMenuOpen";
 import { useDensity } from "@/elements/hooks/useDensity";
 import { useDictationLevels } from "@/elements/hooks/useDictationLevels";
 import { useElements } from "@/elements/hooks/useElements";
@@ -108,6 +109,7 @@ import {
   type MentionableTool,
   removeToken,
   skillTokensIn,
+  splitComposerSegments,
   toolSetToMentionableTools,
 } from "@/elements/lib/tool-mentions";
 import { ComposerRichInput } from "@/elements/components/assistant-ui/composer-rich-input";
@@ -657,10 +659,11 @@ export const Composer: FC<ComposerProps> = ({
   );
   // A draft that opens with `/skill` names a skill, not a command — without
   // this the command menu would claim it, and Enter would run a command
-  // instead of sending the message.
-  const startsWithSkill = skillNames.some((name) =>
-    composerText.toLowerCase().startsWith(`/${name.toLowerCase()}`),
-  );
+  // instead of sending the message. Tokenized the same way the composer paints
+  // it, so a skill named `help` cannot swallow the `/helper` command.
+  const startsWithSkill =
+    splitComposerSegments(composerText, undefined, skillNames)[0]?.kind ===
+    "skill";
   const slashQuery =
     composerText.startsWith("/") && !startsWithSkill
       ? composerText.slice(1).trim().toLowerCase()
@@ -677,6 +680,7 @@ export const Composer: FC<ComposerProps> = ({
   }, [slashQuery, slashCommands]);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
   const slashOpen = slashMatches.length > 0;
+  useComposerMenuOpen(slashOpen, composerRootRef);
 
   // The draft owns which skills are attached: a `/skill` token puts one on the
   // next message, deleting the token takes it back off. Deriving the host's
