@@ -1,5 +1,58 @@
 # dashboard
 
+## 0.107.0
+
+### Minor Changes
+
+- ae7f01b: The assistant detail panel is now fully configurable and observable. Overview settings (name, model, concurrency, warm TTL) are editable in place. The Sessions tab shows aggregate stats (sessions, messages, cost, tokens) over a selectable time range defaulting to the last 30 days, with per-session cost in the list. Triggers expand in place to show their recent traffic via the new `triggers.listEvents` endpoint, with each dispatched event linking to the conversation it was routed to.
+- ca0f1c1: Encrypt platform OpenRouter API keys at rest. New keys are written with an
+  AES-256-GCM encrypted copy alongside the plaintext column (dual-write during
+  the expand phase), every read path prefers the encrypted copy and lazily
+  records ciphertext for legacy plaintext rows, and the credits monitoring
+  activity decrypts inside the activity boundary. A new platform-admin
+  `adminOpenRouterKeys` service and dashboard page list every organization's
+  keys with their credit limit, live usage, and encryption state, with actions
+  to encrypt (verify the ciphertext, then clear the plaintext), enable, and
+  disable a key. Enable and disable actions are audit logged against the owning
+  organization; the encrypt action is internal storage hygiene and is not
+  surfaced in customer-visible audit logs.
+
+### Patch Changes
+
+- e3bb138: Render `@tool` and `/skill` references in the assistant composer as colored
+  chips, and make the composer a contenteditable so they can be real inline
+  elements rather than paint under a transparent textarea.
+
+  A textarea holds one flat string, so a reference inside a draft could only be
+  mirrored underneath the input — and anything painted there that occupied width
+  slid the caret off the glyphs after it. The input is now a `plaintext-only`
+  contenteditable whose chips are `contentEditable={false}` spans with real
+  padding, so the browser places the caret around them. The draft still lives on
+  the runtime as a string: the element reports edits as text and exposes
+  `value` / `selectionStart` / `selectionEnd` / `setSelectionRange`, so the
+  mention autocomplete, prompt recall, and dictation are unchanged.
+
+  Skills move into the draft with them. Picking a skill writes its `/name` token
+  into the text (and focuses the input, caret at the end) instead of only
+  toggling hidden state, and the composer derives the attached-skill set back out
+  of the draft — so deleting the token detaches the skill, and a message carrying
+  nothing but a reference can be sent. Tool names containing hyphens now match at
+  all; hyphenated source-slug names previously stopped at the first hyphen and
+  resolved to nothing. The badge rows above the input are gone, since the tokens
+  name themselves, and sent messages render the same chips in a bordered
+  white bubble.
+
+- c66958e: Agent sessions routed through LiteLLM keep their LiteLLM association even when the agent's own hook stream captures the transcript: they match the LiteLLM platform filter and display as "<Client> via LiteLLM" in the session list and detail views.
+- d893bcb: Fix natural-language input in the dashboard time range picker. The picker's
+  "type any date" parsing POSTs to `/chat/completions`, which requires both
+  `Gram-Session` and `Gram-Project` headers, but most pages rendered the picker
+  without a `projectSlug`, so the request 401ed and parsing silently did nothing.
+  The `DashboardTimeRangePicker` wrapper now injects the request project slug
+  via `useProjectSlugForRequests()` (callers can still override it), fixing the
+  project home, MCP overview, security overview, watchdog, and risk overview
+  pages in one place — and org-scoped pages like Billing through the same
+  default-project fallback every other SDK request uses.
+
 ## 0.106.0
 
 ### Minor Changes
