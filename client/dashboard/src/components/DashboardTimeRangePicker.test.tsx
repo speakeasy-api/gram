@@ -1,11 +1,11 @@
 import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Capture the props the wrapper forwards to the Elements picker. The
 // /chat/completions proxy requires BOTH Gram-Session and Gram-Project, so the
-// wrapper must inject the route's project slug alongside the session header —
-// callers that omit projectSlug otherwise 401 and natural-language parsing
-// silently no-ops.
+// wrapper must inject the request project slug (useProjectSlugForRequests)
+// alongside the session header — callers that omit projectSlug otherwise 401
+// and natural-language parsing silently no-ops.
 const pickerProps = vi.fn();
 
 vi.mock("@/elements", () => ({
@@ -20,7 +20,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "acme", projectSlug: "route-project" }),
+  useProjectSlugForRequests: () => "route-project",
 }));
 
 vi.mock("@/lib/utils", async (importOriginal) => ({
@@ -31,7 +31,11 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 import { TimeRangePicker } from "./DashboardTimeRangePicker";
 
 describe("DashboardTimeRangePicker", () => {
-  it("injects the route's project slug when the caller does not pass one", () => {
+  beforeEach(() => {
+    pickerProps.mockClear();
+  });
+
+  it("injects the request project slug when the caller does not pass one", () => {
     render(<TimeRangePicker />);
 
     expect(pickerProps).toHaveBeenCalledWith(
@@ -39,7 +43,7 @@ describe("DashboardTimeRangePicker", () => {
     );
   });
 
-  it("prefers an explicitly passed project slug over the route's", () => {
+  it("prefers an explicitly passed project slug over the request slug", () => {
     render(<TimeRangePicker projectSlug="explicit-project" />);
 
     expect(pickerProps).toHaveBeenCalledWith(
