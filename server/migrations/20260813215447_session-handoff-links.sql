@@ -17,7 +17,7 @@ CREATE TABLE "session_handoff_links" (
 );
 -- Create index "session_handoff_links_expires_at_idx" to table: "session_handoff_links"
 CREATE INDEX "session_handoff_links_expires_at_idx" ON "session_handoff_links" ("expires_at");
--- Create index "session_handoff_links_project_id_idx" to table: "session_handoff_links"
-CREATE INDEX "session_handoff_links_project_id_idx" ON "session_handoff_links" ("project_id");
+-- Create index "session_handoff_links_organization_project_idx" to table: "session_handoff_links"
+CREATE INDEX "session_handoff_links_organization_project_idx" ON "session_handoff_links" ("organization_id", "project_id");
 -- Create index "session_handoff_links_token_key" to table: "session_handoff_links"
 CREATE UNIQUE INDEX "session_handoff_links_token_key" ON "session_handoff_links" ("token");

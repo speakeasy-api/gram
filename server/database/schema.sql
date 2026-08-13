@@ -6669,6 +6669,11 @@ CREATE TABLE IF NOT EXISTS session_handoff_links (
 
 CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_token_key ON session_handoff_links (token);
 
-CREATE INDEX IF NOT EXISTS session_handoff_links_project_id_idx ON session_handoff_links (project_id);
+-- Serves both cascade paths: an organization delete scans by the leading
+-- organization_id, a project delete by the full (organization_id, project_id)
+-- pair. Nothing reads this table by project_id alone -- links are fetched by
+-- token -- so a standalone project_id index would only cost write throughput.
+CREATE INDEX IF NOT EXISTS session_handoff_links_organization_project_idx
+ON session_handoff_links (organization_id, project_id);
 
 CREATE INDEX IF NOT EXISTS session_handoff_links_expires_at_idx ON session_handoff_links (expires_at);
