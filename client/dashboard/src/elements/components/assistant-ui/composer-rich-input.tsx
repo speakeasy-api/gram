@@ -104,15 +104,27 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
 
   /** Set while keystrokes are still arriving; a rebuild waits for the lull. */
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** An outside draft arrived mid-burst and has not been painted yet. */
+  const externalPending = useRef(false);
   const [idleTick, setIdleTick] = useState(0);
 
   const handleInput = useCallback(() => {
     const element = ref.current;
     if (!element || composing.current) return;
+    // An outside draft landed mid-burst and is still waiting to be painted.
+    // Reporting the DOM now would report the text it is about to replace, and
+    // the recalled prompt (or inserted token) would be gone. Let it through
+    // first; this keystroke is the cheaper thing to drop.
+    if (externalPending.current) {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      typingTimer.current = null;
+      setIdleTick((tick) => tick + 1);
+      return;
+    }
     const next = readPlainText(element);
     pendingCaret.current = caretOffset(element);
     awaitingEcho.current = [
-      ...awaitingEcho.current.slice(-ECHO_QUEUE_LIMIT),
+      ...awaitingEcho.current.slice(-(ECHO_QUEUE_LIMIT - 1)),
       next,
     ];
     // Rebuilding while keystrokes are still queued destroys the very nodes the
@@ -141,17 +153,17 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || composing.current) return;
-    // Nothing redraws mid-burst, whoever asked for it: replacing these nodes
-    // while keystrokes are still queued against them loses those characters.
-    // The timer's own tick re-runs this the moment typing settles.
-    if (typingTimer.current) return;
-
     // Whose string is newer. A draft this input reported can arrive back
     // several keystrokes late — the browser has already applied them to the
     // tree — so for local edits the DOM is the truth and rebuilding from
     // `text` would swallow them. Only a change from elsewhere (dictation,
     // prompt recall, an inserted token) outranks what is on screen.
     const domText = readPlainText(element);
+    // Where the caret sits RIGHT NOW, not where it sat when the render that
+    // triggered this was queued: a deferred rebuild can run several keystrokes
+    // later, and restoring the older offset drops the caret mid-word so the
+    // next characters land in the wrong place.
+    const liveCaret = caretOffset(element);
     const echoed = awaitingEcho.current.indexOf(text);
     if (echoed !== -1)
       awaitingEcho.current = awaitingEcho.current.slice(echoed + 1);
@@ -166,6 +178,17 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
       pendingCaret.current = null;
       return;
     }
+
+    // Nothing redraws mid-burst, whoever asked: replacing these nodes while
+    // keystrokes are still queued against them loses those characters. The
+    // timer's own tick re-runs this the moment typing settles — but an outside
+    // draft waiting behind it must not be quietly overwritten by the next
+    // keystroke reporting the stale DOM, so flag it for `handleInput`.
+    if (typingTimer.current) {
+      if (fromOutside) externalPending.current = true;
+      return;
+    }
+    externalPending.current = false;
     element.replaceChildren(
       ...sourceSegments.map((segment) => {
         if (segment.kind === "text") {
@@ -182,12 +205,26 @@ export const ComposerRichInput: FC<ComposerRichInputProps> = ({
       }),
     );
     renderedSignature.current = sourceSignature;
-    awaitingEcho.current = [];
+    // Entries newer than what was just painted stay queued: they are keystrokes
+    // this input reported and has yet to see come back, and dropping them makes
+    // their renders look like outside edits — which repaints mid-burst and
+    // scrambles the draft.
+    const painted = awaitingEcho.current.indexOf(source);
+    if (painted !== -1) {
+      awaitingEcho.current = awaitingEcho.current.slice(painted + 1);
+    }
     // The runtime still owns the draft, so a rebuild from the DOM has to report
     // what it rendered — otherwise state keeps the older string forever.
-    if (source !== text) aui.composer().setText(source);
+    if (source !== text) {
+      awaitingEcho.current = [...awaitingEcho.current, source];
+      aui.composer().setText(source);
+    }
 
-    const target = pendingCaret.current ?? source.length;
+    // An outside draft brings its own caret (the inserter asked for one, or it
+    // belongs at the end of the new text); a local redraw keeps the user's.
+    const target = fromOutside
+      ? (pendingCaret.current ?? source.length)
+      : (liveCaret ?? pendingCaret.current ?? source.length);
     pendingCaret.current = null;
     const root = element.getRootNode();
     const active =

@@ -48,7 +48,7 @@ const TOKEN_PATTERN = /(?<![\w@/:])([@/])([\w.-]+)/g;
 /** Anything that reads as a link. A URL's own punctuation (`?next=/skill`,
  *  `#@tool`) otherwise looks exactly like a reference boundary — and a chip
  *  there would silently attach a skill the user only meant to link to. */
-const URL_PATTERN = /\b(?:[a-z][a-z\d+.-]*:\/\/|www\.)\S+/gi;
+const URL_PATTERN = /(?:\b[a-z][a-z\d+.-]*:|\/\/|\bwww\.)\S+/gi;
 
 function urlSpans(text: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];

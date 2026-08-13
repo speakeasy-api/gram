@@ -82,3 +82,19 @@ describe("splitComposerSegments and URLs", () => {
     ]);
   });
 });
+
+describe("splitComposerSegments and other URI forms", () => {
+  it("ignores a reference inside a protocol-relative URL", () => {
+    const draft = "//cdn.example.com/x?to=/latency-triage";
+    expect(splitComposerSegments(draft, TOOLS, SKILLS)).toEqual([
+      { text: draft, kind: "text" },
+    ]);
+  });
+
+  it("ignores a reference inside a non-hierarchical URI", () => {
+    const draft = "mailto:someone@example.test?body=/latency-triage";
+    expect(splitComposerSegments(draft, TOOLS, SKILLS)).toEqual([
+      { text: draft, kind: "text" },
+    ]);
+  });
+});
