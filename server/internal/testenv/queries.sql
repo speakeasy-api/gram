@@ -418,3 +418,26 @@ WHERE s.project_id = @project_id
     NOT @found_only::boolean
     OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
   );
+
+-- name: ForceSoftDeleteUser :exec
+-- Test-only fixture: soft-deletes a directory user to exercise deleted-row
+-- filtering in identity resolution.
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: ForceSoftDeleteOrganizationUserRelationship :exec
+-- Test-only fixture: soft-deletes an org membership to exercise deleted-row
+-- filtering in identity resolution.
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
+-- name: ForceSoftDeleteUserAccountsByEmail :exec
+-- Test-only fixture: soft-deletes an org's linked accounts by email to
+-- exercise deleted-row filtering in identity resolution.
+UPDATE user_accounts
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND lower(email) = @email_lower::text;
