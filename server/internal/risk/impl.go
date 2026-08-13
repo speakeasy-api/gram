@@ -2848,6 +2848,13 @@ var exclusionMatchTypeAllow = map[string]bool{
 	"entity_type": true,
 }
 
+// errExclusionSuggestionInvalid marks a completion that came back but failed
+// validation (bad match_type, regex that does not compile as RE2, empty
+// value). Distinguishes "the model got it wrong" — worth one corrective
+// retry — from transport failures, which a retry with the same budget is
+// unlikely to fix.
+var errExclusionSuggestionInvalid = errors.New("invalid exclusion suggestion")
+
 func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []repo.RiskResult, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
@@ -2913,6 +2920,30 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Strict:      optionalnullable.From(&strict),
 	}
 
+	result, err := s.requestExclusionSuggestion(ctx, orgID, projectID, userID, userEmail, systemPrompt, userMessage, &jsonSchema)
+	if err == nil {
+		return result, nil
+	}
+	if !errors.Is(err, errExclusionSuggestionInvalid) {
+		return nil, err
+	}
+
+	// One corrective retry with the validation error fed back. Without it, a
+	// model slip (a lookahead in an otherwise fine regex, say) drops the
+	// caller onto the heuristic fallback — an exact match on the operator's
+	// entire prompt text — which reads as the AI failing outright.
+	retryMessage := fmt.Sprintf("%s\n\nYour previous suggestion was rejected: %v\nReturn a corrected JSON object that fixes this.", userMessage, err)
+	result, retryErr := s.requestExclusionSuggestion(ctx, orgID, projectID, userID, userEmail, systemPrompt, retryMessage, &jsonSchema)
+	if retryErr != nil {
+		return nil, fmt.Errorf("retry exclusion suggestion: %w (first attempt: %w)", retryErr, err)
+	}
+	return result, nil
+}
+
+// requestExclusionSuggestion performs a single completion round trip and
+// validates the response with the same gate the create/update exclusion
+// handlers use. Validation failures wrap errExclusionSuggestionInvalid.
+func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, projectID, userID, userEmail, systemPrompt, userMessage string, jsonSchema *or.ChatJSONSchemaConfig) (*gen.SuggestExclusionResult, error) {
 	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -2933,7 +2964,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		ExternalUserID: "",
 		UserEmail:      userEmail,
 		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
+		JSONSchema:     jsonSchema,
 		Reasoning:      nil,
 	})
 	if err != nil {
@@ -2945,7 +2976,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return nil, fmt.Errorf("empty completion content")
+		return nil, fmt.Errorf("%w: empty completion content", errExclusionSuggestionInvalid)
 	}
 
 	var parsed struct {
@@ -2955,7 +2986,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		SourceFilter string `json:"source_filter"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, fmt.Errorf("parse llm response: %w", err)
+		return nil, fmt.Errorf("%w: parse llm response: %w", errExclusionSuggestionInvalid, err)
 	}
 
 	parsed.MatchType = strings.ToLower(strings.TrimSpace(parsed.MatchType))
@@ -2964,12 +2995,12 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	parsed.SourceFilter = strings.TrimSpace(parsed.SourceFilter)
 
 	if !exclusionMatchTypeAllow[parsed.MatchType] {
-		return nil, fmt.Errorf("model returned invalid match_type %q", parsed.MatchType)
+		return nil, fmt.Errorf("%w: model returned invalid match_type %q", errExclusionSuggestionInvalid, parsed.MatchType)
 	}
 	// Same gate the create/update exclusion handlers apply: non-empty value,
 	// and a regex must compile (RE2) and fit the length cap.
 	if err := validateExclusionMatchValue(parsed.MatchType, parsed.MatchValue); err != nil {
-		return nil, fmt.Errorf("model returned invalid match_value: %w", err)
+		return nil, fmt.Errorf("%w: model returned invalid match_value: %w", errExclusionSuggestionInvalid, err)
 	}
 
 	return exclusionSuggestionResult(parsed.MatchType, parsed.MatchValue, parsed.RuleIDFilter, parsed.SourceFilter), nil
