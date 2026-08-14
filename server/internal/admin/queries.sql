@@ -101,8 +101,10 @@ WITH filtered AS (
 )
 SELECT * FROM filtered
 -- The sort key stays a bound parameter, never an interpolated column name, so no
--- caller input reaches the parser. NULLS LAST on every arm keeps empty dates at
--- the bottom whichever way the direction points.
+-- caller input reaches the parser. NULLS LAST is what keeps empty dates at the
+-- bottom under DESC, where Postgres would otherwise put them first; on the ASC
+-- arms it only spells out the default. Both are written out so the two arms of a
+-- column read alike.
 ORDER BY
     CASE WHEN sqlc.arg('sort_by')::text = 'name' AND sqlc.arg('sort_dir')::text = 'asc' THEN name END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'name' AND sqlc.arg('sort_dir')::text = 'desc' THEN name END DESC NULLS LAST,

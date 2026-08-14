@@ -320,6 +320,11 @@ const (
 
 // The columns the ORDER BY ladder in AdminListOrganizations knows. The opaque
 // ids are absent on purpose: an order built from them tells an operator nothing.
+//
+// This map cannot widen what the ladder accepts. The ladder matches these seven
+// literals and nothing else, so an unrecognised sort key collapses to the
+// tiebreaker with or without the check here. It is defense in depth, and the one
+// place a reader can see the accepted set without reading the SQL.
 var listOrganizationsSortColumns = map[string]bool{
 	"name":          true,
 	"slug":          true,

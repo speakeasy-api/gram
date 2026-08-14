@@ -396,8 +396,10 @@ type AdminListOrganizationsRow struct {
 // cursor walk it always had: the sort ladder collapses to all-NULL and the
 // tiebreaker alone orders the rows. A caller that supplies one gets offset paging.
 // The sort key stays a bound parameter, never an interpolated column name, so no
-// caller input reaches the parser. NULLS LAST on every arm keeps empty dates at
-// the bottom whichever way the direction points.
+// caller input reaches the parser. NULLS LAST is what keeps empty dates at the
+// bottom under DESC, where Postgres would otherwise put them first; on the ASC
+// arms it only spells out the default. Both are written out so the two arms of a
+// column read alike.
 func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizations,
 		arg.SortBy,
