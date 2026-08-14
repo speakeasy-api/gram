@@ -202,6 +202,30 @@ function detectHost(): string {
   );
 }
 
+/**
+ * The host is interpolated into URLs that already carry their own scheme and
+ * port, so a value that brings either along produces something like
+ * `https://https://devbox:5173:5173` — written to every browser-facing var at
+ * once, and only visible later as a stack that will not load. Cheaper to refuse.
+ */
+function validateHost(host: string): string {
+  // A bracketed IPv6 literal is the one legal way for a bare host to carry
+  // colons, and it is already in the form a URL wants.
+  const bare = /^\[.+\]$/.test(host)
+    ? host
+    : (host
+        .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
+        .split("/")[0]
+        ?.split(":")[0] ?? "");
+
+  if (bare !== host) {
+    throw new Error(
+      `--host takes a bare hostname, not a URL: got ${host}. Ports and scheme come from this worktree's own mapping — try --host ${bare}`,
+    );
+  }
+  return host;
+}
+
 function miseTomlEnv(): Record<string, string> {
   const config = parseTOML(readFileSync("mise.toml", "utf-8")) as {
     env: Record<string, string>;
@@ -277,6 +301,7 @@ function main(): void {
   if (flagHost && detect) {
     throw new Error("Pass either --host or --detect, not both.");
   }
+  if (flagHost) validateHost(flagHost);
 
   // With no flags, re-apply whatever is already recorded. This is the path
   // `git:workinit` takes on a fresh worktree.
