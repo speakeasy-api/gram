@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,11 +14,11 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
-// postBulk drives a raw JSON body through the generated request decoder before
-// the handler, because the allow-list lives in the decoder and a test that calls
-// the handler directly never touches it.
+// Drives raw JSON through the generated decoder first, because the allow-list
+// lives there and a test that calls the handler directly never touches it.
 func postBulk(t *testing.T, ctx context.Context, svc *Service, body string) (*gen.AdminBulkUpdateAccountTypeResult, error) {
 	t.Helper()
 
@@ -32,21 +33,6 @@ func postBulk(t *testing.T, ctx context.Context, svc *Service, body string) (*ge
 	return svc.BulkUpdateAccountType(ctx, payload)
 }
 
-// postUpdateOrg is postBulk's twin for the single-organization write path.
-func postUpdateOrg(t *testing.T, ctx context.Context, svc *Service, body string) (*gen.AdminOrganization, error) {
-	t.Helper()
-
-	req := httptest.NewRequest(http.MethodPost, "/admin/organization.update", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	payload, err := srv.DecodeUpdateOrganizationRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return svc.UpdateOrganization(ctx, payload)
-}
-
 func TestBulkUpdateAccountType_WritesOnlyTheListedIDs(t *testing.T) {
 	t.Parallel()
 
@@ -55,9 +41,8 @@ func TestBulkUpdateAccountType_WritesOnlyTheListedIDs(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_a", name: "Bulk A", slug: "bulk-a", accountType: "free"})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_b", name: "Bulk B", slug: "bulk-b", accountType: "pro"})
 
-	// The bystander is the whole point of this fixture: without a seeded
-	// organization outside ids, an UPDATE that dropped its WHERE clause and wrote
-	// the entire table would still look correct.
+	// Without an organization outside ids, an UPDATE that lost its WHERE clause
+	// and wrote the whole table would still look correct.
 	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_bystander", name: "Bystander", slug: "bystander", accountType: "free"})
 	bystanderBefore := readOrgState(t, ctx, conn, "org_bulk_bystander")
 
@@ -108,11 +93,11 @@ func TestBulkUpdateAccountType_ReportsMissingIDsAndWritesTheRest(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_real", name: "Real Co", slug: "real-co", accountType: "free"})
 
 	res, err := postBulk(t, ctx, svc,
-		`{"ids":["org_bulk_ghost","org_bulk_real","org_bulk_ghost"],"account_type":"pro"}`)
+		`{"ids":["org_bulk_ghost","org_bulk_real","org_bulk_ghost","org_bulk_real"],"account_type":"pro"}`)
 	require.NoError(t, err, "a stale id must cost the operator that row, not the batch")
 
-	require.Equal(t, []string{"org_bulk_real"}, res.UpdatedIds)
-	require.Equal(t, []string{"org_bulk_ghost"}, res.MissingIds)
+	require.Equal(t, []string{"org_bulk_real"}, res.UpdatedIds, "a repeated id that was written must appear exactly once")
+	require.Equal(t, []string{"org_bulk_ghost"}, res.MissingIds, "a repeated id that was not written must appear exactly once")
 	require.Equal(t, "pro", readOrgState(t, ctx, conn, "org_bulk_real").GramAccountType)
 }
 
@@ -123,11 +108,13 @@ func TestBulkUpdateAccountType_AllIDsMissing(t *testing.T) {
 
 	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_only", name: "Only Co", slug: "only-co", accountType: "free"})
 
-	res, err := postBulk(t, ctx, svc, `{"ids":["ghost_one","ghost_two"],"account_type":"enterprise"}`)
+	// Unsorted on purpose, so a mutation that sorts is visible.
+	res, err := postBulk(t, ctx, svc, `{"ids":["ghost_zulu","ghost_alpha"],"account_type":"enterprise"}`)
 	require.NoError(t, err)
 	require.NotNil(t, res.UpdatedIds, "updated_ids is required, so it must serialise as [] rather than null")
+	require.NotNil(t, res.MissingIds, "missing_ids is required too, so it carries the same contract")
 	require.Empty(t, res.UpdatedIds)
-	require.Equal(t, []string{"ghost_one", "ghost_two"}, res.MissingIds)
+	require.Equal(t, []string{"ghost_zulu", "ghost_alpha"}, res.MissingIds)
 	require.Equal(t, "free", readOrgState(t, ctx, conn, "org_bulk_only").GramAccountType)
 }
 
@@ -135,9 +122,8 @@ func TestBulkUpdateAccountType_RejectedRequestsWriteNothing(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		body string
-		// names is the value the refusal must quote back to the operator.
+		name  string
+		body  string
 		names string
 	}{
 		{name: "unknown value", body: `{"ids":["org_bulk_bad"],"account_type":"gold"}`, names: "gold"},
@@ -176,73 +162,92 @@ func TestBulkUpdateAccountType_RejectedRequestsWriteNothing(t *testing.T) {
 func TestBulkUpdateAccountType_AcceptsEveryAllowedValue(t *testing.T) {
 	t.Parallel()
 
-	for _, accountType := range []string{"free", "pro", "enterprise"} {
-		t.Run(accountType, func(t *testing.T) {
+	cases := []struct{ seed, target string }{
+		{seed: "pro", target: "free"},
+		{seed: "free", target: "pro"},
+		{seed: "free", target: "enterprise"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.target, func(t *testing.T) {
 			t.Parallel()
 
 			ctx, svc, conn := newTestAdminService(t)
-			seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_ok", name: "Ok Co", slug: "ok-co", accountType: "free"})
+			seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_ok", name: "Ok Co", slug: "ok-co", accountType: tc.seed})
 
-			_, err := postBulk(t, ctx, svc, `{"ids":["org_bulk_ok"],"account_type":"`+accountType+`"}`)
+			res, err := postBulk(t, ctx, svc, `{"ids":["org_bulk_ok"],"account_type":"`+tc.target+`"}`)
 			require.NoError(t, err)
-			require.Equal(t, accountType, readOrgState(t, ctx, conn, "org_bulk_ok").GramAccountType)
+			require.Equal(t, []string{"org_bulk_ok"}, res.UpdatedIds, "an organization that was written must be reported as written")
+			require.Empty(t, res.MissingIds, "an organization that exists must never be reported missing")
+			require.Equal(t, tc.target, readOrgState(t, ctx, conn, "org_bulk_ok").GramAccountType)
 		})
 	}
 }
 
-// The two write paths accepting different sets of values is the defect this
-// endpoint exists to prevent, so dropping the allow-list from either one has to
-// turn a test red.
-func TestUpdateOrganization_AccountTypeAllowList(t *testing.T) {
+// Every other test here is a real transition, so this is the only one that sees
+// a "skip rows already correct" optimisation reporting a real organization missing.
+func TestBulkUpdateAccountType_AlreadyOnTargetIsNotMissing(t *testing.T) {
 	t.Parallel()
 
-	t.Run("refuses an out-of-list value and writes nothing", func(t *testing.T) {
-		t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
 
-		ctx, svc, conn := newTestAdminService(t)
-		seedOrg(t, ctx, conn, orgFixture{id: "org_single_bad", name: "Single Bad", slug: "single-bad", accountType: "free", whitelisted: true})
-		before := readOrgState(t, ctx, conn, "org_single_bad")
+	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_noop", name: "Noop Co", slug: "noop-co", accountType: "pro"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_move", name: "Move Co", slug: "move-co", accountType: "free"})
 
-		for _, bad := range []string{"gold", "Free", "FREE", ""} {
-			_, err := postUpdateOrg(t, ctx, svc, `{"id":"org_single_bad","account_type":"`+bad+`"}`)
-			require.Error(t, err, "the single path must refuse %q just as the bulk path does", bad)
-			if bad != "" {
-				require.ErrorContains(t, err, bad, "the refusal must name the offending value")
-			}
+	res, err := postBulk(t, ctx, svc, `{"ids":["org_bulk_noop","org_bulk_move"],"account_type":"pro"}`)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"org_bulk_noop", "org_bulk_move"}, res.UpdatedIds,
+		"an organization already on the target type exists, so it must be reported as written")
+	require.Empty(t, res.MissingIds, "an organization that exists must never be reported missing")
+
+	require.Equal(t, "pro", readOrgState(t, ctx, conn, "org_bulk_noop").GramAccountType)
+	require.Equal(t, "pro", readOrgState(t, ctx, conn, "org_bulk_move").GramAccountType)
+}
+
+func TestBulkUpdateAccountType_RejectsMoreIDsThanTheCap(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_cap", name: "Cap Co", slug: "cap-co", accountType: "free"})
+	before := readOrgState(t, ctx, conn, "org_bulk_cap")
+
+	atCap := make([]string, constants.MaxBulkAccountTypeIDs)
+	for i := range atCap {
+		atCap[i] = fmt.Sprintf(`"org_bulk_cap_%d"`, i)
+	}
+	overCap := append(append([]string{}, atCap...), `"org_bulk_cap"`)
+
+	_, err := postBulk(t, ctx, svc, `{"ids":[`+strings.Join(atCap, ",")+`],"account_type":"pro"}`)
+	require.NoError(t, err, "a request exactly at the cap must be accepted")
+
+	_, err = postBulk(t, ctx, svc, `{"ids":[`+strings.Join(overCap, ",")+`],"account_type":"pro"}`)
+	require.Error(t, err, "one id over the cap must be refused")
+
+	after := readOrgState(t, ctx, conn, "org_bulk_cap")
+	require.Equal(t, "free", after.GramAccountType, "the refused request must write nothing")
+	require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
+}
+
+// Straight at the service on purpose: this is the check a future non-HTTP caller hits.
+func TestBulkUpdateAccountType_ServiceRefusesWhatTheDecoderWould(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_bulk_svc", name: "Svc Co", slug: "svc-co", accountType: "free"})
+	before := readOrgState(t, ctx, conn, "org_bulk_svc")
+
+	for _, bad := range []string{"gold", "Free", "FREE", ""} {
+		_, err := svc.BulkUpdateAccountType(ctx, &gen.BulkUpdateAccountTypePayload{
+			Ids:         []string{"org_bulk_svc"},
+			AccountType: bad,
+		})
+		require.Error(t, err, "the service must refuse %q even with no decoder in front of it", bad)
+		if bad != "" {
+			require.ErrorContains(t, err, bad, "the refusal must name the offending value")
 		}
+	}
 
-		after := readOrgState(t, ctx, conn, "org_single_bad")
-		require.Equal(t, "free", after.GramAccountType)
-		require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
-	})
-
-	t.Run("accepts every allowed value", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, svc, conn := newTestAdminService(t)
-		seedOrg(t, ctx, conn, orgFixture{id: "org_single_ok", name: "Single Ok", slug: "single-ok", accountType: "free"})
-
-		for _, good := range []string{"free", "pro", "enterprise"} {
-			res, err := postUpdateOrg(t, ctx, svc, `{"id":"org_single_ok","account_type":"`+good+`"}`)
-			require.NoError(t, err)
-			require.Equal(t, good, res.AccountType)
-		}
-	})
-
-	// The allow-list narrows account_type; it must not have made it required or
-	// disturbed the guard that rejects a body carrying neither field.
-	t.Run("whitelisted alone still works", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, svc, conn := newTestAdminService(t)
-		seedOrg(t, ctx, conn, orgFixture{id: "org_single_wl", name: "Single WL", slug: "single-wl", accountType: "pro", whitelisted: false})
-
-		res, err := postUpdateOrg(t, ctx, svc, `{"id":"org_single_wl","whitelisted":true}`)
-		require.NoError(t, err)
-		require.True(t, res.Whitelisted)
-		require.Equal(t, "pro", res.AccountType, "a whitelist-only write must leave the account type alone")
-
-		_, err = postUpdateOrg(t, ctx, svc, `{"id":"org_single_wl"}`)
-		require.Error(t, err, "a body with neither account_type nor whitelisted must still be rejected")
-	})
+	after := readOrgState(t, ctx, conn, "org_bulk_svc")
+	require.Equal(t, "free", after.GramAccountType)
+	require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
 }
