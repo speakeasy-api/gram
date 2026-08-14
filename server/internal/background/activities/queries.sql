@@ -367,3 +367,74 @@ UPDATE publish_outbox SET
     updated_at = clock_timestamp()
 WHERE id = ANY(@ids::bigint[])
   AND lease_token = @lease_token::uuid;
+
+-- name: ListIdentityMapEntries :many
+-- Source of the ClickHouse identity_map fold table. Internal sync sweep that
+-- deliberately spans all organizations: the org boundary is carried in the
+-- output rows (organization_id keys the map), not the predicate; not reachable
+-- from user-facing handlers.
+--
+-- Encodes the employee identity fold rules (the SQL twin of telemetry's
+-- resolveEmployeeIdentity, which DNO-857 retires): a directory email maps to
+-- its user only when exactly one connected, non-deleted user claims it
+-- case-insensitively; a linked-account email maps to its owner only when the
+-- email has no directory row in the org and exactly one connected owner with
+-- an unambiguous directory email claims it. Ambiguous emails are omitted so
+-- readers fall back to literal matching rather than guessing.
+--
+-- The owner-ambiguity count deliberately includes account links whose owner is
+-- since deleted or disconnected (matching the Go resolver): a second historical
+-- claimant has telemetry rows under the shared email, and folding it to the
+-- surviving owner would move the departed claimant's usage onto them.
+WITH directory AS (
+    SELECT
+        our.organization_id,
+        lower(btrim(u.email)) AS email_lower,
+        min(u.id) AS user_id,
+        count(*) AS claimants
+    FROM users u
+    JOIN organization_user_relationships our ON our.user_id = u.id
+    WHERE u.deleted_at IS NULL
+      AND our.deleted_at IS NULL
+      AND btrim(u.email) != ''
+    GROUP BY our.organization_id, lower(btrim(u.email))
+), account_owners AS (
+    SELECT ua.organization_id, lower(btrim(ua.email)) AS email_lower, ua.user_id
+    FROM user_accounts ua
+    WHERE ua.deleted_at IS NULL
+      AND ua.user_id IS NOT NULL
+      AND ua.email IS NOT NULL
+      AND btrim(ua.email) != ''
+    GROUP BY ua.organization_id, lower(btrim(ua.email)), ua.user_id
+), unique_account_owner AS (
+    SELECT organization_id, email_lower, min(user_id) AS user_id
+    FROM account_owners
+    GROUP BY organization_id, email_lower
+    HAVING count(*) = 1
+)
+SELECT
+    d.organization_id,
+    d.email_lower,
+    d.user_id::text AS canonical_user_id,
+    d.email_lower AS canonical_email
+FROM directory d
+WHERE d.claimants = 1
+UNION ALL
+SELECT
+    uao.organization_id,
+    uao.email_lower,
+    d.user_id::text AS canonical_user_id,
+    d.email_lower AS canonical_email
+FROM unique_account_owner uao
+JOIN users u ON u.id = uao.user_id AND u.deleted_at IS NULL
+JOIN directory d
+    ON d.organization_id = uao.organization_id
+    AND d.email_lower = lower(btrim(u.email))
+    AND d.user_id = u.id
+    AND d.claimants = 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM directory dd
+    WHERE dd.organization_id = uao.organization_id
+      AND dd.email_lower = uao.email_lower
+)
+ORDER BY organization_id, email_lower;
