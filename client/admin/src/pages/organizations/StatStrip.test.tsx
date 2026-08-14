@@ -371,6 +371,38 @@ describe("organizations stat strip navigation", () => {
     });
   });
 
+  it("turns Previous off with the page it sends the operator back to", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderList(urlFor({ disabled: ["disabled"] }));
+
+    const next = screen.getByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    fireEvent.click(cell("Disabled"));
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBeUndefined();
+    });
+    // Enabled again, so the rows on screen are the first page rather than the
+    // one before it. Previous is disabled off the pages behind, not off this.
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+
+    // Page one has nothing behind it. Left on, Previous would go forwards.
+    expect(
+      screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("names the whole platform on the status control rather than counting it", async () => {
     await renderList();
 

@@ -155,8 +155,8 @@ describe("writeOrganizationToCache", () => {
     ).toBe(true);
   });
 
-  // The cold-load window: the aggregate is still open, so it holds no data and
-  // the invalidation below has nothing to refire. Its pre-write answer would
+  // The cold-load window: the aggregate is still open, and an invalidation
+  // joins a running fetch rather than replacing it. Its pre-write answer would
   // fill the cache and read as fresh.
   it("survives a first stats read that was still open when it landed", async () => {
     const qc = new QueryClient();

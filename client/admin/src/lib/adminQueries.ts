@@ -132,8 +132,9 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
     // Cancelling another organization's detail fetch costs that page a refetch
     // and nothing else, and only one detail query is ever in flight from here.
     qc.cancelQueries({ queryKey: [ORGANIZATION_KEY] }),
-    // A first fetch still open holds no data, so the invalidation below finds
-    // nothing to refire and the pre-write counts land as though they were new.
+    // Measured: the invalidation below cannot refire a fetch that is already
+    // running. React Query joins the open request instead of starting a second
+    // one, and its pre-write answer clears the invalidated flag as it lands.
     qc.cancelQueries({ queryKey: organizationsStatsQuery.queryKey }),
   ]).then(() => undefined);
 }

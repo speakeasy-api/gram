@@ -88,8 +88,8 @@ export function StatStrip(): JSX.Element {
           <button
             key={cell.label}
             type="button"
-            // Readable on demand rather than announced: the dash is not spoken
-            // at default verbosity, so the cell is a label with no figure.
+            // Without it the cell reads as a label with no figure: the dash
+            // standing in for one is not spoken at default verbosity.
             aria-busy={isPending}
             onClick={() => applyFilters(cell.filters, { clearSearch: true })}
             className="flex flex-col items-start gap-0.5 px-4 py-3 text-left transition-colors first:rounded-l-lg last:rounded-r-lg hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"

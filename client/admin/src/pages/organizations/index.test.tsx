@@ -32,6 +32,7 @@ import {
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { useState, type JSX } from "react";
 
@@ -720,6 +721,21 @@ describe("organizations list", () => {
     ).toBe("acme");
   });
 
+  it("counts a full set of types rather than calling it all of them", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: [...ACCOUNT_TYPE_OPTIONS] }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual([...ACCOUNT_TYPE_OPTIONS]);
+    });
+    // An organization can carry a type the picker does not offer, so every
+    // option at once is still a narrowing and must not read as "All types".
+    expect(filterTrigger("Type").getAttribute("aria-label")).toBe(
+      `Type filter: ${ACCOUNT_TYPE_OPTIONS.length} selected`,
+    );
+  });
+
   it("keeps an account type the picker does not offer", async () => {
     // ACCOUNT_TYPE_OPTIONS is the list the picker offers, not the list the
     // column can hold. Dropping a value from outside it would widen the view a
@@ -808,6 +824,21 @@ describe("organizations list", () => {
     const options = await screen.findAllByRole("option");
     expect(options.map((option) => option.textContent)).toEqual(
       TRIAL_STATES.map((state) => TRIAL_LABELS[state]),
+    );
+  });
+
+  it("names every trial state at once rather than counting them", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ trial: [...TRIAL_STATES] }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().trial_states).toEqual([...TRIAL_STATES]);
+    });
+    // Every organization holds exactly one of these, so all of them is the
+    // whole platform. "6 selected" reads as a narrowing that is not there.
+    expect(filterTrigger("Trial").getAttribute("aria-label")).toBe(
+      "Trial filter: All trial states",
     );
   });
 
@@ -919,6 +950,37 @@ describe("organizations list", () => {
     });
     // The cursor was minted by the previous filter set and points into a
     // different result set.
+    expect(lastListParams().cursor).toBeUndefined();
+  });
+
+  it("drops the cursor when the search box changes the term", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // The box writes to the URL itself, so nothing tells the pager. Only the
+    // signature the render compares can catch this one.
+    fireEvent.change(screen.getByLabelText("Search organizations"), {
+      target: { value: "acme" },
+    });
+
+    await waitFor(
+      () => {
+        expect(lastListParams().q).toBe("acme");
+      },
+      { timeout: 2000 },
+    );
     expect(lastListParams().cursor).toBeUndefined();
   });
 

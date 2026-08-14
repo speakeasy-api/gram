@@ -20,3 +20,6 @@ a figure, so each of those refreshes the strip.
 
 Applying a filter set, from a figure or from the filter sheet, now returns to
 the first page even where the set applied is the one already on.
+
+The Status control now names the view it is showing, "Active and disabled",
+where it used to count it as "2 selected".
