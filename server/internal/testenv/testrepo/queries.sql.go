@@ -396,7 +396,7 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 }
 
 const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
-SELECT disabled_at, workos_last_event_id, whitelisted, created_at, updated_at
+SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -405,6 +405,7 @@ type GetOrganizationMetadataStateFixtureRow struct {
 	DisabledAt        pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
 	Whitelisted       bool
+	GramAccountType   string
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 }
@@ -417,6 +418,9 @@ type GetOrganizationMetadataStateFixtureRow struct {
 // the reference points for "did this write stamp the moment of the action":
 // comparing a stamp against them keeps the comparison inside the database
 // clock, which the test host's clock can drift from.
+// gram_account_type and whitelisted are the two columns trial demotion drops,
+// so a write that only extends a trial has to leave both exactly where it found
+// them.
 func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id string) (GetOrganizationMetadataStateFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizationMetadataStateFixture, id)
 	var i GetOrganizationMetadataStateFixtureRow
@@ -424,6 +428,7 @@ func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id st
 		&i.DisabledAt,
 		&i.WorkosLastEventID,
 		&i.Whitelisted,
+		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

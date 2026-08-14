@@ -59,6 +59,10 @@ type Client struct {
 	// listOrganizations endpoint.
 	ListOrganizationsDoer goahttp.Doer
 
+	// ExtendTrial Doer is the HTTP client used to make requests to the extendTrial
+	// endpoint.
+	ExtendTrialDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -90,6 +94,7 @@ func NewClient(
 		ListOrganizationMembersDoer:  doer,
 		ListOrganizationProjectsDoer: doer,
 		ListOrganizationsDoer:        doer,
+		ExtendTrialDoer:              doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -357,6 +362,30 @@ func (c *Client) ListOrganizations() goa.Endpoint {
 		resp, err := c.ListOrganizationsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "listOrganizations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ExtendTrial returns an endpoint that makes HTTP requests to the admin
+// service extendTrial server.
+func (c *Client) ExtendTrial() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExtendTrialRequest(c.encoder)
+		decodeResponse = DecodeExtendTrialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExtendTrialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExtendTrialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "extendTrial", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -382,3 +382,41 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 
 	return v, nil
 }
+
+// BuildExtendTrialPayload builds the payload for the admin extendTrial
+// endpoint from CLI flags.
+func BuildExtendTrialPayload(adminExtendTrialBody string, adminExtendTrialAdminSessionToken string) (*admin.ExtendTrialPayload, error) {
+	var err error
+	var body ExtendTrialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminExtendTrialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if body.Days < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 1, true))
+		}
+		if body.Days > 365 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 365, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminExtendTrialAdminSessionToken != "" {
+			adminSessionToken = &adminExtendTrialAdminSessionToken
+		}
+	}
+	v := &admin.ExtendTrialPayload{
+		ID:   body.ID,
+		Days: body.Days,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

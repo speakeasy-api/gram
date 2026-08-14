@@ -67,6 +67,27 @@ WHERE organization_id = @organization_id
   AND demoted_at IS NULL
 RETURNING *;
 
+-- name: ExtendTrial :execrows
+-- Operator-initiated extension. The interval is added to the existing ends_at
+-- rather than to the current time: "give them another two weeks" means two weeks
+-- on top of whatever the trial has left, and adding to now would silently
+-- shorten a trial that still had three weeks to run.
+--
+-- Only a running trial can be extended, and the three conditions that define
+-- running are here rather than in the handler so the database enforces them.
+-- Zero rows means the trial converted, was demoted, has already expired, or was
+-- never created. Extending a demoted trial is deliberately not the same as
+-- re-arming it: demotion also disabled the organization's model provider keys
+-- and nothing in this repository can re-enable them, so clearing demoted_at
+-- would advertise a running trial whose keys stay dead (AGE-3208).
+UPDATE trials
+SET ends_at = ends_at + make_interval(days => @extend_by_days::int),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND converted_at IS NULL
+  AND demoted_at IS NULL
+  AND ends_at > clock_timestamp();
+
 -- name: DemoteOrganizationToFree :one
 -- Drops the organization to the free tier and back behind the dashboard
 -- book-a-demo gate. Returns the pre-update account type.

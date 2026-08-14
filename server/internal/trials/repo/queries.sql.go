@@ -62,6 +62,41 @@ func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID s
 	return i, err
 }
 
+const extendTrial = `-- name: ExtendTrial :execrows
+UPDATE trials
+SET ends_at = ends_at + make_interval(days => $1::int),
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND converted_at IS NULL
+  AND demoted_at IS NULL
+  AND ends_at > clock_timestamp()
+`
+
+type ExtendTrialParams struct {
+	ExtendByDays   int32
+	OrganizationID string
+}
+
+// Operator-initiated extension. The interval is added to the existing ends_at
+// rather than to the current time: "give them another two weeks" means two weeks
+// on top of whatever the trial has left, and adding to now would silently
+// shorten a trial that still had three weeks to run.
+//
+// Only a running trial can be extended, and the three conditions that define
+// running are here rather than in the handler so the database enforces them.
+// Zero rows means the trial converted, was demoted, has already expired, or was
+// never created. Extending a demoted trial is deliberately not the same as
+// re-arming it: demotion also disabled the organization's model provider keys
+// and nothing in this repository can re-enable them, so clearing demoted_at
+// would advertise a running trial whose keys stay dead (AGE-3208).
+func (q *Queries) ExtendTrial(ctx context.Context, arg ExtendTrialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, extendTrial, arg.ExtendByDays, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveTrial = `-- name: GetActiveTrial :one
 SELECT organization_id, created_at, ends_at
 FROM trials

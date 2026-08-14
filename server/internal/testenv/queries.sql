@@ -204,7 +204,10 @@ WHERE id = @id;
 -- the reference points for "did this write stamp the moment of the action":
 -- comparing a stamp against them keeps the comparison inside the database
 -- clock, which the test host's clock can drift from.
-SELECT disabled_at, workos_last_event_id, whitelisted, created_at, updated_at
+-- gram_account_type and whitelisted are the two columns trial demotion drops,
+-- so a write that only extends a trial has to leave both exactly where it found
+-- them.
+SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
 FROM organization_metadata
 WHERE id = @id;
 

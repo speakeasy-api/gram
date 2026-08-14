@@ -25,11 +25,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 type Service struct {
@@ -561,6 +563,35 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+}
+
+func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
+	// The design bounds this too, but that validation is generated into the
+	// request decoder and only runs at the HTTP boundary. Repeating it here is
+	// what stops a negative day count from shortening a trial through an
+	// endpoint named extend if a future caller reaches the service another way.
+	if payload.Days < constants.MinTrialExtensionDays || payload.Days > constants.MaxTrialExtensionDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	rows, err := trialsRepo.New(s.db).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: payload.ID,
+		ExtendByDays:   int32(payload.Days),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, s.logger)
+	}
+	// Zero rows cannot say which of the four guards rejected the row, and the
+	// operator does not need to know: converted, demoted, expired and never
+	// created all mean the same thing here. Conflict rather than not-found,
+	// because the organization usually does exist and it is its trial's state
+	// that blocks the write. failed_precondition would read better still, but
+	// the admin service does not declare it, so it would leave as a 500.
+	if rows == 0 {
+		return nil, oops.E(oops.CodeConflict, nil, "organization has no running enterprise trial to extend")
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.

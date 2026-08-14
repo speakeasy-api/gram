@@ -390,7 +390,7 @@ var _ = Service("admin", func() {
 		Payload(func() {
 			security.AdminAuthPayload()
 
-			Attribute("q", String, "Search term applied to name and slug (case-insensitive substring).")
+			Attribute("q", String, "Search term. Matches name and slug as a case-insensitive substring, and organization id and WorkOS id exactly.")
 			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
 			Attribute("account_types", ArrayOf(String), "Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.")
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
@@ -424,5 +424,34 @@ var _ = Service("admin", func() {
 
 		shared.CursorPagination()
 		Meta("openapi:operationId", "adminListOrganizations")
+	})
+
+	// Declared last on purpose. Goa names response body types after their
+	// position in this block, so inserting a method in the middle renames every
+	// generated type below it and buries the real change in positional churn.
+	Method("extendTrial", func() {
+		Description("Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id", "days")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+			Attribute("days", Int, "Number of days to add to the trial's current end date.", func() {
+				Minimum(constants.MinTrialExtensionDays)
+				Maximum(constants.MaxTrialExtensionDays)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/trial.extend")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminExtendTrial")
 	})
 })

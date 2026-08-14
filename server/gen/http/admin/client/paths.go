@@ -61,3 +61,8 @@ func ListOrganizationProjectsAdminPath() string {
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
 }
+
+// ExtendTrialAdminPath returns the URL path to the admin service extendTrial HTTP endpoint.
+func ExtendTrialAdminPath() string {
+	return "/admin/trial.extend"
+}
