@@ -580,7 +580,9 @@ func requireOrder(t *testing.T, ctx context.Context, svc *Service, payload *gen.
 }
 
 // The sort fixtures. Every sortable column ranks these four differently, so a
-// ladder arm wired to the wrong column shows up as a wrong order.
+// ladder arm wired to the wrong column shows up as a wrong order. No column may
+// rank them in id order either way round, or the tiebreaker alone reproduces the
+// expected order and a missing ladder arm reads as correct.
 const (
 	sortOrgA = "org_sort_a"
 	sortOrgB = "org_sort_b"
@@ -601,17 +603,17 @@ func seedSortFixtures(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
 	fixtures := []sortFixture{
 		{
 			org:         orgFixture{id: sortOrgA, name: "Cedar Systems", slug: "bravo-co", accountType: "enterprise", whitelisted: true, createdAt: new(base.Add(-10 * time.Hour)), disabledAt: new(base.Add(-8 * time.Hour))},
-			memberCount: 3,
+			memberCount: 1,
 			trialEndsAt: base.Add(24 * time.Hour),
 		},
 		{
 			org:         orgFixture{id: sortOrgB, name: "Alder Group", slug: "delta-co", accountType: "pro", whitelisted: true, createdAt: new(base.Add(-30 * time.Hour)), disabledAt: new(base.Add(-9 * time.Hour))},
-			memberCount: 2,
+			memberCount: 3,
 			trialEndsAt: base.Add(72 * time.Hour),
 		},
 		{
 			org:         orgFixture{id: sortOrgC, name: "Dogwood Ltd", slug: "alpha-co", accountType: "free", whitelisted: true, createdAt: new(base.Add(-40 * time.Hour)), disabledAt: new(base.Add(-7 * time.Hour))},
-			memberCount: 1,
+			memberCount: 2,
 			trialEndsAt: base.Add(96 * time.Hour),
 		},
 		{
@@ -652,7 +654,7 @@ func TestListOrganizations_SortsEveryWhitelistedColumn(t *testing.T) {
 		{sort: "name", wantAsc: []string{sortOrgB, sortOrgD, sortOrgA, sortOrgC}},
 		{sort: "slug", wantAsc: []string{sortOrgC, sortOrgA, sortOrgD, sortOrgB}},
 		{sort: "account_type", wantAsc: []string{sortOrgA, sortOrgC, sortOrgB, sortOrgD}},
-		{sort: "member_count", wantAsc: []string{sortOrgD, sortOrgC, sortOrgB, sortOrgA}},
+		{sort: "member_count", wantAsc: []string{sortOrgD, sortOrgA, sortOrgC, sortOrgB}},
 		{sort: "created_at", wantAsc: []string{sortOrgC, sortOrgB, sortOrgD, sortOrgA}},
 		{sort: "disabled_at", wantAsc: []string{sortOrgB, sortOrgA, sortOrgC, sortOrgD}},
 		{sort: "trial_ends_at", wantAsc: []string{sortOrgA, sortOrgD, sortOrgB, sortOrgC}},
@@ -965,4 +967,84 @@ func TestListOrganizations_OffsetModeIgnoresAndOmitsTheCursor(t *testing.T) {
 		res := requireOrder(t, ctx, svc, c.payload, c.want, c.name)
 		require.Nil(t, res.NextCursor, "offset mode reports no cursor for %s", c.name)
 	}
+}
+
+// A page number selects offset paging on its own, so a cursor left in the URL
+// beside it is ignored the same way a cursor beside a sort is.
+func TestListOrganizations_PageIgnoresAStaleCursor(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	seedPageFixtures(t, ctx, conn)
+
+	byID := []string{"org_page_1", "org_page_2", "org_page_3", "org_page_4", "org_page_5"}
+
+	page1 := &gen.ListOrganizationsPayload{Limit: new(2), Page: new(1), Cursor: new("org_page_3")}
+	res := requireOrder(t, ctx, svc, page1, byID[0:2], "page 1 beside a stale cursor")
+	require.Nil(t, res.NextCursor)
+	require.Equal(t, int64(5), res.Total, "the stale cursor does not narrow the count either")
+
+	page2 := &gen.ListOrganizationsPayload{Limit: new(2), Page: new(2), Cursor: new("org_page_4")}
+	requireOrder(t, ctx, svc, page2, byID[2:4], "page 2 beside a stale cursor")
+}
+
+// The page size an operator can ask for is bounded at both ends. The design
+// declares no minimum, so limit=0 reaches the handler, and the offset is built by
+// dividing by the limit: without the fallback that division is a panic, not a
+// wrong page.
+func TestListOrganizations_LimitIsClampedToItsBounds(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const seeded = 101
+	for i := range seeded {
+		id := fmt.Sprintf("org_limit_%03d", i)
+		seedOrg(t, ctx, conn, orgFixture{id: id, name: id, slug: id, whitelisted: true})
+	}
+
+	cases := []struct {
+		name  string
+		limit *int
+		want  int
+	}{
+		{name: "no limit takes the default", limit: nil, want: 50},
+		{name: "a limit inside the bounds is kept", limit: new(7), want: 7},
+		{name: "the maximum itself is kept", limit: new(100), want: 100},
+		{name: "a limit above the maximum clamps to it", limit: new(1000), want: 100},
+		{name: "zero falls back to the default", limit: new(0), want: 50},
+		{name: "a negative limit falls back to the default", limit: new(-5), want: 50},
+	}
+
+	for _, c := range cases {
+		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Sort: new("name"), Limit: c.limit, Page: new(1)})
+		require.NoError(t, err, "listing organizations for %s", c.name)
+		require.Len(t, res.Organizations, c.want, "page length for %s", c.name)
+		require.Equal(t, int64(seeded), res.Total, "total for %s", c.name)
+	}
+}
+
+// member_count is a sortable column, so the rows it counts have to be the live
+// memberships. A removed member must not keep ranking the organization.
+func TestListOrganizations_MemberCountSkipsRemovedMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	seedOrg(t, ctx, conn, orgFixture{id: "org_gone_a", name: "Gone A", slug: "gone-a", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_gone_b", name: "Gone B", slug: "gone-b", whitelisted: true})
+
+	seedMembership(t, ctx, conn, "org_gone_a", "user_gone_1")
+	seedMembership(t, ctx, conn, "org_gone_a", "user_gone_2")
+	seedMembership(t, ctx, conn, "org_gone_b", "user_gone_3")
+
+	require.NoError(t, testrepo.New(conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, "org_gone_a"))
+
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Sort: new("member_count"), Direction: new("desc")})
+	require.NoError(t, err)
+	require.Len(t, res.Organizations, 2)
+
+	require.Equal(t, "org_gone_b", res.Organizations[0].ID, "the organization with a live member ranks first")
+	require.Equal(t, 1, res.Organizations[0].MemberCount)
+	require.Equal(t, 0, res.Organizations[1].MemberCount, "removed members are not counted")
 }

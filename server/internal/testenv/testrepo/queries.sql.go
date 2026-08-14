@@ -295,6 +295,19 @@ func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const forceSoftDeleteOrganizationUserRelationshipsFixture = `-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+`
+
+// Test-only fixture for seeding a removed member. The deleted column is
+// generated from deleted_at, so a soft delete has to set the timestamp.
+func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationshipsFixture, organizationID)
+	return err
+}
+
 const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()

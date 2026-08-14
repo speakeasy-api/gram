@@ -189,6 +189,13 @@ INSERT INTO organization_metadata (
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
 
+-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
+-- Test-only fixture for seeding a removed member. The deleted column is
+-- generated from deleted_at, so a soft delete has to set the timestamp.
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id;
+
 -- name: ForceSoftDeleteUserSessionIssuer :exec
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
