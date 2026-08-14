@@ -251,7 +251,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 
 	if _, err := q.ActivatePaygBillingMetadata(ctx, repo.ActivatePaygBillingMetadataParams{
 		StripeSubscriptionID:     pgtype.Text{String: event.SubscriptionID, Valid: true},
-		StripeBillingCycleAnchor: pgtype.Timestamptz{Time: checkout.BillingCycleAnchor.UTC(), Valid: true},
+		StripeBillingCycleAnchor: pgtype.Timestamptz{Time: checkout.BillingCycleAnchor.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
 		BillingCycleAnchorDay:    anchorDay,
 		OrganizationID:           organizationID,
 		StripeCustomerID:         pgtype.Text{String: event.CustomerID, Valid: true},

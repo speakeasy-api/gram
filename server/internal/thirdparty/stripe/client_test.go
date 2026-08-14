@@ -98,7 +98,7 @@ func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.Cust
 func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
 	f.calls++
 	f.checkoutSessionParams = params
-	return &stripesdk.CheckoutSession{URL: "https://checkout.stripe.test/session"}, f.err
+	return &stripesdk.CheckoutSession{ID: "cs_test", URL: "https://checkout.stripe.test/session"}, f.err
 }
 
 func (f *fakeStripeAPI) retrieveCheckoutSession(_ context.Context, _ string, params *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error) {
@@ -153,8 +153,8 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 			MeterEventName: "tum",
 		},
 	}
-	trialEnd := time.Date(2026, time.August, 20, 10, 0, 0, 0, time.UTC)
 	billingCycleAnchor := time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC)
+	expiresAt := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
 
 	session, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		CustomerID:         "cus_test",
@@ -162,16 +162,19 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 		OrganizationSlug:   "the-customer",
 		SuccessURL:         "https://app.example.test/the-customer/billing",
 		CancelURL:          "https://app.example.test/the-customer/billing",
-		TrialEnd:           &trialEnd,
+		TrialEnd:           &billingCycleAnchor,
 		BillingCycleAnchor: billingCycleAnchor,
+		ExpiresAt:          expiresAt,
 		IdempotencyKey:     "checkout:<ORG_ID>:request",
 	})
 	require.NoError(t, err)
+	require.Equal(t, "cs_test", session.ID)
 	require.Equal(t, "https://checkout.stripe.test/session", session.URL)
 
 	params := api.checkoutSessionParams
 	require.Equal(t, "checkout:<ORG_ID>:request", stripesdk.StringValue(params.IdempotencyKey))
 	require.Equal(t, "cus_test", stripesdk.StringValue(params.Customer))
+	require.Equal(t, expiresAt.Unix(), stripesdk.Int64Value(params.ExpiresAt))
 	require.Equal(t, "<ORG_ID>", stripesdk.StringValue(params.ClientReferenceID))
 	require.Equal(t, "subscription", stripesdk.StringValue(params.Mode))
 	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
@@ -183,9 +186,9 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	require.Equal(t, "<ORG_ID>", params.Metadata[organizationIDMetadataKey])
 	require.Equal(t, "the-customer", params.Metadata[organizationSlugMetadataKey])
 	require.NotNil(t, params.SubscriptionData)
-	require.Equal(t, trialEnd.Unix(), stripesdk.Int64Value(params.SubscriptionData.TrialEnd))
-	require.Equal(t, billingCycleAnchor.Unix(), stripesdk.Int64Value(params.SubscriptionData.BillingCycleAnchor))
-	require.Equal(t, "none", stripesdk.StringValue(params.SubscriptionData.ProrationBehavior))
+	require.Equal(t, billingCycleAnchor.Unix(), stripesdk.Int64Value(params.SubscriptionData.TrialEnd))
+	require.Nil(t, params.SubscriptionData.BillingCycleAnchor)
+	require.Nil(t, params.SubscriptionData.ProrationBehavior)
 	require.Equal(t, "<ORG_ID>", params.SubscriptionData.Metadata[organizationIDMetadataKey])
 	require.Equal(t, "the-customer", params.SubscriptionData.Metadata[organizationSlugMetadataKey])
 }
@@ -204,10 +207,13 @@ func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
 		CancelURL:          "",
 		TrialEnd:           nil,
 		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
 		IdempotencyKey:     "checkout",
 	})
 	require.NoError(t, err)
 	require.Nil(t, api.checkoutSessionParams.SubscriptionData.TrialEnd)
+	require.Equal(t, time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC).Unix(), stripesdk.Int64Value(api.checkoutSessionParams.SubscriptionData.BillingCycleAnchor))
+	require.Equal(t, "none", stripesdk.StringValue(api.checkoutSessionParams.SubscriptionData.ProrationBehavior))
 }
 
 func TestCreateCheckoutSessionRejectsMissingBillingCycleAnchor(t *testing.T) {
@@ -218,6 +224,20 @@ func TestCreateCheckoutSessionRejectsMissingBillingCycleAnchor(t *testing.T) {
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{IdempotencyKey: "checkout"})
 	require.ErrorIs(t, err, errMissingBillingCycleAnchor)
+	require.Zero(t, api.calls)
+}
+
+func TestCreateCheckoutSessionRejectsMissingExpiration(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.ErrorIs(t, err, errMissingCheckoutExpiration)
 	require.Zero(t, api.calls)
 }
 
@@ -314,6 +334,7 @@ func TestWritesWrapStripeErrors(t *testing.T) {
 
 	_, err = c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC),
 		IdempotencyKey:     "checkout",
 	})
 	require.ErrorIs(t, err, apiErr)
@@ -560,6 +581,7 @@ func TestStubClientIsSafeToCall(t *testing.T) {
 	require.Equal(t, "cus_local_stub", customer.ID)
 	checkout, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{OrganizationSlug: "test/org"})
 	require.NoError(t, err)
+	require.Equal(t, "cs_local_stub", checkout.ID)
 	require.Equal(t, "http://localhost:3000/test%2Forg/billing", checkout.URL)
 	require.NoError(t, c.CreateMeterEvent(t.Context(), CreateMeterEventInput{}))
 	require.Equal(t, Catalog{}, c.Catalog())
