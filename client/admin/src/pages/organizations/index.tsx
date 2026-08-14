@@ -238,6 +238,17 @@ export function OrganizationsList(): JSX.Element {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!peeked || event.defaultPrevented) return;
 
+    // Every row's peek control sits under this handler. An arrow key pressed
+    // on one of them is a reflex to scroll, and answering it moves the panel
+    // to a row the operator is not on, eats the scroll, and leaves them
+    // standing on a control that still reports itself closed. Escape there
+    // would drag the keyboard back to the peeked row. The peeked row's own
+    // control is exempt: that one is the panel's control.
+    if (event.target instanceof HTMLElement) {
+      const trigger = event.target.closest(PEEK_TRIGGER_SELECTOR);
+      if (trigger && !peekedRow.current?.contains(trigger)) return;
+    }
+
     if (event.key === "Escape") {
       event.preventDefault();
       closePeek();
@@ -289,11 +300,16 @@ export function OrganizationsList(): JSX.Element {
 
                 <div
                   ref={scrollBox}
-                  // A scroll box has to be reachable by keyboard in its own
-                  // right, and it is where focus lands when the peeked record
-                  // leaves the list with the keyboard on the panel. The focus
-                  // ring stays: nothing else on screen moves when focus
-                  // arrives here, so the ring is the only sign it did.
+                  // Named, because this is where the keyboard lands when the
+                  // peeked record leaves the list with the panel holding the
+                  // focus. An unnamed div would put the operator somewhere
+                  // their screen reader cannot describe.
+                  role="region"
+                  aria-label="Organizations table"
+                  // Programmatic only: -1 takes the box out of the tab order
+                  // and still lets that rescue focus it. The focus ring stays,
+                  // because nothing else on screen moves when focus arrives
+                  // here and the ring is the only sign that it did.
                   tabIndex={-1}
                   className={cn(
                     "min-h-0 flex-1 overflow-auto",

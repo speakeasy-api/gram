@@ -856,6 +856,55 @@ describe("organizations list peek", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("ignores the arrow keys on a control that is not the peeked row's", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    const other = await peekTrigger(SECOND_ORG.name);
+
+    // An operator on another row's control presses this to scroll. Answering
+    // it would move the panel away from where they are looking, swallow the
+    // scroll, and leave them on a control still reporting itself closed.
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    other.dispatchEvent(event);
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("ignores Escape on a control that is not the peeked row's", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    const other = await peekTrigger(SECOND_ORG.name);
+    other.focus();
+
+    fireEvent.keyDown(other, { key: "Escape" });
+
+    // Closing from here would pull the keyboard onto the peeked row, which is
+    // a place the operator did not ask to go.
+    expect(peekPanel()).toBeTruthy();
+    expect(document.activeElement).toBe(other);
+  });
+
+  it("still closes on Escape pressed on the peeked row's own control", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekOn(FIRST_ORG.name);
+    trigger.focus();
+
+    // The exemption has to be this narrow, or closing from the control that
+    // opened the panel stops working.
+    fireEvent.keyDown(trigger, { key: "Escape" });
+
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+  });
+
   it("announces a move onto an organization that shares the peeked one's name", async () => {
     // Names are not unique. Two records, one name, so both announcements are
     // the same sentence word for word.
@@ -972,6 +1021,11 @@ describe("organizations list peek", () => {
     });
     expect(document.activeElement?.contains(screen.getByRole("table"))).toBe(
       true,
+    );
+    // Named, or the operator arrives somewhere their screen reader announces
+    // as nothing at all.
+    expect(document.activeElement).toBe(
+      screen.getByRole("region", { name: "Organizations table" }),
     );
     // Worded apart from an operator's own close, which says nothing about why.
     expect(announcement()).toBe(
