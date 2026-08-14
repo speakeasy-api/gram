@@ -35,6 +35,14 @@ type Client struct {
 	// updateOrganization endpoint.
 	UpdateOrganizationDoer goahttp.Doer
 
+	// DisableOrganization Doer is the HTTP client used to make requests to the
+	// disableOrganization endpoint.
+	DisableOrganizationDoer goahttp.Doer
+
+	// EnableOrganization Doer is the HTTP client used to make requests to the
+	// enableOrganization endpoint.
+	EnableOrganizationDoer goahttp.Doer
+
 	// GetOrganization Doer is the HTTP client used to make requests to the
 	// getOrganization endpoint.
 	GetOrganizationDoer goahttp.Doer
@@ -76,6 +84,8 @@ func NewClient(
 		LogoutDoer:                   doer,
 		GetProjectDoer:               doer,
 		UpdateOrganizationDoer:       doer,
+		DisableOrganizationDoer:      doer,
+		EnableOrganizationDoer:       doer,
 		GetOrganizationDoer:          doer,
 		ListOrganizationMembersDoer:  doer,
 		ListOrganizationProjectsDoer: doer,
@@ -203,6 +213,54 @@ func (c *Client) UpdateOrganization() goa.Endpoint {
 		resp, err := c.UpdateOrganizationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableOrganization returns an endpoint that makes HTTP requests to the
+// admin service disableOrganization server.
+func (c *Client) DisableOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableOrganizationRequest(c.encoder)
+		decodeResponse = DecodeDisableOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "disableOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableOrganization returns an endpoint that makes HTTP requests to the admin
+// service enableOrganization server.
+func (c *Client) EnableOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableOrganizationRequest(c.encoder)
+		decodeResponse = DecodeEnableOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "enableOrganization", err)
 		}
 		return decodeResponse(resp)
 	}

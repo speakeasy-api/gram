@@ -184,6 +184,30 @@ INSERT INTO organization_metadata (
     COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
 );
 
+-- name: SetWorkosLastEventIDFixture :exec
+-- Test-only fixture for seeding the WorkOS webhook cursor on an organization
+-- that already exists. Deliberately kept out of
+-- CreateOrganizationMetadataFixture: several branches add columns to that
+-- INSERT at once, and a column added mid-list renumbers every positional
+-- placeholder after it in the generated code, which a hand-resolved merge can
+-- get wrong while still compiling.
+UPDATE organization_metadata
+SET workos_last_event_id = @workos_last_event_id
+WHERE id = @id;
+
+-- name: GetOrganizationMetadataStateFixture :one
+-- Test-only fixture for asserting what a write to organization_metadata did
+-- and did not touch. disabled_at comes back at full precision: the admin API
+-- renders it as a second-resolution RFC3339 string, which hides a timestamp
+-- that moved by microseconds. workos_last_event_id is the WorkOS webhook
+-- cursor, which only the webhook path may write. created_at and updated_at are
+-- the reference points for "did this write stamp the moment of the action":
+-- comparing a stamp against them keeps the comparison inside the database
+-- clock, which the test host's clock can drift from.
+SELECT disabled_at, workos_last_event_id, whitelisted, created_at, updated_at
+FROM organization_metadata
+WHERE id = @id;
+
 -- name: CreateOrganizationUserRelationshipFixture :exec
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)

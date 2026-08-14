@@ -20,14 +20,15 @@ import (
 )
 
 type orgFixture struct {
-	id          string
-	name        string
-	slug        string
-	accountType string
-	workosID    *string
-	whitelisted bool
-	disabledAt  *time.Time
-	createdAt   *time.Time
+	id                string
+	name              string
+	slug              string
+	accountType       string
+	workosID          *string
+	workosLastEventID *string
+	whitelisted       bool
+	disabledAt        *time.Time
+	createdAt         *time.Time
 }
 
 func seedOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f orgFixture) {
@@ -52,6 +53,15 @@ func seedOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f orgFixture
 
 	err := testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, params)
 	require.NoError(t, err)
+
+	// The webhook cursor is seeded separately so it stays out of the INSERT.
+	if f.workosLastEventID != nil {
+		err := testrepo.New(conn).SetWorkosLastEventIDFixture(ctx, testrepo.SetWorkosLastEventIDFixtureParams{
+			ID:                f.id,
+			WorkosLastEventID: conv.PtrToPGText(f.workosLastEventID),
+		})
+		require.NoError(t, err)
+	}
 }
 
 func seedMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, userID string) {

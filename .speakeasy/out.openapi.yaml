@@ -59772,6 +59772,15 @@ components:
       required:
         - organization_id
         - key_type
+    DisableOrganizationRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
     DiscoverProtectedResourceMetadataRequestBody:
       type: object
       properties:
@@ -59907,6 +59916,15 @@ components:
       required:
         - organization_id
         - key_type
+    EnableOrganizationRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
     EncryptOpenRouterKeyRequestBody:
       type: object
       properties:

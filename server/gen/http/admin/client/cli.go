@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildLoginPayload builds the payload for the admin login endpoint from CLI
@@ -134,6 +136,68 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 		ID:          body.ID,
 		AccountType: body.AccountType,
 		Whitelisted: body.Whitelisted,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildDisableOrganizationPayload builds the payload for the admin
+// disableOrganization endpoint from CLI flags.
+func BuildDisableOrganizationPayload(adminDisableOrganizationBody string, adminDisableOrganizationAdminSessionToken string) (*admin.DisableOrganizationPayload, error) {
+	var err error
+	var body DisableOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDisableOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDisableOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminDisableOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.DisableOrganizationPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildEnableOrganizationPayload builds the payload for the admin
+// enableOrganization endpoint from CLI flags.
+func BuildEnableOrganizationPayload(adminEnableOrganizationBody string, adminEnableOrganizationAdminSessionToken string) (*admin.EnableOrganizationPayload, error) {
+	var err error
+	var body EnableOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminEnableOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminEnableOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminEnableOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.EnableOrganizationPayload{
+		ID: body.ID,
 	}
 	v.AdminSessionToken = adminSessionToken
 

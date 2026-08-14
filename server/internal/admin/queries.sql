@@ -180,6 +180,27 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: AdminDisableOrganization :execrows
+-- Operator-initiated disable. Keyed on the Gram organization id rather than
+-- workos_id so an organization that was never linked to WorkOS can still be
+-- disabled. Deliberately leaves workos_last_event_id alone: that column is the
+-- WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
+-- misrecord which event was last applied. Idempotent — the COALESCE keeps the
+-- original timestamp when the organization is already disabled.
+UPDATE organization_metadata
+SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: AdminEnableOrganization :execrows
+-- Undo of AdminDisableOrganization, and likewise blind to workos_last_event_id.
+-- Idempotent — enabling an already-active organization is a no-op beyond
+-- updated_at.
+UPDATE organization_metadata
+SET disabled_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: AdminListProjectsForOrganization :many
 SELECT id, slug, name, created_at, updated_at
 FROM projects
@@ -203,7 +224,16 @@ WHERE our.organization_id = @organization_id
 ORDER BY u.email ASC
 LIMIT 200;
 
--- name: AdminGetOrganizationByIDOrSlug :one
+-- name: AdminGetOrganization :one
+-- Resolving a slug is opt-in because every admin write is keyed on id alone.
+-- Both columns are bare TEXT, so one organization's slug can equal another's
+-- id; a read-after-write that allowed slugs could then describe a different
+-- organization than the one just written, and the operator would see a 200
+-- reporting the write never happened. Reads that are not following a write pass
+-- allow_slug true, which the dashboard relies on. The ORDER BY settles the same
+-- collision for those reads: when the argument is one organization's id and
+-- another's slug both rows match, and LIMIT 1 on its own would pick either, so
+-- the exact id match is sorted first.
 SELECT
     om.id,
     om.name,
@@ -234,6 +264,7 @@ SELECT
     )::bigint AS member_count
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
-WHERE om.id = sqlc.arg('id_or_slug')::text
-   OR om.slug = sqlc.arg('id_or_slug')::text
+WHERE om.id = sqlc.arg('id')::text
+   OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
+ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;

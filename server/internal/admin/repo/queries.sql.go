@@ -70,7 +70,46 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	return column_1, err
 }
 
-const adminGetOrganizationByIDOrSlug = `-- name: AdminGetOrganizationByIDOrSlug :one
+const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
+UPDATE organization_metadata
+SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Operator-initiated disable. Keyed on the Gram organization id rather than
+// workos_id so an organization that was never linked to WorkOS can still be
+// disabled. Deliberately leaves workos_last_event_id alone: that column is the
+// WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
+// misrecord which event was last applied. Idempotent — the COALESCE keeps the
+// original timestamp when the organization is already disabled.
+func (q *Queries) AdminDisableOrganization(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDisableOrganization, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminEnableOrganization = `-- name: AdminEnableOrganization :execrows
+UPDATE organization_metadata
+SET disabled_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Undo of AdminDisableOrganization, and likewise blind to workos_last_event_id.
+// Idempotent — enabling an already-active organization is a no-op beyond
+// updated_at.
+func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, adminEnableOrganization, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
     om.name,
@@ -102,11 +141,17 @@ SELECT
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = $1::text
-   OR om.slug = $1::text
+   OR ($2::boolean AND om.slug = $1::text)
+ORDER BY (om.id = $1::text) DESC
 LIMIT 1
 `
 
-type AdminGetOrganizationByIDOrSlugRow struct {
+type AdminGetOrganizationParams struct {
+	ID        string
+	AllowSlug bool
+}
+
+type AdminGetOrganizationRow struct {
 	ID                 string
 	Name               string
 	Slug               string
@@ -123,9 +168,18 @@ type AdminGetOrganizationByIDOrSlugRow struct {
 	MemberCount        int64
 }
 
-func (q *Queries) AdminGetOrganizationByIDOrSlug(ctx context.Context, idOrSlug string) (AdminGetOrganizationByIDOrSlugRow, error) {
-	row := q.db.QueryRow(ctx, adminGetOrganizationByIDOrSlug, idOrSlug)
-	var i AdminGetOrganizationByIDOrSlugRow
+// Resolving a slug is opt-in because every admin write is keyed on id alone.
+// Both columns are bare TEXT, so one organization's slug can equal another's
+// id; a read-after-write that allowed slugs could then describe a different
+// organization than the one just written, and the operator would see a 200
+// reporting the write never happened. Reads that are not following a write pass
+// allow_slug true, which the dashboard relies on. The ORDER BY settles the same
+// collision for those reads: when the argument is one organization's id and
+// another's slug both rows match, and LIMIT 1 on its own would pick either, so
+// the exact id match is sorted first.
+func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganizationParams) (AdminGetOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganization, arg.ID, arg.AllowSlug)
+	var i AdminGetOrganizationRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
