@@ -155,6 +155,30 @@ describe("writeOrganizationToCache", () => {
     ).toBe(true);
   });
 
+  // The cold-load window: the aggregate is still open, so it holds no data and
+  // the invalidation below has nothing to refire. Its pre-write answer would
+  // fill the cache and read as fresh.
+  it("survives a first stats read that was still open when it landed", async () => {
+    const qc = new QueryClient();
+
+    let land: (stats: unknown) => void = () => {};
+    const stale = new Promise((resolve) => {
+      land = resolve;
+    });
+    const inFlight = qc.prefetchQuery({
+      ...organizationsStatsQuery,
+      queryFn: () => stale as Promise<never>,
+    });
+
+    await cancelOrganizationFetches(qc);
+    writeOrganizationToCache(qc, DISABLED);
+
+    land({ total: 1, disabled: 0 });
+    await inFlight;
+
+    expect(qc.getQueryData(organizationsStatsQuery.queryKey)).toBeUndefined();
+  });
+
   it("leaves a page that never held the record exactly as it was", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "other" });

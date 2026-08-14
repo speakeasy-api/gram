@@ -26,6 +26,7 @@ import { ORG_COLUMNS } from "./columns";
 import { WriteReportProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
 import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
+import { FiltersApplied } from "./applyFilters";
 import { useOpenOrganization } from "./rowActions";
 import { StatStrip } from "./StatStrip";
 import { TableActionBar, Toolbar } from "./Toolbar";
@@ -159,6 +160,12 @@ export function OrganizationsList(): JSX.Element {
     // table empties on each change and the rows jump.
     placeholderData: keepPreviousData,
   });
+
+  // Applying a set the list already carries leaves the signature above
+  // untouched, so the control that applies says so itself.
+  const resetPager = useCallback(() => {
+    setPager((prev) => ({ ...prev, cursor: undefined, stack: [] }));
+  }, []);
 
   const goNext = () => {
     if (!data?.next_cursor) return;
@@ -371,11 +378,13 @@ export function OrganizationsList(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <section className="flex min-h-0 flex-1 flex-col">
-        {/* Outside the table's scroll box, so the figures stay on screen while
-            the operator scrolls the rows they lead to. */}
-        <StatStrip />
+        <FiltersApplied.Provider value={resetPager}>
+          {/* Outside the table's scroll box, so the figures stay on screen
+              while the operator scrolls the rows they lead to. */}
+          <StatStrip />
 
-        <Toolbar />
+          <Toolbar />
+        </FiltersApplied.Provider>
 
         {/* A failed refetch keeps the previous rows, so the failure has to show
             outside the empty state or the operator reads stale data as fresh. */}

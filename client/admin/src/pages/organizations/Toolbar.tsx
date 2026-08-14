@@ -66,7 +66,6 @@ export function Toolbar(): JSX.Element {
         search: (prev: OrganizationsSearch) => ({
           ...prev,
           q: next || undefined,
-          page: undefined,
         }),
         // Keystroke rate. One history entry per burst of typing, not one per
         // keystroke.

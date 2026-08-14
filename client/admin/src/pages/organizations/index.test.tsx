@@ -828,21 +828,32 @@ describe("organizations list", () => {
     expect(url).toContain("dir=asc");
   });
 
-  it("returns to the first page when a filter is applied", async () => {
-    const { router } = await renderRouteTree(routeTree, {
-      initialPath: urlFor({ page: 3 }),
+  it("returns to the first page when the sheet applies the set already on", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ disabled: ["disabled"] }),
     });
 
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // Nothing in the URL moves, so the pager cannot notice on its own. Page
+    // three of a filter set is not the first page an operator asked for.
     await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().cursor).toBeUndefined();
     });
-    // Page three of the old filter set is not page three of the new one, and
-    // an operator who narrowed a list expects its first rows.
-    expect(currentSearch(router)).not.toContain("page");
   });
 
   it("keeps an unrecognised type on offer after the operator unchecks it", async () => {
@@ -3095,10 +3106,7 @@ describe("organizationsSearchSchema", () => {
     ["reads a direction in the union", { dir: "desc" }, { dir: "desc" }],
     ["drops a direction outside the union", { dir: "sideways" }, {}],
     ["drops the old disabled flag when it is off", { disabled: false }, {}],
-    ["drops page 1, which is the default", { page: 1 }, {}],
-    ["drops a page below 1", { page: 0 }, {}],
-    ["drops a page between two whole ones", { page: 2.5 }, {}],
-    ["keeps a page past the first", { page: 2 }, { page: 2 }],
+    ["drops a key the schema does not declare", { page: 2 }, {}],
   ];
 
   it.each(cases)("%s", (_name, search, expected) => {

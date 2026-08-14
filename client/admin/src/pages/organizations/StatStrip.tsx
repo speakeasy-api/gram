@@ -36,6 +36,8 @@ type StatCell = {
   subLine?: (stats: AdminOrganizationStats) => string;
   /** Applied whole, so the filters a cell does not name are cleared. */
   filters: FilterSelection;
+  /** What pressing does. The figure alone never says the cell is a control. */
+  action: string;
 };
 
 const STAT_CELLS: StatCell[] = [
@@ -44,18 +46,21 @@ const STAT_CELLS: StatCell[] = [
     value: (stats) => stats.total,
     subLine: (stats) => `${figure(stats.created_last_7_days)} new this week`,
     filters: { ...NO_FILTERS, disabled: EVERY_STATUS },
+    action: "Show every organization",
   },
   {
     // No sub-line: the design's "N with no owner" is cut, Gram has no owners.
     label: "Trials ending in 7 days",
     value: (stats) => stats.trials_ending_soon,
     filters: { ...NO_FILTERS, trial: [ENDING_SOON], disabled: EVERY_STATUS },
+    action: "Show the trials ending in 7 days",
   },
   {
     label: "Disabled",
     value: (stats) => stats.disabled,
     subLine: (stats) => `${figure(stats.disabled_last_7_days)} this week`,
     filters: { ...NO_FILTERS, disabled: [DISABLED] },
+    action: "Show the disabled organizations",
   },
 ];
 
@@ -83,10 +88,10 @@ export function StatStrip(): JSX.Element {
           <button
             key={cell.label}
             type="button"
-            // The dash is not spoken at default verbosity, so without this the
-            // cell is a label with no figure and no sign one is coming.
+            // Readable on demand rather than announced: the dash is not spoken
+            // at default verbosity, so the cell is a label with no figure.
             aria-busy={isPending}
-            onClick={() => applyFilters(cell.filters)}
+            onClick={() => applyFilters(cell.filters, { clearSearch: true })}
             className="flex flex-col items-start gap-0.5 px-4 py-3 text-left transition-colors first:rounded-l-lg last:rounded-r-lg hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <span className="text-muted-foreground text-xs">{cell.label}</span>
@@ -100,6 +105,7 @@ export function StatStrip(): JSX.Element {
                 {data ? cell.subLine(data) : null}
               </span>
             ) : null}
+            <span className="sr-only">{cell.action}</span>
           </button>
         ))}
       </div>

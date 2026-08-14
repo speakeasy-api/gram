@@ -70,6 +70,14 @@ const ORGS: AdminOrganization[] = [
   },
 ];
 
+// Spoken, never painted: each cell ends with a sentence naming what pressing
+// it does.
+const ACTION: Record<string, string> = {
+  Organizations: "Show every organization",
+  "Trials ending in 7 days": "Show the trials ending in 7 days",
+  Disabled: "Show the disabled organizations",
+};
+
 function figure(value: number): string {
   return value.toLocaleString();
 }
@@ -134,13 +142,13 @@ describe("organizations stat strip figures", () => {
     await renderList();
 
     expect(cell("Organizations").textContent).toBe(
-      `Organizations${figure(STATS.total)}${figure(STATS.created_last_7_days)} new this week`,
+      `Organizations${figure(STATS.total)}${figure(STATS.created_last_7_days)} new this week${ACTION["Organizations"]}`,
     );
     expect(cell("Trials ending in 7 days").textContent).toBe(
-      `Trials ending in 7 days${figure(STATS.trials_ending_soon)}`,
+      `Trials ending in 7 days${figure(STATS.trials_ending_soon)}${ACTION["Trials ending in 7 days"]}`,
     );
     expect(cell("Disabled").textContent).toBe(
-      `Disabled${figure(STATS.disabled)}${figure(STATS.disabled_last_7_days)} this week`,
+      `Disabled${figure(STATS.disabled)}${figure(STATS.disabled_last_7_days)} this week${ACTION["Disabled"]}`,
     );
   });
 
@@ -149,8 +157,8 @@ describe("organizations stat strip figures", () => {
 
     const trials = cell("Trials ending in 7 days");
     expect(within(trials).queryByText(/this week/)).toBeNull();
-    expect(trials.querySelectorAll("span").length).toBe(2);
-    expect(cell("Organizations").querySelectorAll("span").length).toBe(3);
+    expect(trials.querySelectorAll("span").length).toBe(3);
+    expect(cell("Organizations").querySelectorAll("span").length).toBe(4);
   });
 
   it("renders a figure of zero as a figure, not as a missing one", async () => {
@@ -159,7 +167,7 @@ describe("organizations stat strip figures", () => {
     await renderList();
 
     expect(cell("Disabled").textContent).toBe(
-      `Disabled0${figure(STATS.disabled_last_7_days)} this week`,
+      `Disabled0${figure(STATS.disabled_last_7_days)} this week${ACTION["Disabled"]}`,
     );
   });
 
@@ -172,7 +180,7 @@ describe("organizations stat strip figures", () => {
     await renderList();
 
     expect(cell("Disabled").textContent).toBe(
-      `Disabled${figure(STATS.disabled)}— this week`,
+      `Disabled${figure(STATS.disabled)}— this week${ACTION["Disabled"]}`,
     );
     expect(cell("Organizations").textContent).toContain(figure(STATS.total));
   });
@@ -187,8 +195,10 @@ describe("organizations stat strip figures", () => {
 
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    expect(cell("Organizations").textContent).toBe("Organizations—");
-    expect(cell("Disabled").textContent).toBe("Disabled—");
+    expect(cell("Organizations").textContent).toBe(
+      `Organizations—${ACTION["Organizations"]}`,
+    );
+    expect(cell("Disabled").textContent).toBe(`Disabled—${ACTION["Disabled"]}`);
 
     settle(STATS);
     await waitFor(() => {
@@ -201,14 +211,26 @@ describe("organizations stat strip figures", () => {
 
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    await screen.findByText(/Could not load the platform totals/);
+    // The reason as well as the headline: a banner that drops it tells the
+    // operator something failed and nothing about what.
+    await screen.findByText(
+      /Could not load the platform totals: stats are down/,
+    );
     // The cells too: a failure falling back to a figure would put three zeroes
     // above a table full of rows.
-    expect(cell("Organizations").textContent).toBe("Organizations—");
-    expect(cell("Trials ending in 7 days").textContent).toBe(
-      "Trials ending in 7 days—",
+    expect(cell("Organizations").textContent).toBe(
+      `Organizations—${ACTION["Organizations"]}`,
     );
-    expect(cell("Disabled").textContent).toBe("Disabled—");
+    expect(cell("Trials ending in 7 days").textContent).toBe(
+      `Trials ending in 7 days—${ACTION["Trials ending in 7 days"]}`,
+    );
+    expect(cell("Disabled").textContent).toBe(`Disabled—${ACTION["Disabled"]}`);
+  });
+
+  it("says nothing about a failure that did not happen", async () => {
+    await renderList();
+
+    expect(screen.queryByText(/Could not load the platform totals/)).toBeNull();
   });
 
   it("still filters from a cell whose figure never arrived", async () => {
@@ -245,9 +267,8 @@ describe("organizations stat strip navigation", () => {
 
     fireEvent.click(cell("Organizations"));
 
-    // Both statuses, spelled out. An absent status filter is not "no filter":
-    // the server reads it as active only, so the figure counts the disabled
-    // organizations and the list it opened would leave them out.
+    // Spelled out, because an absent status filter is not "no filter": the
+    // server reads it as active only.
     await waitFor(() => {
       expect(currentSearch(router)).toBe('?disabled=["active","disabled"]');
     });
@@ -306,7 +327,7 @@ describe("organizations stat strip navigation", () => {
     expect(lastListParams().trial_states).toBeUndefined();
   });
 
-  it("leaves the search term alone", async () => {
+  it("drops the search term the figure never counted", async () => {
     const router = await renderList(urlFor({ q: "acme", type: ["pro"] }));
 
     fireEvent.click(cell("Trials ending in 7 days"));
@@ -314,11 +335,55 @@ describe("organizations stat strip navigation", () => {
     await waitFor(() => {
       expect(lastListParams().trial_states).toEqual(["ending_soon"]);
     });
-    expect(lastListParams().q).toBe("acme");
-    expect(currentSearch(router)).toContain("q=acme");
-    expect(
-      (screen.getByLabelText("Search organizations") as HTMLInputElement).value,
-    ).toBe("acme");
+    expect(lastListParams().q).toBeUndefined();
+    expect(currentSearch(router)).not.toContain("q=");
+    // The box too, or the term is gone from the request and still on screen.
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText("Search organizations") as HTMLInputElement)
+          .value,
+      ).toBe("");
+    });
+  });
+
+  it("returns to the first page even where the filters do not change", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderList(urlFor({ disabled: ["disabled"] }));
+
+    const next = screen.getByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // The set this cell applies is the set already applied, so nothing in the
+    // URL moves and the pager has to be told rather than notice.
+    fireEvent.click(cell("Disabled"));
+
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBeUndefined();
+    });
+  });
+
+  it("names the whole platform on the status control rather than counting it", async () => {
+    await renderList();
+
+    fireEvent.click(cell("Organizations"));
+
+    // "2 selected" reads as a narrowing, and "Active only" would be false.
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: /^Status filter:/ })
+          .getAttribute("aria-label"),
+      ).toBe("Status filter: Active and disabled");
+    });
   });
 
   it("shows the applied filter on the control that opens the sheet", async () => {
@@ -464,12 +529,19 @@ describe("organizations stat strip accessible names", () => {
 
     // The computed name: an aria-label added later would drop the figure.
     for (const name of [
-      `Organizations ${figure(STATS.total)} ${figure(STATS.created_last_7_days)} new this week`,
-      `Trials ending in 7 days ${figure(STATS.trials_ending_soon)}`,
-      `Disabled ${figure(STATS.disabled)} ${figure(STATS.disabled_last_7_days)} this week`,
+      `Organizations ${figure(STATS.total)} ${figure(STATS.created_last_7_days)} new this week ${ACTION["Organizations"]}`,
+      `Trials ending in 7 days ${figure(STATS.trials_ending_soon)} ${ACTION["Trials ending in 7 days"]}`,
+      `Disabled ${figure(STATS.disabled)} ${figure(STATS.disabled_last_7_days)} this week ${ACTION["Disabled"]}`,
     ]) {
       expect(within(strip()).getByRole("button", { name })).toBeTruthy();
     }
+  });
+
+  it("says what pressing does without painting it", async () => {
+    await renderList();
+
+    const spoken = within(cell("Disabled")).getByText(ACTION["Disabled"] ?? "");
+    expect(spoken.className).toContain("sr-only");
   });
 
   it("leaves the name to come from the contents", async () => {

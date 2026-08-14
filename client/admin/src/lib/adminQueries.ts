@@ -132,6 +132,9 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
     // Cancelling another organization's detail fetch costs that page a refetch
     // and nothing else, and only one detail query is ever in flight from here.
     qc.cancelQueries({ queryKey: [ORGANIZATION_KEY] }),
+    // A first fetch still open holds no data, so the invalidation below finds
+    // nothing to refire and the pre-write counts land as though they were new.
+    qc.cancelQueries({ queryKey: organizationsStatsQuery.queryKey }),
   ]).then(() => undefined);
 }
 
