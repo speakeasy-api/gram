@@ -4,7 +4,11 @@
 // written once. A key spelled out at a call site is the usual cause of a
 // mutation that updates the server and leaves the table showing the old row.
 
-import { queryOptions, type QueryKey } from "@tanstack/react-query";
+import {
+  queryOptions,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import {
   getOrganization,
   getProject,
@@ -87,6 +91,42 @@ export function organizationMembersQuery(
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
   });
+}
+
+// Every admin write answers with the organization in its new state, so the
+// caches that hold that record are written from the response. A refetch would
+// be the alternative, and the list is cursor-paged and filtered: refetching it
+// can move the row out from under the operator who just acted on it.
+//
+// It lives beside the keys rather than at a call site for the reason at the top
+// of this file: a key spelled out by hand is how a write updates the server and
+// leaves the table showing the old row.
+export function writeOrganizationToCache(
+  qc: QueryClient,
+  org: AdminOrganization,
+): void {
+  // The detail route takes either, and each is its own entry.
+  qc.setQueryData(organizationQuery(org.id).queryKey, org);
+  if (org.slug) qc.setQueryData(organizationQuery(org.slug).queryKey, org);
+
+  // Every filter and every page, because the operator can act on a row from any
+  // of them and the rest stay in the cache behind it. The record is replaced
+  // where it appears and the page is left alone where it does not, so a list
+  // that never held it keeps its identity and does not re-render.
+  qc.setQueriesData<ListOrganizationsResult>(
+    { queryKey: organizationsListQuery().queryKey },
+    (previous) => {
+      if (!previous?.organizations.some((row) => row.id === org.id)) {
+        return previous;
+      }
+      return {
+        ...previous,
+        organizations: previous.organizations.map((row) =>
+          row.id === org.id ? org : row,
+        ),
+      };
+    },
+  );
 }
 
 export function projectQuery(

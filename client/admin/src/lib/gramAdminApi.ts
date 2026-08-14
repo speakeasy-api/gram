@@ -288,6 +288,57 @@ export function updateOrganization(
   });
 }
 
+export type OrganizationRequest = {
+  id: string;
+};
+
+// Both answer the organization in its new state, so a caller updates its cache
+// from the response rather than reading the record back.
+export function disableOrganization(
+  body: OrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function enableOrganization(
+  body: OrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// The server's own bounds, mirrored so a value it would reject never leaves the
+// browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
+// server/internal/constants/trials.go: zero moves nothing but updated_at, a
+// negative shortens a trial through an endpoint named extend, and a year is
+// where a trial becomes a contract.
+export const MIN_TRIAL_EXTENSION_DAYS = 1;
+export const MAX_TRIAL_EXTENSION_DAYS = 365;
+
+export type ExtendTrialRequest = {
+  id: string;
+  days: number;
+};
+
+// The days are added to the trial's current end date, not to today, so an
+// extension applied early does not shorten the trial.
+export function extendTrial(
+  body: ExtendTrialRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type AdminProject = {
   id: string;
   name: string;
