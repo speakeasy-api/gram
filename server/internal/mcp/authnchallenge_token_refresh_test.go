@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -135,20 +136,26 @@ func TestTokenRefresh_ConcurrentReplaySucceeds(t *testing.T) {
 	first := mintIssuerTokens(t, ctx, ti, toolset.McpSlug.String, toolset.UserSessionIssuerID.UUID, client)
 
 	const n = 8
-	results := make([]*httptest.ResponseRecorder, n)
+	type refreshResult struct {
+		w   *httptest.ResponseRecorder
+		err error
+	}
+	results := make([]refreshResult, n)
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := range n {
 		go func() {
 			defer wg.Done()
-			results[i] = postRefreshToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, first.RefreshToken)
+			w, err := doHostedTokenForm(ctx, ti, toolset.McpSlug.String, refreshTokenForm(client.ClientID, first.RefreshToken))
+			results[i] = refreshResult{w: w, err: err}
 		}()
 	}
 	wg.Wait()
 
-	for i, w := range results {
-		require.Equal(t, http.StatusOK, w.Code, "request %d body=%s", i, w.Body.String())
-		got := decodeMintedTokens(t, w)
+	for i, result := range results {
+		require.NoError(t, result.err, "request %d", i)
+		require.Equal(t, http.StatusOK, result.w.Code, "request %d body=%s", i, result.w.Body.String())
+		got := decodeMintedTokens(t, result.w)
 		require.Equal(t, first.RefreshToken, got.RefreshToken)
 		require.NotEmpty(t, got.AccessToken)
 	}
@@ -189,7 +196,7 @@ func mintIssuerTokens(
 	form.Set("redirect_uri", redirectURI)
 	form.Set("client_id", client.ClientID)
 	form.Set("code_verifier", verifier)
-	w := postTokenForm(t, ctx, ti, mcpSlug, form)
+	w := postHostedTokenForm(t, ctx, ti, mcpSlug, form)
 	require.Equal(t, http.StatusOK, w.Code, "authorization_code grant: %s", w.Body.String())
 	tokens := decodeMintedTokens(t, w)
 	require.NotEmpty(t, tokens.AccessToken)
@@ -197,14 +204,17 @@ func mintIssuerTokens(
 	return tokens
 }
 
-func postRefreshToken(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, clientID, refreshToken string) *httptest.ResponseRecorder {
-	t.Helper()
-
+func refreshTokenForm(clientID, refreshToken string) url.Values {
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", clientID)
-	return postTokenForm(t, ctx, ti, mcpSlug, form)
+	return form
+}
+
+func postRefreshToken(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, clientID, refreshToken string) *httptest.ResponseRecorder {
+	t.Helper()
+	return postHostedTokenForm(t, ctx, ti, mcpSlug, refreshTokenForm(clientID, refreshToken))
 }
 
 func postRevokeToken(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, clientID, token string) *httptest.ResponseRecorder {
@@ -225,9 +235,15 @@ func postRevokeToken(t *testing.T, ctx context.Context, ti *testInstance, mcpSlu
 	return w
 }
 
-func postTokenForm(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug string, form url.Values) *httptest.ResponseRecorder {
+func postHostedTokenForm(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug string, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 
+	w, err := doHostedTokenForm(ctx, ti, mcpSlug, form)
+	require.NoError(t, err)
+	return w
+}
+
+func doHostedTokenForm(ctx context.Context, ti *testInstance, mcpSlug string, form url.Values) (*httptest.ResponseRecorder, error) {
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+mcpSlug+"/token", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
@@ -235,8 +251,10 @@ func postTokenForm(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug 
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleToken(w, req))
-	return w
+	if err := ti.service.HandleToken(w, req); err != nil {
+		return w, fmt.Errorf("handle token: %w", err)
+	}
+	return w, nil
 }
 
 func decodeMintedTokens(t *testing.T, w *httptest.ResponseRecorder) mintedTokens {
