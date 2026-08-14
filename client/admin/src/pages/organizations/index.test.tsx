@@ -856,6 +856,36 @@ describe("organizations list peek", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("marks the open control apart from every other one", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const trigger = await peekOn(FIRST_ORG.name);
+    const other = await peekTrigger(SECOND_ORG.name);
+
+    // The variant, not the classes it expands to. Peek hides the name column
+    // it opened from, so the fill is the only thing left on screen that says
+    // which control the panel belongs to, and the ghost hover token and the
+    // peeked row token are the same grey in this theme.
+    expect(trigger.getAttribute("data-variant")).toBe("default");
+    expect(other.getAttribute("data-variant")).toBe("ghost");
+  });
+
+  it("describes the control to an operator who is not using a screen reader", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekTrigger(FIRST_ORG.name);
+
+    // An icon on its own says nothing to a sighted operator, and the label
+    // this replaces only ever announced itself to a screen reader.
+    fireEvent.focus(trigger);
+
+    const tip = await screen.findByRole("tooltip");
+    expect(tip.textContent).toBe("Peek without leaving the list");
+    // Describing the control must not rename it.
+    expect(
+      screen.getAllByRole("button", { name: `Peek at ${FIRST_ORG.name}` }),
+    ).toHaveLength(1);
+  });
+
   it("ignores the arrow keys on a control that is not the peeked row's", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(FIRST_ORG.name);

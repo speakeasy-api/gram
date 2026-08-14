@@ -14,9 +14,13 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { organizationQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { cn } from "@/lib/utils";
 
 import { PEEK_PANEL_ID } from "./PeekPanel";
 
@@ -77,24 +81,36 @@ export function PeekTrigger({ org }: { org: AdminOrganization }): JSX.Element {
   const isPeeked = peekedId === org.id;
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      data-peek-trigger=""
-      // Stable under the state change. A control whose accessible name moves as
-      // it is pressed is announced as a different control; the state rides on
-      // aria-expanded instead.
-      aria-label={`Peek at ${org.name}`}
-      aria-expanded={isPeeked}
-      // A peeked row always has its panel mounted, and aria-controls pointing
-      // at an absent id is invalid.
-      aria-controls={isPeeked ? PEEK_PANEL_ID : undefined}
-      // The row highlight alone does not say which control the operator is on,
-      // and hover styling would read as open under the pointer.
-      className={cn(isPeeked && "bg-accent text-accent-foreground")}
-      onClick={() => togglePeek(org)}
-    >
-      <PanelRightIcon />
-    </Button>
+    <Tooltip>
+      {/* The control is an icon on its own, so nothing on screen says what it
+          does until the pointer rests on it. The tooltip describes the
+          control; it does not name it, and the accessible name below is what
+          a screen reader still announces. */}
+      <TooltipTrigger asChild>
+        <Button
+          // Filled while open. Ghost hover is `bg-accent`, and the peeked row
+          // is `bg-muted`, and in this theme those two tokens hold the same
+          // grey: an open control styled with either disappears into the row
+          // it sits in and reads as a hover everywhere else.
+          variant={isPeeked ? "default" : "ghost"}
+          size="icon-xs"
+          data-peek-trigger=""
+          // Stable under the state change. A control whose accessible name
+          // moves as it is pressed is announced as a different control; the
+          // state rides on aria-expanded instead.
+          aria-label={`Peek at ${org.name}`}
+          aria-expanded={isPeeked}
+          // A peeked row always has its panel mounted, and aria-controls
+          // pointing at an absent id is invalid.
+          aria-controls={isPeeked ? PEEK_PANEL_ID : undefined}
+          onClick={() => togglePeek(org)}
+        >
+          <PanelRightIcon />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {isPeeked ? "Close peek" : "Peek without leaving the list"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
