@@ -24,11 +24,8 @@ import { cn } from "@/lib/utils";
 
 import { ORG_COLUMNS } from "./columns";
 import { PeekPanel } from "./PeekPanel";
-import {
-  PEEK_TRIGGER_SELECTOR,
-  PeekProvider,
-  useOpenOrganization,
-} from "./rowActions";
+import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
+import { useOpenOrganization } from "./rowActions";
 import { TableActionBar, Toolbar } from "./Toolbar";
 
 const ROUTE_ID = "/organizations/";

@@ -7,7 +7,7 @@ import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { cn } from "@/lib/utils";
 
-import { PeekTrigger } from "./rowActions";
+import { PeekTrigger } from "./PeekTrigger";
 
 function fmtDateShort(iso?: string): string {
   if (!iso) return "-";
