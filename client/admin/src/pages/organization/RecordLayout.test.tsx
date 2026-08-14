@@ -55,6 +55,21 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+// The one region a screen reader hears a write through. Read as a node rather
+// than by its text, because what this is about is the text changing.
+function liveRegion(): HTMLElement {
+  const found = document.querySelector("[aria-live='polite']");
+  if (!(found instanceof HTMLElement)) {
+    throw new Error("no live region on the record");
+  }
+  return found;
+}
+
+// What an operator reads, with the zero-width padding taken back out.
+function spoken(region: HTMLElement): string {
+  return (region.textContent ?? "").replaceAll("\u200b", "");
+}
+
 describe("RecordLayout", () => {
   it("renders the record name once the query resolves", async () => {
     await renderRouteTree(routeTree, {
@@ -110,8 +125,48 @@ describe("RecordLayout", () => {
       await screen.findByRole("button", { name: `Re-enable ${disabled.name}` }),
     );
 
-    const live = await screen.findByText(`${disabled.name} is enabled.`);
-    expect(live.getAttribute("aria-live")).toBe("polite");
+    await waitFor(() => {
+      expect(spoken(liveRegion())).toBe(`${disabled.name} is enabled.`);
+    });
+    expect(liveRegion().getAttribute("aria-live")).toBe("polite");
+    // Heard and not read. Without the class every write result is printed into
+    // the record as body text, between the callout and the view.
+    expect(liveRegion().className.split(" ")).toContain("sr-only");
+  });
+
+  it("speaks a failure again when the same one comes back", async () => {
+    const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
+    mocks.getOrganization.mockResolvedValue(disabled);
+    mocks.enableOrganization.mockRejectedValue(
+      new GramAdminError(500, { message: "enable failed" }, "500"),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${disabled.slug}`,
+    });
+
+    const button = await screen.findByRole("button", {
+      name: `Re-enable ${disabled.name}`,
+    });
+
+    // Three presses, not two. A region is announced when its text changes, and
+    // nothing else on the page reports this failure: the banner's words are
+    // unchanged too. Two presses pass under any padding that changes once, so
+    // they cannot tell alternating from a longer cycle that goes quiet on the
+    // third.
+    let previous = "";
+    let sentence: string | undefined;
+    for (let press = 1; press <= 3; press++) {
+      fireEvent.click(button);
+      await waitFor(() => {
+        expect(liveRegion().textContent).not.toBe(previous);
+      });
+      previous = liveRegion().textContent ?? "";
+      // The operator is told the same thing every time, not a different thing.
+      sentence ??= spoken(liveRegion());
+      expect(spoken(liveRegion())).toBe(sentence);
+    }
+    expect(sentence).toContain(`Could not re-enable ${disabled.name}`);
   });
 
   it("says it is loading rather than reporting an error it has not had", async () => {

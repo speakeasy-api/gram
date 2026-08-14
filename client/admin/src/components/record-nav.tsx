@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { AriaAttributes, JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
@@ -36,6 +36,23 @@ function subtitle(org: AdminOrganization): string {
   return words ? `${org.account_type} · ${words}` : org.account_type;
 }
 
+// Both answers about one item, from the one boolean the nav computes. Without
+// `exact`, `Link` marks itself aria-current="page" whenever the current address
+// merely starts with its target, and every record address starts with
+// `/organizations` and with the record's own index, so three items claim the
+// page at once. `Link` also writes that guess over an aria-current handed to it,
+// so turning the guess off is what lets the value below be the answer.
+// site-header.tsx:99 names the same default.
+function currentProps(isCurrent: boolean): {
+  activeOptions: { exact: boolean };
+  "aria-current": AriaAttributes["aria-current"];
+} {
+  return {
+    activeOptions: { exact: true },
+    "aria-current": isCurrent ? "page" : undefined,
+  };
+}
+
 // `idOrSlug` is the address the operator is on, not `org.slug`. Rewriting it
 // would move the record to another cache entry on the next nav press.
 export function RecordNav({
@@ -60,6 +77,14 @@ export function RecordNav({
     params: { idOrSlug },
     fuzzy: true,
   });
+  const onOverview = !!matchRoute({
+    to: "/organizations/$idOrSlug",
+    params: { idOrSlug },
+  });
+  const onMembers = !!matchRoute({
+    to: "/organizations/$idOrSlug/members",
+    params: { idOrSlug },
+  });
 
   return (
     <>
@@ -72,7 +97,7 @@ export function RecordNav({
                 className="text-muted-foreground"
                 tooltip="All organizations"
               >
-                <Link to="/organizations">
+                <Link to="/organizations" {...currentProps(false)}>
                   <ChevronLeftIcon />
                   <span>All organizations</span>
                 </Link>
@@ -105,15 +130,14 @@ export function RecordNav({
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
-                isActive={
-                  !!matchRoute({
-                    to: "/organizations/$idOrSlug",
-                    params: { idOrSlug },
-                  })
-                }
+                isActive={onOverview}
                 tooltip="Overview"
               >
-                <Link to="/organizations/$idOrSlug" params={{ idOrSlug }}>
+                <Link
+                  to="/organizations/$idOrSlug"
+                  params={{ idOrSlug }}
+                  {...currentProps(onOverview)}
+                >
                   <BuildingIcon />
                   <span>Overview</span>
                 </Link>
@@ -133,6 +157,7 @@ export function RecordNav({
                       idOrSlug,
                       projectIdOrSlug: onlyProject.slug || onlyProject.id,
                     }}
+                    {...currentProps(onProjects)}
                   >
                     <FolderIcon />
                     <span>Projects</span>
@@ -141,6 +166,7 @@ export function RecordNav({
                   <Link
                     to="/organizations/$idOrSlug/projects"
                     params={{ idOrSlug }}
+                    {...currentProps(onProjects)}
                   >
                     <FolderIcon />
                     <span>Projects</span>
@@ -153,19 +179,11 @@ export function RecordNav({
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={
-                  !!matchRoute({
-                    to: "/organizations/$idOrSlug/members",
-                    params: { idOrSlug },
-                  })
-                }
-                tooltip="Members"
-              >
+              <SidebarMenuButton asChild isActive={onMembers} tooltip="Members">
                 <Link
                   to="/organizations/$idOrSlug/members"
                   params={{ idOrSlug }}
+                  {...currentProps(onMembers)}
                 >
                   <UsersIcon />
                   <span>Members</span>

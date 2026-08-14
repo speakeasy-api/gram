@@ -119,6 +119,26 @@ function isActive(name: string): boolean {
   );
 }
 
+const RECORD_NAV = ["All organizations", "Overview", "Projects", "Members"];
+
+// Every item, both answers: the highlight a sighted operator reads and the
+// state a screen reader is told. Asserting only the item expected to be current
+// passes while three others also claim to be the page.
+function navState(): Record<string, { active: boolean; current: boolean }> {
+  return Object.fromEntries(
+    RECORD_NAV.map((label) => {
+      const link = within(sidebar()).getByRole("link", { name: label });
+      return [
+        label,
+        {
+          active: link.getAttribute("data-active") === "true",
+          current: link.getAttribute("aria-current") === "page",
+        },
+      ];
+    }),
+  );
+}
+
 describe("AppSidebar", () => {
   it("renders the global nav outside a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -304,5 +324,99 @@ describe("AppSidebar", () => {
 
     expect(isActive("Members")).toBe(true);
     expect(isActive("Overview")).toBe(false);
+  });
+
+  it("names one current page on the record's own view", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    await screen.findByRole("link", { name: "All organizations" });
+
+    expect(navState()).toEqual({
+      "All organizations": { active: false, current: false },
+      Overview: { active: true, current: true },
+      Projects: { active: false, current: false },
+      Members: { active: false, current: false },
+    });
+  });
+
+  it("names one current page on the members view", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+    await screen.findByRole("link", { name: "All organizations" });
+
+    // The record's address begins with both `/organizations` and the record's
+    // own index, so those two items are the ones that claim a page they are not.
+    expect(navState()).toEqual({
+      "All organizations": { active: false, current: false },
+      Overview: { active: false, current: false },
+      Projects: { active: false, current: false },
+      Members: { active: true, current: true },
+    });
+  });
+
+  it("names one current page on the projects view", async () => {
+    mocks.listOrganizationProjects.mockResolvedValue({
+      projects: [PROJECT, aProject({ id: "proj_2", slug: "second-project" })],
+    });
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+    await screen.findByRole("link", { name: "All organizations" });
+
+    expect(navState()).toEqual({
+      "All organizations": { active: false, current: false },
+      Overview: { active: false, current: false },
+      Projects: { active: true, current: true },
+      Members: { active: false, current: false },
+    });
+  });
+
+  it("names one current page on the projects view of a record with one project", async () => {
+    mocks.listOrganizationProjects.mockResolvedValue({ projects: [PROJECT] });
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+    await screen.findByRole("link", { name: "All organizations" });
+
+    // The item points past this address, at the one project, so the link's own
+    // account of the current page is inverted here: the highlighted item is the
+    // only one it calls an ordinary link.
+    await waitFor(() => {
+      expect(
+        within(sidebar())
+          .getByRole("link", { name: "Projects" })
+          .getAttribute("href"),
+      ).toBe(`/organizations/${ORG.slug}/projects/${PROJECT.slug}`);
+    });
+    expect(navState()).toEqual({
+      "All organizations": { active: false, current: false },
+      Overview: { active: false, current: false },
+      Projects: { active: true, current: true },
+      Members: { active: false, current: false },
+    });
+  });
+
+  it("names one current page while one of the record's projects is shown", async () => {
+    mocks.listOrganizationProjects.mockResolvedValue({
+      projects: [PROJECT, aProject({ id: "proj_2", slug: "second-project" })],
+    });
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects/${PROJECT.slug}`,
+    });
+    await screen.findByRole("link", { name: "All organizations" });
+
+    // A project is under the Projects branch, which the item is current for.
+    // Exactness alone would drop the mark here.
+    expect(navState()).toEqual({
+      "All organizations": { active: false, current: false },
+      Overview: { active: false, current: false },
+      Projects: { active: true, current: true },
+      Members: { active: false, current: false },
+    });
   });
 });
