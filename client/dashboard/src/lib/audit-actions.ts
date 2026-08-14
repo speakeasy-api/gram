@@ -75,6 +75,7 @@ export const AUDIT_ACTIONS = [
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_rearmed",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:webhooks_disabled",
@@ -366,6 +367,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_rearmed":
+      return "restarted enterprise trial";
 
     case "organization_invitation:create":
       return "invited";
