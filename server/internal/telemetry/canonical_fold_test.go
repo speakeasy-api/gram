@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -488,4 +489,171 @@ func TestGetTumBreakdownDimByDay_CanonicalFold_EmailSlicesFold(t *testing.T) {
 	}
 	require.Equal(t, int64(150), tokens[workEmail])
 	require.Equal(t, int64(300), tokens[personalEmail])
+}
+
+func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "hwork-" + suffix + "@example.com"
+	personalEmail := "hpersonal-" + suffix + "@example.com"
+	strangerEmail := "hstranger-" + suffix + "@example.com"
+	userID := uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	event := func(email, tool, skill string) {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   deploymentID,
+			timestamp:      now.Add(-10 * time.Minute),
+			traceID:        uuid.NewString(),
+			userEmail:      email,
+			hookSource:     "mcp",
+			toolSource:     "server-a",
+			toolName:       tool,
+			result:         `"ok"`,
+			skillName:      skill,
+			conversationID: "conv-" + uuid.NewString()[:8],
+		})
+	}
+	// Two personal-email events (one a Skill use), one work event with the
+	// same skill, one stranger, one identity-less event (the Unknown bucket).
+	event(strings.ToUpper(personalEmail), "weather", "")
+	event(personalEmail, "Skill", "deploy-helper")
+	event(workEmail, "Skill", "deploy-helper")
+	event(strangerEmail, "weather", "")
+	event("", "weather", "")
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+			From: now.Add(-time.Hour).Format(time.RFC3339),
+			To:   now.Add(time.Hour).Format(time.RFC3339),
+		})
+		if !assert.NoError(c, err) || !assert.NotNil(c, res) {
+			return
+		}
+
+		// One employee = one bucket under the canonical email; totals are
+		// preserved (folding re-buckets, never drops or double-counts).
+		byUser := map[string]int64{}
+		var total int64
+		for _, u := range res.Users {
+			byUser[u.UserEmail] += u.EventCount
+			total += u.EventCount
+		}
+		if !assert.Equal(c, int64(5), total) {
+			return
+		}
+		assert.Equal(c, int64(3), byUser[workEmail])
+		assert.Equal(c, int64(1), byUser[strangerEmail])
+		assert.Equal(c, int64(1), byUser["Unknown"])
+		assert.NotContains(c, byUser, personalEmail)
+		assert.NotContains(c, byUser, strings.ToUpper(personalEmail))
+
+		// The skill breakdown folds the same way: the shared skill counts one
+		// unique user, not two — the strongest signal the (skill, email)
+		// grouping folded.
+		for _, sk := range res.Skills {
+			if sk.SkillName == "deploy-helper" {
+				assert.Equal(c, int64(2), sk.UseCount)
+				assert.Equal(c, int64(1), sk.UniqueUsers)
+			}
+		}
+
+		// Breakdown and timeseries carry no unfolded personal buckets.
+		for _, b := range res.Breakdown {
+			assert.NotEqual(c, personalEmail, b.UserEmail)
+			assert.NotEqual(c, strings.ToUpper(personalEmail), b.UserEmail)
+		}
+		for _, p := range res.TimeSeries {
+			assert.NotEqual(c, personalEmail, p.UserEmail)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Drilling into the canonical bucket finds the personal rows too: both
+	// sides of the filter fold through the same map.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+			From: now.Add(-time.Hour).Format(time.RFC3339),
+			To:   now.Add(time.Hour).Format(time.RFC3339),
+			Filters: []*gen.LogFilter{
+				{Path: "user.email", Operator: "eq", Values: []string{workEmail}},
+			},
+		})
+		if !assert.NoError(c, err) || !assert.NotNil(c, res) {
+			return
+		}
+		assert.Equal(c, int64(3), res.TotalEvents)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "uwork-" + suffix + "@example.com"
+	personalEmail := "upersonal-" + suffix + "@example.com"
+	userID := uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	serverURL := "https://mcp-" + suffix + ".example.com/api"
+	now := time.Now().UTC()
+	for _, email := range []string{workEmail, personalEmail} {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   deploymentID,
+			timestamp:      now.Add(-10 * time.Minute),
+			traceID:        uuid.NewString(),
+			userEmail:      email,
+			hookSource:     "mcp",
+			toolSource:     "server-u",
+			toolName:       "tool",
+			result:         `"ok"`,
+			mcpServerURL:   serverURL,
+			conversationID: "conv-" + uuid.NewString()[:8],
+		})
+	}
+
+	params := repo.GetUnproxiedMcpServerUserUsageParams{
+		GramProjectID:        projectID,
+		CanonicalURL:         serverURL,
+		TimeStart:            now.Add(-time.Hour).UnixNano(),
+		TimeEnd:              now.Add(time.Hour).UnixNano(),
+		Cursor:               "",
+		Limit:                50,
+		CanonicalIdentityOrg: orgID,
+	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		rows, _, err := ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Len(c, rows, 1) {
+			return
+		}
+		assert.Equal(c, workEmail, rows[0].UserEmail)
+		assert.Equal(c, uint64(2), rows[0].CallCount)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Literal mode keeps the split rows — the flag-off behavior.
+	params.CanonicalIdentityOrg = ""
+	rows, _, err := ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
 }

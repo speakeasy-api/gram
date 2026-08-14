@@ -325,6 +325,39 @@ func applyHookFiltersToBuilder(sb squirrel.SelectBuilder, filters []AttributeFil
 	return sb
 }
 
+// applyHookFiltersToBuilderCanonical applies the same filters with the email
+// dimension folded: eq/in filters on user_email match canonically (both sides
+// through the identity map) so a drill from a folded breakdown finds all of an
+// employee's rows. Other ops keep literal semantics — exists/not_exists are
+// fold-neutral emptiness checks, and contains/not_eq on a canonical value have
+// no meaningful fold.
+// emailCol is the caller's table-qualified user_email column — the hooks
+// queries span trace_summaries and telemetry_logs, and qualification also
+// guards against SELECT-alias substitution in GROUP BY.
+func applyHookFiltersToBuilderCanonical(sb squirrel.SelectBuilder, filters []AttributeFilter, typesToInclude []string, canonicalOrgLit, emailCol string) squirrel.SelectBuilder {
+	if canonicalOrgLit == "" {
+		return applyHookFiltersToBuilder(sb, filters, typesToInclude)
+	}
+	rest := make([]AttributeFilter, 0, len(filters))
+	for _, filter := range filters {
+		op := filter.Op
+		if resolveAttributeColumn(filter.Path) == "user_email" && (op == "" || op == "eq" || op == "in") && len(filter.Values) > 0 {
+			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, emailCol, filter.Values))
+			continue
+		}
+		rest = append(rest, filter)
+	}
+	return applyHookFiltersToBuilder(sb, rest, typesToInclude)
+}
+
+// hookCanonicalEmailKey is the folded user-dimension expression for the hooks
+// pages. The base column is qualified: the SELECT aliases the expression back
+// to user_email, and ClickHouse substitutes unqualified identifiers in GROUP
+// BY with that alias.
+func hookCanonicalEmailKey(canonicalOrgLit string) string {
+	return canonicalEmailExpr(canonicalOrgLit, "trace_summaries.user_email")
+}
+
 // InsertTelemetryLogParams contains the parameters for inserting a telemetry log.
 type InsertTelemetryLogParams struct {
 	ID                   string
@@ -1549,6 +1582,9 @@ type GetUnproxiedMcpServerUserUsageParams struct {
 	TimeEnd       int64
 	Cursor        string
 	Limit         int
+	// CanonicalIdentityOrg, when set, folds the email dimension through the
+	// identity_map so one employee reads as one bucket. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 type UnproxiedMcpServerUserUsageRow struct {
@@ -1574,18 +1610,24 @@ func (q *Queries) GetUnproxiedMcpServerUserUsage(ctx context.Context, arg GetUnp
 		"max(start_time_unix_nano) AS called_at_nano",
 	)
 
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	emailKey := "user_email"
+	if orgLit != "" {
+		emailKey = canonicalEmailExpr(orgLit, "per_trace.user_email")
+	}
 	sb := sq.Select(
-		"user_email",
+		emailKey+" AS user_email",
 		"count() AS call_count",
 		"fromUnixTimestamp64Nano(max(called_at_nano)) AS last_called_at",
 	).
 		FromSelect(innerSb, "per_trace").
 		Where("server_url != ''").
 		Where(unproxiedMcpServerUsageURLMatch(arg.CanonicalURL)).
-		GroupBy("user_email"). //nolint:glint // searchUsers raw-logs path, not yet folded; needs its own shadow comparison (DNO-857 tail)
+		GroupBy(emailKey).
 		OrderBy("call_count DESC", "user_email ASC").
 		Limit(uint64(limit + 1)). //nolint:gosec // limit is clamped to 1..500 by clampUnproxiedMcpServerUsageLimit.
 		Offset(uint64(offset))    //nolint:gosec // offset comes from a decoded, non-negative cursor.
+	sb = withCanonicalFoldSettings(sb, orgLit)
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -5542,12 +5584,17 @@ type GetHooksSummaryParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// CanonicalIdentityOrg, when set, folds email filters through the
+	// identity_map so drills from folded buckets match all linked emails.
+	// Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetHooksSummary retrieves aggregated hooks metrics grouped by server.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams) ([]HooksServerSummaryRow, error) {
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
 	sb := sq.Select(
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"count(*) as event_count",
@@ -5562,7 +5609,7 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd)
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
 	sb = sb.GroupBy("server_name").
 		OrderBy("event_count DESC")
@@ -5601,19 +5648,24 @@ type GetHooksSessionCountParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// CanonicalIdentityOrg, when set, folds email filters through the
+	// identity_map so drills from folded buckets match all linked emails.
+	// Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetHooksSessionCount retrieves the count of unique sessions for hooks.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionCountParams) (int64, error) {
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
 	sb := sq.Select("uniqExact(toString(attributes.`genai.conversation.id`)) as session_count").
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "telemetry_logs.user_email")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5657,14 +5709,25 @@ type GetHooksUserSummaryParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// CanonicalIdentityOrg, when set, folds the email dimension through the
+	// identity_map so one employee reads as one bucket. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetHooksUserSummary retrieves aggregated hooks metrics grouped by user.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSummaryParams) ([]HooksUserSummaryRow, error) {
+	// The literal branch below is the flag-off behavior, byte-identical to the
+	// pre-fold query; the canonical branch groups one employee's linked emails
+	// into one bucket.
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	emailKey := "user_email"
+	if orgLit != "" {
+		emailKey = hookCanonicalEmailKey(orgLit)
+	}
 	sb := sq.Select(
-		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"if("+emailKey+" = '', 'Unknown', "+emailKey+") as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
 		"sum(if(has_result = 1 AND has_error = 0, 1, 0)) as success_count",
@@ -5677,11 +5740,12 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd)
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
-	sb = sb.GroupBy("user_email"). //nolint:glint // hooks user summary, not yet folded (DNO-857 tail)
-					OrderBy("event_count DESC")
+	sb = sb.GroupBy(emailKey).
+		OrderBy("event_count DESC")
 
+	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building hooks user summary query: %w", err)
@@ -5723,6 +5787,9 @@ type GetSkillsSummaryParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// CanonicalIdentityOrg, when set, folds the unique-user count through the
+	// identity_map so one employee counts once. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetSkillsSummary retrieves aggregated skills usage metrics.
@@ -5730,10 +5797,17 @@ type GetSkillsSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryParams) ([]SkillSummaryRow, error) {
+	// unique_users counts identities: folded, one employee's linked emails
+	// count once instead of once per email.
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	emailKey := "user_email"
+	if orgLit != "" {
+		emailKey = hookCanonicalEmailKey(orgLit)
+	}
 	sb := sq.Select(
 		"skill_name",
 		"count(*) as use_count",
-		"uniqExact(user_email) as unique_users",
+		"uniqExact("+emailKey+") as unique_users",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5741,11 +5815,12 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("skill_name != ''")
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
 	sb = sb.GroupBy("skill_name").
 		OrderBy("use_count DESC")
 
+	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building skills summary query: %w", err)
@@ -5786,13 +5861,21 @@ type GetSkillBreakdownParams struct {
 	TimeStart     int64
 	TimeEnd       int64
 	Filters       []AttributeFilter
+	// CanonicalIdentityOrg, when set, folds the email dimension through the
+	// identity_map so one employee reads as one bucket. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetSkillBreakdown retrieves per-(skill, user) usage counts.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownParams) ([]SkillBreakdownRow, error) {
-	sb := sq.Select("skill_name", "user_email", "count(*) as use_count").
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	emailKey := "user_email"
+	if orgLit != "" {
+		emailKey = hookCanonicalEmailKey(orgLit)
+	}
+	sb := sq.Select("skill_name", emailKey+" as user_email", "count(*) as use_count").
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("event_source = 'hook'").
@@ -5802,9 +5885,10 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 		Where("skill_name != ''")
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
-	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC"). //nolint:glint // skill breakdown, not yet folded (DNO-857 tail)
-												Limit(10000) // Defensive cap
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, nil, orgLit, "trace_summaries.user_email")
+	sb = sb.GroupBy("skill_name", emailKey).OrderBy("skill_name", "use_count DESC").
+		Limit(10000) // Defensive cap
+	sb = withCanonicalFoldSettings(sb, orgLit)
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5848,6 +5932,9 @@ type GetHooksBreakdownParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// CanonicalIdentityOrg, when set, folds the email dimension through the
+	// identity_map so one employee reads as one bucket. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetHooksBreakdown retrieves cross-dimensional hook event counts grouped by (user, server, hook_source, tool).
@@ -5855,8 +5942,13 @@ type GetHooksBreakdownParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownParams) ([]HooksBreakdownRow, error) {
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	emailKey := "user_email"
+	if orgLit != "" {
+		emailKey = hookCanonicalEmailKey(orgLit)
+	}
 	sb := sq.Select(
-		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"if("+emailKey+" = '', 'Unknown', "+emailKey+") as user_email",
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"hook_source",
 		"tool_name",
@@ -5869,11 +5961,12 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd)
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
-	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name"). //nolint:glint // hooks breakdown, not yet folded (DNO-857 tail)
-											OrderBy("event_count DESC").
-											Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
+	sb = withCanonicalFoldSettings(sb, orgLit)
+	sb = sb.GroupBy(emailKey, "server_name", "hook_source", "tool_name").
+		OrderBy("event_count DESC").
+		Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5919,6 +6012,9 @@ type GetHooksTimeSeriesParams struct {
 	BucketSizeNs   int64 // Bucket size in nanoseconds (e.g. 5*60*1e9 for 5 minutes)
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// CanonicalIdentityOrg, when set, folds the email dimension through the
+	// identity_map so one employee reads as one bucket. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetHooksTimeSeries retrieves time-bucketed hook event counts grouped by (bucket, server, user).
@@ -5926,10 +6022,15 @@ type GetHooksTimeSeriesParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeriesParams) ([]HooksTimeSeriesPoint, error) {
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	emailKey := "user_email"
+	if orgLit != "" {
+		emailKey = hookCanonicalEmailKey(orgLit)
+	}
 	sb := sq.Select(
 		fmt.Sprintf("intDiv(start_time_unix_nano, %d) * %d as bucket_start", arg.BucketSizeNs, arg.BucketSizeNs),
 		"if(tool_source = '', 'local', tool_source) as server_name",
-		"if(user_email = '', 'Unknown', user_email) as user_email",
+		"if("+emailKey+" = '', 'Unknown', "+emailKey+") as user_email",
 		"count(*) as event_count",
 		"sumIf(has_error, has_error = 1) as failure_count",
 	).
@@ -5939,11 +6040,12 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd)
 
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
-	sb = sb.GroupBy("bucket_start", "server_name", "user_email"). //nolint:glint // unproxied MCP usage, not yet folded (DNO-857 tail)
-									OrderBy("bucket_start ASC").
-									Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
+	sb = withCanonicalFoldSettings(sb, orgLit)
+	sb = sb.GroupBy("bucket_start", "server_name", emailKey).
+		OrderBy("bucket_start ASC").
+		Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5986,6 +6088,10 @@ type GetSkillTimeSeriesParams struct {
 	TimeEnd       int64
 	BucketSizeNs  int64 // Bucket size in nanoseconds (e.g. 5*60*1e9 for 5 minutes)
 	Filters       []AttributeFilter
+	// CanonicalIdentityOrg, when set, folds email filters through the
+	// identity_map so drills from folded buckets match all linked emails.
+	// Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // GetSkillTimeSeries retrieves time-bucketed hook event counts grouped by (bucket, skill).
@@ -5993,6 +6099,7 @@ type GetSkillTimeSeriesParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetSkillTimeSeries(ctx context.Context, arg GetSkillTimeSeriesParams) ([]SkillTimeSeriesPoint, error) {
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
 	sb := sq.Select(
 		fmt.Sprintf("intDiv(start_time_unix_nano, %d) * %d as bucket_start", arg.BucketSizeNs, arg.BucketSizeNs),
 		"skill_name",
@@ -6007,7 +6114,7 @@ func (q *Queries) GetSkillTimeSeries(ctx context.Context, arg GetSkillTimeSeries
 		Where("skill_name != ''")
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
-	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
+	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, nil, orgLit, "trace_summaries.user_email")
 
 	sb = sb.GroupBy("bucket_start", "skill_name").
 		OrderBy("bucket_start ASC").
