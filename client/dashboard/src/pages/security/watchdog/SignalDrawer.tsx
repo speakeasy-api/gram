@@ -243,11 +243,11 @@ export function SignalDrawer({
 
   const openSignalExclusion = () => {
     if (!signal) return;
-    // The sheet derives its ready-made rule options from the findings it is
-    // handed; the loaded evidence rows all share this signal's rule, so the
-    // "Any <rule> finding" option is on offer. Before evidence loads the
-    // sheet still opens, just without ready-made options.
-    setExclusionState({ mode: "create", results: evidence });
+    // The signal itself carries the rule, so the sheet offers — and defaults
+    // to — the "Any <rule> finding" option even before evidence rows load.
+    // Evidence rows still ride along for the exact-value option and the
+    // custom branch's findings context.
+    setExclusionState({ mode: "create", results: evidence, signal });
   };
 
   // Judge-backed signals get false-positive dismissal as the signal-level
