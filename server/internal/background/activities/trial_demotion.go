@@ -73,13 +73,14 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	trial, err := tx.MarkTrialDemoted(ctx, args.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// A conversion, a completed demotion, or a reinstatement (ends_at
-		// moved forward) landed between the list and this write. Only a
-		// closed trial should drop out of the Loops sequence; a re-armed
-		// trial must keep trialActive so reminder mail still sends.
+		// A conversion, a completed demotion, or a re-arm (ends_at moved
+		// forward, stamps cleared) landed between the list and this write.
+		// Only a closed trial should drop out of the Loops sequence.
 		d.logger.InfoContext(ctx, "expired trial changed before demotion",
 			attr.SlogOrganizationID(args.OrganizationID))
-		d.notifyTrialInactiveIfClosed(ctx, args.OrganizationID)
+		if err := d.notifyTrialInactiveIfClosed(ctx, args.OrganizationID); err != nil {
+			return err
+		}
 		return nil
 	case err != nil:
 		return fmt.Errorf("mark trial demoted: %w", err)
@@ -126,19 +127,21 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	return nil
 }
 
-func (d *DemoteExpiredTrials) notifyTrialInactiveIfClosed(ctx context.Context, organizationID string) {
-	trial, err := d.repo.GetTrial(ctx, organizationID)
+func (d *DemoteExpiredTrials) notifyTrialInactiveIfClosed(ctx context.Context, organizationID string) error {
+	// GetActiveTrial is the armed-trial predicate. Re-read it immediately
+	// before Loops so a re-arm that landed after MarkTrialDemoted's
+	// ErrNoRows keeps trialActive. Lookup errors fail the activity so
+	// Temporal retries; notifier errors stay logged-only.
+	_, err := d.repo.GetActiveTrial(ctx, organizationID)
 	switch {
+	case err == nil:
+		return nil
 	case errors.Is(err, pgx.ErrNoRows):
-		return
-	case err != nil:
-		d.logger.ErrorContext(ctx, "lookup trial after demotion skip", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return
+		d.notifyTrialInactive(ctx, organizationID)
+		return nil
+	default:
+		return fmt.Errorf("revalidate trial before inactive notify: %w", err)
 	}
-	if !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid {
-		return
-	}
-	d.notifyTrialInactive(ctx, organizationID)
 }
 
 func (d *DemoteExpiredTrials) notifyTrialInactive(ctx context.Context, organizationID string) {

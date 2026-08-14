@@ -93,9 +93,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 	}
 }
 
-// newTrialOrg creates an enterprise organization that is whitelisted for the
-// duration of its trial, which is the state signup leaves behind.
-func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsAt time.Time) string {
+func newOrg(t *testing.T, ctx context.Context, ti *trialTestInstance) string {
 	t.Helper()
 
 	orgID := "org-" + uuid.NewString()[:8]
@@ -114,7 +112,16 @@ func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsA
 		GramAccountType: "enterprise",
 	}))
 
-	err = ti.trials.CreateTrial(ctx, trialsrepo.CreateTrialParams{
+	return orgID
+}
+
+// newTrialOrg creates an enterprise organization that is whitelisted for the
+// duration of its trial, which is the state signup leaves behind.
+func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsAt time.Time) string {
+	t.Helper()
+
+	orgID := newOrg(t, ctx, ti)
+	err := ti.trials.CreateTrial(ctx, trialsrepo.CreateTrialParams{
 		OrganizationID: orgID,
 		Tier:           "enterprise",
 		EndsAt:         pgtype.Timestamptz{Time: endsAt, InfinityModifier: pgtype.Finite, Valid: true},
@@ -276,7 +283,7 @@ func TestDemoteExpiredTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
 	require.Empty(t, ti.notifier.inactive)
 }
 
-func TestDemoteExpiredTrials_DemoteSkipsReinstatedTrialEmails(t *testing.T) {
+func TestDemoteExpiredTrials_DemoteSkipsActiveUnexpiredTrialEmails(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
@@ -289,6 +296,28 @@ func TestDemoteExpiredTrials_DemoteSkipsReinstatedTrialEmails(t *testing.T) {
 	require.Equal(t, "enterprise", org.GramAccountType)
 	require.True(t, org.Whitelisted)
 	require.Empty(t, ti.notifier.inactive)
+}
+
+func TestDemoteExpiredTrials_DemoteAlreadyDemotedWithFutureEndsAtStillNotifies(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newOrg(t, ctx, ti)
+	now := time.Now().UTC()
+	require.NoError(t, ti.trials.InsertTrialFixture(ctx, trialsrepo.InsertTrialFixtureParams{
+		OrganizationID: orgID,
+		CreatedAt:      pgtype.Timestamptz{Time: now.Add(-48 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ConvertedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		DemotedAt:      pgtype.Timestamptz{Time: now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+
+	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", org.GramAccountType)
+	require.Equal(t, []string{orgID}, ti.notifier.inactive)
 }
 
 func TestDemoteExpiredTrials_TrialInactiveFailureDoesNotFailDemotion(t *testing.T) {
