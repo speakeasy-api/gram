@@ -509,8 +509,8 @@ func TestListOrganizations_SearchByIDIgnoresCase(t *testing.T) {
 	workosID := mixedWorkosID
 	seedOrg(t, ctx, conn, orgFixture{id: mixedID, name: "Mixed Case Holdings", slug: "mixed-case-holdings", workosID: &workosID, whitelisted: true})
 
-	// Each id runs at its own casing, folded down and folded up. Lowering only the column matches the folded form
-	// and misses the other two; lowering only the term matches nothing but the folded form either.
+	// Lowering only the column matches the folded form and misses the other two;
+	// lowering only the term matches nothing but the folded form either.
 	cases := []searchByIDCase{
 		{name: "organization id at its own casing", q: mixedID, wantIDs: []string{mixedID}},
 		{name: "organization id case folded", q: strings.ToLower(mixedID), wantIDs: []string{mixedID}},
@@ -522,6 +522,7 @@ func TestListOrganizations_SearchByIDIgnoresCase(t *testing.T) {
 		// Case folding is all the id arms gained: they still compare whole and exactly.
 		{name: "an id differing by more than its casing", q: "org_search_id_MixedCases", wantIDs: nil},
 		{name: "fragment of an organization id, case folded", q: "search_id_mixedcase", wantIDs: nil},
+		{name: "fragment of a workos id, case folded", q: "placeholder_mixedcase", wantIDs: nil},
 
 		{name: "name case folded", q: "mixed case holdings", wantIDs: []string{mixedID}},
 		{name: "slug upper cased", q: "MIXED-CASE-HOLDINGS", wantIDs: []string{mixedID}},
@@ -578,7 +579,16 @@ func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 			TrialStates: c.trialStates,
 			Cursor:      conv.PtrEmpty(c.cursor),
 		}
-		requireSearchMatches(t, ctx, svc, payload, c.wantIDs, c.name)
+
+		// The count query has no cursor predicate, so only the cursor-free cases
+		// can hold it to a total. The rest must, or the account type and trial
+		// state arms are checked in the page query alone.
+		if c.cursor != "" {
+			requireSearchMatches(t, ctx, svc, payload, c.wantIDs, c.name)
+			continue
+		}
+
+		requireSearchMatchesWithTotal(t, ctx, svc, payload, c.wantIDs, c.name)
 	}
 }
 
@@ -598,8 +608,11 @@ func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
 
 	ctx, svc, conn := newTestAdminService(t)
 
+	// Both ids are mixed case: the bypass carries its own copy of the id arms, so
+	// it needs its own proof that each folds case rather than borrowing the one
+	// TestListOrganizations_SearchByIDIgnoresCase gives an active organization.
 	const (
-		disabledID = "org_search_id_disabled"
+		disabledID = "org_search_id_Disabled"
 		activeID   = "org_search_id_active"
 
 		disabledWorkosID = "org_workos_placeholder_Disabled"
@@ -614,6 +627,7 @@ func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
 		{name: "disabled organization by id, disabled excluded", q: disabledID, wantIDs: []string{disabledID}},
 		{name: "disabled organization by id, disabled included", q: disabledID, includeDisabled: true, wantIDs: []string{disabledID}},
 		{name: "disabled organization by id, disabled_states active", q: disabledID, disabledStates: []string{"active"}, wantIDs: []string{disabledID}},
+		{name: "disabled organization by lowercased id, disabled excluded", q: strings.ToLower(disabledID), wantIDs: []string{disabledID}},
 		{name: "disabled organization by workos id, disabled excluded", q: disabledWorkosID, wantIDs: []string{disabledID}},
 		{name: "disabled organization by lowercased workos id, disabled excluded", q: strings.ToLower(disabledWorkosID), wantIDs: []string{disabledID}},
 
@@ -672,7 +686,6 @@ func TestListOrganizations_SearchEscapesLikeMetacharacters(t *testing.T) {
 		// Backslash is the escape character itself, so it has to be escaped before the two wildcards.
 		{name: "backslash in the term is literal", q: `Back\slash_Co`, wantIDs: []string{backslashID}},
 
-		// Escaping did not cost the arms their substring match.
 		{name: "a substring still matches", q: "Holdings", wantIDs: []string{percentID, nameDecoyID}},
 	}
 
@@ -688,10 +701,17 @@ func TestListOrganizations_SearchTermIsTrimmed(t *testing.T) {
 
 	ctx, svc, conn := newTestAdminService(t)
 
-	const trimID = "org_search_trim_alpha"
+	const (
+		trimID = "org_search_trim_alpha"
+		// Matches none of the terms below, so only a request carrying no term at
+		// all returns it alongside the first. Without it the whitespace-only case
+		// cannot tell a dropped term from a term that still happened to match.
+		bystanderID = "org_search_trim_bravo"
+	)
 
 	workosID := "org_workos_placeholder_trim"
 	seedOrg(t, ctx, conn, orgFixture{id: trimID, name: "Trim Holdings", slug: "trim-holdings", workosID: &workosID, whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: bystanderID, name: "Bystander Systems", slug: "bystander-systems", whitelisted: true})
 
 	cases := []searchByIDCase{
 		{name: "leading space", q: " " + trimID, wantIDs: []string{trimID}},
@@ -701,7 +721,7 @@ func TestListOrganizations_SearchTermIsTrimmed(t *testing.T) {
 		{name: "workos id with a trailing newline", q: workosID + "\n", wantIDs: []string{trimID}},
 		{name: "name with a trailing newline", q: "Trim Holdings\n", wantIDs: []string{trimID}},
 		// Whitespace alone is no search term at all rather than a term nothing holds.
-		{name: "whitespace only", q: " \n\t ", wantIDs: []string{trimID}},
+		{name: "whitespace only", q: " \n\t ", wantIDs: []string{trimID, bystanderID}},
 	}
 
 	for _, c := range cases {
