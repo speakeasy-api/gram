@@ -1,0 +1,85 @@
+server/internal/plugins/setup_test.go
+  s_37eadf6510f36e::t_60ba27f08f3c9d 10,113-130
+  s_37eadf6510f36e::t_2009a7378db396 131-132
+server/internal/authz/load_test.go
+  s_37eadf6510f36e::t_5159b2f59cc17d 52
+server/internal/access/listusergrants_test.go
+  s_37eadf6510f36e::t_684b320b94c884 49,77-79
+server/internal/access/listroles_test.go
+  s_37eadf6510f36e::t_684b320b94c884 31-37
+server/internal/auth/e2e_test.go
+  s_37eadf6510f36e::t_5159b2f59cc17d 1341
+server/internal/background/activities/process_workos_org_events.go
+  s_37eadf6510f36e::t_5159b2f59cc17d 648
+server/internal/plugins/audit_test.go
+  s_37eadf6510f36e::t_60ba27f08f3c9d 231-234,255-256
+server/internal/agent/impl.go
+  s_37eadf6510f36e::t_47af8197ff7a2f 231
+client/dashboard/src/pages/plugins/plugin-reach.test.ts
+  s_37eadf6510f36e::t_c67908f65ae16e 95
+server/internal/plugins/impl_test.go
+  s_37eadf6510f36e::t_60ba27f08f3c9d 718-719,724,751,758-759,767,801-820
+server/internal/access/updaterole_test.go
+  s_37eadf6510f36e::t_1eedf0b096973c 67,363
+server/internal/access/role_manager.go
+  s_37eadf6510f36e::t_5159b2f59cc17d 551,1060
+docs/plugins/overview.md
+  s_37eadf6510f36e::t_a2ff2cbd519c3c 18,35
+server/internal/access/createrole_test.go
+  s_37eadf6510f36e::t_5159b2f59cc17d 206
+server/internal/access/setup_test.go
+  s_37eadf6510f36e::t_684b320b94c884 201-208,210-211
+  s_37eadf6510f36e::t_da3fd7a3519c49 209
+server/internal/access/rbac_test.go
+  s_37eadf6510f36e::t_1eedf0b096973c 64,215
+server/internal/plugins/impl.go
+  s_37eadf6510f36e::t_60ba27f08f3c9d 1112,1131-1134
+  s_37eadf6510f36e::t_3ee94492f210eb 1135
+server/internal/access/deleterole_test.go
+  s_37eadf6510f36e::t_1eedf0b096973c 30-33,38,126-127,132,157-158,163,199-200,205,221
+docs/rbac.md
+  s_37eadf6510f36e::t_a2ff2cbd519c3c 29-31,34-35,41,145,152,390-392,480,757,787,912,920
+  s_37eadf6510f36e::t_e0b79f9579889b 817,847,875
+client/dashboard/src/pages/plugins/plugin-reach.ts
+  s_37eadf6510f36e::t_c67908f65ae16e 20
+server/internal/background/activities/process_workos_org_events_test.go
+  s_37eadf6510f36e::t_db12f2d13a8549 889-899
+  s_37eadf6510f36e::t_7f5af51198f6a4 900-901
+server/cmd/workos-backfill/backfill.go
+  s_37eadf6510f36e::t_5159b2f59cc17d 306
+server/internal/authz/principal.go
+  s_37eadf6510f36e::t_4e75b31ba47c60 69,73-75,77-78,140-141,146-153,171,190-195,197,199,202,205-211,214-220,222,240,244,248,255-263
+server/internal/authz/grants.go
+  s_37eadf6510f36e::t_94d8c187e4c321 121,127,140,154,164,172,178,239-240,242,247
+server/internal/access/getrole_test.go
+  s_37eadf6510f36e::t_684b320b94c884 31-34
+server/design/plugins/design.go
+  s_37eadf6510f36e::t_60ba27f08f3c9d 481
+server/internal/authz/principal_test.go
+  s_37eadf6510f36e::t_684b320b94c884 64
+  s_37eadf6510f36e::t_c67908f65ae16e 30-31,42-63,65
+server/gen/http/openapi3.yaml
+  s_37eadf6510f36e::t_d417b94a2b486f 67112
+server/gen/http/plugins/client/types.go
+  s_37eadf6510f36e::t_c1b2526f3078b4 3347
+server/gen/http/plugins/server/types.go
+  s_37eadf6510f36e::t_a356557551d7c5 3347
+server/gen/plugins/service.go
+  s_37eadf6510f36e::t_8239b379910459 263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ac184b7b0488e668ad986a15ce8c0b6eebea22ee",
+  "prompts": {},
+  "sessions": {
+    "s_37eadf6510f36e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff651-c145-7c40-824b-af8fc4942e2a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
