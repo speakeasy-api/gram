@@ -1,6 +1,7 @@
 package aiintegrations
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -228,6 +229,7 @@ func TestBuildCodexCostLogParamsFallsBackToFileEndTimeWithoutBucket(t *testing.T
 func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 	t.Parallel()
 
+	body := []byte("{}\n")
 	cfg := codexCostConfig()
 	file := codexapi.LogFile{
 		ID:         "eclf_123",
@@ -237,9 +239,15 @@ func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 		FileSize:   3,
 		FileSHA256: "not-the-right-hash",
 	}
-	_, err := buildCodexCostLogParams(cfg, file, []byte("{}\n"))
+	_, err := buildCodexCostLogParams(cfg, file, body)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "sha256 mismatch")
+	require.Contains(t, err.Error(), "failed sha256 verification")
+
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentSHA256Mismatch, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Empty(t, contentErr.Payload)
 }
 
 func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
@@ -260,6 +268,67 @@ func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing event_id")
+	// The message names the log file so a poisoned file in a multi-file
+	// window is identifiable from the stored poll error alone.
+	require.Contains(t, err.Error(), "eclf_123")
+
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentMissingEventID, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Equal(t, bytes.TrimSpace(body), contentErr.Payload)
+}
+
+func TestBuildCodexCostLogParamsClassifiesInvalidTimestamp(t *testing.T) {
+	t.Parallel()
+
+	file := codexapi.LogFile{
+		ID:         "eclf_bad_timestamp",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 16, 0, 27, 13, 340496000, time.UTC),
+		FileName:   "COSTS_2026-07-16T00:27:13.340496+00:00.jsonl",
+		FileSize:   0,
+		FileSHA256: "",
+	}
+	body := []byte(`{"event_id":"event_1","type":"COSTS","timestamp":"not-a-timestamp","payload":{"identity":{"email":"dev@example.com"},"measures":{"usage":{},"billing":[]}}}` + "\n")
+
+	_, err := buildCodexCostLogParams(codexCostConfig(), file, body)
+
+	require.Error(t, err)
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentInvalidTimestamp, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Equal(t, bytes.TrimSpace(body), contentErr.Payload)
+	require.Error(t, contentErr.Cause)
+}
+
+func TestBuildCodexCostLogParamsDecodeErrorNamesLogAndCause(t *testing.T) {
+	t.Parallel()
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_bad",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 16, 0, 27, 13, 340496000, time.UTC),
+		FileName:   "COSTS_2026-07-16T00:27:13.340496+00:00.jsonl",
+		FileSize:   0,
+		FileSHA256: "",
+	}
+
+	body := []byte("\x1f\x8b not json")
+	_, err := buildCodexCostLogParams(cfg, file, body)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode codex compliance cost log eclf_bad")
+	require.Contains(t, err.Error(), "invalid character")
+	require.NotContains(t, err.Error(), "not json")
+
+	var contentErr *CodexCostContentError
+	require.ErrorAs(t, err, &contentErr)
+	require.Equal(t, CodexCostContentInvalidJSON, contentErr.Kind)
+	require.Equal(t, file.ID, contentErr.LogID)
+	require.Equal(t, body, contentErr.Payload)
 }
 
 // Pagination edge cases (empty windows, non-advancing last_end_time, window

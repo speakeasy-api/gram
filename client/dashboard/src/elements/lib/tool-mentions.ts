@@ -12,8 +12,6 @@ export interface MentionContext {
   atPosition: number;
 }
 
-const MENTION_PATTERN = /@(\w+)/g;
-
 export function toolSetToMentionableTools(
   tools: ToolRecord,
 ): MentionableTool[] {
@@ -32,23 +30,116 @@ export function toolSetToMentionableTools(
   }));
 }
 
-export function parseMentionedTools(text: string, tools: ToolRecord): string[] {
-  if (!tools || !text) return [];
+export type ComposerSegmentKind = "text" | "tool" | "skill";
 
-  const toolNames = Object.keys(tools);
-  const mentions: string[] = [];
+export interface ComposerSegment {
+  text: string;
+  kind: ComposerSegmentKind;
+}
+
+/** `@tool` and `/skill` tokens, but only where a reference can start.
+ *
+ *  Punctuation may precede one — `(@tool` is still a mention — so the
+ *  lookbehind rejects only the characters that make a sigil part of something
+ *  else: a word or `:`/`/` before it is a URL's scheme, host, or path segment,
+ *  and a word before `@` is an email address. */
+const TOKEN_PATTERN = /(?<![\w@/:])([@/])([\w.-]+)/g;
+
+/** Anything that reads as a link. A URL's own punctuation (`?next=/skill`,
+ *  `#@tool`) otherwise looks exactly like a reference boundary — and a chip
+ *  there would silently attach a skill the user only meant to link to. */
+const URL_PATTERN = /(?:\b[a-z][a-z\d+.-]*:|\/\/|\bwww\.)\S+/gi;
+
+function urlSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let match: RegExpExecArray | null;
+  URL_PATTERN.lastIndex = 0;
+  while ((match = URL_PATTERN.exec(text)) !== null) {
+    spans.push([match.index, match.index + match[0].length]);
+  }
+  return spans;
+}
+
+/**
+ * Splits draft text into plain runs and reference runs so the composer can
+ * paint each kind in its own color. Only tokens that resolve to something the
+ * assistant can act on count — a half-typed `@sla` stays plain until it names a
+ * real tool, and a stray `/foo` stays plain unless it names a skill.
+ */
+export function splitComposerSegments(
+  text: string,
+  tools: ToolRecord,
+  skillNames: readonly string[] = [],
+): ComposerSegment[] {
+  if (!text) return [];
+
+  const toolNames = new Set(
+    Object.keys(tools ?? {}).map((name) => name.toLowerCase()),
+  );
+  const skills = new Set(skillNames.map((name) => name.toLowerCase()));
+  const segments: ComposerSegment[] = [];
+  const links = urlSpans(text);
+  let consumed = 0;
   let match: RegExpExecArray | null;
 
-  MENTION_PATTERN.lastIndex = 0;
-  while ((match = MENTION_PATTERN.exec(text)) !== null) {
-    mentions.push(match[1]!.toLowerCase());
+  TOKEN_PATTERN.lastIndex = 0;
+  while ((match = TOKEN_PATTERN.exec(text)) !== null) {
+    const at = match.index;
+    if (links.some(([start, end]) => at >= start && at < end)) continue;
+    const kind = referenceKind(match[1]!, match[2]!.toLowerCase(), {
+      toolNames,
+      skills,
+    });
+    if (!kind) continue;
+
+    if (match.index > consumed) {
+      segments.push({ text: text.slice(consumed, match.index), kind: "text" });
+    }
+    segments.push({ text: match[0], kind });
+    consumed = match.index + match[0].length;
   }
 
-  const matchedToolIds = toolNames.filter((name) =>
-    mentions.includes(name.toLowerCase()),
-  );
+  if (consumed < text.length) {
+    segments.push({ text: text.slice(consumed), kind: "text" });
+  }
 
-  return [...new Set(matchedToolIds)];
+  return segments;
+}
+
+function referenceKind(
+  sigil: string,
+  name: string,
+  known: { toolNames: Set<string>; skills: Set<string> },
+): ComposerSegmentKind | null {
+  if (sigil === "@") return known.toolNames.has(name) ? "tool" : null;
+  return known.skills.has(name) ? "skill" : null;
+}
+
+/** The `/skill` tokens present in a draft, as skill names. */
+export function skillTokensIn(
+  text: string,
+  skillNames: readonly string[],
+): string[] {
+  return splitComposerSegments(text, undefined, skillNames)
+    .filter((segment) => segment.kind === "skill")
+    .map((segment) => segment.text.slice(1));
+}
+
+/** Appends a reference token to the draft, spacing it off whatever precedes it. */
+export function appendToken(text: string, token: string): string {
+  const base = text && !/\s$/.test(text) ? `${text} ` : text;
+  return `${base}${token} `;
+}
+
+/** Drops a reference token (and the space after it) from the draft. */
+export function removeToken(text: string, token: string): string {
+  return text
+    .replace(new RegExp(`(?<=^|\\s)${escapeForRegExp(token)}\\s?`, "g"), "")
+    .trimStart();
+}
+
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function detectMentionContext(
@@ -101,9 +192,4 @@ export function insertToolMention(
   const newText = `${beforeMention}@${toolName} ${afterCursor}`;
   const newCursorPosition = atPosition + toolName.length + 2;
   return { text: newText, cursorPosition: newCursorPosition };
-}
-
-export function removeToolMention(text: string, toolName: string): string {
-  const pattern = new RegExp(`@${toolName}\\s?`, "gi");
-  return text.replace(pattern, "");
 }

@@ -1,27 +1,30 @@
-import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Switch } from "@/components/ui/Switch";
-import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
-import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { AdminRow, AdminSection } from "./AdminSection";
 import {
   invalidateAllChatAnalysisSettings,
   useChatAnalysisSettings,
 } from "@gram/client/react-query/chatAnalysisSettings.js";
-import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import {
   invalidateAllProductFeatures,
   useProductFeatures,
 } from "@gram/client/react-query/productFeatures.js";
+
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { Input } from "@/components/ui/Input";
+import { Page } from "@/components/page-layout";
+import { PlatformAdminGate } from "./PlatformAdminGate";
+import { Switch } from "@/components/ui/Switch";
+import { toast } from "sonner";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
 import { useUpsertBusinessMemoryAnalysisSettingsMutation } from "@gram/client/react-query/upsertBusinessMemoryAnalysisSettings.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { toast } from "sonner";
-import { AdminRow, AdminSection } from "./AdminSection";
-import { PlatformAdminGate } from "./PlatformAdminGate";
 
 export default function PlatformAdminFeatures(): JSX.Element {
   return (
@@ -61,6 +64,7 @@ const PRODUCT_FEATURES: {
     | "authzChallengeLoggingEnabled"
     | "customerManagedEncryptionKeysEnabled"
     | "customModelKeysEnabled"
+    | "platformMcpEnabled"
     | "remoteSessionAutoRefreshEnabled"
     | "ssoEnabled"
     | "scimEnabled";
@@ -86,6 +90,15 @@ const PRODUCT_FEATURES: {
       "Allows projects in this organization to store OpenRouter API keys for model completions.",
     enabledKey: "customModelKeysEnabled",
   },
+
+  {
+    featureName: FeatureName.PlatformMcp,
+    label: "Platform MCP access",
+    description:
+      "Allows this organization to authenticate to and use Platform MCP, including manual setup. Disabling it denies runtime access without removing existing setup records.",
+    enabledKey: "platformMcpEnabled",
+  },
+
   {
     featureName: FeatureName.RemoteSessionAutoRefresh,
     label: "Automatic Remote Session Refresh",
@@ -110,6 +123,12 @@ const PRODUCT_FEATURES: {
 function ProductFeaturesSection(): JSX.Element {
   const queryClient = useQueryClient();
   const { data: features, isLoading, error } = useProductFeatures();
+  const platformMcp = useFeatureFlag(FEATURE_FLAGS.platformMcp);
+  const visibleFeatures = PRODUCT_FEATURES.filter(
+    (feature) =>
+      feature.featureName !== FeatureName.PlatformMcp ||
+      platformMcp.status === "enabled",
+  );
 
   const {
     mutate,
@@ -142,7 +161,7 @@ function ProductFeaturesSection(): JSX.Element {
     }
     return (
       <div className="divide-border divide-y">
-        {PRODUCT_FEATURES.map((feature) => {
+        {visibleFeatures.map((feature) => {
           const enabled = features[feature.enabledKey];
           const rowPending =
             isPending && pendingFeature === feature.featureName;

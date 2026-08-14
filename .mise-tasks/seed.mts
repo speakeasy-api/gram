@@ -5732,10 +5732,12 @@ async function seed() {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
     // session_capture gates Claude hook chat persistence; without it,
     // hooks.ingest accepts events but silently skips writing chat_messages.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills'), ('${activeOrgID}', 'mcp_approval') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills: feature:${activeOrgID}:mcp_approval:`.quiet();
+    // platform_mcp is the default-on organization entitlement; PostHog rollout
+    // flags separately control whether its runtime and dashboard are exposed.
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills'), ('${activeOrgID}', 'platform_mcp'), ('${activeOrgID}', 'mcp_approval') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills: feature:${activeOrgID}:platform_mcp: feature:${activeOrgID}:mcp_approval:`.quiet();
     log.info(
-      "Enabled local logs, tool_io_logs, session_capture, skills, and mcp_approval features",
+      "Enabled local logs, tool_io_logs, session_capture, skills, platform_mcp, and mcp_approval features",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };

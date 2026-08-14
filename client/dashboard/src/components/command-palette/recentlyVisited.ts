@@ -22,14 +22,43 @@ export interface RecentEntry {
 const MAX_RECENTS = 6;
 const UPDATED_EVENT = "gram:recents-updated";
 
+// Opaque ids make poor Recents labels. UUIDs and other long tokens fall back
+// to the section title until a detail page registers a human name.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isOpaqueIdSegment(segment: string): boolean {
+  return UUID_RE.test(segment) || segment.length > 24;
+}
+
+/**
+ * Label a visited page for the Recents list. Section/list pages keep the route
+ * title; detail pages prefer the human-readable last path segment (a slug like
+ * "notion"). Opaque id segments are not shown — those pages register a name
+ * via `useRecentLabelOverride` once their record loads.
+ */
+export function pageLabel(
+  title: string,
+  baseHref: string,
+  pathname: string,
+): string {
+  if (pathname === baseHref || !pathname.startsWith(baseHref)) return title;
+  const segment = decodeURIComponent(
+    pathname.split("/").filter(Boolean).pop() ?? "",
+  );
+  if (!segment || isOpaqueIdSegment(segment)) return title;
+  return segment;
+}
+
 // --- Human label overrides for opaque-id detail pages ----------------------
 //
 // Visits are recorded centrally in App from the active route, which can only
 // derive a label from the URL. For pages keyed by an opaque id — e.g. the
-// assistant detail page at /assistants/<uuid> — that yields "Assistant · <id>"
-// instead of the assistant's name. Such pages register a readable label here
-// once their data resolves; App consults it when recording the visit and
-// re-records when an override arrives asynchronously.
+// assistant detail page at /assistants/<uuid> or a Project Assistant
+// conversation at /chat/<uuid> — that yields the section title instead of the
+// resource name. Such pages register a readable label here once their data
+// resolves; App consults it when recording the visit and re-records when an
+// override arrives asynchronously.
 const labelOverrides = new Map<string, string>();
 export const RECENTS_LABEL_OVERRIDE_EVENT = "gram:recents-label-override";
 
@@ -83,10 +112,9 @@ export function useRecentsUserId(enabled = true): string | undefined {
   return data?.result?.userId || undefined;
 }
 
-// Bump when the entry shape or href scheme changes so stale entries (e.g. older
-// deep-link-param hrefs that now collapse to page-level) are dropped instead of
-// lingering as duplicates.
-const STORAGE_VERSION = "v2";
+// Bump when the entry shape, href scheme, or label format changes so stale
+// entries (e.g. older "Title · <short id>" labels) are dropped.
+const STORAGE_VERSION = "v3";
 
 function storageKey(
   userId?: string,

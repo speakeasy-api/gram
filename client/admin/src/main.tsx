@@ -6,6 +6,13 @@ import { AuthGate } from "@/components/auth-gate";
 import { routeTree } from "./routeTree.gen";
 import "./index.css";
 
+// Hover an element and press Cmd/Ctrl+C to copy its file, component and HTML
+// for pasting into a coding agent. `import.meta.env.DEV` is replaced with
+// `false` in production, so this import is tree-shaken out of the bundle.
+if (import.meta.env.DEV) {
+  void import("react-grab");
+}
+
 const root = document.getElementById("root");
 if (!root) {
   throw new Error("missing #root element");

@@ -5,4 +5,4 @@
 
 set -e
 
-exec pnpm --filter ./client/admin dev
+exec aube run --filter ./client/admin dev

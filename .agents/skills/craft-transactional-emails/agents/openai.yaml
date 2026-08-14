@@ -1,0 +1,4 @@
+interface:
+  display_name: "Craft Transactional Emails"
+  short_description: "Build and validate branded Loops emails"
+  default_prompt: "Use $craft-transactional-emails to create and render a branded Loops transactional email."

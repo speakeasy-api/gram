@@ -1,5 +1,69 @@
 # server
 
+## 1.11.0
+
+### Minor Changes
+
+- d7dca3d: Add exact range-bounded activity totals and independent pagination to assistant sessions.
+
+### Patch Changes
+
+- 1b00702: Scope device agent fleet configuration to organization admins. Viewing it
+  (`agent.getConfiguration`) now requires `org:admin`, matching the existing
+  requirement on `agent.updateConfiguration`, and the dashboard hides the Device
+  Agent Configuration tab from non-admins. The Setup tab stays available to
+  organization readers.
+- eaa0649: Serve the hooks@0.3.22 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 97c1c32: Apply the phased hooks rollout gate to the publish freshness read. A hooks
+  generator version bump used to flip every rollout-gated org's publish status to
+  "needs syncing" permanently: publishing carries a gated org's hooks subtree
+  verbatim (by design), so the stored hooks version could never reach the current
+  constant that GetPublishStatus compared against. The status read now runs the
+  same eligibility check as the publish path and skips the hooks version/config
+  comparison for orgs the rollout hasn't cleared — their published hooks are
+  their target, so only MCP content changes count against freshness. Cleared
+  orgs still read a pending hooks bump (or a deferred hook-config change) as
+  stale, prompting the publish that applies it.
+
+## 1.10.0
+
+### Minor Changes
+
+- ae7f01b: The assistant detail panel is now fully configurable and observable. Overview settings (name, model, concurrency, warm TTL) are editable in place. The Sessions tab shows aggregate stats (sessions, messages, cost, tokens) over a selectable time range defaulting to the last 30 days, with per-session cost in the list. Triggers expand in place to show their recent traffic via the new `triggers.listEvents` endpoint, with each dispatched event linking to the conversation it was routed to.
+- c66958e: Agent sessions routed through LiteLLM keep their LiteLLM association even when the agent's own hook stream captures the transcript: they match the LiteLLM platform filter and display as "<Client> via LiteLLM" in the session list and detail views.
+- ca0f1c1: Encrypt platform OpenRouter API keys at rest. New keys are written with an
+  AES-256-GCM encrypted copy alongside the plaintext column (dual-write during
+  the expand phase), every read path prefers the encrypted copy and lazily
+  records ciphertext for legacy plaintext rows, and the credits monitoring
+  activity decrypts inside the activity boundary. A new platform-admin
+  `adminOpenRouterKeys` service and dashboard page list every organization's
+  keys with their credit limit, live usage, and encryption state, with actions
+  to encrypt (verify the ciphertext, then clear the plaintext), enable, and
+  disable a key. Enable and disable actions are audit logged against the owning
+  organization; the encrypt action is internal storage hygiene and is not
+  surfaced in customer-visible audit logs.
+
+### Patch Changes
+
+- 4dd8211: Expand user email filters in cost analytics and session lists to include the
+  employee's directory email and linked AI account emails. User drill-down pages
+  now report the same cost, token, tool-call, and session totals across work and
+  personal account identities.
+- a2bc9ed: Stop LiteLLM-proxied agent sessions from persisting each assistant turn twice,
+  and label Claude Code sessions as Claude Code. The proxy reports the completion
+  the moment the model returns it and the agent's own hook stream reports the same
+  text when the turn ends; prompts already collapsed onto one row through the
+  session's native marker, but assistant turns share no identity across the two
+  observers, so both rows survived. A proxied assistant turn is now dropped for
+  sessions a Claude hook stream already captured (cost and telemetry for the
+  proxied call are unaffected), so those sessions are attributed to the agent that
+  ran them rather than to the proxy. Separately, the bare `claude` adapter slug the
+  hooks binary sends now resolves to the `claude-code` surface even when a session
+  has no OpenTelemetry stream, instead of colliding with the `claude` the Anthropic
+  compliance import writes for Claude Chat Desktop and being displayed as that
+  surface.
+- cfc020f: Harden OpenAPI-from-URL (and in-process image-from-URL) fetches against SSRF. User-supplied URLs are rejected unless they are https with a host that passes the guardian blocklist (loopback, RFC 1918, link-local/metadata, and other reserved ranges), and redirects are capped and re-checked so a hostile target cannot chain into private address space or downgrade to plaintext HTTP.
+
 ## 1.9.0
 
 ### Minor Changes

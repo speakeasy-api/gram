@@ -17,7 +17,7 @@ import (
 func TestGetConfigurationReturnsUnconfiguredEnvelope(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, ti.orgID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
 
 	result, err := ti.service.GetConfiguration(ctx, &gen.GetConfigurationPayload{})
 	require.NoError(t, err)
@@ -28,15 +28,23 @@ func TestGetConfigurationReturnsUnconfiguredEnvelope(t *testing.T) {
 	require.Nil(t, result.UpdatedAt)
 }
 
-func TestGetConfigurationRequiresOrganizationRead(t *testing.T) {
+func TestGetConfigurationRequiresOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
-	ctx = authztest.WithExactGrants(t, ctx)
 
-	_, err := ti.service.GetConfiguration(ctx, &gen.GetConfigurationPayload{})
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+	// Viewing fleet configuration is org-admin only: an org reader (a plain
+	// member) must be denied, not just a grant-less caller.
+	for _, grants := range [][]authz.Grant{
+		{},
+		{authz.NewGrant(authz.ScopeOrgRead, ti.orgID)},
+	} {
+		scopedCtx := authztest.WithExactGrants(t, ctx, grants...)
+
+		_, err := ti.service.GetConfiguration(scopedCtx, &gen.GetConfigurationPayload{})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr)
+		require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+	}
 }
 
 func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {

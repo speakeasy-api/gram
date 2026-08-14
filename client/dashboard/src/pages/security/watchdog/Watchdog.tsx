@@ -26,7 +26,11 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
+import {
+  getRuleTitleFallback,
+  hasJudgeSource,
+  scoreToRating,
+} from "../risk-utils";
 import { invalidateExclusionSurfaces } from "../exclusion-invalidation";
 import { useDismissFinding } from "../useDismissFinding";
 import {
@@ -164,9 +168,13 @@ function WatchdogContent(): JSX.Element {
     signalCount: number;
   } | null>(null);
   const [collecting, setCollecting] = useState(false);
-  const [pendingExclusions, setPendingExclusions] = useState<
-    RiskSignal[] | null
-  >(null);
+  const [pendingExclusions, setPendingExclusions] = useState<{
+    signals: RiskSignal[];
+    // Judge-backed signals in the selection, dropped from exclusion creation:
+    // their findings can't be excluded (constant rule id per detector), only
+    // dismissed. The dialog names how many were set aside.
+    skippedJudge: number;
+  } | null>(null);
   const [creatingExclusions, setCreatingExclusions] = useState(false);
 
   const handleDismissSelected = async () => {
@@ -197,7 +205,19 @@ function WatchdogContent(): JSX.Element {
   const handleExcludeSelected = () => {
     const selected = selection.selectedItems;
     if (selected.length === 0) return;
-    setPendingExclusions(selected);
+    const excludable = selected.filter(
+      (signal) => !hasJudgeSource(signal.detectionSources),
+    );
+    if (excludable.length === 0) {
+      toast.info(
+        "Prompt-based findings can't be excluded — mark them as false positives instead.",
+      );
+      return;
+    }
+    setPendingExclusions({
+      signals: excludable,
+      skippedJudge: selected.length - excludable.length,
+    });
   };
 
   const confirmCreateExclusions = async () => {
@@ -205,7 +225,7 @@ function WatchdogContent(): JSX.Element {
     setCreatingExclusions(true);
     let created = 0;
     const failed: string[] = [];
-    for (const signal of pendingExclusions) {
+    for (const signal of pendingExclusions.signals) {
       try {
         await createExclusionMutation.mutateAsync({
           request: {
@@ -402,6 +422,7 @@ function WatchdogContent(): JSX.Element {
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
+            window={window}
             onClose={() => setUrlParam("signal", null)}
           />
           <DismissFindingsDialog
@@ -415,7 +436,8 @@ function WatchdogContent(): JSX.Element {
             onConfirm={confirmDismissSelected}
           />
           <CreateExclusionsDialog
-            signals={pendingExclusions}
+            signals={pendingExclusions?.signals ?? null}
+            skippedJudge={pendingExclusions?.skippedJudge ?? 0}
             creating={creatingExclusions}
             onCancel={() => setPendingExclusions(null)}
             onConfirm={() => void confirmCreateExclusions()}
@@ -483,11 +505,14 @@ function exclusionsDialogDescription(count: number): string {
 
 function CreateExclusionsDialog({
   signals,
+  skippedJudge,
   creating,
   onCancel,
   onConfirm,
 }: {
   signals: RiskSignal[] | null;
+  /** Judge-backed signals dropped from the selection — not excludable. */
+  skippedJudge: number;
   creating: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -513,6 +538,14 @@ function CreateExclusionsDialog({
             <li key={signal.key}>{getRuleTitleFallback(signal.ruleId)}</li>
           ))}
         </ul>
+        {skippedJudge > 0 && (
+          <Text small muted>
+            {skippedJudge} prompt-based{" "}
+            {skippedJudge === 1 ? "signal was" : "signals were"} left out —
+            those findings can't be excluded. Mark them as false positives
+            instead.
+          </Text>
+        )}
         <Dialog.Footer>
           <Button variant="tertiary" disabled={creating} onClick={onCancel}>
             <Button.Text>Cancel</Button.Text>
