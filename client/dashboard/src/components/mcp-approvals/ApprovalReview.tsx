@@ -1,4 +1,3 @@
-import { DecisionForm } from "@/components/mcp-approvals/DecisionForm";
 import {
   EvidencePanel,
   StatusBadge,
@@ -27,19 +26,13 @@ import { toast } from "sonner";
  * decision. Rendered wherever a server is reviewed — the Shadow MCP server
  * page for URL targets, the queue's review sheet for stdio targets. Its job
  * is to make one decision fast and defensible, and never to let an absence
- * of evidence read as evidence of safety.
- *
- * showDecide renders the inline decision form. The server page leaves it off
- * — deciding there goes through the Decide Access sheet, and two decide
- * surfaces on one page would race each other — while the stdio sheet, which
- * has no other decide surface, turns it on.
+ * of evidence read as evidence of safety. Deciding always happens in the
+ * Decide Access sheet, never inline here — one write path, one form.
  */
 export function ApprovalReview({
   requestId,
-  showDecide = false,
 }: {
   requestId: string;
-  showDecide?: boolean;
 }): JSX.Element {
   const project = useProject();
 
@@ -107,15 +100,6 @@ export function ApprovalReview({
           </>
         )}
         <PriorDecisions decisions={detail.decisions} />
-        {showDecide && detail.request.status === "requested" && (
-          <section className="space-y-2">
-            <h3 className="text-eyebrow">Decide</h3>
-            <DecisionForm
-              requestId={detail.request.id}
-              projectSlug={project.slug}
-            />
-          </section>
-        )}
       </aside>
     </div>
   );

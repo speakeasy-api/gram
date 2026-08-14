@@ -17,12 +17,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -301,6 +304,20 @@ func (riskIntakeNotFoundRegistry) Do(request *http.Request) (*http.Response, err
 	}, nil
 }
 
+// riskIntakeEmptyAdvisoryDB answers every advisory query with an empty
+// document, OSV's shape for a package it has nothing on.
+type riskIntakeEmptyAdvisoryDB struct{}
+
+func (riskIntakeEmptyAdvisoryDB) Do(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		Status:     http.StatusText(http.StatusOK),
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{}`)),
+		Header:     http.Header{},
+		Request:    request,
+	}, nil
+}
+
 // The block link redeems end to end through the REAL mcpapproval service —
 // wired the way the server wires it — and lands as an approval request with
 // the blocked employee attached, deduplicated on the canonical URL, with no
@@ -319,6 +336,9 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 		features = productfeatures.NewClient(logger, tracerProvider, instance.conn, redisClient)
 		assembler := evidence.NewAssembler(
 			packagemeta.NewClient(riskIntakeNotFoundRegistry{}),
+			repometa.NewClient(riskIntakeNotFoundRegistry{}),
+			advisories.NewClient(riskIntakeEmptyAdvisoryDB{}),
+			domainmeta.NewClient(riskIntakeNotFoundRegistry{}),
 			telemetryrepo.New(instance.chConn),
 			riskIntakeQuietProbes{},
 			riskIntakeQuietProbes{},

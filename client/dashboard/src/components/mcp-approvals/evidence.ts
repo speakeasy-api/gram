@@ -36,6 +36,45 @@ export type EvidencePackage = {
   deprecationReason?: string;
 };
 
+export type EvidenceRepository = {
+  url: string;
+  host: string;
+  owner: string;
+  name: string;
+  stars?: number;
+  forks?: number;
+  /** GitHub counts open issues and pull requests together. */
+  openIssues?: number;
+  archived: boolean;
+  createdAt?: string;
+  pushedAt?: string;
+  /** Absent when the host did not answer — unknown, never "no contributors". */
+  contributorCount?: number;
+};
+
+export type EvidenceAdvisoryItem = {
+  id: string;
+  summary?: string;
+  severity?: string;
+  published?: string;
+};
+
+export type EvidenceAdvisories = {
+  ecosystem?: string;
+  package?: string;
+  /** Everything the database returned; `advisories` is a recent sample. */
+  knownCount: number;
+  advisories: EvidenceAdvisoryItem[];
+};
+
+export type EvidenceDomain = {
+  domain: string;
+  registeredAt?: string;
+  registrar?: string;
+  /** The registry answered that no such domain exists. */
+  unregistered: boolean;
+};
+
 export type EvidenceExposure = {
   status: "seen" | "unseen";
   canonicalUrl?: string;
@@ -93,6 +132,16 @@ export type EvidenceDocument = {
   identity: EvidenceIdentity;
   package?: EvidencePackage;
   packageNotPublished: boolean;
+  /**
+   * The code host's numbers for the repository the publisher declared. The
+   * repository is the publisher's claim — nothing verifies it builds this
+   * package — and the panel's copy must say so.
+   */
+  repository?: EvidenceRepository;
+  /** The publisher declared a repository and the code host has no such repository. */
+  repositoryNotFound: boolean;
+  advisories?: EvidenceAdvisories;
+  domain?: EvidenceDomain;
   exposure?: EvidenceExposure;
   authority?: EvidenceAuthority;
   capabilities: EvidenceCapability[];
@@ -119,6 +168,12 @@ export function gapLabel(gap: string): string {
       return "Neither the server nor a registry catalog supplied a tool listing, so its declared capabilities are unknown";
     case "catalog_lookup_failed":
       return "The MCP registry catalog could not be consulted, so whether this server is catalogued is unknown";
+    case "repository_lookup_failed":
+      return "The code host could not be reached, so the declared repository's track record is unknown";
+    case "advisory_lookup_failed":
+      return "The vulnerability database could not be queried, so published advisories are unknown";
+    case "domain_lookup_failed":
+      return "The domain registry could not be consulted, so the domain's registration age is unknown";
     default:
       return `A source could not be consulted (${gap})`;
   }
@@ -192,6 +247,53 @@ export function parseEvidenceDocument(
       maintainerCount: num(packageRecord, "maintainer_count"),
       deprecated: bool(packageRecord, "deprecated"),
       deprecationReason: str(packageRecord, "deprecation_reason"),
+    };
+  }
+
+  let repository: EvidenceRepository | undefined;
+  const repositoryRecord = asRecord(root["repository"]);
+  if (repositoryRecord) {
+    repository = {
+      url: str(repositoryRecord, "url") ?? "",
+      host: str(repositoryRecord, "host") ?? "",
+      owner: str(repositoryRecord, "owner") ?? "",
+      name: str(repositoryRecord, "name") ?? "",
+      stars: num(repositoryRecord, "stars"),
+      forks: num(repositoryRecord, "forks"),
+      openIssues: num(repositoryRecord, "open_issues"),
+      archived: bool(repositoryRecord, "archived"),
+      createdAt: str(repositoryRecord, "created_at"),
+      pushedAt: str(repositoryRecord, "pushed_at"),
+      contributorCount: num(repositoryRecord, "contributor_count"),
+    };
+  }
+
+  let advisoriesSection: EvidenceAdvisories | undefined;
+  const advisoriesRecord = asRecord(root["advisories"]);
+  // A section without a numeric count is a document this parser does not
+  // understand; dropping it renders "not consulted" — the conservative
+  // unknown — rather than coercing a partial section into checked-and-clean.
+  const knownCount = advisoriesRecord
+    ? num(advisoriesRecord, "known_count")
+    : undefined;
+  if (advisoriesRecord && knownCount !== undefined) {
+    advisoriesSection = {
+      ecosystem: str(advisoriesRecord, "ecosystem"),
+      package: str(advisoriesRecord, "package"),
+      knownCount,
+      advisories: advisoryItems(advisoriesRecord["advisories"]),
+    };
+  }
+
+  let domain: EvidenceDomain | undefined;
+  const domainRecord = asRecord(root["domain"]);
+  const domainName = domainRecord ? str(domainRecord, "domain") : undefined;
+  if (domainRecord && domainName) {
+    domain = {
+      domain: domainName,
+      registeredAt: str(domainRecord, "registered_at"),
+      registrar: str(domainRecord, "registrar"),
+      unregistered: bool(domainRecord, "unregistered"),
     };
   }
 
@@ -276,6 +378,10 @@ export function parseEvidenceDocument(
     identity,
     package: packageSection,
     packageNotPublished: bool(root, "package_not_published"),
+    repository,
+    repositoryNotFound: bool(root, "repository_not_found"),
+    advisories: advisoriesSection,
+    domain,
     exposure,
     authority,
     capabilities,
@@ -295,6 +401,23 @@ function capabilitiesSource(
 function strings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function advisoryItems(value: unknown): EvidenceAdvisoryItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: EvidenceAdvisoryItem[] = [];
+  for (const entry of value) {
+    const record = asRecord(entry);
+    const id = record ? str(record, "id") : undefined;
+    if (!record || !id) continue;
+    out.push({
+      id,
+      summary: str(record, "summary"),
+      severity: str(record, "severity"),
+      published: str(record, "published"),
+    });
+  }
+  return out;
 }
 
 function credentials(value: unknown): EvidenceCredential[] {

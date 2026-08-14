@@ -5,13 +5,17 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import type {
+  EvidenceAdvisories,
+  EvidenceAdvisoryItem,
   EvidenceAuthority,
   EvidenceCapability,
   EvidenceDocument,
+  EvidenceDomain,
   EvidenceExposure,
   EvidenceIdentity,
   EvidencePackage,
   EvidenceProvenance,
+  EvidenceRepository,
 } from "./evidence";
 import { gapLabel } from "./evidence";
 
@@ -50,7 +54,11 @@ export function EvidencePanel({
           nothing is verified behavior.
         </p>
       )}
-      <TrustSection identity={document.identity} pkg={document.package} />
+      <TrustSection
+        identity={document.identity}
+        pkg={document.package}
+        domain={document.domain}
+      />
       <AuthoritySection authority={document.authority} />
       <DeclaredCapabilitySection
         capabilities={document.capabilities}
@@ -62,12 +70,17 @@ export function EvidencePanel({
         packageName={document.identity.packageName}
         provenance={document.provenance}
         identityKind={document.identity.kind}
+        repository={document.repository}
+        repositoryNotFound={document.repositoryNotFound}
+      />
+      <AdvisoriesSection
+        advisories={document.advisories}
+        identityKind={document.identity.kind}
       />
       <ExposureSection
         exposure={document.exposure}
         identity={document.identity}
       />
-      <OrgKnowledgeSection />
     </div>
   );
 }
@@ -179,9 +192,11 @@ function identityKindLabel(identity: EvidenceIdentity): string {
 function TrustSection({
   identity,
   pkg,
+  domain,
 }: {
   identity: EvidenceIdentity;
   pkg: EvidencePackage | undefined;
+  domain: EvidenceDomain | undefined;
 }): JSX.Element {
   if (identity.kind === "unresolved") {
     return (
@@ -218,10 +233,31 @@ function TrustSection({
   if (pkg?.maintainerCount !== undefined) {
     facts.push({ label: "Registry maintainers", value: pkg.maintainerCount });
   }
+  if (domain?.registeredAt) {
+    facts.push({
+      label: "Domain registered",
+      value: (
+        <HumanizeDateTime
+          date={new Date(domain.registeredAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (domain?.registrar) {
+    facts.push({ label: "Registrar", value: domain.registrar });
+  }
 
   return (
     <EvidenceGroup question="Who am I trusting?">
       <FactList facts={facts} />
+      {domain?.unregistered && (
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
+          The domain registry reports no registration for{" "}
+          <span className="font-mono">{domain.domain}</span> — unusual for a
+          host that answers traffic.
+        </div>
+      )}
       {identity.kind === "remote" && !identity.registrableDomain && (
         <UnknownBlock>
           No registrable public domain — nothing links this host to a known
@@ -303,16 +339,7 @@ function AuthoritySection({
               Scopes it will ask to be granted — the one item here the
               authorization server actually enforces:
             </p>
-            <div className="flex flex-wrap gap-1">
-              {authority.scopes.map((scope) => (
-                <span
-                  key={scope}
-                  className="border-border border px-1.5 py-px font-mono text-xs"
-                >
-                  {scope}
-                </span>
-              ))}
-            </div>
+            <ScopeChips scopes={authority.scopes} />
           </div>
         )}
       </div>
@@ -324,6 +351,104 @@ function AuthoritySection({
         </div>
       )}
     </EvidenceGroup>
+  );
+}
+
+/** How many scope chips show before the rest collapses behind the toggle. */
+const SCOPE_PREVIEW_COUNT = 4;
+
+/**
+ * Hiding the tail of a list: the state, the slice, and what counts as
+ * collapsible. Every list here that hides one shares this, so the rule that
+ * a list at exactly the preview count shows no toggle is decided once.
+ */
+function useCollapsedPreview<T>(
+  items: T[],
+  previewCount: number,
+): {
+  collapsible: boolean;
+  expanded: boolean;
+  toggle: () => void;
+  visible: T[];
+} {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = items.length > previewCount;
+
+  return {
+    collapsible,
+    expanded,
+    toggle: () => setExpanded((current) => !current),
+    visible: collapsible && !expanded ? items.slice(0, previewCount) : items,
+  };
+}
+
+/**
+ * The control that reveals a hidden tail. The chrome around it differs — a
+ * chip in a wrap of scopes, a footer row under a framed list — but the
+ * accessible contract and the collapse wording are the same wherever it
+ * appears, so they live here rather than in each caller.
+ */
+function MoreToggle({
+  expanded,
+  onToggle,
+  collapsedLabel,
+  className,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  /** What the control says while the tail is hidden. */
+  collapsedLabel: string;
+  className?: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className={cn(
+        "text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs",
+        className,
+      )}
+    >
+      {expanded ? "Show fewer" : collapsedLabel}
+      {expanded ? (
+        <ChevronUp className="size-3" />
+      ) : (
+        <ChevronDown className="size-3" />
+      )}
+    </button>
+  );
+}
+
+/**
+ * The wrap of scope chips, with the tail collapsed behind a "+N more" toggle
+ * chip once the list exceeds the preview count.
+ */
+function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
+  const { collapsible, expanded, toggle, visible } = useCollapsedPreview(
+    scopes,
+    SCOPE_PREVIEW_COUNT,
+  );
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((scope) => (
+        <span
+          key={scope}
+          className="border-border border px-1.5 py-px font-mono text-xs"
+        >
+          {scope}
+        </span>
+      ))}
+      {collapsible && (
+        <MoreToggle
+          expanded={expanded}
+          onToggle={toggle}
+          collapsedLabel={`+${scopes.length - SCOPE_PREVIEW_COUNT} more`}
+          className="px-1.5 py-px"
+        />
+      )}
+    </div>
   );
 }
 
@@ -410,66 +535,85 @@ function DeclaredCapabilitySection({
 /** How many tool rows show before the rest collapses behind the toggle. */
 const TOOL_PREVIEW_COUNT = 3;
 
+/**
+ * A bordered, hairline-divided list whose tail collapses behind a
+ * "Show all N {noun}" toggle once it exceeds the preview count.
+ */
+function CollapsibleList<T>({
+  items,
+  itemKey,
+  renderItem,
+  itemClassName,
+  noun,
+  previewCount = TOOL_PREVIEW_COUNT,
+}: {
+  items: T[];
+  itemKey: (item: T) => string;
+  renderItem: (item: T) => React.ReactNode;
+  itemClassName: string;
+  /** Plural label for the toggle, e.g. "tools". */
+  noun: string;
+  previewCount?: number;
+}): JSX.Element {
+  const { collapsible, expanded, toggle, visible } = useCollapsedPreview(
+    items,
+    previewCount,
+  );
+
+  return (
+    <div className="border-border border">
+      <ul className="divide-border divide-y">
+        {visible.map((item) => (
+          <li key={itemKey(item)} className={itemClassName}>
+            {renderItem(item)}
+          </li>
+        ))}
+      </ul>
+      {collapsible && (
+        <MoreToggle
+          expanded={expanded}
+          onToggle={toggle}
+          collapsedLabel={`Show all ${items.length} ${noun}`}
+          className="border-border w-full justify-center border-t px-3 py-1"
+        />
+      )}
+    </div>
+  );
+}
+
 function ToolList({
   capabilities,
 }: {
   capabilities: EvidenceCapability[];
 }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const collapsible = capabilities.length > TOOL_PREVIEW_COUNT;
-  const visible =
-    collapsible && !expanded
-      ? capabilities.slice(0, TOOL_PREVIEW_COUNT)
-      : capabilities;
-
   return (
-    <div className="border-border border">
-      <ul className="divide-border divide-y">
-        {visible.map((tool) => (
-          <li
-            key={tool.tool}
-            className="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
-          >
-            <span className="font-mono">{tool.tool}</span>
-            {tool.unannotated ? (
-              <span className="text-muted-foreground italic">
-                declares nothing — authority unknown
-              </span>
-            ) : (
-              <span className="flex flex-wrap justify-end gap-1">
-                {[...tool.declared, ...tool.schemaImplied].map((value) => (
-                  <span
-                    key={value}
-                    className="border-border text-muted-foreground border px-1.5 py-px"
-                  >
-                    {capabilityLabel(value)}
-                  </span>
-                ))}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-      {collapsible && (
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="text-muted-foreground hover:text-foreground border-border flex w-full items-center justify-center gap-1 border-t px-3 py-1 text-xs"
-        >
-          {expanded ? (
-            <>
-              Show fewer
-              <ChevronUp className="size-3" />
-            </>
+    <CollapsibleList
+      items={capabilities}
+      itemKey={(tool) => tool.tool}
+      itemClassName="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
+      noun="tools"
+      renderItem={(tool) => (
+        <>
+          <span className="font-mono">{tool.tool}</span>
+          {tool.unannotated ? (
+            <span className="text-muted-foreground italic">
+              declares nothing — authority unknown
+            </span>
           ) : (
-            <>
-              Show all {capabilities.length} tools
-              <ChevronDown className="size-3" />
-            </>
+            <span className="flex flex-wrap justify-end gap-1">
+              {[...tool.declared, ...tool.schemaImplied].map((value) => (
+                <span
+                  key={value}
+                  className="border-border text-muted-foreground border px-1.5 py-px"
+                >
+                  {capabilityLabel(value)}
+                </span>
+              ))}
+            </span>
           )}
-        </button>
+        </>
       )}
-    </div>
+    />
   );
 }
 
@@ -541,12 +685,16 @@ function MaturitySection({
   packageName,
   provenance,
   identityKind,
+  repository,
+  repositoryNotFound,
 }: {
   pkg: EvidencePackage | undefined;
   notPublished: boolean;
   packageName: string | undefined;
   provenance: EvidenceProvenance | undefined;
   identityKind: EvidenceIdentity["kind"];
+  repository: EvidenceRepository | undefined;
+  repositoryNotFound: boolean;
 }): JSX.Element {
   if (identityKind === "remote" && provenance) {
     if (!provenance.catalogued) {
@@ -636,7 +784,184 @@ function MaturitySection({
         </div>
       )}
       <FactList facts={facts} />
+      {repository && <RepositoryFacts repository={repository} />}
+      {repositoryNotFound && (
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
+          The publisher declares a source repository that does not exist on the
+          code host — the package's provenance cannot be traced to any source.
+        </div>
+      )}
     </EvidenceGroup>
+  );
+}
+
+/**
+ * The declared repository's public track record. Everything here is about the
+ * repository the publisher chose to name — nothing verifies that repository
+ * builds this package, so a popular repository must not read as vouching for
+ * the artifact.
+ */
+function RepositoryFacts({
+  repository,
+}: {
+  repository: EvidenceRepository;
+}): JSX.Element {
+  const facts: Array<{ label: string; value: React.ReactNode }> = [
+    {
+      label: "Declared repository",
+      value: `${repository.owner}/${repository.name}`,
+    },
+  ];
+  if (repository.stars !== undefined) {
+    facts.push({ label: "Stars", value: repository.stars });
+  }
+  if (repository.forks !== undefined) {
+    facts.push({ label: "Forks", value: repository.forks });
+  }
+  if (
+    repository.contributorCount !== undefined &&
+    repository.contributorCount > 0
+  ) {
+    facts.push({ label: "Contributors", value: repository.contributorCount });
+  }
+  if (repository.openIssues !== undefined) {
+    facts.push({ label: "Open issues and PRs", value: repository.openIssues });
+  }
+  if (repository.createdAt) {
+    facts.push({
+      label: "Repository created",
+      value: (
+        <HumanizeDateTime
+          date={new Date(repository.createdAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (repository.pushedAt) {
+    facts.push({
+      label: "Last commit pushed",
+      value: (
+        <HumanizeDateTime
+          date={new Date(repository.pushedAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+
+  return (
+    <>
+      {repository.archived && (
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
+          The declared repository is archived — its owner froze it against
+          further commits and issues.
+        </div>
+      )}
+      <FactList facts={facts} />
+      <p className="text-muted-foreground text-xs">
+        The repository is the publisher's claim; nothing verifies it builds the
+        package that installs.
+      </p>
+    </>
+  );
+}
+
+/**
+ * OSV's answer gets its own group: checked-and-clean, advisories-found, and
+ * could-not-check are three different answers, and collapsing any two of them
+ * is exactly what this panel exists to prevent. Advisory databases index
+ * published packages, so a non-package reference renders the group with an
+ * explanation rather than an answer — the question still exists for a remote
+ * endpoint; a database just cannot answer it.
+ */
+function AdvisoriesSection({
+  advisories,
+  identityKind,
+}: {
+  advisories: EvidenceAdvisories | undefined;
+  identityKind: EvidenceIdentity["kind"];
+}): JSX.Element {
+  if (identityKind !== "package") {
+    return (
+      <EvidenceGroup question="Does anything published say it's vulnerable?">
+        <UnknownBlock>
+          Advisory databases index published packages, and this server is not
+          one — there is nothing to look up. The vendor's security history is a
+          research question, not a database check.
+        </UnknownBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  if (!advisories) {
+    return (
+      <EvidenceGroup question="Does anything published say it's vulnerable?">
+        <UnknownBlock>
+          No advisory database was consulted — published vulnerabilities are
+          unknown.
+        </UnknownBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  if (advisories.knownCount === 0) {
+    return (
+      <EvidenceGroup question="Does anything published say it's vulnerable?">
+        <div className="border-border border px-2.5 py-1.5 text-xs">
+          OSV lists no published advisories for this package. Checked today and
+          clean — not a guarantee, and it says nothing about unreported issues.
+        </div>
+      </EvidenceGroup>
+    );
+  }
+
+  const sampled = advisories.advisories.length;
+  return (
+    <EvidenceGroup question="Does anything published say it's vulnerable?">
+      <div className="border-destructive border px-2.5 py-1.5 text-xs">
+        <span className="font-medium">
+          {advisories.knownCount === 1
+            ? "1 published advisory names this package"
+            : `${advisories.knownCount} published advisories name this package`}
+        </span>
+        {sampled < advisories.knownCount && (
+          <span className="text-muted-foreground">
+            {" "}
+            — most recent {sampled} shown
+          </span>
+        )}
+      </div>
+      <AdvisoryList advisories={advisories.advisories} />
+    </EvidenceGroup>
+  );
+}
+
+function AdvisoryList({
+  advisories,
+}: {
+  advisories: EvidenceAdvisoryItem[];
+}): JSX.Element {
+  return (
+    <CollapsibleList
+      items={advisories}
+      itemKey={(advisory) => advisory.id}
+      itemClassName="px-3 py-1.5 text-xs"
+      noun="advisories"
+      renderItem={(advisory) => (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono">{advisory.id}</span>
+            {advisory.severity && (
+              <Badge variant="destructive">{advisory.severity}</Badge>
+            )}
+          </div>
+          {advisory.summary && (
+            <p className="text-muted-foreground mt-0.5">{advisory.summary}</p>
+          )}
+        </>
+      )}
+    />
   );
 }
 
@@ -708,17 +1033,6 @@ function ExposureSection({
         </div>
       )}
       <FactList facts={facts} />
-    </EvidenceGroup>
-  );
-}
-
-function OrgKnowledgeSection(): JSX.Element {
-  return (
-    <EvidenceGroup question="What do we already know?">
-      <UnknownBlock>
-        Nothing on file — existing contract and prior security review are
-        unrecorded.
-      </UnknownBlock>
     </EvidenceGroup>
   );
 }

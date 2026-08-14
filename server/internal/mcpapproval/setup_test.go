@@ -24,12 +24,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -115,6 +118,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	probes := &testProbes{onGather: nil, fail: false}
 	assembler := evidence.NewAssembler(
 		packagemeta.NewClient(notFoundRegistry{}),
+		repometa.NewClient(notFoundRegistry{}),
+		advisories.NewClient(emptyAdvisoryDB{}),
+		domainmeta.NewClient(notFoundRegistry{}),
 		telemetryrepo.New(chConn),
 		probes,
 		probes,
@@ -375,6 +381,20 @@ func (p *testProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match
 	}
 
 	return nil, nil
+}
+
+// emptyAdvisoryDB answers every advisory query with an empty document, which
+// is OSV's shape for a package it has nothing on — checked and clean.
+type emptyAdvisoryDB struct{}
+
+func (emptyAdvisoryDB) Do(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		Status:     http.StatusText(http.StatusOK),
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{}`)),
+		Header:     http.Header{},
+		Request:    request,
+	}, nil
 }
 
 // notFoundRegistry answers every package-registry request with a 404, so

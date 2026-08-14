@@ -41,6 +41,13 @@ import { toast } from "sonner";
  * resolves with the decision instead of staying pending forever.
  */
 export type DecideAccessTarget = {
+  /**
+   * The reference namespace being decided on. Defaults to server_url; a
+   * stdio_command target carries the redacted command in canonicalServerUrl,
+   * has no URL for enforcement grants, and records a decision of record
+   * instead.
+   */
+  targetKind?: "server_url" | "stdio_command";
   canonicalServerUrl: string;
   displayName: string;
   approvalRequestId?: string;
@@ -88,6 +95,12 @@ const RATIONALE_PREFILL: Record<AccessDecision, string> = {
   approved: "Approved for use in this project.",
   denied: "Denied for use in this project.",
 };
+
+function approveSublabel(stdio: boolean, audienceSelectable: boolean): string {
+  if (stdio) return "Record the approval as the decision of record.";
+  if (audienceSelectable) return "Allow the server for the audience below.";
+  return "Unblock the server for everyone in the project.";
+}
 
 /**
  * Allow or deny one MCP server. This is the single write path for server
@@ -145,10 +158,12 @@ export function DecideAccessSheet({
 
   if (!target) return null;
 
+  const stdio = target.targetKind === "stdio_command";
   // Under an allow-by-default policy a narrow approval is inexpressible —
   // approving clears the block for everyone — so the audience picker only
-  // appears when a block-by-default policy can scope who passes.
-  const audienceSelectable = disposition !== "allow_all";
+  // appears when a block-by-default policy can scope who passes. A stdio
+  // command has no URL for grants to attach to, so it never shows one.
+  const audienceSelectable = disposition !== "allow_all" && !stdio;
   const isSubmitting =
     submitting ||
     createRequest.isPending ||
@@ -186,7 +201,7 @@ export function DecideAccessSheet({
           request: {
             gramProject: project.slug,
             createRequestRequestBody: {
-              targetKind: "server_url",
+              targetKind: target.targetKind ?? "server_url",
               target: target.canonicalServerUrl,
               note: trimmedRationale,
             },
@@ -270,12 +285,14 @@ export function DecideAccessSheet({
         <RequireScope scope="mcp_approval:decide" level="component">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
             <section className="border-border border px-4 py-3">
-              <Text variant="small" className="font-medium">
+              <Text variant="small" className="font-medium break-all">
                 {target.displayName}
               </Text>
-              <Text muted small className="mt-1 break-all">
-                {target.canonicalServerUrl}
-              </Text>
+              {target.canonicalServerUrl !== target.displayName && (
+                <Text muted small className="mt-1 break-all">
+                  {target.canonicalServerUrl}
+                </Text>
+              )}
             </section>
 
             <RadioGroup
@@ -295,9 +312,7 @@ export function DecideAccessSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    {audienceSelectable
-                      ? "Allow the server for the audience below."
-                      : "Unblock the server for everyone in the project."}
+                    {approveSublabel(stdio, audienceSelectable)}
                   </Text>
                 </span>
               </label>
@@ -313,11 +328,21 @@ export function DecideAccessSheet({
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    Block the server for everyone in the project.
+                    {stdio
+                      ? "Record the denial as the decision of record."
+                      : "Block the server for everyone in the project."}
                   </Text>
                 </span>
               </label>
             </RadioGroup>
+
+            {stdio && (
+              <Text muted small>
+                Shared with the requester. This is the decision of record — a
+                command-line server has no URL for blocking policies to enforce
+                against automatically.
+              </Text>
+            )}
 
             {decision === "approved" && audienceSelectable && (
               <section className="border-border space-y-2 border p-3">

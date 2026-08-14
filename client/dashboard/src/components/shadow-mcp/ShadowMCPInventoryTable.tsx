@@ -411,6 +411,14 @@ export function ShadowMCPInventoryTable({
             setReviewSheetServer(null);
           }
         }}
+        onDecide={(request) => {
+          setDecideTarget({
+            targetKind: "stdio_command",
+            canonicalServerUrl: request.targetRaw,
+            displayName: request.targetRaw,
+            approvalRequestId: request.id,
+          });
+        }}
       />
       <DecideAccessSheet
         target={decideTarget}
@@ -426,6 +434,10 @@ export function ShadowMCPInventoryTable({
         onDecided={() => {
           setCursor(undefined);
           setPages([]);
+          // A decision handed off from the stdio review sheet resolves that
+          // review; leaving the sheet open underneath would return the admin
+          // to a stale pending view of a request that was just decided.
+          setReviewSheetServer(null);
         }}
       />
       <Page.Toolbar className="shrink-0">

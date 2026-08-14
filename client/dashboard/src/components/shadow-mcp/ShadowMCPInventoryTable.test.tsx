@@ -113,16 +113,26 @@ vi.mock("@/components/mcp-approvals/ReviewRequestSheet", () => ({
   ReviewRequestSheet: ({
     request,
     open,
+    onDecide,
   }: {
     request: { id: string; targetRaw: string; requesterCount: number } | null;
     open: boolean;
+    onDecide: (request: {
+      id: string;
+      targetRaw: string;
+      requesterCount: number;
+    }) => void;
   }) =>
     open && request ? (
       <div
         data-testid="review-request-sheet"
         data-request-id={request.id}
         data-target-raw={request.targetRaw}
-      />
+      >
+        <button type="button" onClick={() => onDecide(request)}>
+          Decide Access
+        </button>
+      </div>
     ) : null,
 }));
 
@@ -689,6 +699,57 @@ describe("ShadowMCPInventoryTable", () => {
       "npx -y example-package",
     );
     expect(onOpenServer).not.toHaveBeenCalled();
+  });
+
+  it("hands a stdio review off to the decide access sheet and closes the review on decision", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "npx -y example-package",
+          serverName: undefined,
+          urlHost: "",
+          targetKind: "stdio_command",
+          approvalRequest: {
+            id: "stdio-request-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable(
+      "project-id-1",
+      "blocking",
+      [blockingPolicy()],
+      [],
+      [],
+      vi.fn<(server: ShadowMCPInventoryServer) => void>(),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("npx -y example-package")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText("npx -y example-package").closest("tr")!);
+    await screen.findByTestId("review-request-sheet");
+
+    fireEvent.click(screen.getByText("Decide Access"));
+
+    const sheetProps = lastDecideAccessSheetProps();
+    expect(sheetProps.open).toBe(true);
+    expect(sheetProps.target).toEqual({
+      targetKind: "stdio_command",
+      canonicalServerUrl: "npx -y example-package",
+      displayName: "npx -y example-package",
+      approvalRequestId: "stdio-request-1",
+    });
+
+    // A recorded decision resolves the review: the review sheet must not stay
+    // open underneath showing a stale pending request.
+    act(() => sheetProps.onDecided?.("approved"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("review-request-sheet")).toBeNull();
+    });
   });
 
   it("closes the decide access sheet when the sheet requests it", async () => {
