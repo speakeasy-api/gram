@@ -138,7 +138,12 @@ func countOrganizationsForWorkOSID(t *testing.T, ctx context.Context, conn *pgxp
 
 // runOrganizationWebhook runs the WorkOS event sync for one organization, which
 // is the other writer that can create the row this endpoint creates.
-func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Pool, event events.Event) {
+//
+// workosOrgID is passed separately from the event because the activity uses it
+// to key the sync cursor and to filter the WorkOS events listing, neither of
+// which an event ID would address. The stub ignores the filter, so an event ID
+// here would still pass while modelling a call production never makes.
+func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Pool, workosOrgID string, event events.Event) {
 	t.Helper()
 
 	stub := workos.NewStubClient()
@@ -146,7 +151,7 @@ func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
-		WorkOSOrganizationID: event.ID,
+		WorkOSOrganizationID: workosOrgID,
 		SinceEventID:         nil,
 	})
 	require.NoError(t, err, "the webhook path must not fail against an organization the admin endpoint created")
@@ -278,11 +283,11 @@ func TestCreateOrganization_WebhookAfterwardsDoesNotDuplicate(t *testing.T) {
 	// Both polarities of external_id. WorkOS emits the event before the
 	// back-fill lands, so the first delivery carries no external_id and the
 	// sync has to derive the id; a later organization.updated carries it.
-	runOrganizationWebhook(t, ctx, conn, organizationEvent("event_01HZA", "organization.created", workosOrgID, "Hook After Co", ""))
+	runOrganizationWebhook(t, ctx, conn, workosOrgID, organizationEvent("event_01HZA", "organization.created", workosOrgID, "Hook After Co", ""))
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID),
 		"a webhook with no external_id must derive the same id and update the existing row")
 
-	runOrganizationWebhook(t, ctx, conn, organizationEvent("event_01HZB", "organization.updated", workosOrgID, "Hook After Co", res.ID))
+	runOrganizationWebhook(t, ctx, conn, workosOrgID, organizationEvent("event_01HZB", "organization.updated", workosOrgID, "Hook After Co", res.ID))
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID),
 		"a webhook carrying the external_id must resolve to the same row")
 
@@ -309,7 +314,7 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	// writers the same name would make the name assertion pass whichever of
 	// them won, which is the half of this test that would otherwise only look
 	// like coverage.
-	runOrganizationWebhook(t, ctx, conn, organizationEvent("event_01HZC", "organization.created", workosOrgID, "Race Co From The Sync", ""))
+	runOrganizationWebhook(t, ctx, conn, workosOrgID, organizationEvent("event_01HZC", "organization.created", workosOrgID, "Race Co From The Sync", ""))
 
 	derivedID := orgid.FromWorkOSID(workosOrgID)
 	seeded, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, derivedID)

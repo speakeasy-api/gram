@@ -544,10 +544,15 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 // empty fields from the request body, so an absent field means "leave alone"
 // rather than "set to empty": Gram's external_id back-fill sends external_id
 // and no name, and must not blank the name it just set.
+//
+// The ID is resolved without auto-association, so an unknown one is a 404
+// rather than a write applied to whichever organization happens to have no
+// workos_id yet. Every caller of this endpoint has just created the
+// organization it names, so there is nothing to auto-associate.
 func (h *Handler) handleWorkosUpdateOrganization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	id, err := h.resolveOrgID(ctx, r.PathValue("id"))
+	id, err := h.lookupOrgID(ctx, r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusNotFound, "organization not found")
 		return
@@ -1023,23 +1028,13 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 //     default "Speakeasy" org seeded by bootstrap) so subsequent requests
 //     resolve instantly.
 func (h *Handler) resolveOrgID(ctx context.Context, raw string) (uuid.UUID, error) {
-	queries := repo.New(h.db)
-
-	// Fast path: raw is already a UUID matching an org's primary key.
-	if parsed, err := uuid.Parse(raw); err == nil {
-		if _, err := queries.GetOrganization(ctx, parsed); err == nil {
-			return parsed, nil
-		}
-	}
-
-	// Lookup by workos_id text.
-	narg := sql.NullString{String: raw, Valid: true}
-	if org, err := queries.GetOrganizationByWorkosID(ctx, narg); err == nil {
-		return org.ID, nil
+	if id, err := h.lookupOrgID(ctx, raw); err == nil {
+		return id, nil
 	}
 
 	// Auto-associate: stamp workos_id on the default org.
-	org, err := queries.SetOrganizationWorkosID(ctx, repo.SetOrganizationWorkosIDParams{
+	narg := sql.NullString{String: raw, Valid: true}
+	org, err := repo.New(h.db).SetOrganizationWorkosID(ctx, repo.SetOrganizationWorkosIDParams{
 		WorkosID: narg,
 		Ts:       time.Now(),
 	})
@@ -1050,6 +1045,33 @@ func (h *Handler) resolveOrgID(ctx context.Context, raw string) (uuid.UUID, erro
 		slog.String("external_id", raw),
 		slog.String("dev_idp_org_id", org.ID.String()),
 	)
+	return org.ID, nil
+}
+
+// errUnknownOrg is what lookupOrgID reports for an ID no organization carries.
+var errUnknownOrg = errors.New("organization not found")
+
+// lookupOrgID resolves raw without the auto-association step. A handler that
+// writes must use this: auto-association picks the oldest organization with no
+// workos_id, so resolving an unknown ID there would stamp that organization and
+// then apply the update to it, answering 200 for a write that landed on a
+// different organization than the caller named.
+func (h *Handler) lookupOrgID(ctx context.Context, raw string) (uuid.UUID, error) {
+	queries := repo.New(h.db)
+
+	// Fast path: raw is already a UUID matching an org's primary key.
+	if parsed, err := uuid.Parse(raw); err == nil {
+		if _, err := queries.GetOrganization(ctx, parsed); err == nil {
+			return parsed, nil
+		}
+	}
+
+	// Lookup by workos_id text.
+	org, err := queries.GetOrganizationByWorkosID(ctx, sql.NullString{String: raw, Valid: true})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve org %q: %w", raw, errUnknownOrg)
+	}
+
 	return org.ID, nil
 }
 
