@@ -58,6 +58,7 @@ require (
 	github.com/moby/moby/client v0.4.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/oschwald/maxminddb-golang v1.13.1
+	github.com/pganalyze/pg_query_go/v6 v6.2.2
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250908221444-24ae56d05ec0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -83,7 +84,10 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
 	github.com/tidwall/gjson v1.19.0
+	github.com/urfave/cli-altsrc/v3 v3.1.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/urfave/cli/v3 v3.10.1
+	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
 	github.com/workos/workos-go/v6 v6.5.0
 	github.com/zricethezav/gitleaks/v8 v8.30.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0
@@ -300,7 +304,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/superfly/graphql v0.2.6 // indirect
 	github.com/superfly/macaroon v0.3.0 // indirect
-	github.com/tetratelabs/wazero v1.11.0 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/therootcompany/xz v1.0.1 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -312,7 +316,7 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/wasilibs/go-re2 v1.9.0 // indirect
-	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect
+	github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect

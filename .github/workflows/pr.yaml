@@ -36,6 +36,7 @@ jobs:
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
       migrations: ${{ steps.gates.outputs.migrations }}
+      queries: ${{ steps.gates.outputs.queries }}
       plog: ${{ steps.gates.outputs.plog }}
       infra: ${{ steps.gates.outputs.infra }}
       pystreams: ${{ steps.gates.outputs.pystreams }}
@@ -807,6 +808,33 @@ jobs:
         env:
           BASE_REF: ${{ steps.base.outputs.ref }}
         run: mise run lint:migrations --git-base "$BASE_REF" --no-atlas
+
+  lint-queries:
+    name: Lint query tenancy scoping
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    # The check reads the whole corpus rather than a diff, so it needs no base
+    # ref. In the merge queue it always runs: dorny/paths-filter has no reliable
+    # base on merge_group, and two PRs that each pass alone can still land a new
+    # unscoped query together.
+    if: >-
+      (github.event_name == 'pull_request' && needs.changes.outputs.queries == 'true')
+      || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Check query tenancy scoping
+        run: mise run lint:queries
 
   atlas-lint:
     name: Lint migrations with Atlas
@@ -2209,6 +2237,7 @@ jobs:
       - impeccable
       - golang-migrate-clickhouse
       - lint-migrations
+      - lint-queries
       - atlas-lint
       - atlas-push
       - webhooks-catalog-breaking-changes

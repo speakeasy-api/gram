@@ -6,8 +6,22 @@ server:
   - "ci/**"
   - "server/**"
   - "infra/**"
+  # sqlclint is built and tested by `mise run test:ci`, which runs in the
+  # server-build-lint job, so its tests only run when this filter matches.
+  - "sqlclint/**"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"
+
+queries:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "sqlclint/**"
+  - "sqlclint.yaml"
+  - ".sqlclintignore"
+  - "server/**/queries.sql"
+  - "server/database/schema.sql"
+  - ".mise-tasks/lint/queries.sh"
 
 client:
   - ".github/**"

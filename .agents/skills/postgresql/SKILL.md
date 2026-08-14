@@ -199,9 +199,71 @@ When writing SQLc queries, follow these guidelines:
 - Consume the corresponding database schema to understand what tables, columns, relationships and indexes exist.
 - CRITICAL: No matter the query, it MUST ALWAYS be scoped to a `project_id` to explicitly limit the scope of writes.
 
+### Tenancy scoping is enforced (IDOR mitigation)
+
+`mise run lint:queries` checks every production query for a tenancy bound and
+fails CI when one is missing. It parses each query with the same Postgres
+grammar sqlc uses, so a bound counts wherever it appears — `WHERE`, `JOIN ... ON`,
+an `EXISTS` subquery, `UPDATE ... FROM`, a CTE, or an `INSERT` column list.
+
+**Which column a table requires**, applied in order:
+
+1. `project_id` is `NOT NULL` on the table → bind **`project_id`**. Binding only
+   `organization_id` is rejected: it lets the query cross every project in the org.
+2. Otherwise `organization_id` is `NOT NULL` → bind **`organization_id`**. Binding
+   only a nullable `project_id` is rejected: rows holding `NULL` silently vanish.
+3. Otherwise → bind **either** tenancy column the table has.
+
+A table with neither column inherits its parents' requirement through its foreign
+keys, so pin a child row through its parent rather than trusting the child id:
+
+```sql
+WHERE h.remote_mcp_server_id = @remote_mcp_server_id
+  AND EXISTS (
+    SELECT 1 FROM remote_mcp_servers s
+    WHERE s.id = h.remote_mcp_server_id AND s.project_id = @project_id
+  )
+```
+
+Bind with `@name`, `sqlc.arg()`, or `$n`. **Never `sqlc.narg()`** — a nullable
+tenancy parameter either matches nothing or, in the `(@x IS NULL OR col = @x)`
+idiom, removes the boundary entirely when `NULL` is passed. Keep the mandatory
+bound and the optional filter separate.
+
+**When a query genuinely cannot be tenant-bounded**, annotate it under its
+`-- name:` line with a category and a reason a reviewer can check:
+
+```sql
+-- name: GetAPIKeyByKeyHash :one
+-- sqlclint:ignore token-keyed -- key_hash holds a SHA-256 of a high-entropy API
+-- key; this lookup is what resolves the organization, so no tenant is known yet
+SELECT * FROM api_keys WHERE key_hash = @key_hash AND deleted IS FALSE;
+```
+
+Run `sqlclint rules` for the categories and `sqlclint rule <id>` for the full
+description of any rule, including the evidence each category's reason must
+establish. The embedded docs are the source of truth; do not restate them here.
+
+`.sqlclintignore` grandfathers violations that predate the check. It is generated
+debt, not approval: entries are pinned to a hash of the query body, so editing a
+grandfathered query re-raises it. Regenerate with
+`mise run lint:queries --write-ignore-file` and commit the result — never add or
+edit a line by hand, and never use an entry in place of fixing or annotating a
+query.
+
+<important>
+
+The check proves a tenancy predicate exists and is parameterized. It cannot prove
+the parameter carries the _authenticated_ tenant. Always thread the value from
+`contextvalues.GetAuthContext`, never from a request payload field.
+
+</important>
+
 <relevant-tasks>
 
 - `mise run infra:start`: bring up the local Postgres/ClickHouse/etc containers — required before running sqlc, since sqlc connects to the database to type-check queries.
 - `mise run gen:sqlc-server`: generates Go code from SQLc queries (requires the local database from `mise run infra:start`).
+- `mise run lint:queries`: check that every production query is bounded to a tenant.
+- `mise run lint:queries --write-ignore-file`: regenerate `.sqlclintignore` after fixing or annotating a query.
 
 </relevant-tasks>
