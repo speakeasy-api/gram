@@ -1,4 +1,4 @@
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GramAdminError } from "@/lib/gramAdminApi";
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  enableOrganization: vi.fn(),
 }));
 
 // Only the endpoints this route reaches are replaced. The rest of the module
@@ -23,10 +24,17 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    enableOrganization: mocks.enableOrganization,
   };
 });
 
 const ORG = anOrganization();
+
+// Live and trialling, so the callout has a reason to draw.
+const TRIALLING = anOrganization({
+  trial_state: "running",
+  trial_ends_at: "2026-05-06T00:00:00Z",
+});
 
 beforeEach(() => {
   mocks.getSession.mockReset();
@@ -40,6 +48,7 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  mocks.enableOrganization.mockReset();
 });
 
 afterEach(cleanup);
@@ -59,6 +68,48 @@ describe("RecordLayout", () => {
     });
 
     expect(await screen.findByRole("heading", { name: ORG.name })).toBeTruthy();
+  });
+
+  // The claim that the header and the callout are record chrome rather than
+  // part of Overview. Without it, putting both inside `Overview.tsx` passes
+  // every other test in this file.
+  it.each(["", "/projects", "/members"])(
+    "renders the header and the callout above the view at %s",
+    async (view) => {
+      mocks.getOrganization.mockResolvedValue(TRIALLING);
+
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${TRIALLING.slug}${view}`,
+      });
+
+      expect(
+        await screen.findByRole("link", { name: /Open in Gram/ }),
+      ).toBeTruthy();
+      const callout = await screen.findByRole("status");
+      expect(callout.textContent).toContain("Trial ends");
+    },
+  );
+
+  it("speaks the result of a write started from the record chrome", async () => {
+    // The actions report through context whose default is silent, so a record
+    // page with no reporter of its own announces nothing at all.
+    const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
+    mocks.getOrganization.mockResolvedValue(disabled);
+    mocks.enableOrganization.mockResolvedValue({
+      ...disabled,
+      disabled_at: undefined,
+    });
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${disabled.slug}`,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: `Re-enable ${disabled.name}` }),
+    );
+
+    const live = await screen.findByText(`${disabled.name} is enabled.`);
+    expect(live.getAttribute("aria-live")).toBe("polite");
   });
 
   it("says it is loading rather than reporting an error it has not had", async () => {
