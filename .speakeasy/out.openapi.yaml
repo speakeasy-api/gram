@@ -67950,6 +67950,22 @@ components:
       required:
         - group_value
         - points
+    RearmTrialRequestBody:
+      type: object
+      properties:
+        days:
+          type: integer
+          description: Number of days the re-armed trial runs for, counted from now.
+          format: int64
+          minimum: 1
+          maximum: 365
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
+        - days
     RecordInstallIntentRequestBody:
       type: object
       properties:

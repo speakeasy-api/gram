@@ -326,7 +326,11 @@ func TestListOrganizations_FullPageWithFilterEndsTheWalk(t *testing.T) {
 }
 
 type trialFixture struct {
-	orgID       string
+	orgID string
+	// tier defaults to enterprise, which is the only tier the application
+	// writes today. The re-arm tests set it to something else to pin that the
+	// restored account type is read from the row rather than hardcoded.
+	tier        string
 	endsAt      time.Time
 	convertedAt *time.Time
 	demotedAt   *time.Time
@@ -335,8 +339,13 @@ type trialFixture struct {
 func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFixture) {
 	t.Helper()
 
+	if f.tier == "" {
+		f.tier = "enterprise"
+	}
+
 	err := trialsRepo.New(conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
 		OrganizationID: f.orgID,
+		Tier:           f.tier,
 		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-30 * 24 * time.Hour)),
 		EndsAt:         conv.ToPGTimestamptz(f.endsAt),
 		ConvertedAt:    conv.PtrToPGTimestamptz(f.convertedAt),

@@ -24,6 +24,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -37,7 +38,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -54,6 +58,33 @@ type Service struct {
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSOrganizationCreator
+
+	// openRouter brings an organization's platform keys back up when a demoted
+	// trial is re-armed.
+	openRouter TrialKeyReviver
+
+	audit *audit.Logger
+}
+
+// TrialKeyReviver is the one method of openrouter.Provisioner a re-arm needs.
+// The doc comment on the interface names it the reinstatement path: a key that
+// DisableAPIKey turned off comes back enabled, upstream and locally.
+type TrialKeyReviver interface {
+	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+}
+
+// ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter,
+// which RearmTrial answers below 500 so its explanation reaches the operator.
+var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+
+// TrialKeysUnavailable stands in for the OpenRouter client where one cannot be
+// built, so the admin server still boots: every endpoint that needs no
+// OpenRouter still works, and the one that does says so rather than panicking
+// on a nil interface.
+type TrialKeysUnavailable struct{}
+
+func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrKeyRevivalUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -68,6 +99,7 @@ func NewService(
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
 	workosClient orgprovision.WorkOSOrganizationCreator,
+	openRouter TrialKeyReviver,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -89,6 +121,8 @@ func NewService(
 		verifier:       NewVerifier(logger, sessionStore, oidcClient),
 		allowedOrigins: allowedOrigins,
 		workos:         workosClient,
+		openRouter:     openRouter,
+		audit:          audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -761,6 +795,258 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	}
 
 	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+}
+
+// RearmTrial puts a demoted enterprise trial back on.
+//
+// The keys come back up before the database restore commits, which is
+// deliberately not the demotion's ordering mirrored. The demotion takes the
+// keys down first and commits the account-type write after, because a rollback
+// there leaves an organization reading as enterprise with a dead key and the
+// next sweep finishes the job. Mirrored, that would leave a failed re-arm
+// reading as a running trial whose keys are dead, which is the one state this
+// endpoint exists to prevent.
+//
+// So a partial failure here leaves the organization still demoted and still
+// free, with keys that are alive again. Nothing advertises a trial that is not
+// running, and a retry is safe because reviving an already-live key is a no-op.
+// Do not "fix" this to match the demotion.
+func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload) (*gen.AdminOrganization, error) {
+	// Defence in depth against a non-HTTP caller, for the reason ExtendTrial
+	// gives: the design's bounds are generated into the request decoder alone.
+	// The check stays on the wide payload.Days and the int32 narrowing stays
+	// below it, or 1<<32 + 1 would truncate into range.
+	if payload.Days < constants.MinTrialRearmDays || payload.Days > constants.MaxTrialRearmDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialRearmDays, constants.MaxTrialRearmDays)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	trials := trialsRepo.New(tx)
+
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
+		OrganizationID: payload.ID,
+		RearmForDays:   int32(payload.Days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, s.rejectRearm(ctx, logger, payload.ID)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+	}
+
+	uncapped, err := s.reviveTrialKeys(ctx, logger, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
+		OrganizationID: payload.ID,
+		AccountType:    rearmed.Tier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
+	}
+
+	actor, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
+		OrganizationID: payload.ID,
+		Actor:          actor,
+		// The customer reads this feed, so they get the collective staff label
+		// rather than the operator's email. adminActor says why the read-side
+		// mask cannot do it for us. The subject on Actor above is the
+		// accountability record and stays.
+		ActorDisplayName: conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		ActorSlug:        nil,
+		OrganizationName: organization.Name,
+		OrganizationSlug: organization.Slug,
+		AccountType:      rearmed.Tier,
+		TrialEndsAt:      rearmed.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
+	}
+
+	s.recapRevivedKeys(ctx, logger, payload.ID, uncapped)
+
+	// Which operator did it, recorded where only Speakeasy reads it. The audit
+	// entry carries the OIDC subject and the team label, so this log is the one
+	// place the two are tied together.
+	logger.InfoContext(ctx, "re-armed enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
+}
+
+// rejectRearm turns a zero-row re-arm into the error the operator should act
+// on. It is ExtendTrial's disambiguation, on purpose and separately: an
+// operator who pastes one wrong id must be told the organization does not
+// exist, not sent to go and look at a trial. The two are kept apart rather than
+// shared because extend's semantics are out of this slice's scope.
+func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	switch {
+	case errors.Is(lookupErr, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case lookupErr != nil:
+		// Falling through to the conflict here would report a trial state we
+		// never managed to read.
+		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unrearmed trial").LogError(ctx, logger)
+	}
+
+	// The organization exists, so it is the trial that blocks the write: never
+	// granted, converted, or still running. Which one is not the operator's
+	// business, and arming a trial that was never granted is the auth flow's
+	// job rather than this endpoint's.
+	return oops.E(oops.CodeConflict, nil, "organization has no demoted enterprise trial to re-arm")
+}
+
+// reviveTrialKeys brings every platform key the organization holds back up.
+//
+// Both key types, because the demotion loops openrouter.AllKeyTypes and a
+// re-arm that took only chat back up would leave the organization on a running
+// trial with its internal completions still dead.
+//
+// Shaped like openrouterkeys.EnableKey rather than like the demotion's
+// unconditional loop, and the difference is not cosmetic: DisableAPIKey no-ops
+// on an organization that has no key row of a type, but RefreshAPIKeyLimit
+// errors on one. An organization that never ran an internal completion has no
+// internal key, so the demotion's shape here would fail most re-arms outright.
+//
+// Every read and write in here runs on the pool rather than on the caller's
+// transaction, because RefreshAPIKeyLimit writes on the pool itself. That is
+// what makes a revived key survive the rollback of a re-arm that fails later,
+// which is the safe direction: a live key on a demoted organization costs
+// nothing, since the free tier's credit gate still binds.
+//
+// The key types it returns are the ones it could only revive at a ceiling
+// resolved from the pre-commit world. recapRevivedKeys finishes those off once
+// the restore has committed.
+func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string) ([]openrouter.KeyType, error) {
+	keys := orrepo.New(s.db)
+
+	var uncapped []openrouter.KeyType
+
+	for _, keyType := range openrouter.AllKeyTypes {
+		row, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: organizationID,
+			KeyType:        string(keyType),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
+		}
+
+		if !row.Disabled {
+			continue
+		}
+
+		// The ceiling recorded on the row, not the policy default: a trial key
+		// is minted well below that default, and resetting to it would hand the
+		// organization a larger allowance than its trial ever had.
+		//
+		// A row with no recorded ceiling gets the default instead, because
+		// conv.PtrEmpty answers nil for a zero and RefreshAPIKeyLimit falls
+		// back to defaultLimitForOrg on a nil limit. Which default it lands on
+		// is worth stating: defaultLimitForOrg reads on the pool, so it runs
+		// before this transaction commits the restore and sees the
+		// organization as free with no active trial. It therefore returns the
+		// free-tier allowance rather than the trial's, which is the price of
+		// reviving the keys first. Only a row minted before the ceiling column
+		// existed can reach it, and recapRevivedKeys corrects that row once the
+		// restore has committed, so the type is recorded here.
+		if row.MonthlyCredits == 0 {
+			uncapped = append(uncapped, keyType)
+		}
+		limit := conv.PtrEmpty(int(row.MonthlyCredits))
+		_, err = s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+		switch {
+		case errors.Is(err, ErrKeyRevivalUnavailable):
+			// CodeInvalid and not CodeGatewayError:
+			// server/design/shared/errors.go maps
+			// gateway_error to 502 and the admin app trusts a response body
+			// only below 500, so this explanation would never arrive. It is
+			// worth arriving, because it names a deployment setting to fix
+			// rather than a call to retry. It names both settings because the
+			// handler cannot tell which one is missing: deps.go substitutes
+			// the same stand-in for an absent provisioning key and for an
+			// encryption key that will not parse, and logs which at startup.
+			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
+		case err != nil:
+			// A gateway error and not an unexpected one: this is OpenRouter
+			// refusing, and the operator's action is to retry rather than to
+			// read a stack trace. Both map above 500, so neither carries its
+			// message to the admin app; the detail belongs in the log.
+			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+		}
+	}
+
+	return uncapped, nil
+}
+
+// recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
+// could only revive at the free-tier one.
+//
+// It runs after the commit and only then, because that is the whole point: the
+// ceiling RefreshAPIKeyLimit resolves for a nil limit comes from
+// defaultLimitForOrg, which reads the organization and its trial on the pool.
+// Before the commit it sees a free organization with no running trial; after
+// it, the trial the re-arm just restored. Nothing else corrects this on any
+// schedule, so leaving it to a later refresh would strand the organization on
+// the free-tier allowance for the whole re-armed run.
+//
+// A failure here is logged and swallowed. The re-arm itself is committed and
+// durable by this point, so answering the operator with an error would report a
+// trial as unarmed that is in fact running. The organization is left with a
+// live key and too small an allowance, which the platform-admin key page
+// already has an action to correct.
+func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) {
+	for _, keyType := range keyTypes {
+		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, nil); err != nil {
+			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
+				attr.SlogError(err),
+				attr.SlogOpenRouterKeyType(string(keyType)),
+			)
+		}
+	}
+}
+
+// adminActor identifies the operator behind an admin-app write for the audit
+// log. An admin session carries an OIDC subject and an email rather than a Gram
+// user id, so the subject is what the principal is built from. A call that
+// arrives without a session records the same system actor the demotion sweeper
+// uses, because an entry naming an unknown operator beats no entry at all.
+//
+// The returned email is for the structured log only. It must not become the
+// entry's display name: these entries are written against the customer's
+// organization and surface in that customer's own audit feed, so a Speakeasy
+// operator's email would be handed to them. auditapi already masks staff
+// identities on read, but it cannot mask this one, because it recognises staff
+// by matching the actor id against a Gram user and an OIDC subject is not one.
+// The caller applies audit.SpeakeasyTeamActorLabel at write time instead, which
+// is the same string that mask produces.
+func adminActor(ctx context.Context) (actor urn.Principal, operatorEmail *string) {
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.OIDCSubject == "" {
+		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), nil
+	}
+
+	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.OIDCSubject), conv.PtrEmpty(authCtx.Email)
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.

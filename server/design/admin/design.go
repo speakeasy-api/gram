@@ -499,4 +499,39 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminCreateOrganization")
 	})
+
+	Method("rearmTrial", func() {
+		Description("Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id", "days")
+
+			// Structurally identical to extendTrial's body, and the OpenAPI
+			// emitter deduplicates request bodies by shape and keeps the first
+			// name it registered. Without this the schema would come out named
+			// after extend, so an operator reading the spec would see re-arm
+			// documented as an extension.
+			Meta("openapi:typename", "RearmTrialRequestBody")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+			// Counted from now rather than added to the trial's current end
+			// date, which is always in the past on a demoted trial.
+			Attribute("days", Int, "Number of days the re-armed trial runs for, counted from now.", func() {
+				Minimum(constants.MinTrialRearmDays)
+				Maximum(constants.MaxTrialRearmDays)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/trial.rearm")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminRearmTrial")
+	})
 })
