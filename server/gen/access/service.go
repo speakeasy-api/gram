@@ -574,6 +574,16 @@ type Selector struct {
 	ServerURL *string
 }
 
+// The MCP approval request tracking review status for a server. Status records
+// the review outcome, which may cover only selected principals; the server's
+// access field reports enforcement state.
+type ShadowMCPInventoryApprovalRequest struct {
+	ID     string
+	Status string
+	// How many distinct people have asked for this server.
+	RequesterCount int
+}
+
 // Decision used when resolving a Shadow MCP inventory request.
 type ShadowMCPInventoryRequestDecision string
 
@@ -601,6 +611,7 @@ type ShadowMCPInventoryServer struct {
 	Access             string
 	RequestCount       int
 	LatestRequest      *ShadowMCPInventoryRequestSummary
+	ApprovalRequest    *ShadowMCPInventoryApprovalRequest
 	AllowedPolicyIds   []string
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
@@ -613,6 +624,7 @@ type ShadowMCPInventoryURLState struct {
 	Access           string
 	RequestCount     int
 	LatestRequest    *ShadowMCPInventoryRequestSummary
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequest
 	AllowedPolicyIds []string
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
