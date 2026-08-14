@@ -90,7 +90,10 @@ function DataTableHeader<T extends RowData>({
       {table.getHeaderGroups().map((group) => (
         <TableRow key={group.id}>
           {group.headers.map((header) => (
-            <TableHead key={header.id}>
+            // A placeholder header and a colSpan above 1 both appear only when
+            // columns are grouped. Handling one and not the other would leave a
+            // group heading sitting over a single column.
+            <TableHead key={header.id} colSpan={header.colSpan}>
               {header.isPlaceholder ? null : <FlexRender header={header} />}
             </TableHead>
           ))}
