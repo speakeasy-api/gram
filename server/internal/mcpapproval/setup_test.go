@@ -2,6 +2,7 @@ package mcpapproval_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -23,6 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
@@ -62,6 +66,9 @@ type testInstance struct {
 	authContext    *contextvalues.AuthContext
 	organizationID string
 	projectID      uuid.UUID
+
+	// probes is the instance's remote-probe stand-in, reconfigurable per test.
+	probes *testProbes
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -103,9 +110,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
+	probes := &testProbes{onGather: nil, fail: false}
 	assembler := evidence.NewAssembler(
 		packagemeta.NewClient(notFoundRegistry{}),
 		telemetryrepo.New(chConn),
+		probes,
+		probes,
+		probes,
 	)
 
 	ti := &testInstance{
@@ -117,6 +128,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		authContext:    authContext,
 		organizationID: organizationID,
 		projectID:      projectID,
+		probes:         probes,
 	}
 
 	enableMCPApproval(t, ctx, ti)
@@ -298,6 +310,45 @@ func requestStatus(t *testing.T, ctx context.Context, ti *testInstance, projectI
 	require.NoError(t, err)
 
 	return request.Status
+}
+
+// testProbes stands in for the remote probes. Its zero configuration is
+// quiet: nothing discovered, nothing declared, no gaps — remote-probe
+// behavior is covered by the evidence package's own tests. Tests reach into
+// their instance's probes to reconfigure them: fail turns every remote source
+// into a gap, and onGather runs mid-gather — after the service read the
+// request row and before it writes — which is how the CAS tests interleave a
+// concurrent write.
+type testProbes struct {
+	onGather func()
+	fail     bool
+}
+
+func (p *testProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	if p.onGather != nil {
+		p.onGather()
+	}
+	if p.fail {
+		return nil, errors.New("authority probe unreachable")
+	}
+
+	return nil, nil
+}
+
+func (p *testProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	if p.fail {
+		return nil, errors.New("tools probe unreachable")
+	}
+
+	return nil, nil
+}
+
+func (p *testProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+	if p.fail {
+		return nil, errors.New("catalog unreachable")
+	}
+
+	return nil, nil
 }
 
 // notFoundRegistry answers every package-registry request with a 404, so

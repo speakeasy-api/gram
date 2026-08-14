@@ -231,6 +231,21 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: SetApprovalRequestEvidenceIfUnchanged :execrows
+-- Compare-and-set variant for explicit refreshes: writes only when the stored
+-- gather is still the one the caller read before gathering, so two concurrent
+-- refreshes cannot land an older gather over a newer one. Zero rows means a
+-- concurrent write won and the caller's gather is discarded.
+UPDATE mcp_approval_requests
+SET current_evidence = @current_evidence
+  , evidence_version = @evidence_version
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND evidence_collected_at IS NOT DISTINCT FROM @previous_collected_at
+  AND deleted IS FALSE;
+
 -- name: RefreshApprovalRequestEvidence :execrows
 -- Compare-and-set variant used by the read-path gap retry. The fresh document
 -- lands only while the stored evidence is still the exact gather the caller

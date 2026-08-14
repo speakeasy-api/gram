@@ -805,6 +805,44 @@ func (q *Queries) SetApprovalRequestEvidence(ctx context.Context, arg SetApprova
 	return err
 }
 
+const setApprovalRequestEvidenceIfUnchanged = `-- name: SetApprovalRequestEvidenceIfUnchanged :execrows
+UPDATE mcp_approval_requests
+SET current_evidence = $1
+  , evidence_version = $2
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $3
+  AND project_id = $4
+  AND evidence_collected_at IS NOT DISTINCT FROM $5
+  AND deleted IS FALSE
+`
+
+type SetApprovalRequestEvidenceIfUnchangedParams struct {
+	CurrentEvidence     []byte
+	EvidenceVersion     int32
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	PreviousCollectedAt pgtype.Timestamptz
+}
+
+// Compare-and-set variant for explicit refreshes: writes only when the stored
+// gather is still the one the caller read before gathering, so two concurrent
+// refreshes cannot land an older gather over a newer one. Zero rows means a
+// concurrent write won and the caller's gather is discarded.
+func (q *Queries) SetApprovalRequestEvidenceIfUnchanged(ctx context.Context, arg SetApprovalRequestEvidenceIfUnchangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setApprovalRequestEvidenceIfUnchanged,
+		arg.CurrentEvidence,
+		arg.EvidenceVersion,
+		arg.ID,
+		arg.ProjectID,
+		arg.PreviousCollectedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setApprovalRequestStatus = `-- name: SetApprovalRequestStatus :exec
 UPDATE mcp_approval_requests
 SET status = $1

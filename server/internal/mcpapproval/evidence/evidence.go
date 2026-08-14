@@ -30,11 +30,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/exposure"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
@@ -64,10 +68,43 @@ type Document struct {
 	// present only when the target had a URL to look up.
 	Exposure *ExposureSection `json:"exposure,omitempty"`
 
+	// Authority is what the server and its authorization server publish about
+	// authentication, gathered for remote targets through the well-known
+	// OAuth discovery endpoints. Also set when an unauthenticated tool
+	// listing succeeded — a server that served the protocol without any
+	// credential — even if it published no OAuth metadata.
+	Authority *AuthoritySection `json:"authority,omitempty"`
+
+	// Capabilities is what each tool declares about itself, gathered from the
+	// server's own unauthenticated tools/list or, failing that, the registry
+	// catalog's copy (see CapabilitiesSource).
+	Capabilities []CapabilitySection `json:"capabilities,omitempty"`
+
+	// CapabilitiesSource records where Capabilities came from: the server's
+	// own unauthenticated tools/list (CapabilitiesFromServer) or its registry
+	// catalog entry (CapabilitiesFromRegistry). The registry's copy is one
+	// step further from the source, and the panel must say so. Empty when no
+	// source supplied declarations; set with an empty Capabilities when a
+	// source answered with zero tools, which is a real (if odd) declaration.
+	CapabilitiesSource string `json:"capabilities_source,omitempty"`
+
+	// Provenance is the registry catalog's maturity and popularity signals
+	// for the matched entry, present for remote targets whose catalog lookup
+	// ran. Catalogued false is checked-and-absent — every registry answered
+	// and none carries the URL — distinct from a lookup failure, which is a
+	// gap.
+	Provenance *ProvenanceSection `json:"provenance,omitempty"`
+
 	// Gaps lists the sources that could not be consulted this gather. A
 	// reader must treat a listed source as unknown, never as clean.
 	Gaps []string `json:"gaps,omitempty"`
 }
+
+// Capabilities sources, recorded in CapabilitiesSource.
+const (
+	CapabilitiesFromServer   = "server"
+	CapabilitiesFromRegistry = "registry"
+)
 
 // IdentitySection mirrors identity.Identity for storage.
 type IdentitySection struct {
@@ -110,11 +147,82 @@ type ExposureSection struct {
 	InUse        bool   `json:"in_use"`
 }
 
+// AuthoritySection mirrors authority.Authority for storage.
+type AuthoritySection struct {
+	Mode                 string              `json:"mode"`
+	Transport            string              `json:"transport,omitempty"`
+	Scopes               []string            `json:"scopes,omitempty"`
+	DynamicRegistration  bool                `json:"dynamic_registration,omitempty"`
+	DemandedSecrets      []CredentialSection `json:"demanded_secrets,omitempty"`
+	OptionalSecrets      []CredentialSection `json:"optional_secrets,omitempty"`
+	UnauthenticatedTools []string            `json:"unauthenticated_tools,omitempty"`
+	Undeclared           bool                `json:"undeclared,omitempty"`
+}
+
+// CredentialSection mirrors authority.Credential for storage.
+type CredentialSection struct {
+	Name        string `json:"name"`
+	Required    bool   `json:"required,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// CapabilitySection mirrors capability.Assessment for storage: one tool's
+// declarations, never observations. The four raw hints are stored alongside
+// the derived summary so the document preserves exactly what was declared —
+// including explicit-false and undeclared states — rather than only the
+// positive capabilities the assessment surfaces.
+type CapabilitySection struct {
+	Tool          string   `json:"tool"`
+	Declared      []string `json:"declared,omitempty"`
+	SchemaImplied []string `json:"schema_implied,omitempty"`
+	ActsOnBehalf  bool     `json:"acts_on_behalf,omitempty"`
+	Unannotated   bool     `json:"unannotated,omitempty"`
+	ReadOnlyHint  *bool    `json:"read_only_hint,omitempty"`
+	Destructive   *bool    `json:"destructive_hint,omitempty"`
+	Idempotent    *bool    `json:"idempotent_hint,omitempty"`
+	OpenWorld     *bool    `json:"open_world_hint,omitempty"`
+}
+
+// ProvenanceSection mirrors provenance.Provenance for storage, plus which
+// registry made the claims.
+type ProvenanceSection struct {
+	Registry              string `json:"registry,omitempty"`
+	Specifier             string `json:"specifier,omitempty"`
+	Catalogued            bool   `json:"catalogued"`
+	Official              bool   `json:"official,omitempty"`
+	Status                string `json:"status,omitempty"`
+	IsLatest              bool   `json:"is_latest,omitempty"`
+	PublishedAt           string `json:"published_at,omitempty"`
+	UpdatedAt             string `json:"updated_at,omitempty"`
+	VisitorsLastWeek      int    `json:"visitors_last_week,omitempty"`
+	VisitorsLastFourWeeks int    `json:"visitors_last_four_weeks,omitempty"`
+	VisitorsTotal         int    `json:"visitors_total,omitempty"`
+}
+
 // Gap names for the sources that can fail independently.
 const (
-	GapPackageLookup  = "package_lookup_failed"
-	GapExposureLookup = "exposure_lookup_failed"
+	GapPackageLookup    = "package_lookup_failed"
+	GapExposureLookup   = "exposure_lookup_failed"
+	GapAuthorityProbe   = "authority_probe_failed"
+	GapToolDeclarations = "tool_declarations_probe_failed"
+	GapCatalogLookup    = "catalog_lookup_failed"
 )
+
+// GappedOnAllRemoteSources reports that this gather failed on every source
+// that consults the network about a remote server — the authority probe, the
+// tool-declarations probe, and the registry catalog lookup. A document in this
+// state carries nothing a fresh gather could not, so a refresh that produced
+// one has learned nothing and must not replace a document that did better.
+// Always false for non-remote targets, which have no remote sources to gap on.
+func (d Document) GappedOnAllRemoteSources() bool {
+	if d.Identity.Kind != string(identity.KindRemote) {
+		return false
+	}
+
+	return slices.Contains(d.Gaps, GapAuthorityProbe) &&
+		slices.Contains(d.Gaps, GapToolDeclarations) &&
+		slices.Contains(d.Gaps, GapCatalogLookup)
+}
 
 // PackageLookup is the slice of the package-metadata client the assembler
 // needs. *packagemeta.Client satisfies it.
@@ -124,6 +232,28 @@ type PackageLookup interface {
 
 var _ PackageLookup = (*packagemeta.Client)(nil)
 
+// AuthorityProber discovers a remote server's published OAuth metadata. A nil
+// declaration with a nil error means the probe ran and the server publishes
+// none — kept distinct from a failed probe, which is a gap.
+type AuthorityProber interface {
+	DiscoverAuthority(ctx context.Context, serverURL string) (*authority.Declaration, error)
+}
+
+// ToolProber lists a remote server's tool declarations without credentials.
+type ToolProber interface {
+	ListToolDeclarations(ctx context.Context, serverURL string) ([]capability.Declaration, error)
+}
+
+// CatalogLookup matches a server URL against the configured MCP registries.
+// A nil match with a nil error is checked-and-absent. includeTools asks for
+// the entry's tool declarations, which cost an extra registry round trip;
+// when false, a match carries provenance only. *catalog.Source satisfies it.
+type CatalogLookup interface {
+	Lookup(ctx context.Context, serverURL string, includeTools bool) (*catalog.Match, error)
+}
+
+var _ CatalogLookup = (*catalog.Source)(nil)
+
 // defaultSourceTimeout bounds each source's gather independently, so one
 // unreachable source costs its own budget rather than the whole gather's —
 // an admission is delayed by a registry outage, never held for the sum of
@@ -132,9 +262,12 @@ const defaultSourceTimeout = 3 * time.Second
 
 // Assembler gathers evidence for one requested server.
 type Assembler struct {
-	packages      PackageLookup
-	traffic       exposure.Reader
-	sourceTimeout time.Duration
+	packages       PackageLookup
+	traffic        exposure.Reader
+	authorityProbe AuthorityProber
+	toolProbe      ToolProber
+	catalog        CatalogLookup
+	sourceTimeout  time.Duration
 }
 
 // Option configures an Assembler.
@@ -145,8 +278,15 @@ func WithSourceTimeout(timeout time.Duration) Option {
 	return func(a *Assembler) { a.sourceTimeout = timeout }
 }
 
-func NewAssembler(packages PackageLookup, traffic exposure.Reader, options ...Option) *Assembler {
-	assembler := &Assembler{packages: packages, traffic: traffic, sourceTimeout: defaultSourceTimeout}
+func NewAssembler(packages PackageLookup, traffic exposure.Reader, authorityProbe AuthorityProber, toolProbe ToolProber, catalogLookup CatalogLookup, options ...Option) *Assembler {
+	assembler := &Assembler{
+		packages:       packages,
+		traffic:        traffic,
+		authorityProbe: authorityProbe,
+		toolProbe:      toolProbe,
+		catalog:        catalogLookup,
+		sourceTimeout:  defaultSourceTimeout,
+	}
 	for _, option := range options {
 		option(assembler)
 	}
@@ -174,6 +314,10 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 		Package:             nil,
 		PackageNotPublished: false,
 		Exposure:            nil,
+		Authority:           nil,
+		Capabilities:        nil,
+		CapabilitiesSource:  "",
+		Provenance:          nil,
 		Gaps:                nil,
 	}
 
@@ -227,6 +371,10 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 				InUse:        signals.InUse(),
 			}
 		}
+
+		authorityConsulted := a.probeAuthority(ctx, target, &document)
+		serverDeclared := a.probeToolDeclarations(ctx, target, &document, authorityConsulted)
+		a.lookupCatalog(ctx, target, &document, serverDeclared)
 	}
 
 	encoded, err := json.Marshal(document)
@@ -235,6 +383,207 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 	}
 
 	return encoded, nil
+}
+
+// probeAuthority asks the server's well-known endpoints what authentication
+// it publishes, reporting whether discovery ran to completion. A probe that
+// finds nothing leaves the section absent — the
+// server publishing no OAuth metadata is not the server declaring it needs
+// nothing.
+func (a *Assembler) probeAuthority(ctx context.Context, serverURL string, document *Document) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+	defer cancel()
+
+	declaration, err := a.authorityProbe.DiscoverAuthority(probeCtx, serverURL)
+	if err != nil {
+		document.Gaps = append(document.Gaps, GapAuthorityProbe)
+		return false
+	}
+	if declaration == nil {
+		return true
+	}
+
+	summary := authority.Summarise(*declaration)
+	document.Authority = &AuthoritySection{
+		Mode:                 string(summary.Mode),
+		Transport:            summary.Transport,
+		Scopes:               summary.Scopes,
+		DynamicRegistration:  summary.DynamicRegistration,
+		DemandedSecrets:      credentialSections(summary.DemandedSecrets),
+		OptionalSecrets:      credentialSections(summary.OptionalSecrets),
+		UnauthenticatedTools: summary.UnauthenticatedTools,
+		Undeclared:           summary.Undeclared,
+	}
+
+	return true
+}
+
+func credentialSections(credentials []authority.Credential) []CredentialSection {
+	sections := make([]CredentialSection, 0, len(credentials))
+	for _, credential := range credentials {
+		sections = append(sections, CredentialSection{
+			Name:        credential.Name,
+			Required:    credential.Required,
+			Description: credential.Description,
+		})
+	}
+
+	return sections
+}
+
+// probeToolDeclarations connects without credentials and records what each
+// tool declares about itself. It reports whether the server answered — a
+// refusal is not yet a gap, because the catalog lookup may still supply the
+// registry's copy of the declarations; recording the gap when both fail is
+// lookupCatalog's job.
+//
+// authorityConsulted gates the synthetic authority section: when the
+// authority probe itself failed, asserting "answers without any credential"
+// alongside an authority_probe_failed gap would be the exact
+// failed-probe-reads-as-clean conflation the gaps exist to prevent.
+func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string, document *Document, authorityConsulted bool) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+	defer cancel()
+
+	declarations, err := a.toolProbe.ListToolDeclarations(probeCtx, serverURL)
+	if err != nil {
+		return false
+	}
+
+	document.CapabilitiesSource = CapabilitiesFromServer
+	a.fillCapabilities(document, declarations)
+	if authorityConsulted {
+		recordUnauthenticatedListing(document, declarations)
+	}
+
+	return true
+}
+
+// recordUnauthenticatedListing carries a successful credential-less tools/list
+// into the authority section: the server served the MCP protocol and named
+// these tools to an unauthenticated caller. When no OAuth metadata was
+// published either, that success is itself the authority evidence — the
+// section is created with mode none rather than left absent, because "we
+// connected without any credential" is a real finding, unlike a pair of 404s
+// on well-known URLs.
+func recordUnauthenticatedListing(document *Document, declarations []capability.Declaration) {
+	names := make([]string, 0, len(declarations))
+	for _, declaration := range declarations {
+		names = append(names, declaration.Name)
+	}
+
+	if document.Authority == nil {
+		document.Authority = &AuthoritySection{
+			Mode:                 string(authority.ModeNone),
+			Transport:            "http",
+			Scopes:               nil,
+			DynamicRegistration:  false,
+			DemandedSecrets:      nil,
+			OptionalSecrets:      nil,
+			UnauthenticatedTools: names,
+			Undeclared:           false,
+		}
+		return
+	}
+
+	document.Authority.UnauthenticatedTools = names
+}
+
+// lookupCatalog matches the server against the configured registries. A match
+// always fills the provenance section; its tool declarations fill the
+// capability section only when the server itself refused to answer, labeled
+// as the registry's copy. When the server refused and no registry supplies
+// declarations either, the tool-declarations gap lands here — declarations
+// could not be consulted anywhere, which must never read as a clean empty
+// list.
+func (a *Assembler) lookupCatalog(ctx context.Context, serverURL string, document *Document, serverDeclared bool) {
+	lookupCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
+	defer cancel()
+
+	// Tool declarations are only requested when the server itself refused to
+	// answer: the details fetch is an extra registry round trip whose result
+	// would otherwise be discarded in favor of the server's own words.
+	match, err := a.catalog.Lookup(lookupCtx, serverURL, !serverDeclared)
+	if err != nil {
+		document.Gaps = append(document.Gaps, GapCatalogLookup)
+		if !serverDeclared {
+			document.Gaps = append(document.Gaps, GapToolDeclarations)
+		}
+		return
+	}
+
+	if match == nil {
+		document.Provenance = &ProvenanceSection{
+			Registry:              "",
+			Specifier:             "",
+			Catalogued:            false,
+			Official:              false,
+			Status:                "",
+			IsLatest:              false,
+			PublishedAt:           "",
+			UpdatedAt:             "",
+			VisitorsLastWeek:      0,
+			VisitorsLastFourWeeks: 0,
+			VisitorsTotal:         0,
+		}
+		if !serverDeclared {
+			document.Gaps = append(document.Gaps, GapToolDeclarations)
+		}
+		return
+	}
+
+	document.Provenance = &ProvenanceSection{
+		Registry:              match.Registry,
+		Specifier:             match.Specifier,
+		Catalogued:            match.Provenance.Catalogued,
+		Official:              match.Provenance.Official,
+		Status:                match.Provenance.Status,
+		IsLatest:              match.Provenance.IsLatest,
+		PublishedAt:           formatTime(match.Provenance.PublishedAt),
+		UpdatedAt:             formatTime(match.Provenance.UpdatedAt),
+		VisitorsLastWeek:      match.Provenance.VisitorsLastWeek,
+		VisitorsLastFourWeeks: match.Provenance.VisitorsLastFourWeeks,
+		VisitorsTotal:         match.Provenance.VisitorsTotal,
+	}
+
+	if serverDeclared {
+		return
+	}
+	if match.Tools == nil {
+		document.Gaps = append(document.Gaps, GapToolDeclarations)
+		return
+	}
+
+	document.CapabilitiesSource = CapabilitiesFromRegistry
+	a.fillCapabilities(document, match.Tools)
+}
+
+// fillCapabilities assesses each declaration and appends it to the document's
+// capability section.
+func (a *Assembler) fillCapabilities(document *Document, declarations []capability.Declaration) {
+	for _, declaration := range declarations {
+		assessment := capability.Assess(declaration)
+		document.Capabilities = append(document.Capabilities, CapabilitySection{
+			Tool:          assessment.Tool,
+			Declared:      capabilityStrings(assessment.Declared),
+			SchemaImplied: capabilityStrings(assessment.SchemaImplied),
+			ActsOnBehalf:  assessment.ActsOnBehalf,
+			Unannotated:   assessment.Unannotated,
+			ReadOnlyHint:  declaration.ReadOnly,
+			Destructive:   declaration.Destructive,
+			Idempotent:    declaration.Idempotent,
+			OpenWorld:     declaration.OpenWorld,
+		})
+	}
+}
+
+func capabilityStrings(values []capability.Capability) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, string(value))
+	}
+
+	return out
 }
 
 // DecodeDocument reads a stored evidence document at the given shape version.

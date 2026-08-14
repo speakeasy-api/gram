@@ -21,6 +21,7 @@ type Endpoints struct {
 	EnsureServerReview goa.Endpoint
 	CreateRequest      goa.Endpoint
 	Promote            goa.Endpoint
+	RefreshEvidence    goa.Endpoint
 	RecordDecision     goa.Endpoint
 }
 
@@ -34,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 		EnsureServerReview: NewEnsureServerReviewEndpoint(s, a.APIKeyAuth),
 		CreateRequest:      NewCreateRequestEndpoint(s, a.APIKeyAuth),
 		Promote:            NewPromoteEndpoint(s, a.APIKeyAuth),
+		RefreshEvidence:    NewRefreshEvidenceEndpoint(s, a.APIKeyAuth),
 		RecordDecision:     NewRecordDecisionEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -45,6 +47,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnsureServerReview = m(e.EnsureServerReview)
 	e.CreateRequest = m(e.CreateRequest)
 	e.Promote = m(e.Promote)
+	e.RefreshEvidence = m(e.RefreshEvidence)
 	e.RecordDecision = m(e.RecordDecision)
 }
 
@@ -268,6 +271,41 @@ func NewPromoteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			return nil, err
 		}
 		return s.Promote(ctx, p)
+	}
+}
+
+// NewRefreshEvidenceEndpoint returns an endpoint function that calls the
+// method "refreshEvidence" of service "mcpApproval".
+func NewRefreshEvidenceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshEvidencePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshEvidence(ctx, p)
 	}
 }
 

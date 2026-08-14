@@ -88,8 +88,11 @@ const statusUnreviewed = "unreviewed"
 // Each source inside the assembler carries its own tighter deadline, so one
 // unreachable registry costs its own budget and lands in the document's gaps
 // rather than holding the admission for this whole window; this bound only
-// matters if every source is slow at once.
-const gatherTimeout = 10 * time.Second
+// matters if every source is slow at once. It is sized above the sum of the
+// sequential per-source budgets (a remote target consults four sources at 3s
+// each), so a gather where every earlier source times out still reaches the
+// catalog lookup instead of losing it to the backstop.
+const gatherTimeout = 14 * time.Second
 
 // gapRetryCooldown bounds how often one gapped dossier re-attempts its gather
 // from the read path. The retry exists so an outage-time dossier heals on a
@@ -719,6 +722,97 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id").LogError(ctx, s.logger)
 	}
 
+	return s.requestDetail(ctx, projectID, requestID)
+}
+
+// RefreshEvidence re-runs every evidence source for a request and replaces its
+// current evidence with the fresh gather.
+//
+// It is gated on the read scope, not decide: gathering is not privileged —
+// intake runs the identical gather for any authenticated member — and a
+// reviewer preparing the queue must be able to refresh what they are reading.
+// Nothing org-authored is written and frozen decision snapshots are never
+// touched, which is also why no audit event is emitted. Unlike intake, where a
+// failed gather must not lose the admission, an explicit refresh that gathered
+// nothing reports the failure instead of silently keeping stale evidence —
+// both when the assembler itself errors and when the gather ran but gapped on
+// every remote source while the stored document did not: an all-gaps document
+// carries strictly less than what it would replace, so the write is skipped
+// and the failure surfaced.
+func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
+	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	if err != nil {
+		return nil, err
+	}
+
+	requestID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
+	}
+
+	queries := repo.New(s.db)
+
+	// Resolved with the project id in the predicate, so a caller who learns an
+	// id from a dashboard URL cannot refresh another tenant's request.
+	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
+	// The stored reference is what intake resolved and gathered from — the
+	// redacted URL for a server_url target — so a refresh sees exactly what a
+	// fresh admission of the same reference would.
+	resolved := identity.Resolve(row.TargetRaw)
+
+	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
+	defer cancelGather()
+	document, err := s.evidence.Assemble(gatherCtx, projectID, resolved)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error gathering evidence").LogError(ctx, s.logger)
+	}
+
+	// A gather that gapped on every remote source learned nothing a reader
+	// does not already know from the gaps alone. Writing it over a stored
+	// document that did consult those sources would clobber real evidence
+	// with a page of failures, so the refresh reports the outage instead —
+	// unless no gather has ever landed (EvidenceCollectedAt unset) or the
+	// stored document is equally gapped or from an older shape, where the
+	// fresh gather is at least as informative.
+	if fresh, decodeErr := evidence.DecodeDocument(document, evidence.Version); decodeErr == nil && fresh.GappedOnAllRemoteSources() && row.EvidenceCollectedAt.Valid {
+		stored, storedErr := evidence.DecodeDocument(row.CurrentEvidence, int(row.EvidenceVersion))
+		if storedErr == nil && !stored.GappedOnAllRemoteSources() {
+			return nil, oops.E(oops.CodeUnexpected, nil, "every remote evidence source was unreachable; keeping the existing evidence").LogError(ctx, s.logger)
+		}
+	}
+
+	// Compare-and-set against the gather that was current when this refresh
+	// started: two concurrent refreshes race the network for seconds, and an
+	// unconditional write would let whichever finished last — not whichever
+	// gathered last — win. Losing the race is fine; the winner's evidence is
+	// at least as fresh, and the detail below returns it.
+	written, err := queries.SetApprovalRequestEvidenceIfUnchanged(ctx, repo.SetApprovalRequestEvidenceIfUnchangedParams{
+		CurrentEvidence:     document,
+		EvidenceVersion:     evidence.Version,
+		ID:                  requestID,
+		ProjectID:           projectID,
+		PreviousCollectedAt: row.EvidenceCollectedAt,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
+	}
+	if written == 0 {
+		s.logger.InfoContext(ctx, "discarded refresh gather superseded by a concurrent write", attr.SlogMCPApprovalRequestID(requestID.String()))
+	}
+
+	return s.requestDetail(ctx, projectID, requestID)
+}
+
+// requestDetail assembles the full detail view of one request, already
+// resolved to the caller's project.
+func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, requestID uuid.UUID) (*gen.ApprovalRequestDetail, error) {
 	// The detail is assembled from four separate pool reads rather than one
 	// snapshot, so a decision committing mid-read can appear in the decision
 	// list before the request's status reflects it. Accepted for a dashboard
