@@ -594,7 +594,7 @@ describe("organizations list peek", () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
-    const trigger = await peekOn(FIRST_ORG.name);
+    await peekOn(FIRST_ORG.name);
 
     expect(
       within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
@@ -602,10 +602,6 @@ describe("organizations list peek", () => {
     // The row's click handler navigates, and the control sits inside the row.
     // A control that let the click through would leave the list entirely.
     expect(router.state.location.pathname).toBe("/organizations");
-
-    // happy-dom synthesises no click from Enter or Space, so the element type
-    // is what proves the keyboard can operate this control at all.
-    expect(trigger.tagName).toBe("BUTTON");
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
@@ -824,7 +820,7 @@ describe("organizations list peek", () => {
     ]);
   });
 
-  it("activating the control twice closes the panel again", async () => {
+  it("closes the panel again when the same control is activated twice", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     const trigger = await peekOn(FIRST_ORG.name);
@@ -838,7 +834,7 @@ describe("organizations list peek", () => {
     expect(announcement()).toBe("Peek closed.");
   });
 
-  it("activating another row's control moves the peek to that row", async () => {
+  it("moves the peek to another row when that row's control is activated", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     await peekOn(FIRST_ORG.name);
@@ -852,7 +848,7 @@ describe("organizations list peek", () => {
     expect(announcement()).toBe(`Peeking at ${SECOND_ORG.name}.`);
   });
 
-  it("the control reports whether its own panel is open", async () => {
+  it("reports on each control whether its own panel is open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     const trigger = await peekOn(FIRST_ORG.name);
@@ -867,7 +863,7 @@ describe("organizations list peek", () => {
     expect(other.hasAttribute("aria-controls")).toBe(false);
   });
 
-  it("closing puts the keyboard back on the control that opened it", async () => {
+  it("returns the keyboard to the control that opened the panel", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     const trigger = await peekOn(FIRST_ORG.name);
@@ -880,6 +876,16 @@ describe("organizations list peek", () => {
     );
 
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("gives the keyboard a control it can operate", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekTrigger(FIRST_ORG.name);
+
+    // A proxy, and an honest one: happy-dom synthesises no click from Enter
+    // or Space, so pressing them here proves nothing either way. The element
+    // type is what a browser reads to decide whether it should.
+    expect(trigger.tagName).toBe("BUTTON");
   });
 
   it("marks the open control apart from every other one", async () => {
@@ -1025,7 +1031,7 @@ describe("organizations list peek", () => {
     expect(announcement()).toBe(`Peeking at ${FIRST_ORG.name}.`);
   });
 
-  it("alt-clicking a row opens the organization rather than peeking at it", async () => {
+  it("opens the organization on an alt-click rather than peeking at it", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });

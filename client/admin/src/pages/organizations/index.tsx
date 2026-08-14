@@ -226,7 +226,6 @@ export function OrganizationsList(): JSX.Element {
     [peekedId, closePeek, openPeek],
   );
 
-  // Memoised, or every trigger cell re-renders on every render of the list.
   const peekControls = useMemo(
     () => ({ peekedId, togglePeek }),
     [peekedId, togglePeek],
@@ -288,8 +287,8 @@ export function OrganizationsList(): JSX.Element {
           {announcement.count % 2 === 1 ? ZERO_WIDTH_SPACE : ""}
         </div>
 
-        {/* Stretch, so the panel takes its height from the row. */}
         <PeekProvider value={peekControls}>
+          {/* Stretch, so the panel takes its height from the row. */}
           <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
