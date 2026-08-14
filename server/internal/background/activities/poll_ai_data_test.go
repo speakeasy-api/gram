@@ -187,12 +187,13 @@ func TestNewPollFailureErrorKeepsStageContextAroundShareableStageErrors(t *testi
 		cause,
 	)
 
-	// The stage label and progress summary survive, and the shareable stage
-	// error is expanded in place to include its hidden cause.
+	// The stage label and progress summary survive verbatim, and the
+	// shareable stage error's hidden cause arrives in the trailer.
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
-	require.Contains(t, appErr.Message(), "[import_cost_logs] insert codex cost telemetry logs: connection refused")
+	require.Contains(t, appErr.Message(), "[import_cost_logs] insert codex cost telemetry logs")
 	require.Contains(t, appErr.Message(), "(progress:")
+	require.Contains(t, appErr.Message(), "insert codex cost telemetry logs: connection refused")
 }
 
 func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
@@ -213,7 +214,8 @@ func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
 
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
-	require.Contains(t, appErr.Message(), "sync codex cost data: import cost logs: download failed")
+	require.Contains(t, appErr.Message(), "sync codex cost data: import cost logs")
+	require.Contains(t, appErr.Message(), "import cost logs: download failed")
 }
 
 func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {

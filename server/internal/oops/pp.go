@@ -105,61 +105,44 @@ func (e *ShareableError) Unwrap() error {
 	return e.cause
 }
 
-// Detail renders the complete error tree for internal diagnostics. Error on a
-// ShareableError intentionally returns only its public message, so Detail
-// replaces that truncated branch with its underlying cause. Multi-cause errors
-// (errors.Join and containers like SyncError) keep their own message; each
-// branch's text is expanded in place within it.
+// Detail renders err for internal diagnostics: worker logs, spans, and
+// Temporal failure messages. Error on a ShareableError intentionally stops at
+// its public message, so Detail appends a trailer carrying the hidden cause
+// chain of every ShareableError in the tree. The natural Error() rendering is
+// kept verbatim — splicing causes into a container's message cannot be done
+// reliably from rendered text, so the hidden chains are appended instead, each
+// prefixed with its boundary's message for correlation.
 func Detail(err error) string {
 	if err == nil {
 		return ""
 	}
-
-	var shareable *ShareableError
-	if !errors.As(err, &shareable) {
+	var hidden []string
+	collectHiddenCauses(err, &hidden)
+	if len(hidden) == 0 {
 		return err.Error()
 	}
-
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		message := err.Error()
-		for _, cause := range joined.Unwrap() {
-			if cause == nil {
-				continue
-			}
-			message = expandCauseInMessage(message, cause)
-		}
-		return message
-	}
-
-	cause := errors.Unwrap(err)
-	if cause == nil {
-		return err.Error()
-	}
-
-	causeText := cause.Error()
-	causeDetail := Detail(cause)
-	message := err.Error()
-	if index := strings.LastIndex(message, causeText); index >= 0 {
-		return message[:index] + causeDetail + message[index+len(causeText):]
-	}
-	return message + ": " + causeDetail
+	return err.Error() + " [hidden: " + strings.Join(hidden, "; ") + "]"
 }
 
-// expandCauseInMessage replaces one occurrence of cause's rendered text inside
-// message with its full Detail expansion. When the container's message does not
-// embed the branch text, the message is returned unchanged rather than guessing
-// where the branch belongs.
-func expandCauseInMessage(message string, cause error) string {
-	causeText := cause.Error()
-	causeDetail := Detail(cause)
-	if causeText == causeDetail {
-		return message
+// collectHiddenCauses walks the error tree depth-first and records one entry
+// per ShareableError that carries a cause, in traversal order.
+func collectHiddenCauses(err error, out *[]string) {
+	switch node := err.(type) { //nolint:errorlint // Walks the tree one node at a time; wrapped errors are visited through the Unwrap cases below.
+	case nil:
+		return
+	case *ShareableError:
+		if node.cause == nil {
+			return
+		}
+		*out = append(*out, node.String())
+		collectHiddenCauses(node.cause, out)
+	case interface{ Unwrap() []error }:
+		for _, cause := range node.Unwrap() {
+			collectHiddenCauses(cause, out)
+		}
+	case interface{ Unwrap() error }:
+		collectHiddenCauses(node.Unwrap(), out)
 	}
-	index := strings.LastIndex(message, causeText)
-	if index < 0 {
-		return message
-	}
-	return message[:index] + causeDetail + message[index+len(causeText):]
 }
 
 // MarshalJSON implements the json.Marshaler interface.
