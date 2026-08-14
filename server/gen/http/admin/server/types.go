@@ -75,6 +75,11 @@ type UpdateOrganizationResponseBody struct {
 	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
 	// The time at which the free trial ends.
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -104,6 +109,11 @@ type GetOrganizationResponseBody struct {
 	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
 	// The time at which the free trial ends.
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -1834,6 +1844,11 @@ type AdminOrganizationResponseBody struct {
 	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
 	// The time at which the free trial ends.
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -1877,6 +1892,8 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 		DisabledAt:         res.DisabledAt,
 		FreeTrialStartedAt: res.FreeTrialStartedAt,
 		FreeTrialEndsAt:    res.FreeTrialEndsAt,
+		TrialState:         res.TrialState,
+		TrialEndsAt:        res.TrialEndsAt,
 		MemberCount:        res.MemberCount,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
@@ -1897,6 +1914,8 @@ func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizati
 		DisabledAt:         res.DisabledAt,
 		FreeTrialStartedAt: res.FreeTrialStartedAt,
 		FreeTrialEndsAt:    res.FreeTrialEndsAt,
+		TrialState:         res.TrialState,
+		TrialEndsAt:        res.TrialEndsAt,
 		MemberCount:        res.MemberCount,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,

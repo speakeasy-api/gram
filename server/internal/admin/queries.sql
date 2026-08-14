@@ -61,6 +61,20 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
+    -- A converted or demoted trial keeps a future ends_at, so both are tested
+    -- ahead of the dates. now() is the transaction timestamp, so every row in
+    -- one response is classified against the same instant; clock_timestamp()
+    -- advances mid-scan and could split the seven-day boundary. The joined
+    -- trials table is keyed by organization_id, so it cannot multiply rows.
+    CASE
+        WHEN t.organization_id IS NULL THEN 'none'
+        WHEN t.converted_at IS NOT NULL THEN 'converted'
+        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+        WHEN t.ends_at <= now() THEN 'expired'
+        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+        ELSE 'running'
+    END::text AS trial_state,
+    t.ends_at AS trial_ends_at,
     om.created_at,
     om.updated_at,
     (
@@ -70,6 +84,7 @@ SELECT
           AND our.deleted IS FALSE
     )::bigint AS member_count
 FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
 WHERE
     (sqlc.narg('q')::text IS NULL OR om.name ILIKE '%' || sqlc.narg('q')::text || '%' OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%')
     AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
@@ -122,6 +137,17 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
+    -- Kept identical to AdminListOrganizations so the detail page and the list
+    -- row can never disagree about an organization's trial state.
+    CASE
+        WHEN t.organization_id IS NULL THEN 'none'
+        WHEN t.converted_at IS NOT NULL THEN 'converted'
+        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+        WHEN t.ends_at <= now() THEN 'expired'
+        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+        ELSE 'running'
+    END::text AS trial_state,
+    t.ends_at AS trial_ends_at,
     om.created_at,
     om.updated_at,
     (
@@ -131,6 +157,7 @@ SELECT
           AND our.deleted IS FALSE
     )::bigint AS member_count
 FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = sqlc.arg('id_or_slug')::text
    OR om.slug = sqlc.arg('id_or_slug')::text
 LIMIT 1;

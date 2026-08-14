@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 type orgFixture struct {
@@ -304,4 +305,110 @@ func TestListOrganizations_FullPageWithFilterEndsTheWalk(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Organizations, 2)
 	require.Nil(t, page.NextCursor)
+}
+
+type trialFixture struct {
+	orgID       string
+	endsAt      time.Time
+	convertedAt *time.Time
+	demotedAt   *time.Time
+}
+
+func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFixture) {
+	t.Helper()
+
+	err := trialsRepo.New(conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
+		OrganizationID: f.orgID,
+		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-30 * 24 * time.Hour)),
+		EndsAt:         conv.ToPGTimestamptz(f.endsAt),
+		ConvertedAt:    conv.PtrToPGTimestamptz(f.convertedAt),
+		DemotedAt:      conv.PtrToPGTimestamptz(f.demotedAt),
+	})
+	require.NoError(t, err)
+}
+
+func TestAdminListOrganizations_TrialState(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	now := time.Now().UTC()
+	demotedAt := now.Add(-72 * time.Hour)
+	convertedAt := now.Add(-96 * time.Hour)
+
+	// Margins are deliberately far from the seven-day boundary and from now(),
+	// so test runtime cannot flip a predicate.
+	for _, id := range []string{
+		"org_trial_none",
+		"org_trial_running",
+		"org_trial_ending_soon",
+		"org_trial_expired",
+		"org_trial_demoted",
+		"org_trial_converted",
+		"org_trial_demoted_past",
+		"org_trial_converted_past",
+	} {
+		seedOrg(t, ctx, conn, orgFixture{id: id, name: "Org " + id, slug: id, whitelisted: true})
+	}
+
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_running", endsAt: now.Add(30 * 24 * time.Hour)})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_ending_soon", endsAt: now.Add(24 * time.Hour)})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_expired", endsAt: now.Add(-24 * time.Hour)})
+	// A future ends_at catches a CASE that reads the dates before converted_at
+	// and demoted_at and so reports these as running or ending_soon.
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_demoted", endsAt: now.Add(12 * 24 * time.Hour), demotedAt: &demotedAt})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_converted", endsAt: now.Add(18 * 24 * time.Hour), convertedAt: &convertedAt})
+	// A past ends_at is the shape the sweeper actually writes, since it demotes
+	// only trials that already ended. It catches the same misordering reporting
+	// them as expired.
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_demoted_past", endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_converted_past", endsAt: now.Add(-10 * 24 * time.Hour), convertedAt: &convertedAt})
+
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
+	require.NoError(t, err)
+	require.Len(t, res.Organizations, 8)
+
+	byID := map[string]*gen.AdminOrganization{}
+	for _, o := range res.Organizations {
+		byID[o.ID] = o
+	}
+
+	wantStates := map[string]string{
+		"org_trial_none":        "none",
+		"org_trial_running":     "running",
+		"org_trial_ending_soon": "ending_soon",
+		"org_trial_expired":     "expired",
+		"org_trial_demoted":     "demoted",
+		"org_trial_converted":   "converted",
+
+		"org_trial_demoted_past":   "demoted",
+		"org_trial_converted_past": "converted",
+	}
+
+	for id, want := range wantStates {
+		org := byID[id]
+		require.NotNil(t, org, "organization %s missing from the list", id)
+		require.NotNil(t, org.TrialState, "organization %s has no trial state", id)
+		require.Equal(t, want, *org.TrialState, "list trial state for %s", id)
+
+		// The detail path must join trials the same way, or an operator sees a
+		// different state depending on which page they opened.
+		detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: id})
+		require.NoError(t, err)
+		require.NotNil(t, detail.TrialState)
+		require.Equal(t, want, *detail.TrialState, "detail trial state for %s", id)
+		require.Equal(t, org.TrialEndsAt, detail.TrialEndsAt, "trial end date for %s", id)
+	}
+
+	require.Nil(t, byID["org_trial_none"].TrialEndsAt, "an organization that never trialled has no trial end date")
+	for id := range wantStates {
+		if id == "org_trial_none" {
+			continue
+		}
+		require.NotNil(t, byID[id].TrialEndsAt, "organization %s should report its trial end date", id)
+	}
+
+	// This slice expands only: the vestigial free trial fields stay on the API.
+	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
+	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }
