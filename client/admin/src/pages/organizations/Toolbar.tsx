@@ -1,12 +1,13 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 
 import type {
   DataTableFeatures,
   DataTableInstance,
 } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,15 +17,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
+  FILTER_GROUPS,
+  filterSummary,
+  filtersToSearch,
+  optionsFor,
+  type FilterGroupKey,
+  type FilterSelection,
+} from "@/lib/organizationFilters";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
+
+import { FilterSheet } from "./FilterSheet";
 
 const ROUTE_ID = "/organizations/";
 const SEARCH_DEBOUNCE_MS = 300;
@@ -74,17 +77,38 @@ export function Toolbar(): JSX.Element {
     return () => clearTimeout(timer);
   }, [draft, committed, navigate]);
 
-  const applyFilter = (patch: Partial<OrganizationsSearch>): void => {
+  // Which group the sheet is showing, and null when it is closed.
+  const [openGroup, setOpenGroup] = useState<FilterGroupKey | null>(null);
+  const triggers = useRef<Partial<Record<FilterGroupKey, HTMLButtonElement>>>(
+    {},
+  );
+  // The trigger the sheet has to give the keyboard back to. A ref rather than
+  // `openGroup`, because the sheet asks for it as it unmounts: by then the
+  // state that opened it has already been cleared.
+  const openedFrom = useRef<FilterGroupKey | null>(null);
+
+  const filters: FilterSelection = {
+    type: search.type ?? [],
+    trial: search.trial ?? [],
+    disabled: search.disabled ?? [],
+  };
+
+  const applyFilters = (next: FilterSelection): void => {
     void navigate({
       search: (prev: OrganizationsSearch) => ({
         ...prev,
-        ...patch,
+        ...filtersToSearch(next),
+        // Page 1. The rows a page-two cursor points at were counted under the
+        // filters that minted it.
         page: undefined,
       }),
     });
   };
 
-  const selectedType = search.type ?? "";
+  const openFilters = (group: FilterGroupKey): void => {
+    openedFrom.current = group;
+    setOpenGroup(group);
+  };
 
   return (
     <div className="mb-2 flex items-center gap-2">
@@ -98,36 +122,47 @@ export function Toolbar(): JSX.Element {
           className="w-full py-1.5 pr-2 pl-8"
         />
       </div>
-      <Select
-        value={selectedType || "all"}
-        onValueChange={(value) =>
-          applyFilter({ type: isAccountType(value) ? value : undefined })
-        }
-      >
-        <SelectTrigger
-          aria-label="Account type"
-          className="h-auto w-auto px-2 py-1.5"
-        >
-          <SelectValue placeholder="All types" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All types</SelectItem>
-          {ACCOUNT_TYPE_OPTIONS.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        variant={search.disabled ? "default" : "ghost"}
-        size="xs"
-        onClick={() =>
-          applyFilter({ disabled: search.disabled ? undefined : true })
-        }
-      >
-        {search.disabled ? "Hide disabled" : "Show disabled"}
-      </Button>
+
+      {/* One trigger per group, all opening the same sheet. The group is the
+          unit an operator thinks in, and a single Filters button would make
+          them find the group again inside the sheet. */}
+      {FILTER_GROUPS.map((group) => {
+        const chosen = filters[group.key];
+        return (
+          <Button
+            key={group.key}
+            ref={(node) => {
+              if (node) triggers.current[group.key] = node;
+            }}
+            variant={chosen.length > 0 ? "secondary" : "ghost"}
+            size="xs"
+            // The count is the whole visible signal, and a count does not say
+            // what it counts. The name a screen reader announces says it.
+            aria-label={`${group.label} filter: ${filterSummary(
+              group,
+              chosen,
+              optionsFor(group, chosen),
+            )}`}
+            onClick={() => openFilters(group.key)}
+          >
+            {group.label}
+            {chosen.length > 0 && <Badge>{chosen.length}</Badge>}
+          </Button>
+        );
+      })}
+
+      <FilterSheet
+        value={filters}
+        openGroup={openGroup}
+        onOpenChange={(open) => {
+          if (!open) setOpenGroup(null);
+        }}
+        onApply={applyFilters}
+        onReturnFocus={() => {
+          const group = openedFrom.current;
+          if (group) triggers.current[group]?.focus();
+        }}
+      />
     </div>
   );
 }

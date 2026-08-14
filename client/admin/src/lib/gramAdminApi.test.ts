@@ -5,6 +5,7 @@ import {
   enableOrganization,
   errorMessage,
   extendTrial,
+  listOrganizations,
   logout,
   MAX_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
@@ -31,6 +32,54 @@ describe("toSearchParams", () => {
   it("encodes a value that needs escaping", () => {
     const qs = toSearchParams({ q: "a b&c" });
     expect(qs.toString()).toBe("q=a+b%26c");
+  });
+});
+
+// The whole URL, not the params object, because a set the server reads as a set
+// has to arrive as one key per value. A comma-joined `account_types=free,pro`
+// parses on the server as a single account type named "free,pro", which matches
+// no organization: the browser would show an empty list and no error.
+describe("listOrganizations", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("repeats a key per value of each filter", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ organizations: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await listOrganizations({
+      q: "acme",
+      account_types: ["free", "pro"],
+      trial_states: ["running", "ending_soon"],
+      disabled_states: ["active", "disabled"],
+    });
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/organizations.list?q=acme" +
+        "&account_types=free&account_types=pro" +
+        "&trial_states=running&trial_states=ending_soon" +
+        "&disabled_states=active&disabled_states=disabled",
+    );
+  });
+
+  it("asks for the unfiltered list with no query string at all", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ organizations: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await listOrganizations({ account_types: [], trial_states: [] });
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe("/admin/organizations.list");
   });
 });
 
