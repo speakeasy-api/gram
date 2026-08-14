@@ -367,13 +367,15 @@ SELECT id, organization_id, project_id, target_kind, target_label, target_key,
        target_dimensions, requester_user_id, requester_email, note
 FROM risk_policy_bypass_requests
 WHERE id = $1
-  AND project_id = $2
+  AND organization_id = $2
+  AND project_id = $3
   AND deleted IS FALSE
 `
 
 type GetBypassRequestForPromotionParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
 type GetBypassRequestForPromotionRow struct {
@@ -389,13 +391,16 @@ type GetBypassRequestForPromotionRow struct {
 	Note             pgtype.Text
 }
 
-// Resolved under the caller's project, never by id alone: the id arrives from
-// the caller, and promotion of another project's bypass request into this
-// project's queue is the exact horizontal escalation the org standard forbids.
-// There is deliberately no database-level pin for this pair (see AIS-470), so
-// this predicate is the primary control.
+// Resolved under the caller's organization and project, never by id alone:
+// the id arrives from the caller, and promotion of another tenant's bypass
+// request into this project's queue is the exact horizontal escalation the
+// org standard forbids. There is deliberately no database-level pin for this
+// pair (see AIS-470), so this predicate is the primary control. The project
+// pin alone would suffice (a project belongs to one organization), but the
+// org pin also guarantees the row's organization_id — which the promotion
+// admits under — is the caller's.
 func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypassRequestForPromotionParams) (GetBypassRequestForPromotionRow, error) {
-	row := q.db.QueryRow(ctx, getBypassRequestForPromotion, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getBypassRequestForPromotion, arg.ID, arg.OrganizationID, arg.ProjectID)
 	var i GetBypassRequestForPromotionRow
 	err := row.Scan(
 		&i.ID,
