@@ -370,7 +370,7 @@ func newPollFailureError(configID uuid.UUID, provider string, attempt int32, non
 	diagnostic := oops.Detail(cause)
 	var contentErr *aiintegrations.CodexCostContentError
 	if errors.As(cause, &contentErr) && len(contentErr.Payload) > 0 {
-		diagnostic = fmt.Sprintf("%s payload=%q", diagnostic, contentErr.Payload)
+		diagnostic = fmt.Sprintf("%s payload=%q", diagnostic, contentErr.Payload[:min(len(contentErr.Payload), 4096)])
 	}
 	message := fmt.Sprintf("poll ai integration usage: provider=%s config=%s attempt=%d/%d: %s",
 		provider, configID, attempt, PollUsageMaxAttempts, diagnostic)
