@@ -26,7 +26,9 @@ File boundaries are based on gate and regeneration workflow.
 | `curated_adversarial.jsonl` | recall | 100 | Curated model-authored adversarial rows merged from fable and codex predecessors; per-row `origin` keeps authorship auditable. |
 | `litellm_extended.jsonl` | recall | 51 | Hand-curated rows inspired by LiteLLM injection fixtures. |
 | `mutations.jsonl` | recall | 70 | Deterministically generated mutation rows with `seed_id` lineage. |
-| `trajectory_twins.jsonl` | recall | 74 | Paired trajectory rows with runtime context and known-gap exclusions. |
+| `trajectory_twins.jsonl` | recall | 98 | Paired trajectory rows with runtime context and known-gap exclusions. |
+| `trajectory_independent_recall.jsonl` | recall | 20 | Pending-curation threat-model trajectory attack matrix. |
+| `trajectory_independent_fp.jsonl` | fp | 20 | Pending-curation benign twins for the threat-model matrix. |
 | `deepset.jsonl` | regression | 662 | External import reported separately due taxonomy mismatch. |
 | `notinject.jsonl` | fp | 339 | External benign trigger-vocabulary import from NotInject. |
 | `llmail_hard.jsonl` | recall | 200 | External LLMail hard attacks, pending curation and excluded from enforced floors. |

@@ -19,12 +19,12 @@ func TestLoadCorpusPreservesTrajectoryTwinSemantics(t *testing.T) {
 	require.NoError(t, err)
 
 	twins := filterSources(corpus, "trajectory_twins")
-	require.Len(t, twins, 74)
+	require.Len(t, twins, 98)
 	byText := make(map[string][]labeledCase)
 	for _, row := range twins {
 		byText[row.Text] = append(byText[row.Text], row)
 	}
-	require.Len(t, byText["cat ~/.config/example/credentials"], 2)
+	require.Len(t, byText["cat ~/.config/example/credentials"], 4)
 }
 
 func TestSummariesCaptureStabilityAndDistributions(t *testing.T) {
