@@ -106,6 +106,11 @@ import {
 } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
+import { policyStatusLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 import {
   ALL_CATEGORIES,
   AVAILABLE_CATEGORIES,
@@ -530,6 +535,7 @@ function PolicyHeader({
   const isCreate = policy === null;
   const routes = useRoutes();
   const [editingName, setEditingName] = useState(false);
+  const toggleEnabledMutation = useTogglePolicyEnabled();
 
   return (
     <Stack
@@ -575,11 +581,30 @@ function PolicyHeader({
               <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           )}
-          {policy ? <StatusBadge /> : null}
+          {policy ? (
+            <>
+              <StatusBadge enabled={policy.enabled} />
+              <Switch
+                checked={policy.enabled}
+                disabled={saving || toggleEnabledMutation.isPending}
+                onCheckedChange={(checked) =>
+                  toggleEnabledMutation.mutate(
+                    togglePolicyEnabledVariables(policy.id, checked),
+                  )
+                }
+                aria-label={
+                  policy.enabled ? "Disable policy" : "Enable policy"
+                }
+              />
+            </>
+          ) : null}
         </Stack>
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
+            {policy.enabled
+              ? null
+              : " · Inactive — new messages are not scanned"}
           </Text>
         ) : (
           <Text small muted>
@@ -631,8 +656,12 @@ function CreateButton({
   );
 }
 
-function StatusBadge(): JSX.Element {
-  return <Badge variant="success">Enforcing</Badge>;
+function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
+  return (
+    <Badge variant={enabled ? "success" : "neutral"}>
+      {policyStatusLabel(enabled)}
+    </Badge>
+  );
 }
 
 // Vertical section header — title stacked over subtext with breathing room.
@@ -789,7 +818,6 @@ function PromptPolicyEditor({
         updateRiskPolicyRequestBody: {
           id: policy.id,
           name: name.trim() || policy.name,
-          enabled: true,
           prompt,
           modelConfig: {
             model: model || undefined,
@@ -3771,7 +3799,6 @@ export function StandardPolicyEditor({
           updateRiskPolicyRequestBody: {
             id: policy.id,
             name: name.trim() || policy.name,
-            enabled: true,
             sources,
             presidioEntities,
             promptInjectionRules,

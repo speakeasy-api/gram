@@ -2,7 +2,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
@@ -19,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   kind: null as string | null,
   category: null as string | null,
   detectorSelections: [] as Array<{ category: string; selected: boolean }>,
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -313,6 +317,47 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
         "https://sketchy.example.com/mcp",
       ]);
       expect(mocks.modeRenders.at(-1)).toBe("block");
+    });
+  });
+});
+
+describe("StandardPolicyEditor policy pause", () => {
+  beforeEach(() => {
+    mocks.saveDisabledRenders.length = 0;
+    mocks.selectionRenders.length = 0;
+    mocks.modeRenders.length = 0;
+    mocks.step = "action";
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("shows Inactive and an enable switch when the policy is disabled", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <StandardPolicyEditor
+            policy={{ ...blockingPolicyWithDirtyDraftName(), enabled: false }}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Inactive")).toBeTruthy();
+    const toggle = screen.getByRole("switch", { name: "Enable policy" });
+    fireEvent.click(toggle);
+    expect(mocks.mutateUpdate).toHaveBeenCalledWith({
+      request: {
+        updateRiskPolicyRequestBody: { id: "policy-1", enabled: true },
+      },
     });
   });
 });
