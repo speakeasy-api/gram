@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization, TrialState } from "@/lib/gramAdminApi";
+import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { fmtDateShort } from "@/lib/utils";
 
 type TrialDisplay = {
@@ -23,11 +24,31 @@ type TrialDisplay = {
 // `TRIAL_STATES` at runtime, so a seventh state fails a test even if this
 // annotation is edited away.
 const TRIAL_DISPLAY: Record<Exclude<TrialState, "none">, TrialDisplay> = {
-  running: { label: "Running", tone: "neutral", showsEndDate: true },
-  ending_soon: { label: "Ending soon", tone: "warning", showsEndDate: true },
-  expired: { label: "Expired", tone: "destructive", showsEndDate: false },
-  demoted: { label: "Demoted", tone: "destructive", showsEndDate: false },
-  converted: { label: "Converted", tone: "success", showsEndDate: false },
+  running: {
+    label: TRIAL_LABELS.running,
+    tone: "neutral",
+    showsEndDate: true,
+  },
+  ending_soon: {
+    label: TRIAL_LABELS.ending_soon,
+    tone: "warning",
+    showsEndDate: true,
+  },
+  expired: {
+    label: TRIAL_LABELS.expired,
+    tone: "destructive",
+    showsEndDate: false,
+  },
+  demoted: {
+    label: TRIAL_LABELS.demoted,
+    tone: "destructive",
+    showsEndDate: false,
+  },
+  converted: {
+    label: TRIAL_LABELS.converted,
+    tone: "success",
+    showsEndDate: false,
+  },
 };
 
 // Indexed as a plain string record on purpose. The server can start sending a
@@ -63,7 +84,7 @@ export function Trial({ org }: { org: AdminOrganization }): JSX.Element {
       <span className="text-muted-foreground text-sm">
         <span aria-hidden="true">-</span>
         <span className="sr-only">
-          {unrecognised ? "Trial state not recognised" : "No trial"}
+          {unrecognised ? "Trial state not recognised" : TRIAL_LABELS.none}
         </span>
       </span>
     );

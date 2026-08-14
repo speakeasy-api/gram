@@ -133,8 +133,9 @@ export function OrganizationsList(): JSX.Element {
   // Every value arrives validated, so nothing is normalised a second time here.
   const listParams: ListOrganizationsParams = {
     q: search.q,
-    account_type: search.type,
-    include_disabled: search.disabled,
+    account_types: search.type,
+    trial_states: search.trial,
+    disabled_states: search.disabled,
   };
 
   // omitUnset, not the raw object: the signature has to call a param unset

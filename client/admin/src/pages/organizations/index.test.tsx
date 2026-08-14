@@ -25,10 +25,12 @@ import {
 
 import {
   GramAdminError,
+  TRIAL_STATES,
   type AdminOrganization,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { useState, type JSX } from "react";
 
 import { routeTree } from "@/routeTree.gen";
@@ -209,6 +211,43 @@ async function withFakeTimers(
 // lets an assertion name the value the way the schema declares it.
 function currentSearch(router: AnyRouter): string {
   return decodeURIComponent(router.state.location.searchStr);
+}
+
+// The three triggers above the table. Found by the state a screen reader is
+// told, because the visible label is the group's name and a bare count.
+function filterTrigger(group: string): HTMLElement {
+  return screen.getByRole("button", { name: new RegExp(`^${group} filter:`) });
+}
+
+// Focused before the click, because a click does not focus a button in every
+// browser and the sheet hands the keyboard back to the trigger that opened it.
+async function openFilters(group: string): Promise<HTMLElement> {
+  const trigger = filterTrigger(group);
+  trigger.focus();
+  fireEvent.click(trigger);
+  await screen.findByRole("dialog");
+  return trigger;
+}
+
+// A picker inside the sheet. Its accessible name is the group's heading
+// followed by its own text, which is what the group is filtering on.
+function picker(group: string): HTMLElement {
+  return screen.getByRole("combobox", { name: new RegExp(`^${group}`) });
+}
+
+// Radix opens a popover on click, unlike the menu and the select below. A
+// choice does not close it, because the group takes more than one, so a second
+// call must not toggle the open list shut.
+async function chooseFilter(group: string, option: string): Promise<void> {
+  const trigger = picker(group);
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    fireEvent.click(trigger);
+  }
+  fireEvent.click(await screen.findByRole("option", { name: option }));
+}
+
+function applyFilters(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 }
 
 // A Radix menu and a Radix select both open on pointerdown, not on click.
@@ -481,56 +520,326 @@ describe("organizations list", () => {
 
   it("shows the filters a reloaded URL carries", async () => {
     await renderRouteTree(routeTree, {
-      initialPath: urlFor({ type: "pro", disabled: true }),
+      initialPath: urlFor({
+        type: ["pro"],
+        trial: ["running", "expired"],
+        disabled: ["active", "disabled"],
+      }),
     });
 
-    expect(screen.getByLabelText("Account type").textContent).toContain("pro");
-    expect(screen.getByRole("button", { name: "Hide disabled" })).toBeTruthy();
+    // The one chosen value is named; more than one is counted, because the
+    // trigger has a row of controls to share.
+    expect(filterTrigger("Type").getAttribute("aria-label")).toContain("pro");
+    expect(filterTrigger("Trial").getAttribute("aria-label")).toContain(
+      "2 selected",
+    );
 
     await waitFor(() => {
       expect(mocks.listOrganizations).toHaveBeenCalled();
     });
-    expect(lastListParams().account_type).toBe("pro");
-    expect(lastListParams().include_disabled).toBe(true);
+    expect(lastListParams()).toMatchObject({
+      account_types: ["pro"],
+      trial_states: ["running", "expired"],
+      disabled_states: ["active", "disabled"],
+    });
+
+    await openFilters("Type");
+    expect(picker("Type").textContent).toContain("pro");
   });
 
-  it("writes the filter controls back to the URL", async () => {
+  it("sends every value of a group the operator picked", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
 
-    openOn(screen.getByLabelText("Account type"));
-    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+    await openFilters("Type");
+    // Picked in the other order, so the assertion below is about the order the
+    // schema settles on rather than the order they were clicked. Two operators
+    // choosing the same filter must produce one request and one cache entry.
+    await chooseFilter("Type", "enterprise");
+    await chooseFilter("Type", "free");
+    applyFilters();
 
     await waitFor(() => {
-      expect(currentSearch(router)).toContain("type=enterprise");
+      expect(lastListParams().account_types).toEqual(["free", "enterprise"]);
     });
-
-    fireEvent.click(screen.getByRole("button", { name: "Show disabled" }));
-
-    await waitFor(() => {
-      expect(currentSearch(router)).toContain("disabled=true");
-    });
-    expect(currentSearch(router)).toContain("type=enterprise");
+    expect(currentSearch(router)).toContain('type=["free","enterprise"]');
   });
 
-  it("clears the account type filter back to every type", async () => {
+  it("holds the table still until the operator applies", async () => {
     const { router } = await renderRouteTree(routeTree, {
-      initialPath: urlFor({ type: "pro" }),
+      initialPath: "/organizations",
+    });
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+    const before = mocks.listOrganizations.mock.calls.length;
+
+    await openFilters("Trial");
+    await chooseFilter("Trial", "Running");
+    await chooseFilter("Trial", "Expired");
+
+    // Three requests and two lists nobody asked for, if the edit went straight
+    // to the URL.
+    expect(mocks.listOrganizations.mock.calls.length).toBe(before);
+    expect(currentSearch(router)).toBe("");
+
+    applyFilters();
+
+    await waitFor(() => {
+      expect(lastListParams().trial_states).toEqual(["running", "expired"]);
+    });
+  });
+
+  it("discards the edit when the operator presses Escape", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+
+    const trigger = await openFilters("Type");
+    await chooseFilter("Type", "enterprise");
+
+    // The open picker is a dismiss layer of its own and takes the first
+    // Escape. The sheet takes the second.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(currentSearch(router)).toBe("");
+    expect(lastListParams().account_types).toBeUndefined();
+    // Closing must not strand the keyboard on a subtree that has unmounted.
+    expect(document.activeElement).toBe(trigger);
+
+    // Discarded, not merely unapplied: the edit is gone when the sheet is
+    // opened again.
+    await openFilters("Type");
+    expect(picker("Type").textContent).toContain("All types");
+  });
+
+  it("holds the list open so a second value can be picked off it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openFilters("Type");
+    // The trigger is clicked once and only once. Every other test here goes
+    // through `chooseFilter`, which reopens a closed list, so a picker that
+    // shut itself on each choice would pass all of them: the operator would be
+    // reopening the list for every value, and nothing would say so.
+    fireEvent.click(picker("Type"));
+    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+
+    expect(picker("Type").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("option", { name: "free" }));
+    expect(picker("Type").getAttribute("aria-expanded")).toBe("true");
+
+    applyFilters();
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["free", "enterprise"]);
+    });
+  });
+
+  it("gives the keyboard back to the trigger after applying", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+
+    await openFilters("Trial");
+    await chooseFilter("Trial", "Expired");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // Escape is not the only way out of the sheet. Applying unmounts the same
+    // subtree, and must not leave the keyboard on it either.
+    expect(document.activeElement).toBe(filterTrigger("Trial"));
+    await waitFor(() => {
+      expect(lastListParams().trial_states).toEqual(["expired"]);
+    });
+  });
+
+  it("clears every filter and leaves the search term alone", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: urlFor({
+        q: "acme",
+        type: ["pro"],
+        disabled: ["disabled"],
+      }),
+    });
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["pro"]);
+    });
+
+    await openFilters("Status");
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+
+    await waitFor(() => {
+      expect(lastListParams().account_types).toBeUndefined();
+    });
+    expect(lastListParams().disabled_states).toBeUndefined();
+    // The term is not a filter this sheet holds. An operator who cleared the
+    // filters has not asked to type it again.
+    expect(lastListParams().q).toBe("acme");
+    expect(currentSearch(router)).toContain("q=acme");
+    expect(
+      (screen.getByLabelText("Search organizations") as HTMLInputElement).value,
+    ).toBe("acme");
+  });
+
+  it("keeps an account type the picker does not offer", async () => {
+    // ACCOUNT_TYPE_OPTIONS is the list the picker offers, not the list the
+    // column can hold. Dropping a value from outside it would widen the view a
+    // link carries while the control read "all types".
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: ["startup"] }),
     });
 
     await waitFor(() => {
-      expect(lastListParams().account_type).toBe("pro");
+      expect(lastListParams().account_types).toEqual(["startup"]);
+    });
+    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
+      "startup",
+    );
+
+    await openFilters("Type");
+    fireEvent.click(picker("Type"));
+    const option = await screen.findByRole("option", { name: "startup" });
+    expect(option.getAttribute("aria-checked")).toBe("true");
+  });
+
+  // These two assert the request rather than the parsed search, because the
+  // empty string has to be gone by the time anything is sent, and asserting the
+  // schema's output would pass while it survived one step further on.
+  //
+  // The hazard is specific to the type group. `trialStates` and
+  // `disabledStates` drop whatever they do not recognise, so an empty string
+  // reaching them is harmless. `accountTypes` deliberately keeps an
+  // unrecognised value, so an empty one would be sent as an account type, and
+  // the server matches no organization against it: a blank table under a
+  // control still reading "All types".
+  it("sends no filter for a group a link left empty", async () => {
+    // `?type=` is not the empty list the schema already drops. It arrives as an
+    // empty string, and `text()` normalising to undefined is the only thing
+    // between it and the request.
+    await renderRouteTree(routeTree, {
+      initialPath: "/organizations?type=&trial=&disabled=",
     });
 
-    openOn(screen.getByLabelText("Account type"));
-    fireEvent.click(await screen.findByRole("option", { name: "All types" }));
-
-    // "All types" is the only route back to an unfiltered list.
     await waitFor(() => {
-      expect(lastListParams().account_type).toBeUndefined();
+      expect(mocks.listOrganizations).toHaveBeenCalled();
     });
-    expect(currentSearch(router)).not.toContain("type=");
+    const params = lastListParams();
+    expect(params.account_types).toBeUndefined();
+    expect(params.trial_states).toBeUndefined();
+    expect(params.disabled_states).toBeUndefined();
+    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
+      "All types",
+    );
+  });
+
+  it("sends no filter for a group a link filled with whitespace", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: "/organizations?type=%20&trial=%20&disabled=%20",
+    });
+
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+    const params = lastListParams();
+    expect(params.account_types).toBeUndefined();
+    expect(params.trial_states).toBeUndefined();
+    expect(params.disabled_states).toBeUndefined();
+  });
+
+  it("opens on the group the operator asked for", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openFilters("Trial");
+
+    // The sheet holds three pickers. Landing on the first would make the
+    // operator walk to the one they pressed.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(picker("Trial"));
+    });
+  });
+
+  it("offers the trial states under the words the rows carry", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openFilters("Trial");
+    fireEvent.click(picker("Trial"));
+
+    // TRIAL_LABELS is the map the Trial cell renders its badge from, so a
+    // filter that spelled a state its own way would fail here.
+    const options = await screen.findAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual(
+      TRIAL_STATES.map((state) => TRIAL_LABELS[state]),
+    );
+  });
+
+  it("keeps the sort when a filter is applied", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: urlFor({ sort: "name", dir: "asc" }),
+    });
+
+    await openFilters("Status");
+    await chooseFilter("Status", "Disabled");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+    });
+    const url = currentSearch(router);
+    expect(url).toContain("sort=name");
+    expect(url).toContain("dir=asc");
+  });
+
+  it("returns to the first page when a filter is applied", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: urlFor({ page: 3 }),
+    });
+
+    await openFilters("Status");
+    await chooseFilter("Status", "Disabled");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+    });
+    // Page three of the old filter set is not page three of the new one, and
+    // an operator who narrowed a list expects its first rows.
+    expect(currentSearch(router)).not.toContain("page");
+  });
+
+  it("keeps an unrecognised type on offer after the operator unchecks it", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: ["startup"] }),
+    });
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["startup"]);
+    });
+
+    await openFilters("Type");
+    // Unchecked, the value has nothing left to derive the option from. Taking
+    // the options off the draft would drop it out of the list here, and the
+    // operator could not change their mind without editing the URL by hand.
+    await chooseFilter("Type", "startup");
+    expect(
+      (await screen.findByRole("option", { name: "startup" })).getAttribute(
+        "aria-checked",
+      ),
+    ).toBe("false");
+
+    await chooseFilter("Type", "startup");
+    applyFilters();
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["startup"]);
+    });
   });
 
   it("sends a pasted term without the whitespace around it", async () => {
@@ -561,10 +870,12 @@ describe("organizations list", () => {
       expect(lastListParams().cursor).toBe("cursor_page_two");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show disabled" }));
+    await openFilters("Status");
+    await chooseFilter("Status", "Disabled");
+    applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().include_disabled).toBe(true);
+      expect(lastListParams().disabled_states).toEqual(["disabled"]);
     });
     // The cursor was minted by the previous filter set and points into a
     // different result set.
@@ -2414,13 +2725,50 @@ describe("TableActionBar", () => {
 // value below is the whole object the route sees.
 describe("organizationsSearchSchema", () => {
   const cases: [string, Record<string, unknown>, OrganizationsSearch][] = [
-    ["reads a hand-written type", { type: "free" }, { type: "free" }],
-    ["drops a type the API does not accept", { type: "startup" }, {}],
+    ["reads a hand-written type", { type: "free" }, { type: ["free"] }],
     [
-      "drops a list, which the request cannot honour",
+      "keeps a type the picker does not offer",
+      { type: "startup" },
+      { type: ["startup"] },
+    ],
+    [
+      "reads a list of types",
       { type: ["pro", "enterprise"] },
+      { type: ["pro", "enterprise"] },
+    ],
+    [
+      "sorts a chosen set into the picker's order",
+      { type: ["enterprise", "free"] },
+      { type: ["free", "enterprise"] },
+    ],
+    ["drops a type named twice", { type: ["pro", "pro"] }, { type: ["pro"] }],
+    [
+      "keeps an unrecognised type after the ones the picker offers",
+      { type: ["startup", "pro"] },
+      { type: ["pro", "startup"] },
+    ],
+    ["drops an empty list of types", { type: [] }, {}],
+    [
+      "sorts trial states into the order the picker offers them",
+      { trial: ["expired", "running"] },
+      { trial: ["running", "expired"] },
+    ],
+    [
+      "drops a trial state the server does not derive",
+      { trial: ["hibernating"] },
       {},
     ],
+    [
+      "reads a status the picker offers",
+      { disabled: ["disabled"] },
+      { disabled: ["disabled"] },
+    ],
+    [
+      "reads the flag this list used to carry as both statuses",
+      { disabled: true },
+      { disabled: ["active", "disabled"] },
+    ],
+    ["drops a status outside the two", { disabled: ["retired"] }, {}],
     ["reads an all-digit term the router coerced", { q: 123 }, { q: "123" }],
     ["reads a boolean term the router coerced", { q: true }, { q: "true" }],
     ["reads a null term the router coerced", { q: null }, { q: "null" }],
@@ -2429,8 +2777,7 @@ describe("organizationsSearchSchema", () => {
     ["trims the term a pasted link carries", { q: "  acme  " }, { q: "acme" }],
     ["reads a direction in the union", { dir: "desc" }, { dir: "desc" }],
     ["drops a direction outside the union", { dir: "sideways" }, {}],
-    ["keeps the disabled flag", { disabled: true }, { disabled: true }],
-    ["drops the disabled flag when it is off", { disabled: false }, {}],
+    ["drops the old disabled flag when it is off", { disabled: false }, {}],
     ["drops page 1, which is the default", { page: 1 }, {}],
     ["drops a page below 1", { page: 0 }, {}],
     ["drops a page between two whole ones", { page: 2.5 }, {}],

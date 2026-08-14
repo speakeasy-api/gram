@@ -228,10 +228,19 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
+// Each filter is a repeated parameter the server reads as a set, and an absent
+// one means no filter of that kind: no account_types is every type, no
+// trial_states is every state, no disabled_states is active organizations only.
+//
+// The scalar `account_type` and the `include_disabled` flag these replaced are
+// still accepted by the server, so its half of this change can merge first.
+// Nothing here sends them, and nothing should: two ways to say the same filter
+// is how the browser and the server end up disagreeing about what is on.
 export type ListOrganizationsParams = {
   q?: string;
-  account_type?: string;
-  include_disabled?: boolean;
+  account_types?: string[];
+  trial_states?: string[];
+  disabled_states?: string[];
   cursor?: string;
   limit?: number;
 };
