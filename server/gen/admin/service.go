@@ -28,6 +28,10 @@ type Service interface {
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Sets one account type on many organizations in a single statement. An ID
+	// that matches no organization is reported back rather than failing the batch,
+	// so a stale ID costs the operator that row and not the whole call.
+	BulkUpdateAccountType(context.Context, *BulkUpdateAccountTypePayload) (res *AdminBulkUpdateAccountTypeResult, err error)
 	// Disables an organization, recording the moment of the action in disabled_at.
 	// Idempotent: disabling an already-disabled organization keeps the original
 	// timestamp.
@@ -47,6 +51,22 @@ type Service interface {
 	// Only a running trial can be extended: one that has converted, has been
 	// demoted, or has already expired is rejected rather than re-armed.
 	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
+	// Creates an organization in WorkOS and in Gram, so an operator does not have
+	// to leave the admin app for the WorkOS dashboard. The organization starts
+	// with no members, is not whitelisted, and gets no trial. Idempotent against
+	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
+	// so both writers converge on one row.
+	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
+	// Puts a demoted enterprise trial back on: restores the organization's account
+	// type and whitelist flag, revives its model provider keys, and gives the
+	// trial a fresh run of the given length counted from now. Only a demoted trial
+	// can be re-armed; one that has converted or is already running is rejected.
+	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
+	// Returns platform-wide organization counts for the strip above the
+	// organizations list. Every figure counts the whole platform: none of them
+	// narrows to the caller's list filters, so the strip does not move when an
+	// operator filters.
+	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -69,7 +89,18 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial"}
+var MethodNames = [16]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats"}
+
+// AdminBulkUpdateAccountTypeResult is the result type of the admin service
+// bulkUpdateAccountType method.
+type AdminBulkUpdateAccountTypeResult struct {
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
+	UpdatedIds []string
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string
+}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -144,6 +175,21 @@ type AdminOrganizationMember struct {
 	UpdatedAt string
 }
 
+// AdminOrganizationStats is the result type of the admin service
+// getOrganizationStats method.
+type AdminOrganizationStats struct {
+	// Every organization on the platform, disabled ones included.
+	Total int64
+	// Organizations created in the last 7 days, whatever their current status.
+	CreatedLast7Days int64
+	// Organizations whose trial_state is ending_soon.
+	TrialsEndingSoon int64
+	// Organizations with disabled_at set.
+	Disabled int64
+	// Organizations disabled in the last 7 days.
+	DisabledLast7Days int64
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -188,6 +234,16 @@ type AdminProjectDetail struct {
 	UpdatedAt      string
 }
 
+// BulkUpdateAccountTypePayload is the payload type of the admin service
+// bulkUpdateAccountType method.
+type BulkUpdateAccountTypePayload struct {
+	AdminSessionToken *string
+	// Organization IDs to update.
+	Ids []string
+	// New gram_account_type for every listed organization.
+	AccountType string
+}
+
 // CallbackPayload is the payload type of the admin service callback method.
 type CallbackPayload struct {
 	// The authorization code returned by the provider on success
@@ -210,6 +266,14 @@ type CallbackResult struct {
 	Location string
 	// The admin session cookie value
 	SessionID string
+}
+
+// CreateOrganizationPayload is the payload type of the admin service
+// createOrganization method.
+type CreateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Display name for the new organization.
+	Name string
 }
 
 // DisableOrganizationPayload is the payload type of the admin service
@@ -246,6 +310,12 @@ type GetOrganizationPayload struct {
 	IDOrSlug string
 }
 
+// GetOrganizationStatsPayload is the payload type of the admin service
+// getOrganizationStats method.
+type GetOrganizationStatsPayload struct {
+	AdminSessionToken *string
+}
+
 // GetProjectPayload is the payload type of the admin service getProject method.
 type GetProjectPayload struct {
 	AdminSessionToken *string
@@ -273,7 +343,12 @@ type ListOrganizationProjectsPayload struct {
 // listOrganizations method.
 type ListOrganizationsPayload struct {
 	AdminSessionToken *string
-	// Search term applied to name and slug (case-insensitive substring).
+	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
+	// case-insensitive substring, with % and _ taken literally, and matches
+	// organization id and WorkOS id exactly, ignoring case. An id match also
+	// returns an organization that disabled_states or include_disabled would
+	// otherwise hide; it still respects account_type, account_types, trial_states
+	// and cursor.
 	Q *string
 	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
@@ -336,13 +411,22 @@ type LogoutPayload struct {
 	SessionID *string
 }
 
+// RearmTrialPayload is the payload type of the admin service rearmTrial method.
+type RearmTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the re-armed trial runs for, counted from now.
+	Days int
+}
+
 // UpdateOrganizationPayload is the payload type of the admin service
 // updateOrganization method.
 type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type (e.g. free, pro, enterprise).
+	// New gram_account_type.
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool

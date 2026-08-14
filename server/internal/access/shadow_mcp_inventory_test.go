@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
@@ -1494,4 +1495,101 @@ func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t 
 	require.NoError(t, err)
 	require.Len(t, blockGrants, 1)
 	require.Equal(t, "https://other.example.com/mcp", blockGrants[0].Selector[authz.SelectorKeyServerURL])
+}
+
+func seedShadowMCPApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, canonicalURL string, status string, requesterCount int) mcpapprovalrepo.McpApprovalRequest {
+	t.Helper()
+
+	queries := mcpapprovalrepo.New(ti.conn)
+	request, err := queries.UpsertApprovalRequest(ctx, mcpapprovalrepo.UpsertApprovalRequestParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		TargetKind:     "server_url",
+		TargetRaw:      canonicalURL,
+		TargetKey:      canonicalURL,
+		ArtifactRef:    conv.ToPGTextEmpty(""),
+		VersionPinned:  false,
+		Status:         status,
+	})
+	require.NoError(t, err)
+
+	for range requesterCount {
+		_, err := queries.CreateApprovalRequestRequester(ctx, mcpapprovalrepo.CreateApprovalRequestRequesterParams{
+			OrganizationID:       organizationID,
+			ProjectID:            projectID,
+			McpApprovalRequestID: request.ID,
+			UserID:               uuid.NewString(),
+			UserEmail:            conv.ToPGText("requester-" + uuid.NewString()[:8] + "@example.com"),
+			Note:                 conv.ToPGTextEmpty(""),
+		})
+		require.NoError(t, err)
+	}
+
+	return request
+}
+
+func TestService_ShadowMCPInventory_JoinsApprovalRequestState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	now := time.Now().UTC()
+
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://tracked.example.com/mcp",
+			URLHost:            "tracked.example.com",
+			ServerName:         "Tracked MCP",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://untracked.example.com/mcp",
+			URLHost:            "untracked.example.com",
+			ServerName:         "Untracked MCP",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+	}))
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://tracked.example.com/mcp", "requested", 2)
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	byURL := make(map[string]*gen.ShadowMCPInventoryServer, len(result.Servers))
+	for _, server := range result.Servers {
+		byURL[server.CanonicalServerURL] = server
+	}
+
+	tracked := byURL["https://tracked.example.com/mcp"]
+	require.NotNil(t, tracked.ApprovalRequest)
+	require.Equal(t, request.ID.String(), tracked.ApprovalRequest.ID)
+	require.Equal(t, "requested", tracked.ApprovalRequest.Status)
+	require.Equal(t, 2, tracked.ApprovalRequest.RequesterCount)
+
+	require.Nil(t, byURL["https://untracked.example.com/mcp"].ApprovalRequest)
+
+	detail, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  projectID,
+		ServerSlug: tracked.ServerSlug,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, detail.ApprovalRequest)
+	require.Equal(t, request.ID.String(), detail.ApprovalRequest.ID)
+	require.Equal(t, 2, detail.ApprovalRequest.RequesterCount)
 }

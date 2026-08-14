@@ -44,6 +44,22 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countOrganizationsForWorkosIDFixture = `-- name: CountOrganizationsForWorkosIDFixture :one
+SELECT count(*)
+FROM organization_metadata
+WHERE workos_id = $1::text
+`
+
+// Test-only fixture for proving that two writers converged on one row instead
+// of creating two. Every read the API offers returns at most one organization,
+// so a duplicate row is invisible through it and only a count can see it.
+func (q *Queries) CountOrganizationsForWorkosIDFixture(ctx context.Context, workosID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationsForWorkosIDFixture, workosID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOutboxEntriesByEventType = `-- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
 FROM publish_outbox
@@ -295,6 +311,25 @@ func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const forceSoftDeleteOrganizationUserRelationship = `-- name: ForceSoftDeleteOrganizationUserRelationship :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+`
+
+type ForceSoftDeleteOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+// Test-only fixture: soft-deletes an org membership to exercise deleted-row
+// filtering in identity resolution.
+func (q *Queries) ForceSoftDeleteOrganizationUserRelationship(ctx context.Context, arg ForceSoftDeleteOrganizationUserRelationshipParams) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const forceSoftDeleteOrganizationUserRelationshipsFixture = `-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -305,6 +340,38 @@ WHERE organization_id = $1
 // generated from deleted_at, so a soft delete has to set the timestamp.
 func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationshipsFixture, organizationID)
+	return err
+}
+
+const forceSoftDeleteUser = `-- name: ForceSoftDeleteUser :exec
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Test-only fixture: soft-deletes a directory user to exercise deleted-row
+// filtering in identity resolution.
+func (q *Queries) ForceSoftDeleteUser(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUser, id)
+	return err
+}
+
+const forceSoftDeleteUserAccountsByEmail = `-- name: ForceSoftDeleteUserAccountsByEmail :exec
+UPDATE user_accounts
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND lower(email) = $2::text
+`
+
+type ForceSoftDeleteUserAccountsByEmailParams struct {
+	OrganizationID string
+	EmailLower     string
+}
+
+// Test-only fixture: soft-deletes an org's linked accounts by email to
+// exercise deleted-row filtering in identity resolution.
+func (q *Queries) ForceSoftDeleteUserAccountsByEmail(ctx context.Context, arg ForceSoftDeleteUserAccountsByEmailParams) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUserAccountsByEmail, arg.OrganizationID, arg.EmailLower)
 	return err
 }
 
@@ -637,6 +704,35 @@ func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID
 		&i.RiskResultID,
 		&i.RiskPolicyID,
 	)
+	return i, err
+}
+
+const getTransactionClockFixture = `-- name: GetTransactionClockFixture :one
+SELECT
+    now()::timestamptz AS transaction_now,
+    (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
+    (now() + INTERVAL '7 days')::timestamptz AS in_seven_days
+`
+
+type GetTransactionClockFixtureRow struct {
+	TransactionNow pgtype.Timestamptz
+	SevenDaysAgo   pgtype.Timestamptz
+	InSevenDays    pgtype.Timestamptz
+}
+
+// Test-only. Returns the transaction timestamp and the two edges a 7-day
+// INTERVAL predicate compares against, so a boundary fixture can be seeded
+// exactly on an edge.
+//
+// Postgres computes the offsets rather than the test, because INTERVAL day
+// arithmetic on timestamptz runs in the session time zone and need not come to
+// 168 hours. It must be read inside the transaction that also runs the query
+// under test: now() is the transaction timestamp, so reading it on its own
+// connection puts the fixture on an edge that has already moved.
+func (q *Queries) GetTransactionClockFixture(ctx context.Context) (GetTransactionClockFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getTransactionClockFixture)
+	var i GetTransactionClockFixtureRow
+	err := row.Scan(&i.TransactionNow, &i.SevenDaysAgo, &i.InSevenDays)
 	return i, err
 }
 

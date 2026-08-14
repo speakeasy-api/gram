@@ -59,6 +59,8 @@ export const AUDIT_ACTIONS = [
   "mcp-server:delete",
   "mcp-server:update",
   "mcp-server:update-tool-metadata",
+  "mcp_approval_request:approve",
+  "mcp_approval_request:deny",
   "mcp_collection:attach_server",
   "mcp_collection:create",
   "mcp_collection:delete",
@@ -72,6 +74,7 @@ export const AUDIT_ACTIONS = [
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_rearmed",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:webhooks_disabled",
@@ -318,6 +321,11 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 
+    case "mcp_approval_request:approve":
+      return "approved MCP access to";
+    case "mcp_approval_request:deny":
+      return "denied MCP access to";
+
     case "mcp_collection:create":
       return "created collection";
     case "mcp_collection:update":
@@ -356,6 +364,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_rearmed":
+      return "restarted enterprise trial";
 
     case "organization_invitation:create":
       return "invited";

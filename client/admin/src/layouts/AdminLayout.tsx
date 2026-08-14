@@ -17,7 +17,10 @@ export function AdminLayout(): JSX.Element {
   const [defaultOpen] = useState(sidebarOpen);
 
   return (
+    // The constraint belongs here rather than in sidebar.tsx: that file is
+    // vendored shadcn and stays pristine so the registry can be re-pulled.
     <SidebarProvider
+      className="h-svh"
       defaultOpen={defaultOpen}
       style={
         {

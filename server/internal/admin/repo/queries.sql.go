@@ -12,8 +12,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
+UPDATE organization_metadata
+SET
+    gram_account_type = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = ANY($2::text[])
+RETURNING id
+`
+
+type AdminBulkUpdateAccountTypeParams struct {
+	AccountType string
+	Ids         []string
+}
+
+// One statement rather than a loop, so every id is matched against one snapshot.
+// RETURNING is how the caller learns which of its ids matched nothing.
+func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkUpdateAccountTypeParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, adminBulkUpdateAccountType, arg.AccountType, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
-WITH filtered AS (
+WITH search AS (
+    -- Identical to AdminListOrganizations, escaping included: a pasted id that
+    -- reaches the rows through an escaped pattern and the total through an
+    -- unescaped one gives the pager a count that disagrees with what it shows.
+    SELECT
+        $2::text AS term,
+        '%' || replace(replace(replace($2::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+),
+filtered AS (
     SELECT
         CASE
             WHEN t.organization_id IS NULL THEN 'none'
@@ -25,16 +69,21 @@ WITH filtered AS (
         END::text AS trial_state
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    CROSS JOIN search
     WHERE
         (
-            $2::text IS NULL
-            OR om.name ILIKE '%' || $2::text || '%'
-            OR om.slug ILIKE '%' || $2::text || '%'
-            OR om.id = $2::text
-            OR om.workos_id = $2::text
+            search.term IS NULL
+            OR om.name ILIKE search.pattern
+            OR om.slug ILIKE search.pattern
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
         )
         AND (coalesce(cardinality($3::text[]), 0) = 0 OR om.gram_account_type = ANY($3::text[]))
-        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
+        AND (
+            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
 )
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
@@ -195,6 +244,61 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
+	)
+	return i, err
+}
+
+const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
+WITH orgs AS (
+    SELECT
+        om.created_at,
+        om.disabled_at,
+        -- Must stay identical to AdminListOrganizations: a figure counted from a
+        -- shortened predicate would disagree with the rows clicking it lands on.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+)
+SELECT
+    count(*)::bigint AS total,
+    count(*) FILTER (WHERE created_at > now() - INTERVAL '7 days')::bigint AS created_last_7_days,
+    count(*) FILTER (WHERE trial_state = 'ending_soon')::bigint AS trials_ending_soon,
+    count(*) FILTER (WHERE disabled_at IS NOT NULL)::bigint AS disabled,
+    count(*) FILTER (WHERE disabled_at > now() - INTERVAL '7 days')::bigint AS disabled_last_7_days
+FROM orgs
+`
+
+type AdminGetOrganizationStatsRow struct {
+	Total             int64
+	CreatedLast7Days  int64
+	TrialsEndingSoon  int64
+	Disabled          int64
+	DisabledLast7Days int64
+}
+
+// Blind to the list's filters by design: these figures must not move when an
+// operator filters. total and both 7-day windows count disabled organizations
+// too, so the strip reports the real platform size rather than the list's
+// default active-only view.
+//
+// The join stays count-safe because organization_id is the trials primary key.
+// Both 7-day windows exclude their boundary: exactly seven days old is outside.
+func (q *Queries) AdminGetOrganizationStats(ctx context.Context) (AdminGetOrganizationStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationStats)
+	var i AdminGetOrganizationStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.CreatedLast7Days,
+		&i.TrialsEndingSoon,
+		&i.Disabled,
+		&i.DisabledLast7Days,
 	)
 	return i, err
 }
@@ -372,7 +476,17 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 }
 
 const adminListOrganizations = `-- name: AdminListOrganizations :many
-WITH filtered AS (
+WITH search AS (
+    -- Escaped once here rather than per arm so the name and the slug arm cannot
+    -- drift apart. Backslash goes first or it escapes the escapes that follow.
+    -- Every id in both id spaces contains underscores and _ is a
+    -- single-character wildcard, so an unescaped pasted id draws incidental
+    -- matches out of the name and slug arms.
+    SELECT
+        $6::text AS term,
+        '%' || replace(replace(replace($6::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+),
+filtered AS (
     SELECT
         om.id,
         om.name,
@@ -403,22 +517,30 @@ WITH filtered AS (
         )::bigint AS member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
+        -- They compare case-insensitively because a real WorkOS id embeds an uppercase ULID and a log pipeline hands the operator a lowercased copy of it.
         -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
         (
-            $6::text IS NULL
-            OR om.name ILIKE '%' || $6::text || '%'
-            OR om.slug ILIKE '%' || $6::text || '%'
-            OR om.id = $6::text
-            OR om.workos_id = $6::text
+            search.term IS NULL
+            OR om.name ILIKE search.pattern
+            OR om.slug ILIKE search.pattern
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
         )
         -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
         -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
         -- would drop every row instead of keeping every row.
         AND (coalesce(cardinality($7::text[]), 0) = 0 OR om.gram_account_type = ANY($7::text[]))
         -- No empty arm: the handler resolves an absent filter to {active}.
-        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
+        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
+        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        AND (
+            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
         AND ($9::text IS NULL OR om.id > $9::text)
 )
 SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered

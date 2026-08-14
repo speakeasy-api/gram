@@ -24,14 +24,24 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -43,6 +53,30 @@ type Service struct {
 	oidc           *OIDCClient
 	sessions       *SessionStore
 	allowedOrigins []string
+
+	// workos creates organizations in the identity provider. Deployments with
+	// no WorkOS configuration get orgprovision.Unavailable, whose failure
+	// CreateOrganization reports rather than working around.
+	workos orgprovision.WorkOSOrganizationCreator
+
+	openRouter TrialKeyReviver
+
+	audit *audit.Logger
+}
+
+// TrialKeyReviver is the one method of openrouter.Provisioner a re-arm needs.
+type TrialKeyReviver interface {
+	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+}
+
+// ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
+var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+
+// TrialKeysUnavailable lets the admin server boot without OpenRouter.
+type TrialKeysUnavailable struct{}
+
+func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrKeyRevivalUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,6 +90,8 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
+	workosClient orgprovision.WorkOSOrganizationCreator,
+	openRouter TrialKeyReviver,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -76,6 +112,9 @@ func NewService(
 		sessions:       sessionStore,
 		verifier:       NewVerifier(logger, sessionStore, oidcClient),
 		allowedOrigins: allowedOrigins,
+		workos:         workosClient,
+		openRouter:     openRouter,
+		audit:          audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -411,8 +450,14 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	accountTypes, disabledStates := listOrganizationsFilters(payload)
 
+	// Trimmed once for both queries. A pasted id commonly arrives with the
+	// newline that ended the line it was copied from, and no arm matches through
+	// it; the id arms because they compare exactly, the name and slug arms
+	// because the whitespace lands inside the pattern.
+	searchTerm := conv.PtrToPGTextTrimmed(payload.Q)
+
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
-		Q:              conv.PtrToPGText(payload.Q),
+		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
@@ -430,7 +475,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// a count, and in cursor mode the page query has already discarded everything
 	// before the cursor.
 	total, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{
-		Q:              conv.PtrToPGText(payload.Q),
+		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
@@ -476,6 +521,23 @@ func listOrganizationsOffset(page *int, limit int32) int64 {
 	}
 
 	return (n - 1) * int64(limit)
+}
+
+// GetOrganizationStats counts the whole platform. It takes no filters, so the
+// figures stay put while an operator narrows the list below them.
+func (s *Service) GetOrganizationStats(ctx context.Context, payload *gen.GetOrganizationStatsPayload) (*gen.AdminOrganizationStats, error) {
+	row, err := repo.New(s.db).AdminGetOrganizationStats(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "organization stats").LogError(ctx, s.logger)
+	}
+
+	return &gen.AdminOrganizationStats{
+		Total:             row.Total,
+		CreatedLast7Days:  row.CreatedLast7Days,
+		TrialsEndingSoon:  row.TrialsEndingSoon,
+		Disabled:          row.Disabled,
+		DisabledLast7Days: row.DisabledLast7Days,
+	}, nil
 }
 
 func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {
@@ -528,6 +590,11 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	// See ExtendTrial: the design bounds this too, but generated validation only
+	// runs at the HTTP boundary.
+	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
+		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
+	}
 
 	queries := repo.New(s.db)
 	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
@@ -539,6 +606,49 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
+}
+
+func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUpdateAccountTypePayload) (*gen.AdminBulkUpdateAccountTypeResult, error) {
+	if !constants.IsAccountType(payload.AccountType) {
+		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
+	}
+
+	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
+		AccountType: payload.AccountType,
+		Ids:         payload.Ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
+	}
+
+	written := make(map[string]struct{}, len(updated))
+	for _, id := range updated {
+		written[id] = struct{}{}
+	}
+
+	// Naming the ids that matched nothing is the only way the operator can tell
+	// the batch fell short.
+	missing := make([]string, 0, len(payload.Ids))
+	seen := make(map[string]struct{}, len(payload.Ids))
+	for _, id := range payload.Ids {
+		if _, ok := written[id]; ok {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		missing = append(missing, id)
+	}
+
+	if updated == nil {
+		updated = []string{}
+	}
+
+	return &gen.AdminBulkUpdateAccountTypeResult{
+		UpdatedIds: updated,
+		MissingIds: missing,
+	}, nil
 }
 
 func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
@@ -619,6 +729,319 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+// CreateOrganization creates an organization in WorkOS and then in Gram.
+//
+// The WorkOS create happens before the transaction opens, because it is the one
+// step that cannot be rolled back. Everything Gram stores is written inside a
+// single transaction afterwards, so a failure below leaves no organization row,
+// no role grants and no entitlements from this call.
+//
+// That is not the same as leaving nothing. Wherever the WorkOS webhook is
+// configured, organization.created arrives about ten seconds later and the sync
+// activity writes the organization row and its role grants anyway, without the
+// default entitlements this handler would have seeded. AGE-3213 covers that gap.
+// Retrying the create is still the right move: the derived ID makes the retry
+// land on that row rather than beside it.
+func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
+	name, err := orgprovision.ValidateName(payload.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
+	switch {
+	case errors.Is(err, orgprovision.ErrUnavailable):
+		// CodeInvalid and not CodeInvariantViolation, which reads like the
+		// better fit and is not. server/design/shared/errors.go maps
+		// invariant_violation to 500, and the admin app trusts a response body
+		// only below 500, so the explanation below would never reach the
+		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
+		// layer does not read that map.
+		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
+	case err != nil:
+		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(created.GramOrganizationID),
+		attr.SlogWorkOSOrganizationID(created.WorkOSOrganizationID),
+	)
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin organization creation transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := orgRepo.New(tx)
+
+	// A row can already exist under the derived ID: WorkOS fires
+	// organization.created the moment the call above returns, so the sync
+	// activity can win the race to insert it. That row's slug is already in the
+	// organization's URL, and re-deriving one would find the base taken by that
+	// very row and write a suffixed variant over it.
+	uniqueSlug := ""
+	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+	switch {
+	case err == nil:
+		uniqueSlug = existing.Slug
+	case errors.Is(err, pgx.ErrNoRows):
+		// Seeded with the WorkOS organization ID rather than randomness so a
+		// retry of the same create competes for one advisory-lock key instead
+		// of two.
+		base, baseErr := orgslug.StableBase(name, created.WorkOSOrganizationID)
+		if baseErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, baseErr, "derive organization slug").LogError(ctx, logger)
+		}
+		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
+		}
+
+		// Read again now that the lock is held. The read above was taken before
+		// it, and under READ COMMITTED the sync activity can hold the lock,
+		// insert this very row under slug base, and commit in the gap. Deciding
+		// from the stale read would then hand back a suffixed variant, and the
+		// upsert below writes slug unconditionally, so it would overwrite a slug
+		// already serving in the organization's URL.
+		afterLock, reReadErr := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+		switch {
+		case reReadErr == nil:
+			uniqueSlug = afterLock.Slug
+		case errors.Is(reReadErr, pgx.ErrNoRows):
+			found, findErr := orgslug.FindUnique(ctx, queries, base)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
+		}
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
+	}
+
+	// Keyed on the derived ID with ON CONFLICT (id) DO UPDATE, so a webhook that
+	// already created this organization is updated rather than duplicated. The
+	// FromWorkOS variants of this query are for the sync path and would insert a
+	// second row here.
+	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:   created.GramOrganizationID,
+		Name: name,
+		Slug: uniqueSlug,
+		// The unique index over workos_id is what turns a diverging ID
+		// derivation into a loud failure instead of a duplicate.
+		WorkosID: conv.ToPGText(created.WorkOSOrganizationID),
+		// On insert this changes nothing: the query already coalesces a null
+		// whitelisted to FALSE. It is a statement of intent at the call site
+		// rather than the mechanism, and it does carry weight on the conflict
+		// arm, where a null would preserve whatever the existing row holds and
+		// FALSE states that an operator creating an organization is not
+		// whitelisting it.
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create organization metadata").LogError(ctx, logger)
+	}
+
+	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "provision organization access defaults").LogError(ctx, logger)
+	}
+
+	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "seed organization default entitlements").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit organization creation transaction").LogError(ctx, logger)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+}
+
+// RearmTrial puts a demoted enterprise trial back on.
+//
+// The keys come back up before the restore commits, deliberately not mirroring
+// the demotion's ordering: a partial failure must leave the organization
+// demoted with live keys, never a running trial with dead ones.
+func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload) (*gen.AdminOrganization, error) {
+	// Defence in depth against a non-HTTP caller: the design's bounds are
+	// generated into the request decoder alone. Keep this on the wide
+	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
+	if payload.Days < constants.MinTrialRearmDays || payload.Days > constants.MaxTrialRearmDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialRearmDays, constants.MaxTrialRearmDays)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	trials := trialsRepo.New(tx)
+
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
+		OrganizationID: payload.ID,
+		RearmForDays:   int32(payload.Days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, s.rejectRearm(ctx, logger, payload.ID)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+	}
+
+	uncapped, err := s.reviveTrialKeys(ctx, logger, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
+		OrganizationID: payload.ID,
+		AccountType:    rearmed.Tier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
+	}
+
+	actor, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
+		OrganizationID: payload.ID,
+		Actor:          actor,
+		// The customer reads this feed, so the entry carries the team label
+		// rather than the operator's email. adminActor says why.
+		ActorDisplayName: conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		ActorSlug:        nil,
+		OrganizationName: organization.Name,
+		OrganizationSlug: organization.Slug,
+		AccountType:      rearmed.Tier,
+		TrialEndsAt:      rearmed.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
+	}
+
+	s.recapRevivedKeys(ctx, logger, payload.ID, uncapped)
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "re-armed enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
+}
+
+// rejectRearm turns a zero-row re-arm into the error the operator should act
+// on: a pasted wrong id must report a missing organization, not a trial state.
+func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	switch {
+	case errors.Is(lookupErr, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case lookupErr != nil:
+		// Falling through would report a trial state we never managed to read.
+		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unrearmed trial").LogError(ctx, logger)
+	}
+
+	// Which of the three reasons applies is not the operator's business.
+	return oops.E(oops.CodeConflict, nil, "organization has no demoted enterprise trial to re-arm")
+}
+
+// reviveTrialKeys brings every platform key the organization holds back up, and
+// returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
+//
+// Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
+// DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
+//
+// It runs on the pool, not the caller's transaction, so a revived key survives
+// a later rollback. That is the safe direction.
+func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string) ([]openrouter.KeyType, error) {
+	keys := orrepo.New(s.db)
+
+	var uncapped []openrouter.KeyType
+
+	for _, keyType := range openrouter.AllKeyTypes {
+		row, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: organizationID,
+			KeyType:        string(keyType),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
+		}
+
+		if !row.Disabled {
+			continue
+		}
+
+		// The ceiling recorded on the row, not the policy default: a trial key
+		// is minted well below that default.
+		//
+		// A zero becomes a nil limit, which RefreshAPIKeyLimit resolves on the
+		// pool: pre-commit that reads free. recapRevivedKeys fixes those after.
+		if row.MonthlyCredits == 0 {
+			uncapped = append(uncapped, keyType)
+		}
+		limit := conv.PtrEmpty(int(row.MonthlyCredits))
+		_, err = s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+		switch {
+		case errors.Is(err, ErrKeyRevivalUnavailable):
+			// CodeInvalid and not CodeGatewayError: the admin app trusts a
+			// response body only below 500, and this names a deployment setting
+			// to fix rather than a call to retry.
+			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
+		case err != nil:
+			// OpenRouter refusing: the operator's action is to retry, not to
+			// read a stack trace.
+			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+		}
+	}
+
+	return uncapped, nil
+}
+
+// recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
+// could only revive at the free-tier one. It must run after the commit, because
+// RefreshAPIKeyLimit resolves a nil limit from the pool.
+//
+// A failure is logged and swallowed: the re-arm is already durable, so an error
+// here would report an armed trial as unarmed.
+func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) {
+	for _, keyType := range keyTypes {
+		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, nil); err != nil {
+			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
+				attr.SlogError(err),
+				attr.SlogOpenRouterKeyType(string(keyType)),
+			)
+		}
+	}
+}
+
+// adminActor identifies the operator behind an admin-app write. An admin session
+// carries an OIDC subject rather than a Gram user id, and a call without one
+// records the system actor the demotion sweeper uses.
+//
+// The returned email is for the structured log only, never the entry's display
+// name: these entries surface in the customer's own feed, and auditapi's
+// read-side mask cannot recognise an OIDC subject as staff.
+func adminActor(ctx context.Context) (actor urn.Principal, operatorEmail *string) {
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.OIDCSubject == "" {
+		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), nil
+	}
+
+	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.OIDCSubject), conv.PtrEmpty(authCtx.Email)
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.

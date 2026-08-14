@@ -69,10 +69,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -613,6 +615,81 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
+}
+
+// newAdminWorkOSOrganizationCreator builds the WorkOS surface the admin server
+// uses to create organizations. With nothing configured it returns
+// orgprovision.Unavailable, so the create-organization endpoint reports that the
+// deployment cannot do this rather than inventing a local-only organization.
+//
+// It never fails. A missing key degrades one endpoint, and taking the admin
+// server down over it would take login, the organizations list, the detail page
+// and every update endpoint with it. The condition is logged at Error on
+// startup, which is what makes it visible before an operator goes looking.
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+	apiKey := c.String("workos-api-key")
+	haveRealKey := apiKey != "" && apiKey != "unset"
+	opts := workosClientOpts(c)
+
+	switch {
+	case haveRealKey:
+		logger.InfoContext(ctx, "using real WorkOS API key to create organizations")
+		return workos.NewClient(guardianPolicy, apiKey, opts)
+	case c.String("environment") != "local":
+		logger.ErrorContext(ctx, "organization creation is unavailable: no WorkOS API key configured")
+		return orgprovision.Unavailable{}
+	case opts.Endpoint != "":
+		logger.InfoContext(ctx, "using dev-idp mock-workos to create organizations")
+		return workos.NewClient(guardianPolicy, "dev-idp-mock", opts)
+	default:
+		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
+		return orgprovision.Unavailable{}
+	}
+}
+
+// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm needs.
+// It degrades rather than refusing to boot, because every other admin endpoint
+// works without OpenRouter; the unavailable case is logged at Error on startup.
+//
+// The nil arguments are a billing tracker and a key refresher, neither reached.
+func newAdminTrialKeyReviver(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	redisClient *redis.Client,
+	c *cli.Context,
+) admin.TrialKeyReviver {
+	env := c.String("environment")
+	if env == "local" {
+		return openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+	}
+
+	provisioningKey := c.String("openrouter-provisioning-key")
+	if provisioningKey == "" {
+		logger.ErrorContext(ctx, "trial re-arm is unavailable: no OpenRouter provisioning key configured")
+		return admin.TrialKeysUnavailable{}
+	}
+
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		logger.ErrorContext(ctx, "trial re-arm is unavailable: no usable encryption key configured", attr.SlogError(err))
+		return admin.TrialKeysUnavailable{}
+	}
+
+	return openrouter.New(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		db,
+		env,
+		provisioningKey,
+		nil,
+		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
+		nil,
+		encryptionClient,
+	)
 }
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {

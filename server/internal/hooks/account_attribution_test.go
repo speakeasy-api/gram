@@ -991,3 +991,58 @@ func TestLogs_DoesNotAdoptCodexCachedAttribution(t *testing.T) {
 	require.Equal(t, accountTypeTeam, cached.AccountType)
 	require.Empty(t, cached.BillingMode)
 }
+
+// An attributed account link (a resolvable user identity on the session) must
+// request an identity map refresh so the ClickHouse fold converges before the
+// sync schedule's next tick; an unattributed link must not.
+func TestLogs_AttributedAccountLinkSignalsIdentityMapRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	userID := "idmap-user-" + uuid.NewString()[:8]
+	workEmail := "idmap-" + uuid.NewString()[:8] + "@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	before := ti.identitySignals.refreshCount()
+
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "idmap-attributed-"+uuid.NewString()),
+				strAttr("user.email", workEmail),
+				strAttr("organization.id", "idmap-ent-org"),
+				strAttr("user.account_uuid", "idmap-acct-"+uuid.NewString()[:8]),
+			},
+		},
+	))
+	require.NoError(t, err)
+	require.Equal(t, before+1, ti.identitySignals.refreshCount())
+
+	// Unknown email on a fresh device: the upsert stores an unattributed link
+	// (no user id), which cannot change any fold — no refresh.
+	before = ti.identitySignals.refreshCount()
+	err = ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "idmap-unattributed-"+uuid.NewString()),
+				strAttr("user.email", "idmap-unknown-"+uuid.NewString()[:8]+"@example.com"),
+				strAttr("organization.id", "idmap-ent-org"),
+				strAttr("user.account_uuid", "idmap-acct-"+uuid.NewString()[:8]),
+			},
+		},
+	))
+	require.NoError(t, err)
+	require.Equal(t, before, ti.identitySignals.refreshCount())
+}

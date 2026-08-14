@@ -47,6 +47,7 @@ import (
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	litellmc "github.com/speakeasy-api/gram/server/gen/http/litellm/client"
+	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
@@ -97,7 +98,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial)",
+		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -124,6 +125,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
+		"mcp-approval (list-requests|get-request|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -344,6 +346,10 @@ func ParseEndpoint(
 		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
 		adminUpdateOrganizationAdminSessionTokenFlag = adminUpdateOrganizationFlags.String("admin-session-token", "", "")
 
+		adminBulkUpdateAccountTypeFlags                 = flag.NewFlagSet("bulk-update-account-type", flag.ExitOnError)
+		adminBulkUpdateAccountTypeBodyFlag              = adminBulkUpdateAccountTypeFlags.String("body", "REQUIRED", "")
+		adminBulkUpdateAccountTypeAdminSessionTokenFlag = adminBulkUpdateAccountTypeFlags.String("admin-session-token", "", "")
+
 		adminDisableOrganizationFlags                 = flag.NewFlagSet("disable-organization", flag.ExitOnError)
 		adminDisableOrganizationBodyFlag              = adminDisableOrganizationFlags.String("body", "REQUIRED", "")
 		adminDisableOrganizationAdminSessionTokenFlag = adminDisableOrganizationFlags.String("admin-session-token", "", "")
@@ -381,6 +387,17 @@ func ParseEndpoint(
 		adminExtendTrialFlags                 = flag.NewFlagSet("extend-trial", flag.ExitOnError)
 		adminExtendTrialBodyFlag              = adminExtendTrialFlags.String("body", "REQUIRED", "")
 		adminExtendTrialAdminSessionTokenFlag = adminExtendTrialFlags.String("admin-session-token", "", "")
+
+		adminCreateOrganizationFlags                 = flag.NewFlagSet("create-organization", flag.ExitOnError)
+		adminCreateOrganizationBodyFlag              = adminCreateOrganizationFlags.String("body", "REQUIRED", "")
+		adminCreateOrganizationAdminSessionTokenFlag = adminCreateOrganizationFlags.String("admin-session-token", "", "")
+
+		adminRearmTrialFlags                 = flag.NewFlagSet("rearm-trial", flag.ExitOnError)
+		adminRearmTrialBodyFlag              = adminRearmTrialFlags.String("body", "REQUIRED", "")
+		adminRearmTrialAdminSessionTokenFlag = adminRearmTrialFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationStatsFlags                 = flag.NewFlagSet("get-organization-stats", flag.ExitOnError)
+		adminGetOrganizationStatsAdminSessionTokenFlag = adminGetOrganizationStatsFlags.String("admin-session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -1251,6 +1268,27 @@ func ParseEndpoint(
 		litellmTracesBodyFlag             = litellmTracesFlags.String("body", "REQUIRED", "")
 		litellmTracesApikeyTokenFlag      = litellmTracesFlags.String("apikey-token", "", "")
 		litellmTracesProjectSlugInputFlag = litellmTracesFlags.String("project-slug-input", "", "")
+
+		mcpApprovalFlags = flag.NewFlagSet("mcp-approval", flag.ContinueOnError)
+
+		mcpApprovalListRequestsFlags                = flag.NewFlagSet("list-requests", flag.ExitOnError)
+		mcpApprovalListRequestsStatusFlag           = mcpApprovalListRequestsFlags.String("status", "", "")
+		mcpApprovalListRequestsLimitFlag            = mcpApprovalListRequestsFlags.String("limit", "", "")
+		mcpApprovalListRequestsSessionTokenFlag     = mcpApprovalListRequestsFlags.String("session-token", "", "")
+		mcpApprovalListRequestsApikeyTokenFlag      = mcpApprovalListRequestsFlags.String("apikey-token", "", "")
+		mcpApprovalListRequestsProjectSlugInputFlag = mcpApprovalListRequestsFlags.String("project-slug-input", "", "")
+
+		mcpApprovalGetRequestFlags                = flag.NewFlagSet("get-request", flag.ExitOnError)
+		mcpApprovalGetRequestIDFlag               = mcpApprovalGetRequestFlags.String("id", "REQUIRED", "")
+		mcpApprovalGetRequestSessionTokenFlag     = mcpApprovalGetRequestFlags.String("session-token", "", "")
+		mcpApprovalGetRequestApikeyTokenFlag      = mcpApprovalGetRequestFlags.String("apikey-token", "", "")
+		mcpApprovalGetRequestProjectSlugInputFlag = mcpApprovalGetRequestFlags.String("project-slug-input", "", "")
+
+		mcpApprovalRecordDecisionFlags                = flag.NewFlagSet("record-decision", flag.ExitOnError)
+		mcpApprovalRecordDecisionBodyFlag             = mcpApprovalRecordDecisionFlags.String("body", "REQUIRED", "")
+		mcpApprovalRecordDecisionSessionTokenFlag     = mcpApprovalRecordDecisionFlags.String("session-token", "", "")
+		mcpApprovalRecordDecisionApikeyTokenFlag      = mcpApprovalRecordDecisionFlags.String("apikey-token", "", "")
+		mcpApprovalRecordDecisionProjectSlugInputFlag = mcpApprovalRecordDecisionFlags.String("project-slug-input", "", "")
 
 		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
 
@@ -3381,6 +3419,7 @@ func ParseEndpoint(
 	adminLogoutFlags.Usage = adminLogoutUsage
 	adminGetProjectFlags.Usage = adminGetProjectUsage
 	adminUpdateOrganizationFlags.Usage = adminUpdateOrganizationUsage
+	adminBulkUpdateAccountTypeFlags.Usage = adminBulkUpdateAccountTypeUsage
 	adminDisableOrganizationFlags.Usage = adminDisableOrganizationUsage
 	adminEnableOrganizationFlags.Usage = adminEnableOrganizationUsage
 	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
@@ -3388,6 +3427,9 @@ func ParseEndpoint(
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 	adminExtendTrialFlags.Usage = adminExtendTrialUsage
+	adminCreateOrganizationFlags.Usage = adminCreateOrganizationUsage
+	adminRearmTrialFlags.Usage = adminRearmTrialUsage
+	adminGetOrganizationStatsFlags.Usage = adminGetOrganizationStatsUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -3599,6 +3641,11 @@ func ParseEndpoint(
 	litellmRevokeInstanceFlags.Usage = litellmRevokeInstanceUsage
 	litellmIngestFlags.Usage = litellmIngestUsage
 	litellmTracesFlags.Usage = litellmTracesUsage
+
+	mcpApprovalFlags.Usage = mcpApprovalUsage
+	mcpApprovalListRequestsFlags.Usage = mcpApprovalListRequestsUsage
+	mcpApprovalGetRequestFlags.Usage = mcpApprovalGetRequestUsage
+	mcpApprovalRecordDecisionFlags.Usage = mcpApprovalRecordDecisionUsage
 
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
 	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
@@ -4119,6 +4166,8 @@ func ParseEndpoint(
 			svcf = keysFlags
 		case "litellm":
 			svcf = litellmFlags
+		case "mcp-approval":
+			svcf = mcpApprovalFlags
 		case "mcp-endpoints":
 			svcf = mcpEndpointsFlags
 		case "mcp-metadata":
@@ -4319,6 +4368,9 @@ func ParseEndpoint(
 			case "update-organization":
 				epf = adminUpdateOrganizationFlags
 
+			case "bulk-update-account-type":
+				epf = adminBulkUpdateAccountTypeFlags
+
 			case "disable-organization":
 				epf = adminDisableOrganizationFlags
 
@@ -4339,6 +4391,15 @@ func ParseEndpoint(
 
 			case "extend-trial":
 				epf = adminExtendTrialFlags
+
+			case "create-organization":
+				epf = adminCreateOrganizationFlags
+
+			case "rearm-trial":
+				epf = adminRearmTrialFlags
+
+			case "get-organization-stats":
+				epf = adminGetOrganizationStatsFlags
 
 			}
 
@@ -4920,6 +4981,19 @@ func ParseEndpoint(
 
 			case "traces":
 				epf = litellmTracesFlags
+
+			}
+
+		case "mcp-approval":
+			switch epn {
+			case "list-requests":
+				epf = mcpApprovalListRequestsFlags
+
+			case "get-request":
+				epf = mcpApprovalGetRequestFlags
+
+			case "record-decision":
+				epf = mcpApprovalRecordDecisionFlags
 
 			}
 
@@ -6295,6 +6369,9 @@ func ParseEndpoint(
 			case "update-organization":
 				endpoint = c.UpdateOrganization()
 				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
+			case "bulk-update-account-type":
+				endpoint = c.BulkUpdateAccountType()
+				data, err = adminc.BuildBulkUpdateAccountTypePayload(*adminBulkUpdateAccountTypeBodyFlag, *adminBulkUpdateAccountTypeAdminSessionTokenFlag)
 			case "disable-organization":
 				endpoint = c.DisableOrganization()
 				data, err = adminc.BuildDisableOrganizationPayload(*adminDisableOrganizationBodyFlag, *adminDisableOrganizationAdminSessionTokenFlag)
@@ -6316,6 +6393,15 @@ func ParseEndpoint(
 			case "extend-trial":
 				endpoint = c.ExtendTrial()
 				data, err = adminc.BuildExtendTrialPayload(*adminExtendTrialBodyFlag, *adminExtendTrialAdminSessionTokenFlag)
+			case "create-organization":
+				endpoint = c.CreateOrganization()
+				data, err = adminc.BuildCreateOrganizationPayload(*adminCreateOrganizationBodyFlag, *adminCreateOrganizationAdminSessionTokenFlag)
+			case "rearm-trial":
+				endpoint = c.RearmTrial()
+				data, err = adminc.BuildRearmTrialPayload(*adminRearmTrialBodyFlag, *adminRearmTrialAdminSessionTokenFlag)
+			case "get-organization-stats":
+				endpoint = c.GetOrganizationStats()
+				data, err = adminc.BuildGetOrganizationStatsPayload(*adminGetOrganizationStatsAdminSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6909,6 +6995,19 @@ func ParseEndpoint(
 			case "traces":
 				endpoint = c.Traces()
 				data, err = litellmc.BuildTracesPayload(*litellmTracesBodyFlag, *litellmTracesApikeyTokenFlag, *litellmTracesProjectSlugInputFlag)
+			}
+		case "mcp-approval":
+			c := mcpapprovalc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-requests":
+				endpoint = c.ListRequests()
+				data, err = mcpapprovalc.BuildListRequestsPayload(*mcpApprovalListRequestsStatusFlag, *mcpApprovalListRequestsLimitFlag, *mcpApprovalListRequestsSessionTokenFlag, *mcpApprovalListRequestsApikeyTokenFlag, *mcpApprovalListRequestsProjectSlugInputFlag)
+			case "get-request":
+				endpoint = c.GetRequest()
+				data, err = mcpapprovalc.BuildGetRequestPayload(*mcpApprovalGetRequestIDFlag, *mcpApprovalGetRequestSessionTokenFlag, *mcpApprovalGetRequestApikeyTokenFlag, *mcpApprovalGetRequestProjectSlugInputFlag)
+			case "record-decision":
+				endpoint = c.RecordDecision()
+				data, err = mcpapprovalc.BuildRecordDecisionPayload(*mcpApprovalRecordDecisionBodyFlag, *mcpApprovalRecordDecisionSessionTokenFlag, *mcpApprovalRecordDecisionApikeyTokenFlag, *mcpApprovalRecordDecisionProjectSlugInputFlag)
 			}
 		case "mcp-endpoints":
 			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8765,6 +8864,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
 	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
 	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
 	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
@@ -8772,6 +8872,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
+	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
+	fmt.Fprintln(os.Stderr, `    rearm-trial: Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-stats: Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -8877,7 +8980,27 @@ func adminUpdateOrganizationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminBulkUpdateAccountTypeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin bulk-update-account-type", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin bulk-update-account-type --body '{\n      \"account_type\": \"pro\",\n      \"ids\": [\n         \"aa\",\n         \"aa\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminDisableOrganizationUsage() {
@@ -9038,6 +9161,64 @@ func adminExtendTrialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin extend-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminCreateOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-organization --body '{\n      \"name\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminRearmTrialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin rearm-trial", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin rearm-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationStatsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-stats", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-stats --admin-session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.
@@ -12992,6 +13173,93 @@ func litellmTracesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm traces --body '{\n      \"resourceSpans\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mcpApprovalUsage displays the usage of the mcp-approval command and its
+// subcommands.
+func mcpApprovalUsage() {
+	fmt.Fprintln(os.Stderr, `Dashboard API for reviewing and deciding MCP server approval requests.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-approval COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-requests: List MCP approval requests for a project.`)
+	fmt.Fprintln(os.Stderr, `    get-request: Fetch one MCP approval request with its evidence and decision history.`)
+	fmt.Fprintln(os.Stderr, `    record-decision: Approve or deny an MCP approval request, recording the rationale and who it applies to.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-approval COMMAND --help\n", os.Args[0])
+}
+func mcpApprovalListRequestsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval list-requests", os.Args[0])
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List MCP approval requests for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval list-requests --status \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalGetRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval get-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch one MCP approval request with its evidence and decision history.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval get-request --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalRecordDecisionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval record-decision", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve or deny an MCP approval request, recording the rationale and who it applies to.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval record-decision --body '{\n      \"decision\": \"denied\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\",\n      \"research_report_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpEndpointsUsage displays the usage of the mcp-endpoints command and its

@@ -211,6 +211,14 @@ SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, create
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: CountOrganizationsForWorkosIDFixture :one
+-- Test-only fixture for proving that two writers converged on one row instead
+-- of creating two. Every read the API offers returns at most one organization,
+-- so a duplicate row is invisible through it and only a count can see it.
+SELECT count(*)
+FROM organization_metadata
+WHERE workos_id = @workos_id::text;
+
 -- name: CreateOrganizationUserRelationshipFixture :exec
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)
@@ -410,3 +418,41 @@ WHERE s.project_id = @project_id
     NOT @found_only::boolean
     OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
   );
+
+-- name: ForceSoftDeleteUser :exec
+-- Test-only fixture: soft-deletes a directory user to exercise deleted-row
+-- filtering in identity resolution.
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: ForceSoftDeleteOrganizationUserRelationship :exec
+-- Test-only fixture: soft-deletes an org membership to exercise deleted-row
+-- filtering in identity resolution.
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
+-- name: ForceSoftDeleteUserAccountsByEmail :exec
+-- Test-only fixture: soft-deletes an org's linked accounts by email to
+-- exercise deleted-row filtering in identity resolution.
+UPDATE user_accounts
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND lower(email) = @email_lower::text;
+
+-- name: GetTransactionClockFixture :one
+-- Test-only. Returns the transaction timestamp and the two edges a 7-day
+-- INTERVAL predicate compares against, so a boundary fixture can be seeded
+-- exactly on an edge.
+--
+-- Postgres computes the offsets rather than the test, because INTERVAL day
+-- arithmetic on timestamptz runs in the session time zone and need not come to
+-- 168 hours. It must be read inside the transaction that also runs the query
+-- under test: now() is the transaction timestamp, so reading it on its own
+-- connection puts the fixture on an edge that has already moved.
+SELECT
+    now()::timestamptz AS transaction_now,
+    (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
+    (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;
