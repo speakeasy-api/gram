@@ -28,7 +28,7 @@ type ProviderAuthorizationIdentity struct {
 // ProviderAuthorizationFingerprint returns an opaque value suitable for
 // readiness persistence. It intentionally excludes access and refresh tokens.
 func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (string, error) {
-	if identity.OrganizationID == "" || identity.Subject.IsZero() || identity.RegistrationID == uuid.Nil || identity.RemoteSessionIssuerID == uuid.Nil {
+	if identity.OrganizationID == "" || identity.Subject.IsZero() || identity.RegistrationID == uuid.Nil {
 		return "", ErrReadinessInvalid
 	}
 
@@ -38,7 +38,7 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 		identity.RegistrationID.String() + "\x00"
 	switch identity.Absence {
 	case "":
-		if identity.RemoteSessionID == uuid.Nil || identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID == uuid.Nil {
+		if identity.RemoteSessionID == uuid.Nil || identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID == uuid.Nil || identity.RemoteSessionIssuerID == uuid.Nil {
 			return "", ErrReadinessInvalid
 		}
 		payload += "active_session\x00" +
@@ -46,11 +46,18 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 			identity.RemoteSessionUpdatedAt.UTC().Format(time.RFC3339Nano) + "\x00" +
 			identity.RemoteSessionClientID.String() + "\x00" +
 			identity.RemoteSessionIssuerID.String()
-	case "no_client", "no_session":
+	case "no_client", "no_session", "anonymous":
 		if identity.RemoteSessionID != uuid.Nil || !identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID != uuid.Nil {
 			return "", ErrReadinessInvalid
 		}
-		payload += identity.Absence + "\x00" + identity.RemoteSessionIssuerID.String()
+		if identity.Absence == "no_session" && identity.RemoteSessionIssuerID == uuid.Nil {
+			return "", ErrReadinessInvalid
+		}
+		issuer := "no_issuer"
+		if identity.RemoteSessionIssuerID != uuid.Nil {
+			issuer = identity.RemoteSessionIssuerID.String()
+		}
+		payload += identity.Absence + "\x00" + issuer
 	default:
 		return "", ErrReadinessInvalid
 	}

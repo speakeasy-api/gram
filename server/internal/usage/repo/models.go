@@ -23,6 +23,8 @@ type BillingCycleUsage struct {
 type BillingMetadatum struct {
 	ID                    uuid.UUID
 	OrganizationID        string
+	StripeCustomerID      pgtype.Text
+	StripeSubscriptionID  pgtype.Text
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32

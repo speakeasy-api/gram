@@ -119,6 +119,10 @@ mise run start
 - Identify any available skills relevant to the task so you can activate them when implementing.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
 
+## Pull requests
+
+**Use the `pull-request` skill when preparing pull requests.** It contains the guidelines we follow to prepare work for review and how to present the PR title and description.
+
 ## Cursor Cloud specific instructions
 
 Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:

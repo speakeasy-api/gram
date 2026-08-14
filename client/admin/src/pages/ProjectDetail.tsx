@@ -8,7 +8,8 @@ import {
 } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getProject, type AdminProjectDetail } from "@/lib/gramAdminApi";
+import { projectQuery } from "@/lib/adminQueries";
+import { errorMessage } from "@/lib/gramAdminApi";
 
 function fmtDate(iso?: string): string {
   if (!iso) return "-";
@@ -45,9 +46,8 @@ export function ProjectDetail(): JSX.Element {
   const navigate = useNavigate();
   const router = useRouter();
 
-  const { data, isLoading, isError, error } = useQuery<AdminProjectDetail>({
-    queryKey: ["gram-admin-project", idOrSlug],
-    queryFn: () => getProject(idOrSlug),
+  const { data, isLoading, isError, error } = useQuery({
+    ...projectQuery(idOrSlug),
     enabled: !!idOrSlug,
   });
 
@@ -84,7 +84,7 @@ export function ProjectDetail(): JSX.Element {
         )}
         {isError && (
           <span className="text-muted-foreground text-sm">
-            Error: {(error as Error).message}
+            Error: {errorMessage(error)}
           </span>
         )}
 

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,12 +24,20 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 type Service struct {
@@ -39,6 +49,11 @@ type Service struct {
 	oidc           *OIDCClient
 	sessions       *SessionStore
 	allowedOrigins []string
+
+	// workos creates organizations in the identity provider. Deployments with
+	// no WorkOS configuration get orgprovision.Unavailable, whose failure
+	// CreateOrganization reports rather than working around.
+	workos orgprovision.WorkOSOrganizationCreator
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -52,6 +67,7 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
+	workosClient orgprovision.WorkOSOrganizationCreator,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -72,6 +88,7 @@ func NewService(
 		sessions:       sessionStore,
 		verifier:       NewVerifier(logger, sessionStore, oidcClient),
 		allowedOrigins: allowedOrigins,
+		workos:         workosClient,
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -316,6 +333,51 @@ const (
 	listOrganizationsMaxLimit     = 100
 )
 
+// The columns the ORDER BY ladder in AdminListOrganizations knows. The opaque
+// ids are absent on purpose: an order built from them tells an operator nothing.
+//
+// This map cannot widen what the ladder accepts. The ladder matches these seven
+// literals and nothing else, so an unrecognised sort key collapses to the
+// tiebreaker with or without the check here. It is defense in depth, and the one
+// place a reader can see the accepted set without reading the SQL.
+var listOrganizationsSortColumns = map[string]bool{
+	"name":          true,
+	"slug":          true,
+	"account_type":  true,
+	"member_count":  true,
+	"created_at":    true,
+	"disabled_at":   true,
+	"trial_ends_at": true,
+}
+
+// listOrganizationsFilters resolves the two set filters the SQL takes from the
+// four the payload offers. The scalar account_type and the include_disabled
+// boolean predate the sets and stay live, because this endpoint keeps serving
+// the dashboard that is on main until AGE-3207 retires them.
+//
+// Unknown values pass straight through to match nothing. An organization can
+// carry an account type from outside the list the dashboard knows, and an
+// operator pasting a colleague's URL is owed an empty table rather than a 422.
+func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) (accountTypes []string, disabledStates []string) {
+	// Union, not override: a caller supplying both asks for both.
+	accountTypes = payload.AccountTypes
+	if payload.AccountType != nil {
+		accountTypes = append(append([]string{}, accountTypes...), *payload.AccountType)
+	}
+
+	// disabled_states overrides the boolean outright. The boolean only picks the
+	// fallback, and these two literals are the arms of the CASE in both queries.
+	disabledStates = payload.DisabledStates
+	if len(disabledStates) == 0 {
+		disabledStates = []string{"active"}
+		if conv.PtrValOr(payload.IncludeDisabled, false) {
+			disabledStates = append(disabledStates, "disabled")
+		}
+	}
+
+	return accountTypes, disabledStates
+}
+
 func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
 	queries := repo.New(s.db)
 
@@ -331,20 +393,67 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		limit = int32(l)
 	}
 
-	// Over-fetch one row to learn whether a next page exists.
+	// Sort or page selects offset paging. Without either, the request keeps the
+	// cursor walk the shipped dashboard still depends on.
+	offsetMode := payload.Sort != nil || payload.Page != nil
+
+	// An unknown sort key falls back to the default order instead of failing: the
+	// value comes from a URL operators paste to each other, and a typo should not
+	// break the page.
+	sortBy := ""
+	if payload.Sort != nil {
+		if key := strings.ToLower(*payload.Sort); listOrganizationsSortColumns[key] {
+			sortBy = key
+		}
+	}
+	sortDir := "asc"
+	if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
+		sortDir = "desc"
+	}
+
+	var afterID pgtype.Text
+	var pageOffset int64
+	fetchLimit := limit
+	if offsetMode {
+		pageOffset = listOrganizationsOffset(payload.Page, limit)
+	} else {
+		afterID = conv.PtrToPGText(payload.Cursor)
+		// Over-fetch one row to learn whether a next page exists.
+		fetchLimit = limit + 1
+	}
+
+	accountTypes, disabledStates := listOrganizationsFilters(payload)
+
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
-		Q:               conv.PtrToPGText(payload.Q),
-		AccountType:     conv.PtrToPGText(payload.AccountType),
-		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
-		AfterID:         conv.PtrToPGText(payload.Cursor),
-		PageLimit:       limit + 1,
+		Q:              conv.PtrToPGText(payload.Q),
+		AccountTypes:   accountTypes,
+		TrialStates:    payload.TrialStates,
+		DisabledStates: disabledStates,
+		AfterID:        afterID,
+		SortBy:         sortBy,
+		SortDir:        sortDir,
+		PageOffset:     pageOffset,
+		PageLimit:      fetchLimit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").LogError(ctx, s.logger)
 	}
 
+	// Counted separately from the page. A page past the end holds no row to carry
+	// a count, and in cursor mode the page query has already discarded everything
+	// before the cursor.
+	total, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{
+		Q:              conv.PtrToPGText(payload.Q),
+		AccountTypes:   accountTypes,
+		TrialStates:    payload.TrialStates,
+		DisabledStates: disabledStates,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").LogError(ctx, s.logger)
+	}
+
 	var nextCursor *string
-	if len(rows) > int(limit) {
+	if !offsetMode && len(rows) > int(limit) {
 		rows = rows[:limit]
 		id := rows[limit-1].ID
 		nextCursor = &id
@@ -358,7 +467,28 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	return &gen.AdminListOrganizationsResult{
 		Organizations: orgs,
 		NextCursor:    nextCursor,
+		Total:         total,
 	}, nil
+}
+
+// listOrganizationsOffset turns a 1-based page number into a row offset, with
+// pages below 1 clamping to the first page.
+func listOrganizationsOffset(page *int, limit int32) int64 {
+	n := int64(1)
+	if page != nil && *page > 1 {
+		n = int64(*page)
+	}
+
+	// Cap the page so that a hand-typed page number cannot overflow the multiply
+	// into a negative offset, which Postgres rejects. Do not add one to this
+	// ceiling. limit is a variable, so at limit 1 that addition would itself
+	// overflow to MinInt64, the guard would fire on every page, and every page
+	// would come back empty. That was the bug this replaced.
+	if maxPage := math.MaxInt64 / int64(limit); n > maxPage {
+		n = maxPage
+	}
+
+	return (n - 1) * int64(limit)
 }
 
 func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {
@@ -421,19 +551,241 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization").LogError(ctx, s.logger)
 	}
 
-	row, err := queries.AdminGetOrganizationByIDOrSlug(ctx, payload.ID)
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
+}
+
+func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
+	rows, err := repo.New(s.db).AdminDisableOrganization(ctx, payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "disable organization").LogError(ctx, s.logger)
+	}
+	if rows == 0 {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after disable")
+}
+
+func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrganizationPayload) (*gen.AdminOrganization, error) {
+	rows, err := repo.New(s.db).AdminEnableOrganization(ctx, payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enable organization").LogError(ctx, s.logger)
+	}
+	if rows == 0 {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+}
+
+func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
+	// The design bounds this too, but that validation is generated into the
+	// request decoder and only runs at the HTTP boundary. Repeating it here is
+	// what stops a negative day count from shortening a trial through an
+	// endpoint named extend if a future caller reaches the service another way.
+	//
+	// The check must stay on the wide payload.Days and the int32 narrowing must
+	// stay below it. Narrowing first would let 1<<32 + 1 truncate to 1 and
+	// quietly extend by a day, and a non-HTTP caller is the only one who can
+	// pass a day count that large at all. TestExtendTrial_DayCountBounds pins
+	// this order.
+	if payload.Days < constants.MinTrialExtensionDays || payload.Days > constants.MaxTrialExtensionDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	rows, err := trialsRepo.New(s.db).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: payload.ID,
+		ExtendByDays:   int32(payload.Days),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, s.logger)
+	}
+	// Zero rows has two causes that mean different things to the operator, and
+	// only the second is a conflict: the organization does not exist at all, or
+	// it exists and its trial cannot be extended. Disable and enable both answer
+	// not-found for an id that matches nothing, so an operator who pastes one bad
+	// id must not be told to go and look at a trial by this endpoint alone.
+	//
+	// The lookup is on the failure path only, so the happy path still costs one
+	// write and one read.
+	if rows == 0 {
+		_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+			ID:        payload.ID,
+			AllowSlug: false,
+		})
+		switch {
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			return nil, oops.C(oops.CodeNotFound)
+		case lookupErr != nil:
+			// Falling through to the conflict here would report a trial state we
+			// never managed to read.
+			return nil, oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unextended trial").LogError(ctx, s.logger)
+		}
+
+		// The organization exists, so it is the trial that blocks the write:
+		// converted, demoted, expired, or never granted. Which one is not the
+		// operator's business, and arming a trial that was never granted is the
+		// auth flow's job rather than this endpoint's. failed_precondition would
+		// read better than conflict, but the admin service does not declare it,
+		// so it would leave as a 500.
+		return nil, oops.E(oops.CodeConflict, nil, "organization has no running enterprise trial to extend")
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+// CreateOrganization creates an organization in WorkOS and then in Gram.
+//
+// The WorkOS create happens before the transaction opens, because it is the one
+// step that cannot be rolled back. Everything Gram stores is written inside a
+// single transaction afterwards, so a failure below leaves no organization row,
+// no role grants and no entitlements from this call.
+//
+// That is not the same as leaving nothing. Wherever the WorkOS webhook is
+// configured, organization.created arrives about ten seconds later and the sync
+// activity writes the organization row and its role grants anyway, without the
+// default entitlements this handler would have seeded. AGE-3213 covers that gap.
+// Retrying the create is still the right move: the derived ID makes the retry
+// land on that row rather than beside it.
+func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
+	name, err := orgprovision.ValidateName(payload.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
+	switch {
+	case errors.Is(err, orgprovision.ErrUnavailable):
+		// CodeInvalid and not CodeInvariantViolation, which reads like the
+		// better fit and is not. server/design/shared/errors.go maps
+		// invariant_violation to 500, and the admin app trusts a response body
+		// only below 500, so the explanation below would never reach the
+		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
+		// layer does not read that map.
+		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
+	case err != nil:
+		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(created.GramOrganizationID),
+		attr.SlogWorkOSOrganizationID(created.WorkOSOrganizationID),
+	)
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin organization creation transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := orgRepo.New(tx)
+
+	// A row can already exist under the derived ID: WorkOS fires
+	// organization.created the moment the call above returns, so the sync
+	// activity can win the race to insert it. That row's slug is already in the
+	// organization's URL, and re-deriving one would find the base taken by that
+	// very row and write a suffixed variant over it.
+	uniqueSlug := ""
+	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+	switch {
+	case err == nil:
+		uniqueSlug = existing.Slug
+	case errors.Is(err, pgx.ErrNoRows):
+		// Seeded with the WorkOS organization ID rather than randomness so a
+		// retry of the same create competes for one advisory-lock key instead
+		// of two.
+		base, baseErr := orgslug.StableBase(name, created.WorkOSOrganizationID)
+		if baseErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, baseErr, "derive organization slug").LogError(ctx, logger)
+		}
+		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
+		}
+
+		// Read again now that the lock is held. The read above was taken before
+		// it, and under READ COMMITTED the sync activity can hold the lock,
+		// insert this very row under slug base, and commit in the gap. Deciding
+		// from the stale read would then hand back a suffixed variant, and the
+		// upsert below writes slug unconditionally, so it would overwrite a slug
+		// already serving in the organization's URL.
+		afterLock, reReadErr := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+		switch {
+		case reReadErr == nil:
+			uniqueSlug = afterLock.Slug
+		case errors.Is(reReadErr, pgx.ErrNoRows):
+			found, findErr := orgslug.FindUnique(ctx, queries, base)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
+		}
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
+	}
+
+	// Keyed on the derived ID with ON CONFLICT (id) DO UPDATE, so a webhook that
+	// already created this organization is updated rather than duplicated. The
+	// FromWorkOS variants of this query are for the sync path and would insert a
+	// second row here.
+	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:   created.GramOrganizationID,
+		Name: name,
+		Slug: uniqueSlug,
+		// The unique index over workos_id is what turns a diverging ID
+		// derivation into a loud failure instead of a duplicate.
+		WorkosID: conv.ToPGText(created.WorkOSOrganizationID),
+		// On insert this changes nothing: the query already coalesces a null
+		// whitelisted to FALSE. It is a statement of intent at the call site
+		// rather than the mechanism, and it does carry weight on the conflict
+		// arm, where a null would preserve whatever the existing row holds and
+		// FALSE states that an operator creating an organization is not
+		// whitelisting it.
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create organization metadata").LogError(ctx, logger)
+	}
+
+	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "provision organization access defaults").LogError(ctx, logger)
+	}
+
+	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "seed organization default entitlements").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit organization creation transaction").LogError(ctx, logger)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+}
+
+// readOrganizationAfterWrite returns the organization a write just landed on.
+// The read is keyed on id alone because every admin write is, so resolving a
+// slug here could return a different organization than the one written.
+func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, errMsg string) (*gen.AdminOrganization, error) {
+	row, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        id,
+		AllowSlug: false,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch organization after update").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
 	return adminOrganizationFromGetRow(row), nil
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
-	row, err := repo.New(s.db).AdminGetOrganizationByIDOrSlug(ctx, payload.IDOrSlug)
+	row, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.IDOrSlug,
+		AllowSlug: true,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
@@ -443,7 +795,7 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	return adminOrganizationFromGetRow(row), nil
 }
 
-func adminOrganizationFromGetRow(row repo.AdminGetOrganizationByIDOrSlugRow) *gen.AdminOrganization {
+func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                 row.ID,
 		Name:               row.Name,
@@ -454,6 +806,8 @@ func adminOrganizationFromGetRow(row repo.AdminGetOrganizationByIDOrSlugRow) *ge
 		DisabledAt:         pgTimestampPtr(row.DisabledAt),
 		FreeTrialStartedAt: pgTimestampPtr(row.FreeTrialStartedAt),
 		FreeTrialEndsAt:    pgTimestampPtr(row.FreeTrialEndsAt),
+		TrialState:         &row.TrialState,
+		TrialEndsAt:        pgTimestampPtr(row.TrialEndsAt),
 		MemberCount:        int(row.MemberCount),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:          row.UpdatedAt.Time.Format(time.RFC3339),
@@ -471,6 +825,8 @@ func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrga
 		DisabledAt:         pgTimestampPtr(row.DisabledAt),
 		FreeTrialStartedAt: pgTimestampPtr(row.FreeTrialStartedAt),
 		FreeTrialEndsAt:    pgTimestampPtr(row.FreeTrialEndsAt),
+		TrialState:         &row.TrialState,
+		TrialEndsAt:        pgTimestampPtr(row.TrialEndsAt),
 		MemberCount:        int(row.MemberCount),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:          row.UpdatedAt.Time.Format(time.RFC3339),

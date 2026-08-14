@@ -33,6 +33,15 @@ export function isJudgeSource(source: string | undefined): boolean {
   return source !== undefined && JUDGE_SOURCE_SET.has(source);
 }
 
+// A signal clusters findings on one rule, so a judge-backed signal is one
+// whose detection sources are judge detectors. Judge findings cannot be
+// meaningfully excluded — every one carries the same constant rule id, so a
+// rule exclusion would silence the whole detector — which is why exclusion
+// affordances hide behind this check and false-positive dismissal takes over.
+export function hasJudgeSource(sources: readonly string[]): boolean {
+  return sources.some(isJudgeSource);
+}
+
 const ruleIdToCategory = new Map<string, RuleCategory>();
 const ruleIdToTitle = new Map<string, string>();
 

@@ -2,7 +2,8 @@ import type { JSX, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { SpeakeasyMark } from "@/components/speakeasy-mark";
-import { adminSessionQuery, isRedirectingToLogin } from "@/lib/gramAdminApi";
+import { adminSessionQuery } from "@/lib/adminQueries";
+import { isRedirectingToLogin } from "@/lib/gramAdminApi";
 
 // Holds the first paint until the session check answers.
 //

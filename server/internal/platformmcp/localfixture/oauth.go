@@ -58,6 +58,22 @@ func NewOAuthHTTP(config *Config) *OAuthHTTP {
 	}
 }
 
+// RestoreRegisteredClient rehydrates the reviewed local client after a fixture
+// process restart. Only the local configurator calls this after validating the
+// persisted no-secret client contract and its fixed callback URL.
+func (s *OAuthHTTP) RestoreRegisteredClient(clientID string) error {
+	if s == nil || s.config == nil || clientID == "" {
+		return fmt.Errorf("local fixture client cannot be restored")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[clientID] = registeredClient{
+		redirectURI: s.config.RemoteLoginCallbackURL(),
+		createdAt:   time.Now().UTC(),
+	}
+	return nil
+}
+
 func (s *OAuthHTTP) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s == nil || s.config == nil {

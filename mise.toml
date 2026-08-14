@@ -137,6 +137,8 @@ GRAM_HOST = "localhost" # Only needed for local development. In production, you 
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
+## Cannot reuse GRAM_SERVER_URL: viteprod unsets it.
+GRAM_APP_URL = "{{env.GRAM_SERVER_URL}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
@@ -286,6 +288,17 @@ PULSE_REGISTRY_KEY = { default = "unset" }
 ## Risk ##
 ##########
 GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6Zn8YAN/32TAgGQrkXwaN2Fzp32kvB9j2Aa4ws="}}'
+
+##########################
+## Stripe configuration ##
+##########################
+## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
+## validate the sandbox TUM meter, product, and metered price. The task writes
+## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+STRIPE_API_KEY = { default = "unset" }
+STRIPE_WEBHOOK_SECRET = { default = "unset" }
+STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_METER_EVENT_NAME = { default = "tum" }
 
 #########################
 ## Polar configuration ##
