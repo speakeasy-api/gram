@@ -2175,7 +2175,10 @@ jobs:
         with:
           install: true
           cache: true
-          cache_key_prefix: mise-blacksmith-v1
+          # This job only needs npx; avoid restoring the full ~606 MiB toolchain
+          # into a job with a five-minute timeout.
+          install_args: node
+          cache_key_prefix: mise-node-blacksmith-v1
           env: false
 
       - name: Run impeccable
