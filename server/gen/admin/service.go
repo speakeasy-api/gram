@@ -53,6 +53,11 @@ type Service interface {
 	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
 	// so both writers converge on one row.
 	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
+	// Puts a demoted enterprise trial back on: restores the organization's account
+	// type and whitelist flag, revives its model provider keys, and gives the
+	// trial a fresh run of the given length counted from now. Only a demoted trial
+	// can be re-armed; one that has converted or is already running is rejected.
+	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -75,7 +80,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization"}
+var MethodNames = [14]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -287,7 +292,12 @@ type ListOrganizationProjectsPayload struct {
 // listOrganizations method.
 type ListOrganizationsPayload struct {
 	AdminSessionToken *string
-	// Search term applied to name and slug (case-insensitive substring).
+	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
+	// case-insensitive substring, with % and _ taken literally, and matches
+	// organization id and WorkOS id exactly, ignoring case. An id match also
+	// returns an organization that disabled_states or include_disabled would
+	// otherwise hide; it still respects account_type, account_types, trial_states
+	// and cursor.
 	Q *string
 	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
@@ -348,6 +358,15 @@ type LoginResult struct {
 type LogoutPayload struct {
 	// The session cookie value to clear for logging out
 	SessionID *string
+}
+
+// RearmTrialPayload is the payload type of the admin service rearmTrial method.
+type RearmTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the re-armed trial runs for, counted from now.
+	Days int
 }
 
 // UpdateOrganizationPayload is the payload type of the admin service
