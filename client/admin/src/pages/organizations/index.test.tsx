@@ -139,8 +139,6 @@ const ORGS: AdminOrganization[] = [
   },
 ];
 
-// Only so the strip above the table has something to render. What it does with
-// these figures is pinned in StatStrip.test.tsx.
 const STATS: AdminOrganizationStats = {
   total: 12,
   created_last_7_days: 3,
@@ -2271,6 +2269,23 @@ describe("organizations list write actions", () => {
     expect(cellUnder(rowFor(other), "Disabled").textContent).toBe(
       shortDate(FIRST_ORG.disabled_at ?? ""),
     );
+  });
+
+  // Unlike the row, which repaints from the answer the write already returned.
+  it("asks for the platform totals again after a write", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+    const before = mocks.getOrganizationStats.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats.mock.calls.length).toBeGreaterThan(
+        before,
+      );
+    });
   });
 
   it("stays on the list while the operator works the menu it opened from a row", async () => {

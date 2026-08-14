@@ -61,10 +61,8 @@ export function organizationsListQuery(
   });
 }
 
-// A constant rather than a function, and that is the whole design: the strip's
-// figures describe the platform, not the view. With no parameters there is no
-// key to move, so changing the table's filters cannot refetch these totals and
-// they cannot start tracking the filtered rows.
+// A constant, not a function: with no parameters there is no key to move, so
+// filtering the table cannot make these totals track the rows on screen.
 export const organizationsStatsQuery = queryOptions({
   queryKey: ["gram-admin-organization-stats"] as const,
   queryFn: getOrganizationStats,
@@ -181,6 +179,10 @@ export function writeOrganizationToCache(
       };
     },
   );
+
+  // Refetched, not written: the response holds one record and these are counts
+  // over all of them. Not awaited, so the row repaints without waiting on it.
+  void qc.invalidateQueries({ queryKey: organizationsStatsQuery.queryKey });
 }
 
 export function projectQuery(

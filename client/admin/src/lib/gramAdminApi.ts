@@ -254,13 +254,6 @@ export function listOrganizations(
   );
 }
 
-// Platform-wide totals for the organizations list's strip. Every figure counts
-// every organization: the endpoint takes no parameters, so nothing an operator
-// filters the table by can narrow them.
-//
-// `trials_ending_soon` counts `trial_state = 'ending_soon'`, the same state the
-// Trial filter sends, so the figure cannot disagree with the rows it navigates
-// to.
 export type AdminOrganizationStats = {
   total: number;
   created_last_7_days: number;

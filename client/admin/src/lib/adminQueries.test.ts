@@ -4,6 +4,7 @@ import {
   cancelOrganizationFetches,
   organizationQuery,
   organizationsListQuery,
+  organizationsStatsQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import type {
@@ -134,6 +135,24 @@ describe("writeOrganizationToCache", () => {
 
     const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);
     expect(after?.organizations[0]).toEqual(DISABLED);
+  });
+
+  // Every write moves one of these, and a single record cannot move a count.
+  it("marks the platform totals for a refetch", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(organizationsStatsQuery.queryKey, {
+      total: 1,
+      created_last_7_days: 0,
+      trials_ending_soon: 0,
+      disabled: 0,
+      disabled_last_7_days: 0,
+    });
+
+    writeOrganizationToCache(qc, DISABLED);
+
+    expect(
+      qc.getQueryState(organizationsStatsQuery.queryKey)?.isInvalidated,
+    ).toBe(true);
   });
 
   it("leaves a page that never held the record exactly as it was", () => {

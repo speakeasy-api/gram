@@ -22,8 +22,7 @@ const mocks = vi.hoisted(() => ({
     vi.fn<
       (params?: ListOrganizationsParams) => Promise<ListOrganizationsResult>
     >(),
-  // Takes whatever it is handed: React Query calls a queryFn with its own
-  // context, and the key on that context is what the test below reads.
+  // Takes whatever it is handed: React Query passes a queryFn its own context.
   getOrganizationStats:
     vi.fn<(...args: unknown[]) => Promise<AdminOrganizationStats>>(),
   getSession: vi.fn(),
@@ -32,9 +31,7 @@ const mocks = vi.hoisted(() => ({
   listOrganizationMembers: vi.fn(),
 }));
 
-// Every endpoint the organizations route reaches, so nothing in this file
-// leaves a real request in flight. The rest of the module stays real: the query
-// layer's own key building is part of what is under test here.
+// Every endpoint the route reaches, so nothing here leaves a request in flight.
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return {
@@ -48,15 +45,14 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   };
 });
 
-// Five distinct figures, none of them a multiple or a sum of another. A cell
-// that reads the wrong field then renders a number no assertion here accepts,
-// which is the whole reason not to reuse a value across two fields.
+// All distinct and all past a thousand: a misread field, or one rendered raw,
+// is then a number no assertion here accepts.
 const STATS: AdminOrganizationStats = {
-  total: 4821,
-  created_last_7_days: 137,
-  trials_ending_soon: 26,
-  disabled: 59,
-  disabled_last_7_days: 8,
+  total: 48213,
+  created_last_7_days: 1372,
+  trials_ending_soon: 926,
+  disabled: 5904,
+  disabled_last_7_days: 1064,
 };
 
 const ORGS: AdminOrganization[] = [
@@ -74,9 +70,6 @@ const ORGS: AdminOrganization[] = [
   },
 ];
 
-// The figures are rendered through toLocaleString, so the expected text comes
-// out of the same formatter. The thousands separator is not what is under test;
-// which field reached the cell is.
 function figure(value: number): string {
   return value.toLocaleString();
 }
@@ -85,9 +78,6 @@ function strip(): HTMLElement {
   return screen.getByRole("group", { name: "Platform totals" });
 }
 
-// By the accessible name, which the cell's own rendered text produces: there is
-// no aria-label standing in for it, so a cell that painted nothing cannot be
-// found here at all.
 function cell(label: string): HTMLElement {
   return within(strip()).getByRole("button", {
     name: new RegExp(`^${label}\\b`),
@@ -111,8 +101,6 @@ function lastListParams(): ListOrganizationsParams {
   return call?.[0] ?? {};
 }
 
-// The strip renders as soon as the query settles, and every assertion below is
-// about what it says once it has.
 async function renderList(initialPath = "/organizations"): Promise<AnyRouter> {
   const { router } = await renderRouteTree(routeTree, { initialPath });
   await waitFor(() => {
@@ -145,10 +133,6 @@ describe("organizations stat strip figures", () => {
   it("reads each cell out of the field the contract names for it", async () => {
     await renderList();
 
-    // Whole text, not a substring match: a cell that rendered its label and no
-    // number, or two numbers where the design has one, fails here. Every figure
-    // in STATS is distinct, so each of these is a statement about which field
-    // the cell read.
     expect(cell("Organizations").textContent).toBe(
       `Organizations${figure(STATS.total)}${figure(STATS.created_last_7_days)} new this week`,
     );
@@ -164,19 +148,36 @@ describe("organizations stat strip figures", () => {
     await renderList();
 
     const trials = cell("Trials ending in 7 days");
-    // The design's "N with no owner" is cut, and a placeholder for it is cut
-    // too. Two assertions, because the wording of a sub-line nobody has written
-    // yet is not knowable: one names the shape the other two cells use, and one
-    // counts the lines.
     expect(within(trials).queryByText(/this week/)).toBeNull();
     expect(trials.querySelectorAll("span").length).toBe(2);
     expect(cell("Organizations").querySelectorAll("span").length).toBe(3);
   });
 
+  it("renders a figure of zero as a figure, not as a missing one", async () => {
+    mocks.getOrganizationStats.mockResolvedValue({ ...STATS, disabled: 0 });
+
+    await renderList();
+
+    expect(cell("Disabled").textContent).toBe(
+      `Disabled0${figure(STATS.disabled_last_7_days)} this week`,
+    );
+  });
+
+  it("stands up to a payload that left a field out", async () => {
+    const { disabled_last_7_days: _dropped, ...partial } = STATS;
+    mocks.getOrganizationStats.mockResolvedValue(
+      partial as AdminOrganizationStats,
+    );
+
+    await renderList();
+
+    expect(cell("Disabled").textContent).toBe(
+      `Disabled${figure(STATS.disabled)}— this week`,
+    );
+    expect(cell("Organizations").textContent).toContain(figure(STATS.total));
+  });
+
   it("says nothing where the figures have not arrived", async () => {
-    // A number that has not been fetched must not be shown as a number, and a
-    // cell must not be blank either: an operator reading a blank strip has no
-    // way to tell it from a platform with nothing on it.
     let settle: (stats: AdminOrganizationStats) => void = () => {};
     mocks.getOrganizationStats.mockReturnValue(
       new Promise((resolve) => {
@@ -193,6 +194,21 @@ describe("organizations stat strip figures", () => {
     await waitFor(() => {
       expect(cell("Organizations").textContent).toContain(figure(STATS.total));
     });
+  });
+
+  it("says the totals failed rather than showing a figure for them", async () => {
+    mocks.getOrganizationStats.mockRejectedValue(new Error("stats are down"));
+
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await screen.findByText(/Could not load the platform totals/);
+    // The cells too: a failure falling back to a figure would put three zeroes
+    // above a table full of rows.
+    expect(cell("Organizations").textContent).toBe("Organizations—");
+    expect(cell("Trials ending in 7 days").textContent).toBe(
+      "Trials ending in 7 days—",
+    );
+    expect(cell("Disabled").textContent).toBe("Disabled—");
   });
 
   it("still filters from a cell whose figure never arrived", async () => {
@@ -214,9 +230,6 @@ describe("organizations stat strip figures", () => {
 
     expect(mocks.getOrganizationStats).toHaveBeenCalled();
     for (const [context] of mocks.getOrganizationStats.mock.calls) {
-      // The cache key React Query fetched under. A key that carried the term or
-      // the filters is a separate entry per view, which is a strip that
-      // refetches with the table and reports the filtered rows.
       expect((context as { queryKey: unknown }).queryKey).toEqual([
         "gram-admin-organization-stats",
       ]);
@@ -225,36 +238,42 @@ describe("organizations stat strip figures", () => {
 });
 
 describe("organizations stat strip navigation", () => {
-  it("clears every filter from the first cell", async () => {
+  it("opens every organization from the first cell, disabled ones included", async () => {
     const router = await renderList(
       urlFor({ type: ["pro"], trial: ["running"], disabled: ["disabled"] }),
     );
 
     fireEvent.click(cell("Organizations"));
 
+    // Both statuses, spelled out. An absent status filter is not "no filter":
+    // the server reads it as active only, so the figure counts the disabled
+    // organizations and the list it opened would leave them out.
     await waitFor(() => {
-      expect(currentSearch(router)).toBe("");
+      expect(currentSearch(router)).toBe('?disabled=["active","disabled"]');
     });
     await waitFor(() => {
-      expect(lastListParams().account_types).toBeUndefined();
+      expect(lastListParams().disabled_states).toEqual(["active", "disabled"]);
     });
+    expect(lastListParams().account_types).toBeUndefined();
     expect(lastListParams().trial_states).toBeUndefined();
-    expect(lastListParams().disabled_states).toBeUndefined();
   });
 
-  it("filters to the trials the middle cell counted", async () => {
+  it("filters to the trials the middle cell counted, at either status", async () => {
     const router = await renderList();
 
     fireEvent.click(cell("Trials ending in 7 days"));
 
-    // `ending_soon`, which is the state the figure above it counts. Any other
-    // trial state would be a cell whose count and whose rows disagree.
+    // The figure counts `ending_soon` over every organization, so the list it
+    // opens has to ask for both statuses to reach the same rows.
     await waitFor(() => {
-      expect(currentSearch(router)).toBe('?trial=["ending_soon"]');
+      expect(currentSearch(router)).toBe(
+        '?trial=["ending_soon"]&disabled=["active","disabled"]',
+      );
     });
     await waitFor(() => {
       expect(lastListParams().trial_states).toEqual(["ending_soon"]);
     });
+    expect(lastListParams().disabled_states).toEqual(["active", "disabled"]);
   });
 
   it("filters to disabled organizations from the last cell", async () => {
@@ -277,9 +296,6 @@ describe("organizations stat strip navigation", () => {
 
     fireEvent.click(cell("Disabled"));
 
-    // Only the filter the cell names. A cell that merged would leave the type
-    // and the trial in place, and the rows would be the disabled pro
-    // organizations whose trial is running, which is not the figure clicked.
     await waitFor(() => {
       expect(currentSearch(router)).toBe('?disabled=["disabled"]');
     });
@@ -291,8 +307,6 @@ describe("organizations stat strip navigation", () => {
   });
 
   it("leaves the search term alone", async () => {
-    // The term is not one of the three filters, and an operator who clicked a
-    // figure has not asked to type it again.
     const router = await renderList(urlFor({ q: "acme", type: ["pro"] }));
 
     fireEvent.click(cell("Trials ending in 7 days"));
@@ -312,9 +326,6 @@ describe("organizations stat strip navigation", () => {
 
     fireEvent.click(cell("Disabled"));
 
-    // The URL is the state, so the sheet's own triggers have to follow a write
-    // the strip made. A strip that navigated some other way would leave these
-    // reading the filter the operator just replaced.
     await waitFor(() => {
       expect(
         screen
@@ -340,8 +351,6 @@ describe("organizations stat strip navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Trial filter:/ }));
     const sheet = await screen.findByRole("dialog");
 
-    // The label the picker shows, not the value the URL carries: the two are
-    // different words, and the operator only ever reads the first.
     expect(
       within(sheet).getByRole("combobox", { name: /^Trial/ }).textContent,
     ).toContain("Ending soon");
@@ -362,16 +371,13 @@ describe("organizations stat strip and the table's filters", () => {
     await waitFor(() => {
       expect(lastListParams().trial_states).toEqual(["running"]);
     });
-    // The figures describe the platform. A strip keyed on the filters would
-    // refetch here and start reporting the rows already on screen.
     expect(mocks.getOrganizationStats.mock.calls.length).toBe(before);
   });
 
   it("holds its figures still while the table reloads under a filter", async () => {
     const router = await renderList();
 
-    // A second answer, so a strip that did refetch would visibly move rather
-    // than merely call the endpoint again.
+    // A second answer, so a strip that did refetch would visibly move.
     mocks.getOrganizationStats.mockResolvedValue({
       total: 1,
       created_last_7_days: 1,
@@ -409,14 +415,15 @@ describe("organizations stat strip and the table's filters", () => {
 });
 
 describe("organizations stat strip placement", () => {
-  it("paints above the table rather than inside the box that scrolls", async () => {
+  it("sits outside the table's scroll box, and before it in the document", async () => {
     await renderList();
 
     const scrollBox = screen.getByRole("region", {
       name: "Organizations table",
     });
-    // Outside the scroll box, and before it in the document. A strip inside it
-    // would scroll away with the rows it leads to.
+    // Tree facts only. happy-dom lays nothing out, so that the strip does not
+    // scroll away with the rows is checked by eye and stated in the pull
+    // request, not here.
     expect(scrollBox.contains(strip())).toBe(false);
     expect(
       strip().compareDocumentPosition(scrollBox) &
@@ -424,12 +431,10 @@ describe("organizations stat strip placement", () => {
     ).toBeTruthy();
   });
 
-  it("reads left to right in the order the design puts the figures", async () => {
+  it("deals the three figures out in the order the design names", async () => {
     await renderList();
 
-    // Every other assertion in this file finds a cell by its label, so the
-    // three could be dealt out in any order and nothing else here would notice.
-    // The first span of each is its label.
+    // Document order: every other assertion here finds a cell by its label.
     expect(
       within(strip())
         .getAllByRole("button")
@@ -446,25 +451,55 @@ describe("organizations stat strip placement", () => {
       "Disabled",
     ]) {
       const control = cell(label);
-      // A div with an onClick is not reachable by Tab and answers no key. The
-      // type matters too: a bare <button> inside a form submits it.
+      // A div with an onClick answers no key; a bare button in a form submits.
       expect(control.tagName).toBe("BUTTON");
       expect(control.getAttribute("type")).toBe("button");
     }
   });
+});
 
-  it("filters from the keyboard as well as the pointer", async () => {
-    const router = await renderList();
+describe("organizations stat strip accessible names", () => {
+  it("speaks the figure, not only what it counts", async () => {
+    await renderList();
 
-    const control = cell("Trials ending in 7 days");
-    control.focus();
-    expect(document.activeElement).toBe(control);
-    // A real button answers Enter and Space by firing a click, which is what
-    // happy-dom's click dispatch stands in for here.
-    fireEvent.click(control);
+    // The computed name: an aria-label added later would drop the figure.
+    for (const name of [
+      `Organizations ${figure(STATS.total)} ${figure(STATS.created_last_7_days)} new this week`,
+      `Trials ending in 7 days ${figure(STATS.trials_ending_soon)}`,
+      `Disabled ${figure(STATS.disabled)} ${figure(STATS.disabled_last_7_days)} this week`,
+    ]) {
+      expect(within(strip()).getByRole("button", { name })).toBeTruthy();
+    }
+  });
 
+  it("leaves the name to come from the contents", async () => {
+    await renderList();
+
+    for (const label of [
+      "Organizations",
+      "Trials ending in 7 days",
+      "Disabled",
+    ]) {
+      expect(cell(label).getAttribute("aria-label")).toBeNull();
+      expect(cell(label).getAttribute("aria-labelledby")).toBeNull();
+    }
+  });
+
+  it("says the figures are on their way while they are in flight", async () => {
+    let settle: (stats: AdminOrganizationStats) => void = () => {};
+    mocks.getOrganizationStats.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    expect(cell("Organizations").getAttribute("aria-busy")).toBe("true");
+
+    settle(STATS);
     await waitFor(() => {
-      expect(currentSearch(router)).toBe('?trial=["ending_soon"]');
+      expect(cell("Organizations").getAttribute("aria-busy")).toBe("false");
     });
   });
 });

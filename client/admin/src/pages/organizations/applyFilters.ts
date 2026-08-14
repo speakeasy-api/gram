@@ -10,12 +10,8 @@ import type { OrganizationsSearch } from "@/routes/organizations.index";
 const ROUTE_ID = "/organizations/";
 
 /**
- * Writes a chosen set to the URL, which is where the list keeps its state.
- *
- * Every control that filters the list goes through this, so the filter sheet
- * and the stat strip cannot disagree about what applying a set does: all three
- * params are written from the set, so a control that names one filter clears
- * the two it does not name rather than merging with whatever was there.
+ * Writes a chosen set to the URL. All three params come from the set, so a
+ * control that names one filter clears the two it does not.
  */
 export function useApplyFilters(): (next: FilterSelection) => void {
   const navigate = useNavigate({ from: ROUTE_ID });
