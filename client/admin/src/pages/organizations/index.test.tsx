@@ -680,6 +680,31 @@ describe("organizations list peek", () => {
     ]);
   });
 
+  it("shows the name column while it is open, even when the operator hid it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Name" }));
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Slug" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("columnheader", { name: "Name" })).toBeNull();
+
+    // The name link is gone with the column, so the row is reached by its slug.
+    const row = screen.getByText(FIRST_ORG.slug).closest("tr");
+    if (!row) throw new Error("the slug cell is not inside a row");
+    fireEvent.click(row, { altKey: true });
+
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["Name", "Slug", "Type"]);
+    expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
+
+    fireEvent.keyDown(peekPanel(), { key: "Escape" });
+
+    expect(screen.queryByRole("columnheader", { name: "Name" })).toBeNull();
+  });
+
   it("leaves the arrow keys to the Columns menu while it is open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });

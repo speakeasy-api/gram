@@ -39,8 +39,6 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   created_at: false,
 };
 
-const PEEK_KEPT_COLUMNS = ["name", "slug", "account_type"] as const;
-
 // Mac labels this key Option; everything else calls it Alt.
 const PEEK_KEY = navigator.userAgent.includes("Mac") ? "\u2325 Option" : "Alt";
 
@@ -139,16 +137,15 @@ export function OrganizationsList(): JSX.Element {
 
   const orgs = data?.organizations ?? NO_ORGS;
 
-  // The lock only sees the operator's own hides, so peek could empty the table.
-  const effectiveVisibility = useMemo(() => {
-    if (!peekedId) return columnVisibility;
-    const anyKept = PEEK_KEPT_COLUMNS.some(
-      (id) => columnVisibility[id] !== false,
-    );
-    return anyKept
-      ? { ...columnVisibility, ...PEEK_HIDDEN_COLUMNS }
-      : columnVisibility;
-  }, [peekedId, columnVisibility]);
+  // Name carries the row's only anchor, which peek closes back onto. Forcing it
+  // also keeps peek's own hiding from emptying the table.
+  const effectiveVisibility = useMemo(
+    () =>
+      peekedId
+        ? { ...columnVisibility, ...PEEK_HIDDEN_COLUMNS, name: true }
+        : columnVisibility,
+    [peekedId, columnVisibility],
+  );
 
   const table = useTable({
     features: dataTableFeatures,
