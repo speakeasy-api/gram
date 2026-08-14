@@ -84,9 +84,9 @@ export function PeekPanel({
       ref={root}
       tabIndex={-1}
       aria-label="Organization peek"
-      className={cn("rounded-lg border p-4 outline-none", className)}
+      className={cn("flex flex-col rounded-lg border outline-none", className)}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2 p-4 pb-3">
         <div className="min-w-0">
           <h5 className="truncate text-sm font-medium">{org.name}</h5>
           <p className="text-muted-foreground truncate text-xs">{org.slug}</p>
@@ -101,30 +101,35 @@ export function PeekPanel({
         </Button>
       </div>
 
-      <dl className="mt-3 grid grid-cols-[5.5rem_1fr] items-baseline gap-x-3 gap-y-1.5">
-        <Field label="Type">
-          <Badge variant="outline" className={badgeTone.neutral}>
-            {org.account_type}
-          </Badge>
-        </Field>
-        <Field label="Trial ends">{fmtDateShort(org.free_trial_ends_at)}</Field>
-        <Field label="Members">{org.member_count}</Field>
-        <Field label="Created">{fmtDateShort(org.created_at)}</Field>
-        <Field label="Org id">
-          <CopyValue label="Org id" value={org.id} />
-        </Field>
-        <Field label="WorkOS id">
-          {org.workos_id ? (
-            <CopyValue label="WorkOS id" value={org.workos_id} />
-          ) : (
-            "-"
-          )}
-        </Field>
-      </dl>
+      {/* min-h-0 or the fields refuse to shrink and push the actions off. */}
+      <div className="min-h-0 flex-1 overflow-auto px-4">
+        <dl className="grid grid-cols-[5.5rem_1fr] items-baseline gap-x-3 gap-y-1.5">
+          <Field label="Type">
+            <Badge variant="outline" className={badgeTone.neutral}>
+              {org.account_type}
+            </Badge>
+          </Field>
+          <Field label="Trial ends">
+            {fmtDateShort(org.free_trial_ends_at)}
+          </Field>
+          <Field label="Members">{org.member_count}</Field>
+          <Field label="Created">{fmtDateShort(org.created_at)}</Field>
+          <Field label="Org id">
+            <CopyValue label="Org id" value={org.id} />
+          </Field>
+          <Field label="WorkOS id">
+            {org.workos_id ? (
+              <CopyValue label="WorkOS id" value={org.workos_id} />
+            ) : (
+              "-"
+            )}
+          </Field>
+        </dl>
+      </div>
 
-      <Separator className="mt-4" />
+      <Separator />
       {/* Empty on purpose: reserved so later actions do not move the grid. */}
-      <div className="flex min-h-8 items-center gap-2" />
+      <div className="flex min-h-8 items-center gap-2 p-4" />
     </aside>
   );
 }

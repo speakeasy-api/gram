@@ -286,7 +286,9 @@ export function OrganizationsList(): JSX.Element {
             <PeekPanel
               org={peeked.original}
               onClose={closePeek}
-              className="w-100 shrink-0"
+              // Same 60vh as the scroll box beside it, so the two line up top
+              // and bottom and the actions sit on the table's last row.
+              className="h-[60vh] w-100 shrink-0"
             />
           ) : null}
         </div>
