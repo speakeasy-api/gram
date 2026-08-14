@@ -276,6 +276,21 @@ func TestDemoteExpiredTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
 	require.Empty(t, ti.notifier.inactive)
 }
 
+func TestDemoteExpiredTrials_DemoteSkipsReinstatedTrialEmails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(24*time.Hour).UTC())
+
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+
+	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", org.GramAccountType)
+	require.True(t, org.Whitelisted)
+	require.Empty(t, ti.notifier.inactive)
+}
+
 func TestDemoteExpiredTrials_TrialInactiveFailureDoesNotFailDemotion(t *testing.T) {
 	t.Parallel()
 

@@ -73,13 +73,13 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	trial, err := tx.MarkTrialDemoted(ctx, args.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// A conversion or a manual reinstatement landed between the list and
-		// this write. The organization is no longer ours to demote. Still
-		// clear trialActive so a retried demotion finishes the Loops update
-		// after a previous commit succeeded.
+		// A conversion, a completed demotion, or a reinstatement (ends_at
+		// moved forward) landed between the list and this write. Only a
+		// closed trial should drop out of the Loops sequence; a re-armed
+		// trial must keep trialActive so reminder mail still sends.
 		d.logger.InfoContext(ctx, "expired trial changed before demotion",
 			attr.SlogOrganizationID(args.OrganizationID))
-		d.notifyTrialInactive(ctx, args.OrganizationID)
+		d.notifyTrialInactiveIfClosed(ctx, args.OrganizationID)
 		return nil
 	case err != nil:
 		return fmt.Errorf("mark trial demoted: %w", err)
@@ -124,6 +124,21 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 
 	d.notifyTrialInactive(ctx, args.OrganizationID)
 	return nil
+}
+
+func (d *DemoteExpiredTrials) notifyTrialInactiveIfClosed(ctx context.Context, organizationID string) {
+	trial, err := d.repo.GetTrial(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return
+	case err != nil:
+		d.logger.ErrorContext(ctx, "lookup trial after demotion skip", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return
+	}
+	if !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid {
+		return
+	}
+	d.notifyTrialInactive(ctx, organizationID)
 }
 
 func (d *DemoteExpiredTrials) notifyTrialInactive(ctx context.Context, organizationID string) {
