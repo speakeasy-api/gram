@@ -27,6 +27,7 @@ import { WriteReportProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
 import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
 import { useOpenOrganization } from "./rowActions";
+import { StatStrip } from "./StatStrip";
 import { TableActionBar, Toolbar } from "./Toolbar";
 
 const ROUTE_ID = "/organizations/";
@@ -370,6 +371,10 @@ export function OrganizationsList(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <section className="flex min-h-0 flex-1 flex-col">
+        {/* Outside the table's scroll box, so the figures stay on screen while
+            the operator scrolls the rows they lead to. */}
+        <StatStrip />
+
         <Toolbar />
 
         {/* A failed refetch keeps the previous rows, so the failure has to show

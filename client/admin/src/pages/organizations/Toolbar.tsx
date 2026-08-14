@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import {
   FILTER_GROUPS,
   filterSummary,
-  filtersToSearch,
   optionsFor,
   type FilterGroupKey,
   type FilterSelection,
@@ -27,6 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
+import { useApplyFilters } from "./applyFilters";
 import { FilterSheet } from "./FilterSheet";
 
 const ROUTE_ID = "/organizations/";
@@ -93,17 +93,7 @@ export function Toolbar(): JSX.Element {
     disabled: search.disabled ?? [],
   };
 
-  const applyFilters = (next: FilterSelection): void => {
-    void navigate({
-      search: (prev: OrganizationsSearch) => ({
-        ...prev,
-        ...filtersToSearch(next),
-        // Page 1. The rows a page-two cursor points at were counted under the
-        // filters that minted it.
-        page: undefined,
-      }),
-    });
-  };
+  const applyFilters = useApplyFilters();
 
   const openFilters = (group: FilterGroupKey): void => {
     openedFrom.current = group;

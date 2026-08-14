@@ -28,6 +28,7 @@ import {
   GramAdminError,
   TRIAL_STATES,
   type AdminOrganization,
+  type AdminOrganizationStats,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
@@ -51,6 +52,7 @@ const mocks = vi.hoisted(() => ({
       (params?: ListOrganizationsParams) => Promise<ListOrganizationsResult>
     >(),
   getSession: vi.fn(),
+  getOrganizationStats: vi.fn(),
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     ...actual,
     listOrganizations: mocks.listOrganizations,
     getSession: mocks.getSession,
+    getOrganizationStats: mocks.getOrganizationStats,
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
@@ -135,6 +138,16 @@ const ORGS: AdminOrganization[] = [
     updated_at: "2026-04-07T00:00:00Z",
   },
 ];
+
+// Only so the strip above the table has something to render. What it does with
+// these figures is pinned in StatStrip.test.tsx.
+const STATS: AdminOrganizationStats = {
+  total: 12,
+  created_last_7_days: 3,
+  trials_ending_soon: 2,
+  disabled: 1,
+  disabled_last_7_days: 1,
+};
 
 // A page the cursor leads to. Nothing it holds appears on the first page, so a
 // row that survives the page change is a reused node rather than a match.
@@ -362,6 +375,8 @@ beforeEach(() => {
     email: "ops@example.test",
     name: "Ops",
   });
+  mocks.getOrganizationStats.mockReset();
+  mocks.getOrganizationStats.mockResolvedValue(STATS);
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(FIRST_ORG);
   mocks.listOrganizationProjects.mockReset();

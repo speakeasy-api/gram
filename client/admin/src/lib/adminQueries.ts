@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import {
   getOrganization,
+  getOrganizationStats,
   getProject,
   getSession,
   listOrganizationMembers,
@@ -59,6 +60,15 @@ export function organizationsListQuery(
     queryFn: () => listOrganizations(params),
   });
 }
+
+// A constant rather than a function, and that is the whole design: the strip's
+// figures describe the platform, not the view. With no parameters there is no
+// key to move, so changing the table's filters cannot refetch these totals and
+// they cannot start tracking the filtered rows.
+export const organizationsStatsQuery = queryOptions({
+  queryKey: ["gram-admin-organization-stats"] as const,
+  queryFn: getOrganizationStats,
+});
 
 // Named once, because the detail entry is reached two ways. The route takes an
 // id or a slug and each is its own entry, so this is the only thing the two
