@@ -715,11 +715,13 @@ func TestPluginsService_SetPluginAssignments(t *testing.T) {
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Assignment Test"})
 	require.NoError(t, err)
+	engineeringRole := createTestRolePrincipal(t, ctx, ti, "engineering")
+	gtmRole := createTestRolePrincipal(t, ctx, ti, "gtm")
 
 	// Set initial assignments.
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
-		PrincipalUrns: []string{"role:engineering", "role:gtm"},
+		PrincipalUrns: []string{engineeringRole, gtmRole},
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Assignments, 2)
@@ -746,14 +748,15 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dedupe Assignment Test"})
 	require.NoError(t, err)
+	engineeringRole := createTestRolePrincipal(t, ctx, ti, "engineering")
 
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID: plugin.ID,
 		PrincipalUrns: []string{
 			"email:Dev@Acme.Corp",
 			"email:dev@acme.corp",
-			"role:engineering",
-			"role:engineering",
+			engineeringRole,
+			engineeringRole,
 			"*",
 			"*",
 		},
@@ -761,7 +764,7 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 	require.NoError(t, err)
 	require.Len(t, result.Assignments, 3)
 	require.Equal(t, "email:dev@acme.corp", result.Assignments[0].PrincipalUrn)
-	require.Equal(t, "role:engineering", result.Assignments[1].PrincipalUrn)
+	require.Equal(t, engineeringRole, result.Assignments[1].PrincipalUrn)
 	require.Equal(t, "*", result.Assignments[2].PrincipalUrn)
 
 	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
@@ -795,7 +798,45 @@ func TestPluginsService_SetPluginAssignments_InvalidURNReturnsBadRequest(t *test
 
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
-		PrincipalUrns: []string{"role:engineering", "not a valid urn"},
+		PrincipalUrns: []string{"not a valid urn"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_LegacyRoleURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy Role URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:engineering"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_UnknownRoleURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unknown Role URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:organization:" + uuid.NewString()},
 	})
 	require.Error(t, err)
 

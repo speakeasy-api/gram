@@ -2,11 +2,10 @@ package authz
 
 import (
 	"context"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +28,8 @@ func TestResolveKnownUserPrincipals_resolvesUserAndRolesForOrgMember(t *testing.
 	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
 	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
 	seedRoleAssignmentForUser(t, ctx, conn, organizationID, userID, SystemRoleMember)
+	memberRole, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleMember)
+	require.NoError(t, err)
 
 	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
 	require.NoError(t, err)
@@ -39,10 +40,30 @@ func TestResolveKnownUserPrincipals_resolvesUserAndRolesForOrgMember(t *testing.
 	}
 	require.Contains(t, principalURNs, urn.NewPrincipal(urn.PrincipalTypeUser, userID).String())
 	require.Contains(t, principalURNs, AllUsersPrincipal().String())
-	require.Contains(t, principalURNs, "role:member")
-	require.True(t, slices.ContainsFunc(principalURNs, func(principalURN string) bool {
-		return strings.HasPrefix(principalURN, "role:global:")
-	}))
+	require.Contains(t, principalURNs, "role:global:"+memberRole.ID.String())
+	require.NotContains(t, principalURNs, "role:member")
+}
+
+func TestParseRolePrincipalURN_requiresCanonicalRoleURN(t *testing.T) {
+	t.Parallel()
+
+	const roleID = "00000000-0000-0000-0000-000000000001"
+	for _, roleURN := range []string{"role:global:" + roleID, "role:organization:" + roleID} {
+		principal, err := parseRolePrincipalURN(roleURN)
+		require.NoError(t, err)
+		require.Equal(t, roleURN, principal.String())
+	}
+
+	for _, roleURN := range []string{
+		"role:member",
+		"role:organization:not-a-uuid",
+		"role:unknown:" + roleID,
+		"user:" + roleID,
+	} {
+		principal, err := parseRolePrincipalURN(roleURN)
+		require.Error(t, err)
+		require.Equal(t, urn.Principal{}, principal)
+	}
 }
 
 func TestResolveUserPrincipals_includesAllUsersWhenUserMissingOrNotInOrg(t *testing.T) {
@@ -125,7 +146,16 @@ func TestValidatePrincipal(t *testing.T) {
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "principal-validator"))
-	require.ErrorContains(t, err, "invalid role principal")
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+
+	conn.Close()
+	err = ValidatePrincipal(ctx, conn, organizationID, rolePrincipal)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrPrincipalInvalid)
+	require.NotErrorIs(t, err, ErrPrincipalNotFound)
 }
 
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {

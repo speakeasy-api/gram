@@ -228,7 +228,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	principals := []string{emailPrincipal.String(), urn.PrincipalWildcard}
 
 	// Resolve the reported email to an org member so user:<id>, user:all, and
-	// role:<...> assignments deliver too. A non-member (or unknown email) is not
+	// role:<kind>:<uuid> assignments deliver too. A non-member (or unknown email) is not
 	// an error: the caller still receives email- and wildcard-scoped plugins.
 	user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
 		Email:          email,
