@@ -390,7 +390,7 @@ func TestBrowserBaseURLOnlyMovesAuthorizationEndpoint(t *testing.T) {
 	}
 }
 
-// The base URL is operator-supplied, so a trailing slash or a stray path must
+// The base URL is operator-supplied, so a trailing slash or a stray query must
 // still yield a usable endpoint rather than something like `//authorize`. A
 // malformed authorization endpoint surfaces only as a broken login, so it is
 // worth pinning.
@@ -401,8 +401,8 @@ func TestBrowserBaseURLIsNormalised(t *testing.T) {
 		want string
 	}{
 		{"trailing slash", "https://devbox.example.ts.net:4000/", "https://devbox.example.ts.net:4000/authorize"},
-		{"path prefix", "https://proxy.example.com/idp", "https://proxy.example.com/idp/authorize"},
 		{"query and fragment", "https://devbox.example.ts.net:4000/?a=b#c", "https://devbox.example.ts.net:4000/authorize"},
+		{"http", "http://devbox.example.ts.net:4000", "http://devbox.example.ts.net:4000/authorize"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ts, _ := newTestServerWithBrowserBase(t, tc.base)
@@ -421,20 +421,35 @@ func TestBrowserBaseURLIsNormalised(t *testing.T) {
 	}
 }
 
-// A base URL that is not absolute cannot be used to build a redirect, so the
-// server falls back to the issuer rather than advertising something unusable.
+// A base URL this server could not actually serve the browser from must fall
+// back to the issuer rather than advertise something unusable. Advertising it
+// would surface only as a broken login, and for the path-prefix case the mux
+// registers /authorize at the root, so the browser would get a 404 unless a
+// proxy in front happened to strip the prefix.
 func TestBrowserBaseURLFallsBackWhenUnusable(t *testing.T) {
-	ts, _ := newTestServerWithBrowserBase(t, "not-a-url")
+	for _, tc := range []struct {
+		name string
+		base string
+	}{
+		{"not a URL", "not-a-url"},
+		{"no host", "https:///authorize"},
+		{"non-http scheme", "ftp://devbox.example.ts.net:4000"},
+		{"path prefix", "https://proxy.example.com/idp"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, _ := newTestServerWithBrowserBase(t, tc.base)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
 
-	provider, err := oidc.NewProvider(ctx, ts.URL)
-	if err != nil {
-		t.Fatalf("oidc.NewProvider: %v", err)
-	}
-	if got, want := provider.Endpoint().AuthURL, ts.URL+"/authorize"; got != want {
-		t.Errorf("authorization_endpoint = %q, want %q", got, want)
+			provider, err := oidc.NewProvider(ctx, ts.URL)
+			if err != nil {
+				t.Fatalf("oidc.NewProvider: %v", err)
+			}
+			if got, want := provider.Endpoint().AuthURL, ts.URL+"/authorize"; got != want {
+				t.Errorf("authorization_endpoint = %q, want %q", got, want)
+			}
+		})
 	}
 }
 

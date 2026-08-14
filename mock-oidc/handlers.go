@@ -73,33 +73,53 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// authorizeEndpoint builds the browser-facing /authorize URL. It resolves the
-// path against the parsed base rather than concatenating, so a base carrying a
-// trailing slash, a path prefix, a query or a fragment cannot produce a
-// malformed endpoint — the value is operator-supplied via --browser-base-url,
-// and an unusable authorization endpoint would only show up as a broken login.
-// Falls back to the issuer when unset or unparseable, which is the ordinary
-// single-machine case.
+// authorizeEndpoint builds the browser-facing /authorize URL by moving the
+// ORIGIN of --browser-base-url over the issuer's, and nothing else. The value is
+// operator-supplied and an unusable authorization endpoint surfaces only as a
+// broken login, so anything that would not resolve to a route this server
+// actually serves is refused in favour of the issuer, loudly.
+//
+// A path prefix is refused rather than honoured: the mux registers /authorize at
+// the root, so advertising `https://proxy.example/idp/authorize` would 404 the
+// browser unless something in front happened to strip the prefix. Falling back
+// makes that a warning at startup instead of a dead login later.
 func (s *Server) authorizeEndpoint(issuer string) string {
+	fallback := strings.TrimRight(issuer, "/") + "/authorize"
 	if s.browserBaseURL == "" {
-		return strings.TrimRight(issuer, "/") + "/authorize"
+		return fallback
 	}
 
 	base, err := url.Parse(s.browserBaseURL)
-	if err != nil || base.Scheme == "" || base.Host == "" {
+	switch {
+	case err != nil || base.Host == "":
 		s.logger.Warn(
 			"browser base URL is not an absolute URL; falling back to the issuer",
 			slog.String("browser_base_url", s.browserBaseURL),
 		)
-		return strings.TrimRight(issuer, "/") + "/authorize"
+		return fallback
+	// A browser reaches this over HTTP(S) or not at all, and the endpoint is
+	// published for a browser to navigate to.
+	case !strings.EqualFold(base.Scheme, "http") && !strings.EqualFold(base.Scheme, "https"):
+		s.logger.Warn(
+			"browser base URL is not http(s); falling back to the issuer",
+			slog.String("browser_base_url", s.browserBaseURL),
+			slog.String("scheme", base.Scheme),
+		)
+		return fallback
+	case strings.Trim(base.Path, "/") != "":
+		s.logger.Warn(
+			"browser base URL carries a path prefix, which this server does not serve; falling back to the issuer",
+			slog.String("browser_base_url", s.browserBaseURL),
+			slog.String("path", base.Path),
+		)
+		return fallback
 	}
 
-	// Drop anything that cannot survive being a base for a path join; the
-	// browser gets its own query string from the authorize request.
-	base.RawQuery = ""
-	base.Fragment = ""
+	// Keep the origin only: the browser brings its own query string on the
+	// authorize request, and a fragment never reaches a server at all.
+	origin := url.URL{Scheme: base.Scheme, Host: base.Host}
 
-	return base.JoinPath("/authorize").String()
+	return origin.JoinPath("/authorize").String()
 }
 
 func (s *Server) discovery(w http.ResponseWriter, _ *http.Request) {

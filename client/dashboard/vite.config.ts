@@ -114,13 +114,17 @@ export default defineConfig(({ command }) => {
   // different hosts when the browser is on another machine, so
   // GRAM_SERVER_PUBLIC_URL overrides the browser-facing half when set — see
   // zero:remap-hostname. Unset in the ordinary single-machine case.
-  const serverUrl =
-    process.env["GRAM_SERVER_PUBLIC_URL"] || process.env["GRAM_SERVER_URL"];
-  if (isDev && !serverUrl) {
+  //
+  // Checked on its own rather than through the pair below: it is what the dev
+  // proxy falls back to, so letting GRAM_SERVER_PUBLIC_URL satisfy the check
+  // would start a dev server whose API requests go nowhere.
+  const internalServerUrl = process.env["GRAM_SERVER_URL"];
+  if (isDev && !internalServerUrl) {
     throw new Error("GRAM_SERVER_URL must be set in development");
   }
+  const serverUrl = process.env["GRAM_SERVER_PUBLIC_URL"] || internalServerUrl;
   const devProxyServerUrl =
-    process.env["GRAM_SERVER_BACKEND_URL"] || process.env["GRAM_SERVER_URL"];
+    process.env["GRAM_SERVER_BACKEND_URL"] || internalServerUrl;
 
   const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
   for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {

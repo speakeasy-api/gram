@@ -362,6 +362,9 @@ function main(): void {
   console.log(
     "                -k /Library/Keychains/System.keychain rootCA.pem",
   );
+  console.log(
+    "       else:  install mkcert on that machine and run `mkcert -install`",
+  );
   console.log();
   console.log("  3. From that same machine, check it:");
   console.log(`       curl -k https://${host}:${sitePort}/`);

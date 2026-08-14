@@ -46,7 +46,7 @@ func NewApp() *cli.App {
 			},
 			&cli.StringFlag{
 				Name:    "browser-base-url",
-				Usage:   "Base URL the end user's browser reaches this server on, used only for the discovery document's authorization_endpoint. Set this when the browser and the relying party reach this server on different origins (e.g. a dev stack on a remote box reached over a tunnel). Defaults to --issuer.",
+				Usage:   "Origin the end user's browser reaches this server on, used only for the discovery document's authorization_endpoint. Set this when the browser and the relying party reach this server on different origins (e.g. a dev stack on a remote box reached over a tunnel). Scheme and host only — a path prefix is refused, because /authorize is served at the root. Defaults to --issuer.",
 				EnvVars: []string{"MOCK_OIDC_BROWSER_BASE_URL"},
 			},
 			&cli.PathFlag{

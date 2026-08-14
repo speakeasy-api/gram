@@ -72,10 +72,15 @@ so the client needs that CA. Copy `$(mkcert -CAROOT)/rootCA.pem` over — the ta
 prints its full path — and trust it once:
 
 ```sh
-# on the CLIENT
+# on the CLIENT, macOS
 sudo security add-trusted-cert -d -r trustRoot \
   -k /Library/Keychains/System.keychain rootCA.pem
 ```
+
+On a Linux or Windows client, install `mkcert` there, put the copied file where
+`mkcert -CAROOT` points, and run `mkcert -install` — it knows each platform's
+trust store, including the separate NSS one Firefox and Chrome use on Linux. See
+[mkcert's README](https://github.com/FiloSottile/mkcert#installing-the-ca-on-other-systems).
 
 Understand what you are granting: whoever can read `rootCA-key.pem` on the host
 can mint a certificate your client will trust for _any_ domain, not just this
