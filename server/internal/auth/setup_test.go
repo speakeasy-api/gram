@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -179,7 +178,7 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	authzProvisioner := authz.NewProvisioner(conn)
-	cacheSuffix := cache.Suffix("auth-" + t.Name() + "-" + uuid.NewString())
+	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
 	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
@@ -246,7 +245,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	authzProvisioner := authz.NewProvisioner(conn)
-	cacheSuffix := cache.Suffix("auth-" + t.Name() + "-" + uuid.NewString())
+	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
 	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 

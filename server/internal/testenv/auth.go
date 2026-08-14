@@ -34,7 +34,7 @@ import (
 // manager as the UserResolver, matching the production wiring in start.go.
 func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
 	t.Helper()
-	suffix = cache.Suffix(fmt.Sprintf("%s-%s-%s", suffix, t.Name(), uuid.NewString()))
+	suffix = NewCacheSuffix(t, suffix)
 
 	cfg := mockidp.NewConfig()
 	srv := httptest.NewServer(mockidp.Handler(cfg))
