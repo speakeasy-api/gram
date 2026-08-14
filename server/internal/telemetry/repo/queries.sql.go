@@ -5680,7 +5680,7 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	sb = sb.GroupBy("user_email"). //nolint:glint // hooks user summary, not yet folded (DNO-857 tail)
-		OrderBy("event_count DESC")
+					OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5804,7 +5804,7 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
 	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC"). //nolint:glint // skill breakdown, not yet folded (DNO-857 tail)
-		Limit(10000) // Defensive cap
+												Limit(10000) // Defensive cap
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5872,8 +5872,8 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name"). //nolint:glint // hooks breakdown, not yet folded (DNO-857 tail)
-		OrderBy("event_count DESC").
-		Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
+											OrderBy("event_count DESC").
+											Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5942,8 +5942,8 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
 	sb = sb.GroupBy("bucket_start", "server_name", "user_email"). //nolint:glint // unproxied MCP usage, not yet folded (DNO-857 tail)
-		OrderBy("bucket_start ASC").
-		Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
+									OrderBy("bucket_start ASC").
+									Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
 
 	query, args, err := sb.ToSql()
 	if err != nil {
