@@ -142,7 +142,8 @@ INSERT INTO organization_metadata (
     whitelisted,
     free_trial_started_at,
     free_trial_ends_at,
-    disabled_at
+    disabled_at,
+    created_at
 ) VALUES (
     $1,
     $2,
@@ -152,7 +153,8 @@ INSERT INTO organization_metadata (
     $6,
     $7,
     $8,
-    $9::timestamptz
+    $9::timestamptz,
+    COALESCE($10::timestamptz, clock_timestamp())
 )
 `
 
@@ -166,12 +168,14 @@ type CreateOrganizationMetadataFixtureParams struct {
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
 }
 
 // Test-only fixture that lets seeders populate every column on
 // organization_metadata. Prefer this over CreateOrganizationMetadata when a
 // test needs to exercise filters that depend on account type, workos linkage,
-// disabled state, whitelist flag, or trial window.
+// disabled state, whitelist flag, trial window, or age. Omit created_at to keep
+// the column default.
 func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg CreateOrganizationMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createOrganizationMetadataFixture,
 		arg.ID,
@@ -183,6 +187,7 @@ func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg Cre
 		arg.FreeTrialStartedAt,
 		arg.FreeTrialEndsAt,
 		arg.DisabledAt,
+		arg.CreatedAt,
 	)
 	return err
 }
@@ -287,6 +292,19 @@ WHERE id = $1
 // legacy/abnormal state that the runtime's self-heal exists to recover from.
 func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteChat, id)
+	return err
+}
+
+const forceSoftDeleteOrganizationUserRelationshipsFixture = `-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+`
+
+// Test-only fixture for seeding a removed member. The deleted column is
+// generated from deleted_at, so a soft delete has to set the timestamp.
+func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationshipsFixture, organizationID)
 	return err
 }
 

@@ -141,8 +141,10 @@ type ListOrganizationProjectsResponseBody struct {
 type ListOrganizationsResponseBody struct {
 	// The page of organizations.
 	Organizations []*AdminOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
-	// Cursor for the next page; empty when exhausted.
+	// Cursor for the next page; empty when exhausted. Omitted in offset mode.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Number of organizations matching the filters, before paging.
+	Total int64 `form:"total" json:"total" xml:"total"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -1966,6 +1968,7 @@ func NewListOrganizationProjectsResponseBody(res *admin.AdminListOrganizationPro
 func NewListOrganizationsResponseBody(res *admin.AdminListOrganizationsResult) *ListOrganizationsResponseBody {
 	body := &ListOrganizationsResponseBody{
 		NextCursor: res.NextCursor,
+		Total:      res.Total,
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*AdminOrganizationResponseBody, len(res.Organizations))
@@ -3350,13 +3353,16 @@ func NewListOrganizationProjectsPayload(organizationID string, adminSessionToken
 
 // NewListOrganizationsPayload builds a admin service listOrganizations
 // endpoint payload.
-func NewListOrganizationsPayload(q *string, accountType *string, includeDisabled *bool, cursor *string, limit *int, adminSessionToken *string) *admin.ListOrganizationsPayload {
+func NewListOrganizationsPayload(q *string, accountType *string, includeDisabled *bool, cursor *string, limit *int, sort *string, direction *string, page *int, adminSessionToken *string) *admin.ListOrganizationsPayload {
 	v := &admin.ListOrganizationsPayload{}
 	v.Q = q
 	v.AccountType = accountType
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Sort = sort
+	v.Direction = direction
+	v.Page = page
 	v.AdminSessionToken = adminSessionToken
 
 	return v
