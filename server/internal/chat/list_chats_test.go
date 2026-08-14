@@ -729,6 +729,14 @@ func TestListChats_Filter_DateRange_ActiveChatNewerThanTo(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, activeChat.String(), result.Chats[0].ID)
+
+	// A page past the end takes the CountChats fallback; it must apply the
+	// same overlap semantics and still count the active chat.
+	payload.Offset = 50
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Empty(t, result.Chats)
 }
 
 func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
