@@ -29,6 +29,7 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -49,11 +50,13 @@ type Service struct {
 	auditLogger   *audit.Logger
 	posthogClient *posthog.Posthog
 	openRouter    openrouter.Provisioner
+	stripeClient  stripeclient.Client
+	stripeHandler stripeWebhookHandler
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
@@ -70,6 +73,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auditLogger:   auditLogger,
 		posthogClient: posthogClient,
 		openRouter:    openRouter,
+		stripeClient:  stripeClient,
+		stripeHandler: serviceStripeWebhookHandler,
 	}
 }
 
@@ -84,6 +89,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, "POST", "/rpc/polar.webhook", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.HandlePolarWebhook).ServeHTTP(w, r)
 	})
+	if service.stripeClient != nil {
+		o11y.AttachHandler(mux, "POST", "/rpc/stripe.webhook", func(w http.ResponseWriter, r *http.Request) {
+			oops.ErrHandle(service.logger, service.handleStripeWebhook).ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

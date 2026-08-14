@@ -153,12 +153,14 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return &Service{
-		tracer:      tp.Tracer("test"),
-		logger:      logger,
-		authz:       authzEngine,
-		repo:        repo.New(db),
-		billingRepo: billingRepo,
-		orgRepo:     orgRepo.New(db),
+		tracer:        tp.Tracer("test"),
+		logger:        logger,
+		authz:         authzEngine,
+		repo:          repo.New(db),
+		billingRepo:   billingRepo,
+		orgRepo:       orgRepo.New(db),
+		stripeClient:  nil,
+		stripeHandler: nil,
 	}
 }
 

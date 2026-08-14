@@ -10,6 +10,39 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
+-- name: LockBillingMetadataByStripeCustomerID :one
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_customer_id = @stripe_customer_id
+FOR UPDATE;
+
+-- name: TryInsertStripeWebhookReceipt :one
+WITH inserted AS (
+  INSERT INTO stripe_webhook_receipts (
+      stripe_event_id
+    , organization_id
+    , event_type
+  ) VALUES (
+      @stripe_event_id
+    , @organization_id
+    , @event_type
+  )
+  ON CONFLICT (stripe_event_id) DO NOTHING
+  RETURNING stripe_event_id
+)
+SELECT EXISTS (SELECT 1 FROM inserted) AS inserted;
+
+-- name: CreateStripeBillingMetadataFixture :exec
+-- Test-only fixture for webhook tests that need a Stripe customer association.
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (@organization_id, @stripe_customer_id);
+
+-- name: CountStripeWebhookReceiptsFixture :one
+-- Test-only fixture assertion for durable webhook completion receipts.
+SELECT count(*)
+FROM stripe_webhook_receipts
+WHERE organization_id = @organization_id;
+
 -- name: UpsertBillingMetadata :one
 INSERT INTO billing_metadata (
     organization_id
