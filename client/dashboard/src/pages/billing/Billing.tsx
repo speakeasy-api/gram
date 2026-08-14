@@ -167,16 +167,18 @@ const UsageSection = () => {
           )}
           {periodUsage?.credits != null &&
             periodUsage.includedCredits != null && (
-              <PlatformAdminOnlyPanel>
-                <UsageItem
-                  label="Chat Based Credits (Polar)"
-                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                  value={periodUsage.credits}
-                  included={periodUsage.includedCredits}
-                  overageIncrement={periodUsage.includedCredits}
-                  noMax={productTier === "enterprise"}
-                />
-              </PlatformAdminOnlyPanel>
+              <div className="pt-8">
+                <PlatformAdminOnlyPanel>
+                  <UsageItem
+                    label="Chat Based Credits (Polar)"
+                    tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                    value={periodUsage.credits}
+                    included={periodUsage.includedCredits}
+                    overageIncrement={periodUsage.includedCredits}
+                    noMax={productTier === "enterprise"}
+                  />
+                </PlatformAdminOnlyPanel>
+              </div>
             )}
         </div>
       </Page.Section.Body>
