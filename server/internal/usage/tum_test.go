@@ -26,6 +26,7 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -84,6 +85,7 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 		repo:          repo.New(db),
 		telemetryRepo: telemetryrepo.New(chConn),
 		auditLogger:   audit.NewLogger(),
+		trial:         trialemails.NoopNotifier{},
 	}
 
 	return svc, db, chConn, projectID

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 const testAdminHD = "example.com"
@@ -101,6 +102,7 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 		oidc:     oidcClient,
 		sessions: sessions,
 		verifier: NewVerifier(logger, sessions, oidcClient),
+		trial:    trialemails.NoopNotifier{},
 	}
 }
 
