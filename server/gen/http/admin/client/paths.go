@@ -32,6 +32,11 @@ func UpdateOrganizationAdminPath() string {
 	return "/admin/organization.update"
 }
 
+// BulkUpdateAccountTypeAdminPath returns the URL path to the admin service bulkUpdateAccountType HTTP endpoint.
+func BulkUpdateAccountTypeAdminPath() string {
+	return "/admin/organizations.bulkUpdateAccountType"
+}
+
 // DisableOrganizationAdminPath returns the URL path to the admin service disableOrganization HTTP endpoint.
 func DisableOrganizationAdminPath() string {
 	return "/admin/organization.disable"

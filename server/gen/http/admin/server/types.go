@@ -19,10 +19,19 @@ import (
 type UpdateOrganizationRequestBody struct {
 	// Organization ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// New gram_account_type (e.g. free, pro, enterprise).
+	// New gram_account_type.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	// New whitelisted flag.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+}
+
+// BulkUpdateAccountTypeRequestBody is the type of the "admin" service
+// "bulkUpdateAccountType" endpoint HTTP request body.
+type BulkUpdateAccountTypeRequestBody struct {
+	// Organization IDs to update.
+	Ids []string `form:"ids,omitempty" json:"ids,omitempty" xml:"ids,omitempty"`
+	// New gram_account_type for every listed organization.
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 }
 
 // DisableOrganizationRequestBody is the type of the "admin" service
@@ -127,6 +136,16 @@ type UpdateOrganizationResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the organization.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// BulkUpdateAccountTypeResponseBody is the type of the "admin" service
+// "bulkUpdateAccountType" endpoint HTTP response body.
+type BulkUpdateAccountTypeResponseBody struct {
+	// IDs of the organizations whose account type was set.
+	UpdatedIds []string `form:"updated_ids" json:"updated_ids" xml:"updated_ids"`
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string `form:"missing_ids" json:"missing_ids" xml:"missing_ids"`
 }
 
 // DisableOrganizationResponseBody is the type of the "admin" service
@@ -1262,6 +1281,194 @@ type UpdateOrganizationUnexpectedResponseBody struct {
 // service "updateOrganization" endpoint HTTP response body for the
 // "gateway_error" error.
 type UpdateOrganizationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeUnauthorizedResponseBody is the type of the "admin"
+// service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "unauthorized" error.
+type BulkUpdateAccountTypeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeForbiddenResponseBody is the type of the "admin"
+// service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "forbidden" error.
+type BulkUpdateAccountTypeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeBadRequestResponseBody is the type of the "admin"
+// service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "bad_request" error.
+type BulkUpdateAccountTypeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeNotFoundResponseBody is the type of the "admin" service
+// "bulkUpdateAccountType" endpoint HTTP response body for the "not_found"
+// error.
+type BulkUpdateAccountTypeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeConflictResponseBody is the type of the "admin" service
+// "bulkUpdateAccountType" endpoint HTTP response body for the "conflict" error.
+type BulkUpdateAccountTypeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeUnsupportedMediaResponseBody is the type of the "admin"
+// service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "unsupported_media" error.
+type BulkUpdateAccountTypeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeInvalidResponseBody is the type of the "admin" service
+// "bulkUpdateAccountType" endpoint HTTP response body for the "invalid" error.
+type BulkUpdateAccountTypeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeInvariantViolationResponseBody is the type of the
+// "admin" service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "invariant_violation" error.
+type BulkUpdateAccountTypeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeUnexpectedResponseBody is the type of the "admin"
+// service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "unexpected" error.
+type BulkUpdateAccountTypeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BulkUpdateAccountTypeGatewayErrorResponseBody is the type of the "admin"
+// service "bulkUpdateAccountType" endpoint HTTP response body for the
+// "gateway_error" error.
+type BulkUpdateAccountTypeGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3229,6 +3436,29 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 	return body
 }
 
+// NewBulkUpdateAccountTypeResponseBody builds the HTTP response body from the
+// result of the "bulkUpdateAccountType" endpoint of the "admin" service.
+func NewBulkUpdateAccountTypeResponseBody(res *admin.AdminBulkUpdateAccountTypeResult) *BulkUpdateAccountTypeResponseBody {
+	body := &BulkUpdateAccountTypeResponseBody{}
+	if res.UpdatedIds != nil {
+		body.UpdatedIds = make([]string, len(res.UpdatedIds))
+		for i, val := range res.UpdatedIds {
+			body.UpdatedIds[i] = val
+		}
+	} else {
+		body.UpdatedIds = []string{}
+	}
+	if res.MissingIds != nil {
+		body.MissingIds = make([]string, len(res.MissingIds))
+		for i, val := range res.MissingIds {
+			body.MissingIds[i] = val
+		}
+	} else {
+		body.MissingIds = []string{}
+	}
+	return body
+}
+
 // NewDisableOrganizationResponseBody builds the HTTP response body from the
 // result of the "disableOrganization" endpoint of the "admin" service.
 func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOrganizationResponseBody {
@@ -4126,6 +4356,156 @@ func NewUpdateOrganizationUnexpectedResponseBody(res *goa.ServiceError) *UpdateO
 // from the result of the "updateOrganization" endpoint of the "admin" service.
 func NewUpdateOrganizationGatewayErrorResponseBody(res *goa.ServiceError) *UpdateOrganizationGatewayErrorResponseBody {
 	body := &UpdateOrganizationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeUnauthorizedResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeUnauthorizedResponseBody {
+	body := &BulkUpdateAccountTypeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeForbiddenResponseBody builds the HTTP response body
+// from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeForbiddenResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeForbiddenResponseBody {
+	body := &BulkUpdateAccountTypeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeBadRequestResponseBody builds the HTTP response body
+// from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeBadRequestResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeBadRequestResponseBody {
+	body := &BulkUpdateAccountTypeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeNotFoundResponseBody builds the HTTP response body
+// from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeNotFoundResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeNotFoundResponseBody {
+	body := &BulkUpdateAccountTypeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeConflictResponseBody builds the HTTP response body
+// from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeConflictResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeConflictResponseBody {
+	body := &BulkUpdateAccountTypeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "bulkUpdateAccountType" endpoint of the
+// "admin" service.
+func NewBulkUpdateAccountTypeUnsupportedMediaResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeUnsupportedMediaResponseBody {
+	body := &BulkUpdateAccountTypeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeInvalidResponseBody builds the HTTP response body
+// from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeInvalidResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeInvalidResponseBody {
+	body := &BulkUpdateAccountTypeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "bulkUpdateAccountType" endpoint of the
+// "admin" service.
+func NewBulkUpdateAccountTypeInvariantViolationResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeInvariantViolationResponseBody {
+	body := &BulkUpdateAccountTypeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeUnexpectedResponseBody builds the HTTP response body
+// from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeUnexpectedResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeUnexpectedResponseBody {
+	body := &BulkUpdateAccountTypeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBulkUpdateAccountTypeGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "bulkUpdateAccountType" endpoint of the "admin"
+// service.
+func NewBulkUpdateAccountTypeGatewayErrorResponseBody(res *goa.ServiceError) *BulkUpdateAccountTypeGatewayErrorResponseBody {
+	body := &BulkUpdateAccountTypeGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5626,6 +6006,21 @@ func NewUpdateOrganizationPayload(body *UpdateOrganizationRequestBody, adminSess
 	return v
 }
 
+// NewBulkUpdateAccountTypePayload builds a admin service bulkUpdateAccountType
+// endpoint payload.
+func NewBulkUpdateAccountTypePayload(body *BulkUpdateAccountTypeRequestBody, adminSessionToken *string) *admin.BulkUpdateAccountTypePayload {
+	v := &admin.BulkUpdateAccountTypePayload{
+		AccountType: *body.AccountType,
+	}
+	v.Ids = make([]string, len(body.Ids))
+	for i, val := range body.Ids {
+		v.Ids[i] = val
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewDisableOrganizationPayload builds a admin service disableOrganization
 // endpoint payload.
 func NewDisableOrganizationPayload(body *DisableOrganizationRequestBody, adminSessionToken *string) *admin.DisableOrganizationPayload {
@@ -5745,6 +6140,36 @@ func NewGetOrganizationStatsPayload(adminSessionToken *string) *admin.GetOrganiz
 func ValidateUpdateOrganizationRequestBody(body *UpdateOrganizationRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.AccountType != nil {
+		if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "enterprise"}))
+		}
+	}
+	return
+}
+
+// ValidateBulkUpdateAccountTypeRequestBody runs the validations defined on
+// BulkUpdateAccountTypeRequestBody
+func ValidateBulkUpdateAccountTypeRequestBody(body *BulkUpdateAccountTypeRequestBody) (err error) {
+	if body.Ids == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ids", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if len(body.Ids) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1, true))
+	}
+	for _, e := range body.Ids {
+		if utf8.RuneCountInString(e) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids[*]", e, utf8.RuneCountInString(e), 1, true))
+		}
+	}
+	if body.AccountType != nil {
+		if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "enterprise"}))
+		}
 	}
 	return
 }

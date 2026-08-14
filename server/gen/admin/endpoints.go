@@ -21,6 +21,7 @@ type Endpoints struct {
 	Logout                   goa.Endpoint
 	GetProject               goa.Endpoint
 	UpdateOrganization       goa.Endpoint
+	BulkUpdateAccountType    goa.Endpoint
 	DisableOrganization      goa.Endpoint
 	EnableOrganization       goa.Endpoint
 	GetOrganization          goa.Endpoint
@@ -43,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:                   NewLogoutEndpoint(s),
 		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
 		UpdateOrganization:       NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		BulkUpdateAccountType:    NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
 		DisableOrganization:      NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
 		EnableOrganization:       NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
 		GetOrganization:          NewGetOrganizationEndpoint(s, a.APIKeyAuth),
@@ -63,6 +65,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetProject = m(e.GetProject)
 	e.UpdateOrganization = m(e.UpdateOrganization)
+	e.BulkUpdateAccountType = m(e.BulkUpdateAccountType)
 	e.DisableOrganization = m(e.DisableOrganization)
 	e.EnableOrganization = m(e.EnableOrganization)
 	e.GetOrganization = m(e.GetOrganization)
@@ -145,6 +148,29 @@ func NewUpdateOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.UpdateOrganization(ctx, p)
+	}
+}
+
+// NewBulkUpdateAccountTypeEndpoint returns an endpoint function that calls the
+// method "bulkUpdateAccountType" of service "admin".
+func NewBulkUpdateAccountTypeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BulkUpdateAccountTypePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BulkUpdateAccountType(ctx, p)
 	}
 }
 

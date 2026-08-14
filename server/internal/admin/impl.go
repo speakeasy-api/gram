@@ -603,6 +603,45 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
 }
 
+func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUpdateAccountTypePayload) (*gen.AdminBulkUpdateAccountTypeResult, error) {
+	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
+		AccountType: payload.AccountType,
+		Ids:         payload.Ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
+	}
+
+	written := make(map[string]struct{}, len(updated))
+	for _, id := range updated {
+		written[id] = struct{}{}
+	}
+
+	// An id that matched nothing is the operator's stale paste, and naming it is
+	// the only way they can tell the batch fell short of what they asked for.
+	missing := make([]string, 0, len(payload.Ids))
+	seen := make(map[string]struct{}, len(payload.Ids))
+	for _, id := range payload.Ids {
+		if _, ok := written[id]; ok {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		missing = append(missing, id)
+	}
+
+	if updated == nil {
+		updated = []string{}
+	}
+
+	return &gen.AdminBulkUpdateAccountTypeResult{
+		UpdatedIds: updated,
+		MissingIds: missing,
+	}, nil
+}
+
 func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
 	rows, err := repo.New(s.db).AdminDisableOrganization(ctx, payload.ID)
 	if err != nil {

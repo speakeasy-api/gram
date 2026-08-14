@@ -1218,6 +1218,241 @@ func DecodeUpdateOrganizationResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildBulkUpdateAccountTypeRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "bulkUpdateAccountType"
+// endpoint
+func (c *Client) BuildBulkUpdateAccountTypeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BulkUpdateAccountTypeAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "bulkUpdateAccountType", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBulkUpdateAccountTypeRequest returns an encoder for requests sent to
+// the admin bulkUpdateAccountType server.
+func EncodeBulkUpdateAccountTypeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.BulkUpdateAccountTypePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "bulkUpdateAccountType", "*admin.BulkUpdateAccountTypePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewBulkUpdateAccountTypeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "bulkUpdateAccountType", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBulkUpdateAccountTypeResponse returns a decoder for responses returned
+// by the admin bulkUpdateAccountType endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeBulkUpdateAccountTypeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBulkUpdateAccountTypeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BulkUpdateAccountTypeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			res := NewBulkUpdateAccountTypeAdminBulkUpdateAccountTypeResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BulkUpdateAccountTypeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BulkUpdateAccountTypeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BulkUpdateAccountTypeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BulkUpdateAccountTypeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BulkUpdateAccountTypeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BulkUpdateAccountTypeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BulkUpdateAccountTypeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BulkUpdateAccountTypeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+				}
+				err = ValidateBulkUpdateAccountTypeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+				}
+				return nil, NewBulkUpdateAccountTypeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BulkUpdateAccountTypeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+				}
+				err = ValidateBulkUpdateAccountTypeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+				}
+				return nil, NewBulkUpdateAccountTypeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "bulkUpdateAccountType", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BulkUpdateAccountTypeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkUpdateAccountType", err)
+			}
+			err = ValidateBulkUpdateAccountTypeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkUpdateAccountType", err)
+			}
+			return nil, NewBulkUpdateAccountTypeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "bulkUpdateAccountType", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDisableOrganizationRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "disableOrganization"
 // endpoint

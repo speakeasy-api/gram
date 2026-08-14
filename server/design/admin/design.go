@@ -147,6 +147,18 @@ var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
 	Attribute("disabled_last_7_days", Int64, "Organizations disabled in the last 7 days.")
 })
 
+var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", func() {
+	Description("Outcome of a bulk account type change.")
+	Required("updated_ids", "missing_ids")
+
+	Attribute("updated_ids", ArrayOf(String), "IDs of the organizations whose account type was set.")
+	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
+})
+
+// Shared so the single and bulk write paths cannot drift apart into accepting
+// different sets.
+var accountTypes = []any{"free", "pro", "enterprise"}
+
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
 	Security(security.AdminAuth)
@@ -263,7 +275,9 @@ var _ = Service("admin", func() {
 			Required("id")
 
 			Attribute("id", String, "Organization ID.")
-			Attribute("account_type", String, "New gram_account_type (e.g. free, pro, enterprise).")
+			Attribute("account_type", String, "New gram_account_type.", func() {
+				Enum(accountTypes...)
+			})
 			Attribute("whitelisted", Boolean, "New whitelisted flag.")
 		})
 
@@ -275,6 +289,36 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminUpdateOrganization")
+	})
+
+	Method("bulkUpdateAccountType", func() {
+		Description("Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("ids", "account_type")
+
+			// See disableOrganization for why this needs an explicit typename.
+			Meta("openapi:typename", "BulkUpdateAccountTypeRequestBody")
+
+			Attribute("ids", ArrayOf(String, func() {
+				MinLength(1)
+			}), "Organization IDs to update.", func() {
+				MinLength(1)
+			})
+			Attribute("account_type", String, "New gram_account_type for every listed organization.", func() {
+				Enum(accountTypes...)
+			})
+		})
+
+		Result(AdminBulkUpdateAccountTypeResult)
+
+		HTTP(func() {
+			POST("/admin/organizations.bulkUpdateAccountType")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminBulkUpdateAccountType")
 	})
 
 	Method("disableOrganization", func() {

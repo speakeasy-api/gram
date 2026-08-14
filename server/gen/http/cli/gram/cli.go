@@ -97,7 +97,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
+		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -343,6 +343,10 @@ func ParseEndpoint(
 		adminUpdateOrganizationFlags                 = flag.NewFlagSet("update-organization", flag.ExitOnError)
 		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
 		adminUpdateOrganizationAdminSessionTokenFlag = adminUpdateOrganizationFlags.String("admin-session-token", "", "")
+
+		adminBulkUpdateAccountTypeFlags                 = flag.NewFlagSet("bulk-update-account-type", flag.ExitOnError)
+		adminBulkUpdateAccountTypeBodyFlag              = adminBulkUpdateAccountTypeFlags.String("body", "REQUIRED", "")
+		adminBulkUpdateAccountTypeAdminSessionTokenFlag = adminBulkUpdateAccountTypeFlags.String("admin-session-token", "", "")
 
 		adminDisableOrganizationFlags                 = flag.NewFlagSet("disable-organization", flag.ExitOnError)
 		adminDisableOrganizationBodyFlag              = adminDisableOrganizationFlags.String("body", "REQUIRED", "")
@@ -3392,6 +3396,7 @@ func ParseEndpoint(
 	adminLogoutFlags.Usage = adminLogoutUsage
 	adminGetProjectFlags.Usage = adminGetProjectUsage
 	adminUpdateOrganizationFlags.Usage = adminUpdateOrganizationUsage
+	adminBulkUpdateAccountTypeFlags.Usage = adminBulkUpdateAccountTypeUsage
 	adminDisableOrganizationFlags.Usage = adminDisableOrganizationUsage
 	adminEnableOrganizationFlags.Usage = adminEnableOrganizationUsage
 	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
@@ -4332,6 +4337,9 @@ func ParseEndpoint(
 
 			case "update-organization":
 				epf = adminUpdateOrganizationFlags
+
+			case "bulk-update-account-type":
+				epf = adminBulkUpdateAccountTypeFlags
 
 			case "disable-organization":
 				epf = adminDisableOrganizationFlags
@@ -6318,6 +6326,9 @@ func ParseEndpoint(
 			case "update-organization":
 				endpoint = c.UpdateOrganization()
 				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
+			case "bulk-update-account-type":
+				endpoint = c.BulkUpdateAccountType()
+				data, err = adminc.BuildBulkUpdateAccountTypePayload(*adminBulkUpdateAccountTypeBodyFlag, *adminBulkUpdateAccountTypeAdminSessionTokenFlag)
 			case "disable-organization":
 				endpoint = c.DisableOrganization()
 				data, err = adminc.BuildDisableOrganizationPayload(*adminDisableOrganizationBodyFlag, *adminDisableOrganizationAdminSessionTokenFlag)
@@ -8797,6 +8808,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
 	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
 	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
 	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
@@ -8912,7 +8924,27 @@ func adminUpdateOrganizationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminBulkUpdateAccountTypeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin bulk-update-account-type", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin bulk-update-account-type --body '{\n      \"account_type\": \"pro\",\n      \"ids\": [\n         \"aa\",\n         \"aa\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminDisableOrganizationUsage() {

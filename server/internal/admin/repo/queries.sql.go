@@ -12,6 +12,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
+UPDATE organization_metadata
+SET
+    gram_account_type = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = ANY($2::text[])
+RETURNING id
+`
+
+type AdminBulkUpdateAccountTypeParams struct {
+	AccountType string
+	Ids         []string
+}
+
+// Bulk sibling of AdminUpdateOrganization. One statement rather than a loop, so
+// the whole batch lands or none of it does. Returns the ids it touched, which is
+// how the caller learns which of its ids matched nothing.
+func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkUpdateAccountTypeParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, adminBulkUpdateAccountType, arg.AccountType, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
 WITH search AS (
     -- Identical to AdminListOrganizations, escaping included: a pasted id that

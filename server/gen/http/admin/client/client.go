@@ -35,6 +35,10 @@ type Client struct {
 	// updateOrganization endpoint.
 	UpdateOrganizationDoer goahttp.Doer
 
+	// BulkUpdateAccountType Doer is the HTTP client used to make requests to the
+	// bulkUpdateAccountType endpoint.
+	BulkUpdateAccountTypeDoer goahttp.Doer
+
 	// DisableOrganization Doer is the HTTP client used to make requests to the
 	// disableOrganization endpoint.
 	DisableOrganizationDoer goahttp.Doer
@@ -100,6 +104,7 @@ func NewClient(
 		LogoutDoer:                   doer,
 		GetProjectDoer:               doer,
 		UpdateOrganizationDoer:       doer,
+		BulkUpdateAccountTypeDoer:    doer,
 		DisableOrganizationDoer:      doer,
 		EnableOrganizationDoer:       doer,
 		GetOrganizationDoer:          doer,
@@ -233,6 +238,30 @@ func (c *Client) UpdateOrganization() goa.Endpoint {
 		resp, err := c.UpdateOrganizationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BulkUpdateAccountType returns an endpoint that makes HTTP requests to the
+// admin service bulkUpdateAccountType server.
+func (c *Client) BulkUpdateAccountType() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBulkUpdateAccountTypeRequest(c.encoder)
+		decodeResponse = DecodeBulkUpdateAccountTypeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBulkUpdateAccountTypeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BulkUpdateAccountTypeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "bulkUpdateAccountType", err)
 		}
 		return decodeResponse(resp)
 	}

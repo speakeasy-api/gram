@@ -244,6 +244,17 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: AdminBulkUpdateAccountType :many
+-- Bulk sibling of AdminUpdateOrganization. One statement rather than a loop, so
+-- the whole batch lands or none of it does. Returns the ids it touched, which is
+-- how the caller learns which of its ids matched nothing.
+UPDATE organization_metadata
+SET
+    gram_account_type = @account_type::text,
+    updated_at = clock_timestamp()
+WHERE id = ANY(@ids::text[])
+RETURNING id;
+
 -- name: AdminDisableOrganization :execrows
 -- Operator-initiated disable. Keyed on the Gram organization id rather than
 -- workos_id so an organization that was never linked to WorkOS can still be
