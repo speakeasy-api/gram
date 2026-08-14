@@ -155,8 +155,7 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_receipts (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT stripe_webhook_receipts_pkey PRIMARY KEY (stripe_event_id),
-  CONSTRAINT stripe_webhook_receipts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT stripe_webhook_receipts_pkey PRIMARY KEY (stripe_event_id)
 );
 
 CREATE INDEX IF NOT EXISTS stripe_webhook_receipts_organization_id_idx
