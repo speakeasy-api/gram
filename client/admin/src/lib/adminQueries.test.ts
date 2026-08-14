@@ -169,7 +169,7 @@ describe("writeOrganizationToCache", () => {
     // Asked before the write, and still open when the write comes back.
     const inFlight = qc.prefetchQuery({ ...page, queryFn: () => stale });
 
-    await cancelOrganizationFetches(qc, DISABLED.id);
+    await cancelOrganizationFetches(qc);
     writeOrganizationToCache(qc, DISABLED);
 
     // The stale answer arrives late, carrying the row in its pre-write state.
@@ -178,5 +178,31 @@ describe("writeOrganizationToCache", () => {
 
     const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);
     expect(after?.organizations[0]).toEqual(DISABLED);
+  });
+
+  // The entry the operator actually opened. The row links by slug wherever an
+  // organization has one, so the detail read in flight is keyed by slug, and
+  // the slug is not known when the write starts. Cancelling the id alone would
+  // leave this one free to answer late and put the record back as it was.
+  it("survives a detail read in flight under the slug, not the id", async () => {
+    const qc = new QueryClient();
+    const detail = organizationQuery(DISABLED.slug);
+
+    let land: (result: AdminOrganization) => void = () => {};
+    const stale = new Promise<AdminOrganization>((resolve) => {
+      land = resolve;
+    });
+
+    const inFlight = qc.prefetchQuery({ ...detail, queryFn: () => stale });
+
+    await cancelOrganizationFetches(qc);
+    writeOrganizationToCache(qc, DISABLED);
+
+    land(LIVE);
+    await inFlight;
+
+    expect(qc.getQueryData(detail.queryKey)?.disabled_at).toBe(
+      DISABLED.disabled_at,
+    );
   });
 });

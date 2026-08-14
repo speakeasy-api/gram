@@ -85,7 +85,7 @@ export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => disableOrganization({ id }),
-    onMutate: (id) => cancelOrganizationFetches(qc, id),
+    onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
   });
 }
@@ -94,7 +94,7 @@ export function useEnableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => enableOrganization({ id }),
-    onMutate: (id) => cancelOrganizationFetches(qc, id),
+    onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
   });
 }
@@ -105,7 +105,7 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
     // Wrapped, so the body is the only argument the client is handed: the
     // mutation passes its own context as a second one.
     mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
-    onMutate: (body) => cancelOrganizationFetches(qc, body.id),
+    onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
   });
 }

@@ -60,11 +60,16 @@ export function organizationsListQuery(
   });
 }
 
+// Named once, because the detail entry is reached two ways. The route takes an
+// id or a slug and each is its own entry, so this is the only thing the two
+// have in common and the only way to name both at once.
+const ORGANIZATION_KEY = "gram-admin-organization";
+
 export function organizationQuery(
   idOrSlug: string,
 ): AdminQuery<AdminOrganization, readonly ["gram-admin-organization", string]> {
   return queryOptions({
-    queryKey: ["gram-admin-organization", idOrSlug] as const,
+    queryKey: [ORGANIZATION_KEY, idOrSlug] as const,
     queryFn: () => getOrganization(idOrSlug),
   });
 }
@@ -106,13 +111,19 @@ export function organizationMembersQuery(
 //
 // Cancelling rather than awaiting, because the answer is already stale: it was
 // asked before the write the operator just made.
-export function cancelOrganizationFetches(
-  qc: QueryClient,
-  id: string,
-): Promise<void> {
+export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
   return Promise.all([
     qc.cancelQueries({ queryKey: organizationsListQuery().queryKey }),
-    qc.cancelQueries({ queryKey: organizationQuery(id).queryKey }),
+    // The whole detail key rather than one organization's, and that is the
+    // point rather than laziness. `writeOrganizationToCache` writes the record
+    // under its id and under its slug, the row links by slug wherever there is
+    // one, and the slug is not known here: it arrives with the response the
+    // write has not made yet. Cancelling the id alone would leave the entry the
+    // operator actually opened free to answer late and put the record back.
+    //
+    // Cancelling another organization's detail fetch costs that page a refetch
+    // and nothing else, and only one detail query is ever in flight from here.
+    qc.cancelQueries({ queryKey: [ORGANIZATION_KEY] }),
   ]).then(() => undefined);
 }
 
