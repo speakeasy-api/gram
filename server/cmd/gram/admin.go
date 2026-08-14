@@ -290,10 +290,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(middleware.AdminCookieAttributes(adminCrossOriginCookies, adminCookieDomain))
 			mux.Use(admin.SessionMiddleware)
 
-			adminWorkOSClient, err := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			if err != nil {
-				return fmt.Errorf("create admin workos client: %w", err)
-			}
+			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
 
 			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient))
 
