@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -346,9 +347,9 @@ func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) 
 	return &Customer{ID: "cus_local_stub"}, nil
 }
 
-func (s *stubClient) CreateCheckoutSession(ctx context.Context, _ CreateCheckoutSessionInput) (*CheckoutSession, error) {
+func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
 	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
-	return &CheckoutSession{URL: "http://localhost:3000/billing"}, nil
+	return &CheckoutSession{URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
 }
 
 func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {

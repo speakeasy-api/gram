@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -35,6 +41,7 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
   }),
 }));
 
+import { resetPaygCheckoutLocks } from "./payg-checkout-lock";
 import { StartPaygCheckoutCTA } from "./start-payg-checkout-cta";
 
 type MutateCallbacks = {
@@ -45,6 +52,7 @@ type MutateCallbacks = {
 
 const DAY = 24 * 60 * 60 * 1000;
 const CHECKOUT_URL = "https://checkout.stripe.test/c/pay/session";
+const ORGANIZATION_ID = "org-under-test";
 
 const activeTrial = () => ({
   startedAt: new Date(Date.now() - 3 * DAY),
@@ -73,6 +81,9 @@ function rejectWith(error: unknown) {
 const cta = () =>
   screen.queryByRole("button", { name: /start pay as you go/i });
 
+const ctas = () =>
+  screen.getAllByRole("button", { name: /start pay as you go/i });
+
 const alert = () => screen.queryByRole("alert");
 
 describe("StartPaygCheckoutCTA", () => {
@@ -82,9 +93,15 @@ describe("StartPaygCheckoutCTA", () => {
     // The hoisted mocks are shared across tests; call counts have to start
     // from zero or the single-flight assertions read stale clicks.
     vi.clearAllMocks();
+    // The checkout lock is module state shared by every mount, so it outlives
+    // unmount and has to be released between tests.
+    resetPaygCheckoutLocks();
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
-    mocks.session.mockReturnValue({ trial: activeTrial() });
+    mocks.session.mockReturnValue({
+      trial: activeTrial(),
+      activeOrganizationId: ORGANIZATION_ID,
+    });
     mocks.isPending.mockReturnValue(false);
     mocks.mutate.mockImplementation(() => {});
     assign.mockReset();
@@ -95,6 +112,7 @@ describe("StartPaygCheckoutCTA", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -149,6 +167,29 @@ describe("StartPaygCheckoutCTA", () => {
     expect(cta()).toBeNull();
   });
 
+  // A billing page left open across the end of the trial would otherwise keep
+  // offering a checkout the backend now rejects.
+  it("stops offering checkout the moment the trial ends", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-18T23:59:59.999Z"));
+    mocks.session.mockReturnValue({
+      trial: {
+        startedAt: new Date("2026-08-05T00:00:00.000Z"),
+        endsAt: new Date("2026-08-19T00:00:00.000Z"),
+      },
+      activeOrganizationId: ORGANIZATION_ID,
+    });
+
+    render(<StartPaygCheckoutCTA />);
+    expect(cta()).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(cta()).toBeNull();
+  });
+
   it("only calls the checkout endpoint on click", () => {
     render(<StartPaygCheckoutCTA />);
 
@@ -177,6 +218,45 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(button);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  // The billing page and the sidebar trial card mount the CTA at the same
+  // time, each with its own mutation, so the single-flight guard has to be
+  // shared or a click on one surface can open a second Stripe session while
+  // the other's request is still in flight.
+  it("starts a single checkout across two mounted instances", () => {
+    mocks.mutate.mockImplementation(() => {});
+    render(
+      <>
+        <StartPaygCheckoutCTA />
+        <StartPaygCheckoutCTA />
+      </>,
+    );
+
+    const [first, second] = ctas();
+    fireEvent.click(first!);
+    fireEvent.click(second!);
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    // Both surfaces reflect the in-flight checkout, not just the clicked one.
+    expect(first!.hasAttribute("disabled")).toBe(true);
+    expect(second!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-enables both instances once the checkout settles", () => {
+    rejectWith(new Error("stripe unavailable"));
+    render(
+      <>
+        <StartPaygCheckoutCTA />
+        <StartPaygCheckoutCTA />
+      </>,
+    );
+
+    const [first, second] = ctas();
+    fireEvent.click(first!);
+
+    expect(first!.hasAttribute("disabled")).toBe(false);
+    expect(second!.hasAttribute("disabled")).toBe(false);
   });
 
   it("disables the button while the mutation is pending", () => {

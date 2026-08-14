@@ -1,3 +1,8 @@
+import {
+  isPaygCheckoutLocked,
+  setPaygCheckoutLocked,
+  usePaygCheckoutLocked,
+} from "@/components/billing/payg-checkout-lock";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { ButtonSize } from "@/components/ui/lib/types";
@@ -5,6 +10,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useTrialNow } from "@/hooks/useTrialNow";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
@@ -13,7 +19,7 @@ import { cn } from "@/lib/utils";
 // separately. If generation names the hook differently, only this import and
 // the `checkout.mutate` call below have to follow it.
 import { useCreateStripeCheckoutMutation } from "@gram/client/react-query/createStripeCheckout.js";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 const CTA_LABEL = "Start pay as you go";
 const ERROR_MESSAGE = "Couldn't start checkout. Try again.";
@@ -24,10 +30,12 @@ const ERROR_MESSAGE = "Couldn't start checkout. Try again.";
  *
  * Shared by the billing page and the sidebar trial card so the gating, the
  * single-flight mutation, and the navigation rules can only be changed in one
- * place. Every gate is opt-in: a flag that is loading, disabled, unregistered,
- * or errored renders nothing, as does a viewer without `org:admin` or an
- * organization whose trial never started or already ended. Callers keep their
- * existing talk-to-sales fallback — this CTA is additive.
+ * place. Both surfaces can be mounted at once, so the single-flight lock is
+ * organization-scoped module state rather than per-instance — see
+ * `payg-checkout-lock`. Every gate is opt-in: a flag that is loading, disabled,
+ * unregistered, or errored renders nothing, as does a viewer without
+ * `org:admin` or an organization whose trial never started or already ended.
+ * Callers keep their existing talk-to-sales fallback — this CTA is additive.
  */
 export function StartPaygCheckoutCTA({
   size = "md",
@@ -38,18 +46,23 @@ export function StartPaygCheckoutCTA({
 }): JSX.Element | null {
   const flag = useFeatureFlag(FEATURE_FLAGS.paygSelfServeBilling);
   const { hasScope } = useRBAC();
-  const { trial } = useSession();
+  const { trial, activeOrganizationId } = useSession();
   const telemetry = useTelemetry();
   const checkout = useCreateStripeCheckoutMutation();
   const [failed, setFailed] = useState(false);
-  // `isPending` only disables the button on the NEXT render, so a second click
+  // A trial that ends while the page is open has to take the CTA with it, so
+  // the lifecycle below reads a clock that re-renders on the trial's own
+  // boundaries instead of whenever a parent happens to re-render.
+  const now = useTrialNow(trial);
+  // `isPending` only disables the button on the NEXT render, and only for the
+  // mount that owns the mutation, so a second click — on either mount —
   // dispatched before React re-renders would open a second checkout session.
-  // The ref closes that window synchronously.
-  const inFlight = useRef(false);
+  // The lock closes that window synchronously for every mount.
+  const locked = usePaygCheckoutLocked(activeOrganizationId);
 
   const startCheckout = useCallback(() => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+    if (isPaygCheckoutLocked(activeOrganizationId)) return;
+    setPaygCheckoutLocked(activeOrganizationId, true);
     setFailed(false);
 
     checkout.mutate(
@@ -76,15 +89,15 @@ export function StartPaygCheckoutCTA({
           setFailed(true);
         },
         onSettled: () => {
-          inFlight.current = false;
+          setPaygCheckoutLocked(activeOrganizationId, false);
         },
       },
     );
-  }, [checkout, telemetry]);
+  }, [activeOrganizationId, checkout, telemetry]);
 
   if (flag.status !== "enabled") return null;
   if (!hasScope("org:admin")) return null;
-  if (getTrialLifecycleFromDates(trial, new Date()) !== "active") return null;
+  if (getTrialLifecycleFromDates(trial, now) !== "active") return null;
 
   return (
     <div className={cn("flex flex-col items-start gap-2", className)}>
@@ -92,7 +105,7 @@ export function StartPaygCheckoutCTA({
         variant="primary"
         size={size}
         onClick={startCheckout}
-        disabled={checkout.isPending}
+        disabled={locked || checkout.isPending}
       >
         {CTA_LABEL}
       </Button>

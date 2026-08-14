@@ -36,6 +36,7 @@ type checkoutStripeClient struct {
 	mu sync.Mutex
 
 	customers      map[string]*stripeclient.Customer
+	checkoutURLs   map[string]string
 	customerInputs []stripeclient.CreateCustomerInput
 	checkoutInputs []stripeclient.CreateCheckoutSessionInput
 	customerError  error
@@ -45,6 +46,7 @@ type checkoutStripeClient struct {
 func newCheckoutStripeClient() *checkoutStripeClient {
 	return &checkoutStripeClient{
 		customers:      make(map[string]*stripeclient.Customer),
+		checkoutURLs:   make(map[string]string),
 		customerInputs: make([]stripeclient.CreateCustomerInput, 0),
 		checkoutInputs: make([]stripeclient.CreateCheckoutSessionInput, 0),
 	}
@@ -74,7 +76,12 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 	if c.checkoutError != nil {
 		return nil, c.checkoutError
 	}
-	return &stripeclient.CheckoutSession{URL: fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutInputs))}, nil
+	if checkoutURL, ok := c.checkoutURLs[input.IdempotencyKey]; ok {
+		return &stripeclient.CheckoutSession{URL: checkoutURL}, nil
+	}
+	checkoutURL := fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutURLs)+1)
+	c.checkoutURLs[input.IdempotencyKey] = checkoutURL
+	return &stripeclient.CheckoutSession{URL: checkoutURL}, nil
 }
 
 func (c *checkoutStripeClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
@@ -255,7 +262,7 @@ func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
 	require.Equal(t, checkouts[0].SuccessURL, checkouts[0].CancelURL)
 	require.Nil(t, checkouts[0].TrialEnd)
-	require.Equal(t, "checkout-session:"+ti.orgID+":request-checkout-test", checkouts[0].IdempotencyKey)
+	require.Equal(t, "checkout-session:"+ti.orgID, checkouts[0].IdempotencyKey)
 }
 
 func TestCreateStripeCheckoutFailsClosedWithoutRolloutProvider(t *testing.T) {
@@ -413,13 +420,14 @@ func TestCreateStripeCheckoutSequentialRequestsCreateCustomerOnce(t *testing.T) 
 	require.NoError(t, err)
 	secondURL, err := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
 	require.NoError(t, err)
-	require.NotEqual(t, firstURL, secondURL)
+	require.Equal(t, firstURL, secondURL)
 
 	uniqueCustomers, customers, checkouts := ti.stripe.snapshot()
 	require.Equal(t, 1, uniqueCustomers)
 	require.Len(t, customers, 1)
 	require.Len(t, checkouts, 2)
 	require.Equal(t, checkouts[0].CustomerID, checkouts[1].CustomerID)
+	require.Equal(t, checkouts[0].IdempotencyKey, checkouts[1].IdempotencyKey)
 }
 
 func TestCreateStripeCheckoutAuditsActingUserWithoutStripeMetadata(t *testing.T) {
@@ -479,6 +487,8 @@ func TestCreateStripeCheckoutConcurrentDoubleClickCreatesOneCustomer(t *testing.
 		require.Equal(t, "customer:"+ti.orgID, customer.IdempotencyKey)
 	}
 	require.Len(t, checkouts, 2)
+	require.Equal(t, "checkout-session:"+ti.orgID, checkouts[0].IdempotencyKey)
+	require.Equal(t, checkouts[0].IdempotencyKey, checkouts[1].IdempotencyKey)
 
 	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
 	require.NoError(t, err)

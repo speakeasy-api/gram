@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -90,14 +89,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		customerID = customer.ID
 	}
 
-	requestID := uuid.NewString()
-	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx.ReqID != "" {
-		requestID = requestCtx.ReqID
-	}
 	billingURL := s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String()
-	if trialEnd != nil && time.Until(*trialEnd) < minimumStripeCheckoutTrialLead {
-		return "", oops.E(oops.CodeConflict, nil, "the active trial ends too soon to start self-serve billing").LogWarn(ctx, s.logger)
-	}
 	checkout, err := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 		CustomerID:       customerID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -105,7 +97,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		SuccessURL:       billingURL,
 		CancelURL:        billingURL,
 		TrialEnd:         trialEnd,
-		IdempotencyKey:   fmt.Sprintf("checkout-session:%s:%s", authCtx.ActiveOrganizationID, requestID),
+		IdempotencyKey:   fmt.Sprintf("checkout-session:%s", authCtx.ActiveOrganizationID),
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create Stripe Checkout session").LogError(ctx, s.logger)

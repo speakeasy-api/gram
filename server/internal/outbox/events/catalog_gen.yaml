@@ -654,7 +654,7 @@ webhooks:
                 required: true
     audit_log.billing_metadata_event_v1:
         post:
-            description: Emitted when changes to billing metadata are made
+            description: Emitted when billing metadata changes or self-serve checkout activity occurs
             operationId: audit_log.billing_metadata_event_v1
             requestBody:
                 content:
