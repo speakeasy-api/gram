@@ -28,6 +28,7 @@ type Endpoints struct {
 	ListOrganizationProjects goa.Endpoint
 	ListOrganizations        goa.Endpoint
 	ExtendTrial              goa.Endpoint
+	CreateOrganization       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -47,6 +48,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListOrganizationProjects: NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:        NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 		ExtendTrial:              NewExtendTrialEndpoint(s, a.APIKeyAuth),
+		CreateOrganization:       NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -64,6 +66,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
 	e.ListOrganizations = m(e.ListOrganizations)
 	e.ExtendTrial = m(e.ExtendTrial)
+	e.CreateOrganization = m(e.CreateOrganization)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -297,5 +300,28 @@ func NewExtendTrialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.ExtendTrial(ctx, p)
+	}
+}
+
+// NewCreateOrganizationEndpoint returns an endpoint function that calls the
+// method "createOrganization" of service "admin".
+func NewCreateOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateOrganizationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateOrganization(ctx, p)
 	}
 }

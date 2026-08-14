@@ -420,3 +420,34 @@ func BuildExtendTrialPayload(adminExtendTrialBody string, adminExtendTrialAdminS
 
 	return v, nil
 }
+
+// BuildCreateOrganizationPayload builds the payload for the admin
+// createOrganization endpoint from CLI flags.
+func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCreateOrganizationAdminSessionToken string) (*admin.CreateOrganizationPayload, error) {
+	var err error
+	var body CreateOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminCreateOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.CreateOrganizationPayload{
+		Name: body.Name,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
