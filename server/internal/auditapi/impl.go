@@ -40,11 +40,6 @@ const listAuditLogsPageSize = 50
 // Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
 // override) are shown under a collective label instead of the staff member's
 // email. Logs viewed within the Speakeasy org itself are not masked.
-//
-// The label itself lives in the audit package because writers that already know
-// they are staff apply it at write time, where this mask cannot reach them: it
-// matches an actor id against a Gram user, and an actor authenticated outside
-// Gram has no such id.
 const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 type Service struct {
