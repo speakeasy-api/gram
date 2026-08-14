@@ -1004,6 +1004,146 @@ PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): give the organi
 
 ---
 
+## Task 6c: Split the actions between the header and the callout
+
+**Task 6b resolved the duplication the wrong way and this task reverses it.** Read
+this section fully before touching anything, because it un-asserts tests that 6b
+mutation-tested.
+
+The design at `patterns/organization-detail.html` puts **different** actions in the two
+places, so nothing is duplicated:
+
+|         | Design                            | After Task 6b                             |
+| ------- | --------------------------------- | ----------------------------------------- |
+| Header  | `Open in Gram`, `Disable`         | `Open in Gram`, `Disable`, `Extend trial` |
+| Callout | `Extend trial`, `Convert to paid` | nothing                                   |
+
+Its notes say the trial "appears three times on purpose: a badge in the title, a warning callout with the two actions that resolve it, and the dated fact in the Plan group". So the callout is meant to carry the trial-resolving action. 6b deleted it. Walker chose the split on 2026-08-14 once the design was read.
+
+`Convert to paid` is **out of scope**. Account type is edited through the Overview fact row's select, which is S2's work, and S0 adds no behaviour. Do not invent it.
+
+**Files:**
+
+- Modify: `client/admin/src/pages/organizations/OrganizationActions.tsx`, `OrganizationActions.test.tsx`
+- Modify: `client/admin/src/pages/organization/RecordHeader.tsx`, `RecordHeader.test.tsx`
+- Modify: `client/admin/src/pages/organization/TrialCallout.tsx`, `TrialCallout.test.tsx`
+
+**Interfaces:**
+
+- Produces: `OrganizationActions({ org, layout, actions })`, where `actions` defaults to `"all"`
+
+- [ ] **Step 1: Add the `actions` prop**
+
+```tsx
+export function OrganizationActions({
+  org,
+  layout,
+  actions = "all",
+}: {
+  org: AdminOrganization;
+  layout: "menu" | "buttons";
+  // Which of the record's actions this instance draws. The record shows two
+  // bars at once: lifecycle in the header, the trial's own resolution in the
+  // callout beside the deadline it acts on. `all` is every other surface.
+  actions?: "all" | "lifecycle" | "trial";
+}): JSX.Element {
+```
+
+Gate the two groups in **both** layout branches, so a future menu caller cannot get a silently different answer:
+
+- Disable / Re-enable render when `actions !== "trial"`.
+- Extend trial renders when `actions !== "lifecycle" && canExtendTrial(org)`.
+
+Leave the dialogs mounted unconditionally. They render nothing while closed, and an instance that draws no trigger for a dialog simply never opens it.
+
+Do not change the default. `PeekPanel` and the row menu pass no `actions` and must keep every action they have today.
+
+- [ ] **Step 2: Point the two call sites at their halves**
+
+`RecordHeader.tsx`: `<OrganizationActions org={org} layout="buttons" actions="lifecycle" />`
+
+`TrialCallout.tsx`: restore the action bar, trial only. Put back the `justify-between` and `flex-wrap` classes that 6b removed, and the `OrganizationActions` import:
+
+```tsx
+<div className="border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3">
+```
+
+**A disabled organization has no extendable trial**, because `canExtendTrial` returns false whenever `disabled_at` is set. In that case `actions="trial"` draws no button, so do not wrap it in a container that would leave a visible empty gap. Render `<OrganizationActions>` as a direct child of the callout rather than inside a spacer `div`.
+
+- [ ] **Step 3: Correct the tests Task 6b wrote**
+
+6b's callout test asserts the callout has **no** buttons at all. That invariant is now wrong and the test must not simply be deleted: the real rule is that the callout carries the trial action and **not** the lifecycle one. Replace it with that, keeping the `it.each` over both live states:
+
+```tsx
+it.each(["running", "ending_soon"] as const)(
+  "carries the trial's own action and not the record's while %s",
+  async (state) => {
+    await renderWithApp(
+      <TrialCallout
+        org={anOrganization({
+          trial_state: state,
+          trial_ends_at: TRIAL_ENDS_AT,
+        })}
+      />,
+    );
+
+    // Screen-wide, not scoped to the status region: an action moved to a
+    // sibling of that region is still an action on the callout. Task 6b found
+    // that a `within(callout)` query cannot see one.
+    const labels = screen.queryAllByRole("button").map((b) => b.textContent);
+    expect(labels).toContain("Extend trial");
+    expect(labels).not.toContain("Disable");
+  },
+);
+```
+
+And in `RecordHeader.test.tsx`, the mirror. 6b moved two tests here from the callout; the `ending_soon` one now asserts the opposite of what it did:
+
+```tsx
+it("carries the record's lifecycle action and not the trial's", async () => {
+  await renderWithApp(
+    <RecordHeader org={anOrganization({ trial_state: "ending_soon" })} />,
+  );
+
+  const labels = screen.queryAllByRole("button").map((b) => b.textContent);
+  expect(labels).toContain("Disable");
+  expect(labels).not.toContain("Extend trial");
+});
+```
+
+Keep 6b's other RecordHeader tests. The trial-mark gate from 6b is untouched by this task and must stay green.
+
+- [ ] **Step 4: Verify the surfaces you did not change**
+
+`PeekPanel` and the row menu pass no `actions`. Their tests must pass **unchanged**: if you had to edit an `OrganizationActions.test.tsx` case that does not pass `actions`, the default regressed. Say so in your report rather than editing the test to fit.
+
+Run: `aube run -F admin test`
+Expected: all pass.
+
+- [ ] **Step 5: Mutate it yourself**
+
+At least these, each reverted after:
+
+- `actions = "all"` default changed to `"lifecycle"`. `PeekPanel`'s footer must lose Extend trial and a test must die.
+- The trial gate written as `actions === "trial"` instead of `actions !== "lifecycle"`. Every default caller then loses Extend trial.
+- The lifecycle gate applied only in the `buttons` branch, leaving `menu` ungated.
+- The header given `actions="all"` again, which is exactly the duplication this task removes.
+
+Any survivor is a missing test. Write it, then re-run.
+
+- [ ] **Step 6: Recapture the screenshots**
+
+The three `t6b-*` PNGs now show the wrong thing. Recapture as `t6c-header-running.png`, `t6c-header-ending-soon.png`, `t6c-header-no-trial.png`, same method as 6b. The `ending_soon` one is the important one: it must show `Extend trial` in the callout and not in the header.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add client/admin/src
+PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): give the trial callout the action that resolves it"
+```
+
+---
+
 ## Task 7: Mutation sweep and gates
 
 The plan's test list is a floor, not coverage. This task is where the tests get attacked.
@@ -1034,7 +1174,8 @@ Do not work from a supplied list. For each behaviour this slice claims, ask what
 - The header moved inside `Overview.tsx`. Only the Task 5 Step 8 test catches this.
 - `useMatchRoute` given `fuzzy: false`. The record nav then appears on the index view and vanishes on `/members`.
 - The breadcrumb's last segment rendered as a `BreadcrumbLink` rather than a `BreadcrumbPage`.
-- `canExtendTrial` inlined as `trial_state === "running"`. The `ending_soon` case must catch it. **Apply this in `RecordHeader`, not the callout**: Task 6b removed the callout's buttons, so the callout no longer asks the question.
+- `canExtendTrial` inlined as `trial_state === "running"`. The `ending_soon` case must catch it. Apply it in the callout, which is where Task 6c put the trial action back.
+- `canExtendTrial`'s `!org.disabled_at` clause dropped. A disabled organization then offers to extend a trial it cannot honour, in the callout and the peek panel both.
 - The header's trial gate widened from `!== "none"` to "anything `Trial` would not draw a dash for". Task 6b's unrecognised-state test must catch it.
 - `LIVE_TRIAL_STATES` widened to include `expired`, kept rather than reverted after Step 1. Step 1 already proves a test dies here, so use this one to confirm you restored the line.
 
