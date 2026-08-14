@@ -1,6 +1,7 @@
 import { useState, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { createColumnHelper, useTable } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -11,7 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DataTable as Table, type Column } from "@/components/data-table";
+import {
+  dataTableFeatures,
+  DataTable as Table,
+  type DataTableFeatures,
+} from "@/components/data-table";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import { cn } from "@/lib/utils";
@@ -292,40 +297,43 @@ function projectsMessage(isLoading: boolean, isError: boolean): string {
   return "No projects in this organization";
 }
 
-const PROJECT_COLUMNS: Column<AdminProject>[] = [
-  {
-    key: "name",
+const projectColumn = createColumnHelper<DataTableFeatures, AdminProject>();
+
+const PROJECT_COLUMNS = projectColumn.columns([
+  projectColumn.accessor("name", {
     header: "Name",
     // The link, not the row, carries the keyboard path and the accessible
     // name. It also lets the operator open the project in a new tab.
-    render: (p) => (
+    cell: ({ row }) => (
       <Link
         to="/projects/$idOrSlug"
-        params={{ idOrSlug: p.slug || p.id }}
+        params={{ idOrSlug: row.original.slug || row.original.id }}
         className="text-sm underline-offset-4 hover:underline focus-visible:underline"
       >
-        {p.name}
+        {row.original.name}
       </Link>
     ),
-  },
-  {
-    key: "slug",
+  }),
+  projectColumn.accessor("slug", {
     header: "Slug",
-    render: (p) => <span className="text-sm">{p.slug}</span>,
-  },
-  {
-    key: "id",
+    cell: ({ row }) => <span className="text-sm">{row.original.slug}</span>,
+  }),
+  projectColumn.accessor("id", {
     header: "ID",
-    render: (p) => (
-      <span className="text-muted-foreground text-sm">{p.id}</span>
+    cell: ({ row }) => (
+      <span className="text-muted-foreground text-sm">{row.original.id}</span>
     ),
-  },
-  {
-    key: "created_at",
+  }),
+  projectColumn.accessor("created_at", {
     header: "Created",
-    render: (p) => <span className="text-sm">{fmtDate(p.created_at)}</span>,
-  },
-];
+    cell: ({ row }) => (
+      <span className="text-sm">{fmtDate(row.original.created_at)}</span>
+    ),
+  }),
+]);
+
+// A fresh fallback array each render would rebuild the row model every time.
+const NO_PROJECTS: AdminProject[] = [];
 
 function OrgProjectsPanel({ orgID }: { orgID: string }) {
   const navigate = useNavigate();
@@ -334,29 +342,35 @@ function OrgProjectsPanel({ orgID }: { orgID: string }) {
     enabled: !!orgID,
   });
 
-  const projects = data?.projects ?? [];
+  const table = useTable({
+    features: dataTableFeatures,
+    columns: PROJECT_COLUMNS,
+    data: data?.projects ?? NO_PROJECTS,
+    getRowId: (project) => project.id,
+  });
+
+  const rows = table.getRowModel().rows;
 
   return (
     <div className="max-h-96 overflow-auto rounded-lg border">
-      <Table columns={PROJECT_COLUMNS} cellPadding="condensed">
-        <Table.Header columns={PROJECT_COLUMNS} />
+      <Table cellPadding="condensed">
+        <Table.Header table={table} />
         <Table.Body>
-          {isLoading || projects.length === 0 ? (
+          {isLoading || rows.length === 0 ? (
             <Table.NoResultsMessage>
               <span className="text-muted-foreground text-sm">
                 {projectsMessage(isLoading, isError)}
               </span>
             </Table.NoResultsMessage>
           ) : (
-            projects.map((p) => (
+            rows.map((row) => (
               <Table.Row
-                key={p.id}
-                row={p}
-                columns={PROJECT_COLUMNS}
-                onClick={() => {
+                key={row.id}
+                row={row}
+                onClick={(project) => {
                   void navigate({
                     to: "/projects/$idOrSlug",
-                    params: { idOrSlug: p.slug || p.id },
+                    params: { idOrSlug: project.slug || project.id },
                   });
                 }}
               />
@@ -368,39 +382,51 @@ function OrgProjectsPanel({ orgID }: { orgID: string }) {
   );
 }
 
-const MEMBER_COLUMNS: Column<AdminOrganizationMember>[] = [
-  {
-    key: "email",
+const memberColumn = createColumnHelper<
+  DataTableFeatures,
+  AdminOrganizationMember
+>();
+
+const MEMBER_COLUMNS = memberColumn.columns([
+  memberColumn.accessor("email", {
     header: "Email",
-    render: (m) => <span className="text-sm">{m.email}</span>,
-  },
-  {
-    key: "display_name",
+    cell: ({ row }) => <span className="text-sm">{row.original.email}</span>,
+  }),
+  memberColumn.accessor("display_name", {
     header: "Name",
-    render: (m) => <span className="text-sm">{m.display_name}</span>,
-  },
-  {
-    key: "id",
-    header: "ID",
-    render: (m) => (
-      <span className="text-muted-foreground text-sm">{m.id}</span>
+    cell: ({ row }) => (
+      <span className="text-sm">{row.original.display_name}</span>
     ),
-  },
-  {
-    key: "last_login",
+  }),
+  memberColumn.accessor("id", {
+    header: "ID",
+    cell: ({ row }) => (
+      <span className="text-muted-foreground text-sm">{row.original.id}</span>
+    ),
+  }),
+  memberColumn.accessor("last_login", {
     header: "Last login",
-    render: (m) => (
-      <span className={cn("text-sm", !m.last_login && "text-muted-foreground")}>
-        {fmtDate(m.last_login)}
+    cell: ({ row }) => (
+      <span
+        className={cn(
+          "text-sm",
+          !row.original.last_login && "text-muted-foreground",
+        )}
+      >
+        {fmtDate(row.original.last_login)}
       </span>
     ),
-  },
-  {
-    key: "created_at",
+  }),
+  memberColumn.accessor("created_at", {
     header: "Joined",
-    render: (m) => <span className="text-sm">{fmtDate(m.created_at)}</span>,
-  },
-];
+    cell: ({ row }) => (
+      <span className="text-sm">{fmtDate(row.original.created_at)}</span>
+    ),
+  }),
+]);
+
+// A fresh fallback array each render would rebuild the row model every time.
+const NO_MEMBERS: AdminOrganizationMember[] = [];
 
 function membersMessage(isLoading: boolean, isError: boolean): string {
   if (isLoading) return "Loading...";
@@ -414,23 +440,28 @@ function OrgMembersPanel({ orgID }: { orgID: string }) {
     enabled: !!orgID,
   });
 
-  const members = data?.members ?? [];
+  const table = useTable({
+    features: dataTableFeatures,
+    columns: MEMBER_COLUMNS,
+    data: data?.members ?? NO_MEMBERS,
+    getRowId: (member) => member.id,
+  });
+
+  const rows = table.getRowModel().rows;
 
   return (
     <div className="max-h-96 overflow-auto rounded-lg border">
-      <Table columns={MEMBER_COLUMNS} cellPadding="condensed">
-        <Table.Header columns={MEMBER_COLUMNS} />
+      <Table cellPadding="condensed">
+        <Table.Header table={table} />
         <Table.Body>
-          {isLoading || members.length === 0 ? (
+          {isLoading || rows.length === 0 ? (
             <Table.NoResultsMessage>
               <span className="text-muted-foreground text-sm">
                 {membersMessage(isLoading, isError)}
               </span>
             </Table.NoResultsMessage>
           ) : (
-            members.map((m) => (
-              <Table.Row key={m.id} row={m} columns={MEMBER_COLUMNS} />
-            ))
+            rows.map((row) => <Table.Row key={row.id} row={row} />)
           )}
         </Table.Body>
       </Table>

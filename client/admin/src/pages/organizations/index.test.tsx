@@ -1,11 +1,17 @@
 import type { AnyRouter } from "@tanstack/react-router";
 import {
+  useTable,
+  type ColumnVisibilityState,
+  type Updater,
+} from "@tanstack/react-table";
+import {
   act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import {
   afterEach,
@@ -22,12 +28,14 @@ import type {
   ListOrganizationsParams,
   ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { useState, type JSX } from "react";
+
 import { routeTree } from "@/routeTree.gen";
 import {
   organizationsSearchSchema,
   type OrganizationsSearch,
 } from "@/routes/organizations.index";
-import type { Column } from "@/components/data-table";
+import { dataTableFeatures } from "@/components/data-table";
 import { renderRouteTree } from "@/test/harness";
 
 import { ORG_COLUMNS } from "./columns";
@@ -39,32 +47,79 @@ const mocks = vi.hoisted(() => ({
       (params?: ListOrganizationsParams) => Promise<ListOrganizationsResult>
     >(),
   getSession: vi.fn(),
+  getOrganization: vi.fn(),
+  listOrganizationProjects: vi.fn(),
+  listOrganizationMembers: vi.fn(),
 }));
 
-// Only the two endpoints this page's route tree reaches are replaced. The rest
-// of the module stays real, so toSearchParams and omitUnset still decide what
-// counts as an unset param.
+// Only the endpoints this page's route tree reaches are replaced. The rest of
+// the module stays real, so toSearchParams and omitUnset still decide what
+// counts as an unset param. The three detail endpoints are here because a row
+// click leaves this page for the detail route.
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return {
     ...actual,
     listOrganizations: mocks.listOrganizations,
     getSession: mocks.getSession,
+    getOrganization: mocks.getOrganization,
+    listOrganizationProjects: mocks.listOrganizationProjects,
+    listOrganizationMembers: mocks.listOrganizationMembers,
   };
 });
 
+// Two rows, and every optional field set on one of them. One row forecloses
+// every ordering and keying fault by construction, and an unset optional field
+// renders the same dash whichever field the cell reads.
 const ORGS: AdminOrganization[] = [
   {
     id: "org_placeholder_one",
     name: "Placeholder One",
     slug: "placeholder-one",
     account_type: "pro",
+    workos_id: "workosplaceholderone",
     whitelisted: true,
+    disabled_at: "2026-03-04T00:00:00Z",
+    free_trial_started_at: "2026-02-01T00:00:00Z",
+    free_trial_ends_at: "2026-05-06T00:00:00Z",
     member_count: 3,
     created_at: "2026-01-02T00:00:00Z",
-    updated_at: "2026-01-02T00:00:00Z",
+    updated_at: "2026-01-07T00:00:00Z",
+  },
+  {
+    id: "org_placeholder_two",
+    name: "Placeholder Two",
+    slug: "placeholder-two",
+    account_type: "free",
+    whitelisted: false,
+    member_count: 7,
+    created_at: "2026-06-08T00:00:00Z",
+    updated_at: "2026-06-09T00:00:00Z",
   },
 ];
+
+// A page the cursor leads to. Nothing it holds appears on the first page, so a
+// row that survives the page change is a reused node rather than a match.
+const NEXT_PAGE_ORG: AdminOrganization = {
+  id: "org_placeholder_three",
+  name: "Placeholder Three",
+  slug: "placeholder-three",
+  account_type: "enterprise",
+  whitelisted: false,
+  member_count: 11,
+  created_at: "2026-07-10T00:00:00Z",
+  updated_at: "2026-07-11T00:00:00Z",
+};
+
+const [FIRST_ORG] = ORGS;
+if (!FIRST_ORG) throw new Error("ORGS needs a row");
+
+// The columns render a date through toLocaleDateString, so the expected text
+// has to come out of the same formatter. Reading the field off the fixture is
+// what the assertion is for: the format is not.
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString();
+}
 
 function lastListParams(): ListOrganizationsParams {
   const call = mocks.listOrganizations.mock.calls.at(-1);
@@ -108,6 +163,14 @@ function openOn(trigger: HTMLElement): void {
   });
 }
 
+// Reached through the name link, so a test names the row the way an operator
+// would rather than by position.
+function rowFor(link: HTMLElement): HTMLTableRowElement {
+  const row = link.closest("tr");
+  if (!row) throw new Error("the name link is not inside a row");
+  return row;
+}
+
 function urlFor(search: Record<string, unknown>): string {
   // The router JSON-encodes a non-string value, so a bookmarked URL is built
   // the same way here rather than hand-written.
@@ -126,6 +189,12 @@ beforeEach(() => {
     email: "ops@example.test",
     name: "Ops",
   });
+  mocks.getOrganization.mockReset();
+  mocks.getOrganization.mockResolvedValue(FIRST_ORG);
+  mocks.listOrganizationProjects.mockReset();
+  mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
+  mocks.listOrganizationMembers.mockReset();
+  mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
 });
 
 afterEach(cleanup);
@@ -245,6 +314,12 @@ describe("organizations list", () => {
     });
     expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
 
+    // Every row has to drop the same cell the header dropped, or every cell
+    // after it slides one column to the left.
+    expect(screen.getAllByRole("cell").length).toBe(
+      screen.getAllByRole("columnheader").length * ORGS.length,
+    );
+
     // Reopening reads the menu against the page's own state. Without this the
     // bar could take a constant and its guard would never fire.
     openOn(screen.getByRole("button", { name: "Columns" }));
@@ -351,68 +426,258 @@ describe("organizations list", () => {
     // different result set.
     expect(lastListParams().cursor).toBeUndefined();
   });
+
+  it("renders every cell of a row out of the record that produced it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const { workos_id: workosID, disabled_at: disabledAt } = FIRST_ORG;
+    const trialEndsAt = FIRST_ORG.free_trial_ends_at;
+    if (!workosID || !disabledAt || !trialEndsAt) {
+      throw new Error("the row under test needs its optional fields set");
+    }
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    // The Name cell puts the name in the text and the slug in the href, so a
+    // cell that reads the wrong field cannot satisfy both.
+    expect(link.getAttribute("href")).toBe(`/organizations/${FIRST_ORG.slug}`);
+
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual([
+      "Name",
+      "Slug",
+      "Type",
+      "Members",
+      "WorkOS",
+      "Disabled",
+      "Trial ends",
+      "Created",
+    ]);
+    expect(
+      within(rowFor(link))
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual([
+      FIRST_ORG.name,
+      FIRST_ORG.slug,
+      FIRST_ORG.account_type,
+      String(FIRST_ORG.member_count),
+      // The truncation length is written out rather than imported. Reading the
+      // column's own constant would move this expectation along with it.
+      `${workosID.substring(0, 12)}...`,
+      shortDate(disabledAt),
+      shortDate(trialEndsAt),
+      shortDate(FIRST_ORG.created_at),
+    ]);
+  });
+
+  it("opens the organization when the operator clicks the row body", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const [, slugCell] = within(rowFor(link)).getAllByRole("cell");
+    if (!slugCell) throw new Error("the row needs a second cell");
+
+    fireEvent.click(slugCell);
+
+    // The slug, not the id: the handler takes the record, and a handler handed
+    // the row wrapper instead would reach the id and seed the detail page's
+    // cache with a table object.
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(
+        `/organizations/${FIRST_ORG.slug}`,
+      );
+    });
+  });
+
+  it("leaves the current tab in place when the operator command-clicks a name", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    fireEvent.click(link, { button: 0, metaKey: true });
+
+    // The browser opens the link in a background tab and the row handler has to
+    // stay out of it. Without the guard the list the operator meant to keep
+    // navigates away underneath the new tab.
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(router.state.location.pathname).toBe("/organizations");
+  });
+
+  it("drops focus rather than moving it to another organization on the next page", async () => {
+    mocks.listOrganizations.mockImplementation((params) =>
+      Promise.resolve(
+        params?.cursor
+          ? { organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    link.focus();
+    expect(document.activeElement).toBe(link);
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+
+    // Keyed by index, React reuses this node for the next page's record and
+    // relabels it under the operator's focus. No focus event fires, so the next
+    // Enter opens an organization they never chose.
+    expect(link.isConnected).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+  });
 });
 
-// The bar takes its columns as props, so the last-column case is reachable
-// here without clicking seven items shut through a menu that closes each time.
+// The bar takes a table, so the last-column case is reachable here by handing
+// it a two column table rather than by clicking seven items shut through a
+// menu that closes each time.
 describe("TableActionBar", () => {
   const [FIRST, SECOND] = ORG_COLUMNS;
   if (!FIRST || !SECOND) throw new Error("ORG_COLUMNS needs two columns");
 
+  // An accessor column takes its id from its key unless it names one, and that
+  // id is what the visibility state is keyed by.
+  const SECOND_ID = String(SECOND.id ?? SECOND.accessorKey);
+
+  // Sliced, so the array carries the element type useTable asks for.
+  const MENU_COLUMNS = ORG_COLUMNS.slice(0, 2);
+
+  function ColumnsMenu({
+    initialVisibility,
+    onVisibilityChange,
+    columns,
+  }: {
+    initialVisibility: ColumnVisibilityState;
+    onVisibilityChange: (updater: Updater<ColumnVisibilityState>) => void;
+    columns: typeof MENU_COLUMNS;
+  }): JSX.Element {
+    const [columnVisibility, setColumnVisibility] = useState(initialVisibility);
+    const table = useTable({
+      features: dataTableFeatures,
+      columns,
+      data: ORGS,
+      getRowId: (org) => org.id,
+      state: { columnVisibility },
+      // The spy sits in front of the state, so a blocked toggle is a call that
+      // never happened rather than a state that happened to settle back.
+      onColumnVisibilityChange: (updater) => {
+        onVisibilityChange(updater);
+        setColumnVisibility(updater);
+      },
+    });
+    return <TableActionBar table={table} />;
+  }
+
   function openColumnsMenu(
-    visibleColumns: Column<AdminOrganization>[],
-  ): Mock<(key: string) => void> {
-    const onToggleColumn = vi.fn<(key: string) => void>();
+    initialVisibility: ColumnVisibilityState,
+    columns: typeof MENU_COLUMNS = MENU_COLUMNS,
+  ): Mock<(updater: Updater<ColumnVisibilityState>) => void> {
+    const onVisibilityChange =
+      vi.fn<(updater: Updater<ColumnVisibilityState>) => void>();
     render(
-      <TableActionBar
-        columns={ORG_COLUMNS}
-        visibleColumns={visibleColumns}
-        onToggleColumn={onToggleColumn}
+      <ColumnsMenu
+        initialVisibility={initialVisibility}
+        onVisibilityChange={onVisibilityChange}
+        columns={columns}
       />,
     );
     openOn(screen.getByRole("button", { name: "Columns" }));
-    return onToggleColumn;
+    return onVisibilityChange;
+  }
+
+  // A toggle that lands closes the menu. Reopening also reads the item back
+  // against the state that settled, not against the click that asked for it.
+  function reopenColumnsMenu(): void {
+    openOn(screen.getByRole("button", { name: "Columns" }));
   }
 
   // Found by the name an operator reads, so the query goes through the same
   // accessible name a screen reader would announce. A header is a node in
   // general, and only a string carries a name this query can match.
-  function itemFor(column: Column<AdminOrganization>): HTMLElement {
-    const { header } = column;
+  function itemFor(header: unknown): HTMLElement {
     if (typeof header !== "string") {
-      throw new Error(`column ${String(column.key)} needs a text header`);
+      throw new Error("the column under test needs a text header");
     }
     return screen.getByRole("menuitemcheckbox", { name: header });
   }
 
   it("stops the operator hiding the last visible column", () => {
-    const onToggleColumn = openColumnsMenu([FIRST]);
+    const onVisibilityChange = openColumnsMenu({ [SECOND_ID]: false });
 
-    const item = itemFor(FIRST);
+    const item = itemFor(FIRST.header);
     fireEvent.click(item);
-    expect(onToggleColumn).not.toHaveBeenCalled();
+    expect(onVisibilityChange).not.toHaveBeenCalled();
 
     // Marked rather than disabled. Radix drops a disabled item out of the
     // menu's roving focus, and a screen reader then never reaches it.
     expect(item.getAttribute("aria-disabled")).toBe("true");
     expect(item.hasAttribute("data-disabled")).toBe(false);
+
+    // The visual half of the same guard. Radix dims a `disabled` item for us
+    // and this one is not disabled, so a sighted operator otherwise reads a
+    // locked item as live and gets no answer when clicking it does nothing.
+    // A token, not a substring: the stock item already carries
+    // `data-[disabled]:opacity-50`.
+    expect(item.classList.contains("opacity-50")).toBe(true);
+    expect(itemFor(SECOND.header).classList.contains("opacity-50")).toBe(false);
+
+    // The other half of the guard. Radix dismisses the menu on select unless
+    // the default is prevented, and a menu that closes on a locked item reads
+    // as if the click had worked.
+    expect(itemFor(FIRST.header)).toBe(item);
   });
 
   it("still unhides a column while only one is visible", () => {
-    const onToggleColumn = openColumnsMenu([FIRST]);
+    const onVisibilityChange = openColumnsMenu({ [SECOND_ID]: false });
 
-    fireEvent.click(itemFor(SECOND));
+    const item = itemFor(SECOND.header);
+    expect(item.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(item);
+    expect(onVisibilityChange).toHaveBeenCalled();
 
     // The lock holds the last visible column, not the whole menu. Locking the
     // menu would trap the operator in the state the lock exists to prevent.
-    expect(onToggleColumn).toHaveBeenCalledWith(String(SECOND.key));
+    reopenColumnsMenu();
+    expect(itemFor(SECOND.header).getAttribute("aria-checked")).toBe("true");
   });
 
   it("hides a column while a second one is still visible", () => {
-    const onToggleColumn = openColumnsMenu([FIRST, SECOND]);
+    const onVisibilityChange = openColumnsMenu({});
 
-    fireEvent.click(itemFor(FIRST));
-    expect(onToggleColumn).toHaveBeenCalledWith(String(FIRST.key));
+    fireEvent.click(itemFor(FIRST.header));
+    expect(onVisibilityChange).toHaveBeenCalled();
+
+    reopenColumnsMenu();
+    expect(itemFor(FIRST.header).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("locks a column that opts out of hiding", () => {
+    // Both are visible, so the last-column rule is not what holds this one.
+    const onVisibilityChange = openColumnsMenu({}, [
+      { ...FIRST, enableHiding: false },
+      SECOND,
+    ]);
+
+    const item = itemFor(FIRST.header);
+    fireEvent.click(item);
+    expect(onVisibilityChange).not.toHaveBeenCalled();
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+
+    // The opt-out is per column, so the menu still works around it.
+    fireEvent.click(itemFor(SECOND.header));
+    expect(onVisibilityChange).toHaveBeenCalled();
   });
 });
 

@@ -1,8 +1,12 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
 import { useEffect, useState, type JSX } from "react";
 
-import type { Column } from "@/components/data-table";
+import type {
+  DataTableFeatures,
+  DataTableInstance,
+} from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
-import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
@@ -134,21 +137,14 @@ export function Toolbar(): JSX.Element {
  * selected, so the slice that adds bulk actions swaps its contents in place
  * and no row moves under the pointer.
  */
-export function TableActionBar({
-  columns,
-  visibleColumns,
-  onToggleColumn,
+export function TableActionBar<T extends RowData>({
+  table,
 }: {
-  columns: Column<AdminOrganization>[];
-  visibleColumns: Column<AdminOrganization>[];
-  onToggleColumn: (key: string) => void;
+  table: DataTableInstance<T>;
 }): JSX.Element {
-  // The keys come from the array the table renders, not from a second walk of
-  // the same predicate, so the menu cannot disagree with the table about how
-  // many columns are left.
-  const visibleKeys = new Set(
-    visibleColumns.map((column) => String(column.key)),
-  );
+  // Read off the table rather than walked a second time here, so the menu
+  // cannot disagree with the table about how many columns are left.
+  const visibleCount = table.getVisibleLeafColumns().length;
 
   return (
     <div className="flex items-center gap-3 border-b px-3 py-2">
@@ -161,16 +157,16 @@ export function TableActionBar({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {columns.map((column) => {
-            const key = String(column.key);
-            const checked = visibleKeys.has(key);
+          {table.getAllLeafColumns().map((column) => {
+            const checked = column.getIsVisible();
             // Hiding the last one leaves a header with no cells above rows with
             // no cells. This menu still lists every column, so the operator can
             // climb back out, but the table is unreadable until they do.
-            const locked = checked && visibleKeys.size === 1;
+            const locked =
+              !column.getCanHide() || (checked && visibleCount === 1);
             return (
               <DropdownMenuCheckboxItem
-                key={key}
+                key={column.id}
                 checked={checked}
                 // Radix drops a `disabled` item out of the menu's roving focus,
                 // so a keyboard or a screen reader never reaches it. Marking it
@@ -183,10 +179,10 @@ export function TableActionBar({
                   if (locked) event.preventDefault();
                 }}
                 onCheckedChange={() => {
-                  if (!locked) onToggleColumn(key);
+                  if (!locked) column.toggleVisibility();
                 }}
               >
-                {column.header}
+                {columnLabel(column)}
               </DropdownMenuCheckboxItem>
             );
           })}
@@ -194,4 +190,13 @@ export function TableActionBar({
       </DropdownMenu>
     </div>
   );
+}
+
+// A header is a renderable in general, and only a string carries a label a
+// screen reader can announce here. The id is the readable fallback.
+function columnLabel<T extends RowData>(
+  column: Column<DataTableFeatures, T>,
+): string {
+  const { header } = column.columnDef;
+  return typeof header === "string" ? header : column.id;
 }
