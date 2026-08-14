@@ -2361,6 +2361,31 @@ describe("organizations list write actions", () => {
     });
   });
 
+  // The write drops the read in flight before it goes out. A write that then
+  // fails puts nothing in its place, and a first read holds no figures to fall
+  // back on, so the strip would keep the dashes it started with.
+  it("asks for the platform totals again when the write is refused", async () => {
+    mocks.disableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is already disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    // Held open, so the cancel catches it before it has answered once.
+    mocks.getOrganizationStats.mockReturnValueOnce(new Promise(() => {}));
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+    expect(mocks.getOrganizationStats.mock.calls.length).toBe(1);
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats.mock.calls.length).toBe(2);
+    });
+  });
+
   it("stays on the list while the operator works the menu it opened from a row", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",

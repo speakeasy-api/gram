@@ -185,7 +185,19 @@ export function writeOrganizationToCache(
   );
 
   // Refetched, not written: the response holds one record and these are counts
-  // over all of them. Not awaited, so the row repaints without waiting on it.
+  // over all of them.
+  invalidateOrganizationStats(qc);
+}
+
+/**
+ * The other half of the cancel above, for a write that never lands. The stats
+ * read it dropped has nothing to replace it, and a first read cancelled before
+ * its answer holds no figures to fall back on, so the strip keeps three dashes
+ * until a focus or a remount asks again.
+ *
+ * Not awaited anywhere: the counts are the last thing on the page to matter.
+ */
+export function invalidateOrganizationStats(qc: QueryClient): void {
   void qc.invalidateQueries({ queryKey: organizationsStatsQuery.queryKey });
 }
 
