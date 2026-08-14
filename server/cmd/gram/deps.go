@@ -76,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -490,6 +491,7 @@ func newBillingProvider(
 	guardianPolicy *guardian.Policy,
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
+	stripeClient stripeclient.Client,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -530,9 +532,46 @@ func newBillingProvider(
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
 		return stub, stub, nil
+	case stripeClient != nil:
+		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
+		unavailable := billing.NewUnavailableClient(logger)
+		return unavailable, tracking.New(unavailable, posthogClient, logger), nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")
 	}
+}
+
+func newStripeClient(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.Client, error) {
+	apiKey := c.String("stripe-api-key")
+	if !stripeclient.IsConfigured(apiKey) {
+		if c.String("environment") == "local" {
+			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
+			return stripeclient.NewStubClient(logger), nil
+		}
+
+		logger.InfoContext(ctx, "Stripe client not configured")
+		return nil, nil
+	}
+
+	catalog := stripeclient.Catalog{
+		PriceIDTUM:     c.String("stripe-price-id-tum"),
+		MeterEventName: c.String("stripe-meter-event-name"),
+	}
+	if err := catalog.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Stripe catalog configuration: %w", err)
+	}
+
+	return stripeclient.NewClient(
+		guardianPolicy,
+		apiKey,
+		c.String("stripe-webhook-secret"),
+		catalog,
+	), nil
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
