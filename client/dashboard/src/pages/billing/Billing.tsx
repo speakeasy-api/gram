@@ -142,19 +142,6 @@ const UsageSection = () => {
                 overageIncrement={1}
                 noMax={productTier === "enterprise"}
               />
-              {periodUsage.credits != null &&
-                periodUsage.includedCredits != null && (
-                  <PlatformAdminOnlyPanel>
-                    <UsageItem
-                      label="Chat Based Credits (Polar)"
-                      tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                      value={periodUsage.credits}
-                      included={periodUsage.includedCredits}
-                      overageIncrement={periodUsage.includedCredits}
-                      noMax={productTier === "enterprise"}
-                    />
-                  </PlatformAdminOnlyPanel>
-                )}
             </>
           ) : (
             <>
@@ -178,6 +165,19 @@ const UsageSection = () => {
               <Skeleton className="h-4 w-full" />
             </>
           )}
+          {periodUsage?.credits != null &&
+            periodUsage.includedCredits != null && (
+              <PlatformAdminOnlyPanel>
+                <UsageItem
+                  label="Chat Based Credits (Polar)"
+                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                  value={periodUsage.credits}
+                  included={periodUsage.includedCredits}
+                  overageIncrement={periodUsage.includedCredits}
+                  noMax={productTier === "enterprise"}
+                />
+              </PlatformAdminOnlyPanel>
+            )}
         </div>
       </Page.Section.Body>
     </Page.Section>
