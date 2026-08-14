@@ -107,7 +107,7 @@ async function renderMenu(org: AdminOrganization = ORG): Promise<HTMLElement> {
 async function renderFooter(org: AdminOrganization = ORG): Promise<void> {
   await renderWithApp(
     <WriteReportProvider value={REPORTER}>
-      <OrganizationActions org={org} layout="footer" />
+      <OrganizationActions org={org} layout="buttons" />
     </WriteReportProvider>,
   );
 }
@@ -849,6 +849,27 @@ describe("the peek panel footer", () => {
     expect(
       screen.queryByRole("button", { name: `Extend trial for ${ORG.name}` }),
     ).toBeNull();
+  });
+
+  it("keeps a press on its controls and its dialog off the surface under them", async () => {
+    const underneath = vi.fn<() => void>();
+    await renderWithApp(
+      // A handler in the position the list's row keeps one. The dialog is
+      // portalled to the end of the document, but a portal's events still
+      // travel up the React tree, so the confirmation reaches this too.
+      <div onClick={underneath}>
+        <WriteReportProvider value={REPORTER}>
+          <OrganizationActions org={ORG} layout="buttons" />
+        </WriteReportProvider>
+      </div>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Disable ${ORG.name}` }),
+    );
+    fireEvent.click(await screen.findByRole("dialog"));
+
+    expect(underneath).not.toHaveBeenCalled();
   });
 
   it("confirms before it disables, the same as the row menu does", async () => {

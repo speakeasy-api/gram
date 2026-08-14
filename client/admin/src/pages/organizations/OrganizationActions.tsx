@@ -89,18 +89,22 @@ export function WriteReportProvider({
 type OpenDialog = "disable" | "extend";
 
 /**
- * Disable, re-enable and extend, in the row menu and in the peek panel footer.
+ * Disable, re-enable and extend, wherever the record is on screen: the row
+ * menu, the peek panel footer and the record header.
  *
- * One component for both surfaces, because they are the same three actions
+ * One component for all three, because they are the same three actions
  * against the same record: two implementations would be two answers to
  * "can this trial be extended" and two confirmations to keep in step.
+ *
+ * `buttons` names the shape rather than the place. It was `footer` while the
+ * peek panel was the only surface that drew it that way.
  */
 export function OrganizationActions({
   org,
   layout,
 }: {
   org: AdminOrganization;
-  layout: "menu" | "footer";
+  layout: "menu" | "buttons";
 }): JSX.Element {
   const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
@@ -229,7 +233,7 @@ export function OrganizationActions({
     </div>
   );
 
-  if (layout === "footer") {
+  if (layout === "buttons") {
     return contain(
       <>
         {/* Named for the record, the same way the row menu trigger is. The
