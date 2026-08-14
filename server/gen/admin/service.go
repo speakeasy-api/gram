@@ -273,8 +273,7 @@ type ListOrganizationProjectsPayload struct {
 // listOrganizations method.
 type ListOrganizationsPayload struct {
 	AdminSessionToken *string
-	// Search term. Matches name and slug as a case-insensitive substring, and
-	// organization id and WorkOS id exactly.
+	// Search term applied to name and slug (case-insensitive substring).
 	Q *string
 	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same

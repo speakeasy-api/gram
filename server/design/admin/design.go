@@ -390,7 +390,7 @@ var _ = Service("admin", func() {
 		Payload(func() {
 			security.AdminAuthPayload()
 
-			Attribute("q", String, "Search term. Matches name and slug as a case-insensitive substring, and organization id and WorkOS id exactly.")
+			Attribute("q", String, "Search term applied to name and slug (case-insensitive substring).")
 			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
 			Attribute("account_types", ArrayOf(String), "Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.")
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
