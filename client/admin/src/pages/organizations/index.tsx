@@ -252,6 +252,24 @@ export function OrganizationsList(): JSX.Element {
     [peekedId, togglePeek],
   );
 
+  // Peek narrows the table, so a column it hides is one this menu can write
+  // and nothing on screen answers: the checkbox snaps back with no column, no
+  // refusal and no reason. Checking a column is an unambiguous request to see
+  // it, so the panel gives way rather than the request. The column arrives in
+  // the commit the panel leaves in, which is the whole explanation, and
+  // reopening peek is one click.
+  //
+  // The keyboard is left where it is. The operator is in the Columns menu, and
+  // Radix puts them back on its trigger as it closes.
+  const handleColumnToggled = useCallback(
+    (columnId: string, label: string): void => {
+      if (!peekedId || !(columnId in PEEK_HIDDEN_COLUMNS)) return;
+      setPeek(undefined);
+      announce(`Peek closed to show the ${label} column.`);
+    },
+    [peekedId, announce],
+  );
+
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!peeked || event.defaultPrevented) return;
 
@@ -329,7 +347,10 @@ export function OrganizationsList(): JSX.Element {
           <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
-                <TableActionBar table={table} />
+                <TableActionBar
+                  table={table}
+                  onColumnToggled={handleColumnToggled}
+                />
 
                 <div
                   ref={scrollBox}

@@ -1314,6 +1314,93 @@ describe("organizations list peek", () => {
     expect(await peekTrigger(FIRST_ORG.name)).toBeTruthy();
   });
 
+  it("closes the peek to show a column the peek was hiding", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    expect(screen.queryByRole("columnheader", { name: "Members" })).toBeNull();
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Members" }));
+
+    // Checking a column is an unambiguous request to see it, and the panel is
+    // the only thing in the way. Granting it explains itself: the panel goes
+    // and the column arrives in the same commit, where the write on its own
+    // was swallowed and the checkbox snapped back with nothing to say.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("columnheader", { name: "Members" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    expect(announcement()).toBe("Peek closed to show the Members column.");
+  });
+
+  it("leaves the keyboard on the Columns control when a column closes the peek", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekOn(FIRST_ORG.name);
+    const columns = screen.getByRole("button", { name: "Columns" });
+
+    openOn(columns);
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Members" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("columnheader", { name: "Members" }),
+      ).toBeTruthy();
+    });
+    // An operator's own close puts the keyboard back on the peek control.
+    // Doing that here would drag them out of the menu they are working in and
+    // onto a row they were not looking at.
+    expect(document.activeElement).not.toBe(trigger);
+    expect(document.activeElement).toBe(columns);
+  });
+
+  it("keeps the peek open for a column the peek was not hiding", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // Hidden before the peek opens. Peek leaves this column visible, and a
+    // column the menu already reports as checked is not one an operator can
+    // ask for.
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Slug" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
+    });
+
+    await peekOn(FIRST_ORG.name);
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Slug" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Slug" })).toBeTruthy();
+    });
+    // Nothing was in the way of this one, so nothing has to give way for it.
+    // A panel that went here would be closing on any menu click at all.
+    expect(peekPanel()).toBeTruthy();
+    expect(announcement()).toBe(`Peeking at ${FIRST_ORG.name}.`);
+  });
+
+  it("says nothing about the peek when a column is toggled with none open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Members" }));
+
+    // The same column, and no panel in the way of it. Announcing a close here
+    // would report a panel that was never open, over a column that just went.
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("columnheader", { name: "Members" }),
+      ).toBeNull();
+    });
+    expect(announcement()).toBe("");
+  });
+
   it("puts the keyboard on the table, not on the body, when the peeked record leaves the list", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
@@ -1409,15 +1496,18 @@ describe("TableActionBar", () => {
 
   // An accessor column takes its id from its key unless it names one, and that
   // id is what the visibility state is keyed by.
+  const FIRST_ID = String(FIRST.id ?? FIRST.accessorKey);
   const SECOND_ID = String(SECOND.id ?? SECOND.accessorKey);
 
   function ColumnsMenu({
     initialVisibility,
     onVisibilityChange,
+    onColumnToggled,
     columns,
   }: {
     initialVisibility: ColumnVisibilityState;
     onVisibilityChange: (updater: Updater<ColumnVisibilityState>) => void;
+    onColumnToggled: (columnId: string, label: string) => void;
     columns: typeof MENU_COLUMNS;
   }): JSX.Element {
     const [columnVisibility, setColumnVisibility] = useState(initialVisibility);
@@ -1434,24 +1524,33 @@ describe("TableActionBar", () => {
         setColumnVisibility(updater);
       },
     });
-    return <TableActionBar table={table} />;
+    return <TableActionBar table={table} onColumnToggled={onColumnToggled} />;
   }
+
+  type MenuSpies = {
+    onVisibilityChange: Mock<(updater: Updater<ColumnVisibilityState>) => void>;
+    onColumnToggled: Mock<(columnId: string, label: string) => void>;
+  };
 
   function openColumnsMenu(
     initialVisibility: ColumnVisibilityState,
     columns: typeof MENU_COLUMNS = MENU_COLUMNS,
-  ): Mock<(updater: Updater<ColumnVisibilityState>) => void> {
-    const onVisibilityChange =
-      vi.fn<(updater: Updater<ColumnVisibilityState>) => void>();
+  ): MenuSpies {
+    const spies: MenuSpies = {
+      onVisibilityChange:
+        vi.fn<(updater: Updater<ColumnVisibilityState>) => void>(),
+      onColumnToggled: vi.fn<(columnId: string, label: string) => void>(),
+    };
     render(
       <ColumnsMenu
         initialVisibility={initialVisibility}
-        onVisibilityChange={onVisibilityChange}
+        onVisibilityChange={spies.onVisibilityChange}
+        onColumnToggled={spies.onColumnToggled}
         columns={columns}
       />,
     );
     openOn(screen.getByRole("button", { name: "Columns" }));
-    return onVisibilityChange;
+    return spies;
   }
 
   // A toggle that lands closes the menu. Reopening also reads the item back
@@ -1471,7 +1570,7 @@ describe("TableActionBar", () => {
   }
 
   it("stops the operator hiding the last visible column", () => {
-    const onVisibilityChange = openColumnsMenu({ [SECOND_ID]: false });
+    const { onVisibilityChange } = openColumnsMenu({ [SECOND_ID]: false });
 
     const item = itemFor(FIRST.header);
     fireEvent.click(item);
@@ -1497,7 +1596,7 @@ describe("TableActionBar", () => {
   });
 
   it("still unhides a column while only one is visible", () => {
-    const onVisibilityChange = openColumnsMenu({ [SECOND_ID]: false });
+    const { onVisibilityChange } = openColumnsMenu({ [SECOND_ID]: false });
 
     const item = itemFor(SECOND.header);
     expect(item.getAttribute("aria-checked")).toBe("false");
@@ -1511,7 +1610,7 @@ describe("TableActionBar", () => {
   });
 
   it("hides a column while a second one is still visible", () => {
-    const onVisibilityChange = openColumnsMenu({});
+    const { onVisibilityChange } = openColumnsMenu({});
 
     fireEvent.click(itemFor(FIRST.header));
     expect(onVisibilityChange).toHaveBeenCalled();
@@ -1520,12 +1619,35 @@ describe("TableActionBar", () => {
     expect(itemFor(FIRST.header).getAttribute("aria-checked")).toBe("false");
   });
 
+  it("reports a toggle that landed, by column and by the name on the item", () => {
+    const { onColumnToggled } = openColumnsMenu({});
+
+    const item = itemFor(FIRST.header);
+    fireEvent.click(item);
+
+    // The label as well as the id, because the page that acts on this holds
+    // only the id and cannot name the column back to the operator without it.
+    // Read off the item, so the two cannot disagree about what it is called.
+    expect(onColumnToggled).toHaveBeenCalledWith(FIRST_ID, item.textContent);
+  });
+
+  it("reports nothing for a toggle the lock refused", () => {
+    const { onColumnToggled } = openColumnsMenu({ [SECOND_ID]: false });
+
+    fireEvent.click(itemFor(FIRST.header));
+
+    // Radix fires onCheckedChange whether or not the select was prevented, so
+    // an unguarded report would tell the page a column changed when the lock
+    // had just held it where it was.
+    expect(onColumnToggled).not.toHaveBeenCalled();
+  });
+
   it("stops the operator hiding the last column that carries data", () => {
     // Peek and Name, both visible. Peek opts out of hiding, so it is on screen
     // whatever the operator does and it is not the column that keeps the table
     // readable. Counting it would leave Name free to go, and the table behind
     // this menu would be a strip of controls above rows holding no record.
-    const onVisibilityChange = openColumnsMenu({}, WITH_PEEK_COLUMN);
+    const { onVisibilityChange } = openColumnsMenu({}, WITH_PEEK_COLUMN);
 
     const item = itemFor(FIRST.header);
     fireEvent.click(item);
@@ -1540,7 +1662,7 @@ describe("TableActionBar", () => {
   it("locks a column that opts out of hiding", () => {
     // Three visible, two of them hideable, so the last-data-column rule is not
     // what holds this one and hiding the next one along is still allowed.
-    const onVisibilityChange = openColumnsMenu({}, [
+    const { onVisibilityChange } = openColumnsMenu({}, [
       { ...FIRST, enableHiding: false },
       SECOND,
       THIRD,
