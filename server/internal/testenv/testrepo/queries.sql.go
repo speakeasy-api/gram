@@ -395,6 +395,30 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 	return items, nil
 }
 
+const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
+SELECT disabled_at, workos_last_event_id, whitelisted
+FROM organization_metadata
+WHERE id = $1
+`
+
+type GetOrganizationMetadataStateFixtureRow struct {
+	DisabledAt        pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	Whitelisted       bool
+}
+
+// Test-only fixture for asserting what a write to organization_metadata did
+// and did not touch. disabled_at comes back at full precision: the admin API
+// renders it as a second-resolution RFC3339 string, which hides a timestamp
+// that moved by microseconds. workos_last_event_id is the WorkOS webhook
+// cursor, which only the webhook path may write.
+func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id string) (GetOrganizationMetadataStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMetadataStateFixture, id)
+	var i GetOrganizationMetadataStateFixtureRow
+	err := row.Scan(&i.DisabledAt, &i.WorkosLastEventID, &i.Whitelisted)
+	return i, err
+}
+
 const getOutboxEntry = `-- name: GetOutboxEntry :one
 SELECT id FROM outbox WHERE id = $1
 `
@@ -1318,6 +1342,28 @@ type SetProjectSlugFixtureParams struct {
 
 func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
+	return err
+}
+
+const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
+UPDATE organization_metadata
+SET workos_last_event_id = $1
+WHERE id = $2
+`
+
+type SetWorkosLastEventIDFixtureParams struct {
+	WorkosLastEventID pgtype.Text
+	ID                string
+}
+
+// Test-only fixture for seeding the WorkOS webhook cursor on an organization
+// that already exists. Deliberately kept out of
+// CreateOrganizationMetadataFixture: several branches add columns to that
+// INSERT at once, and a column added mid-list renumbers every positional
+// placeholder after it in the generated code, which a hand-resolved merge can
+// get wrong while still compiling.
+func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
+	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
 	return err
 }
 
