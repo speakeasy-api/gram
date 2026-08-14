@@ -377,10 +377,8 @@ func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx r
 }
 
 // LogOrganizationEnterpriseTrialRearmedEvent records an operator putting a
-// demoted trial back on. AccountType is the tier the organization was restored
-// to, and it is on the entry because the demotion's own entry is the only place
-// the tier it overwrote survives: a reader comparing the two learns whether the
-// re-arm gave the organization back what it had.
+// demoted trial back on. AccountType carries the restored tier so a reader can
+// compare it with the demotion entry, which is the only record of the old one.
 type LogOrganizationEnterpriseTrialRearmedEvent struct {
 	OrganizationID string
 

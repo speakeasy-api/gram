@@ -16,9 +16,7 @@ type LogRecord struct {
 	Action    string
 	ProjectID uuid.NullUUID
 
-	// ActorID and ActorType identify the actor. ActorDisplayName is for
-	// rendering and is masked for Speakeasy staff, so it cannot be asserted on
-	// alone.
+	// The display name is denormalized and masked for staff; assert on these instead.
 	ActorID          string
 	ActorType        string
 	ActorDisplayName *string
