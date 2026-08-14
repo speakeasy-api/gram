@@ -48,6 +48,24 @@ if (trueish.has(process.env["GRAM_ENABLE_OTEL_METRICS"] ?? "")) {
   );
 }
 
+const assistantRuntimeProvider =
+  process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] ?? "";
+if (assistantRuntimeProvider === "local") {
+  console.log(
+    chalk.greenBright(
+      "⚫︎ Assistant runtimes run locally (GRAM_ASSISTANT_RUNTIME_PROVIDER)",
+    ),
+  );
+} else if (assistantRuntimeProvider) {
+  console.log(
+    `⚪︎ Assistant runtime provider: ${assistantRuntimeProvider}`,
+  );
+} else {
+  console.log(
+    "⚪︎ Assistant runtime provider is not configured (run `mise run zero:assistants`)",
+  );
+}
+
 const assistantRuntimeServerURL =
   process.env["GRAM_ASSISTANT_RUNTIME_SERVER_URL"] ?? "";
 if (assistantRuntimeServerURL) {

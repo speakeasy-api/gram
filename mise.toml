@@ -276,10 +276,17 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Where assistant runtimes run.
 ## Allowed values: local, flyio, gke.
+## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
+## configured" from an intentional override in mise.local.toml or the
+## environment. When unset, that task writes local defaults:
+##   GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+##   GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
+## and builds `gram-assistant-runtime:dev` if the image is missing.
+## `mise run zero:assistants --restart` rewrites those keys and rebuilds.
 ## The local provider starts runtime containers on demand on this machine's
-## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
-GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
-GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
+## Docker daemon. Rebuild anytime with `mise run build:assistants-runtime-image`.
+# GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+# GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
 ##################
 ## MCP Registry ##
