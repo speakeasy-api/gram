@@ -428,4 +428,52 @@ describe("StartPaygCheckoutCTA", () => {
     expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
     expect(alert()).toBeNull();
   });
+
+  // On the lockout gate the organization is walled off rather than trialing,
+  // so eligibility turns on that instead of the trial's state.
+  describe("gated eligibility", () => {
+    beforeEach(() => {
+      mocks.session.mockReturnValue({
+        trial: null,
+        whitelisted: false,
+        activeOrganizationId: ORGANIZATION_ID,
+      });
+    });
+
+    it("offers checkout to an admin of a walled-off organization", () => {
+      render(<StartPaygCheckoutCTA eligibility="gated" />);
+
+      expect(cta()).not.toBeNull();
+    });
+
+    it("renders nothing for an organization that is not walled off", () => {
+      mocks.session.mockReturnValue({
+        trial: activeTrial(),
+        whitelisted: true,
+        activeOrganizationId: ORGANIZATION_ID,
+      });
+
+      render(<StartPaygCheckoutCTA eligibility="gated" />);
+
+      expect(cta()).toBeNull();
+    });
+
+    it("starts checkout through the same mutation", () => {
+      resolveWith(CHECKOUT_URL);
+      render(<StartPaygCheckoutCTA eligibility="gated" />);
+
+      fireEvent.click(cta()!);
+
+      expect(mocks.mutate).toHaveBeenCalledTimes(1);
+      expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+    });
+
+    // The in-app surfaces stay trial-only: a walled-off organization has no
+    // billing page to reach.
+    it("leaves the active-trial surfaces gated on the trial", () => {
+      render(<StartPaygCheckoutCTA />);
+
+      expect(cta()).toBeNull();
+    });
+  });
 });

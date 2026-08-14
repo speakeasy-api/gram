@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import _Cal, { getCalApi } from "@calcom/embed-react";
+import { LockoutPaygCheckoutPanel } from "@/components/billing/lockout-payg-checkout-panel";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { CAL_DEMO_LINK, splitDisplayName } from "./demo-booking";
@@ -132,6 +133,11 @@ export function DemoBookingFlow({
   return (
     <div className="flex w-full flex-col items-center gap-6">
       {intro}
+
+      {/* Both gates render through this flow, so the checkout offer lives here
+          rather than in each page — the calendar below stays the fallback for
+          anyone it doesn't apply to. */}
+      <LockoutPaygCheckoutPanel />
 
       <div className="w-full overflow-hidden border border-(--edge) bg-(--card)">
         {/* The embed runs with `hideEventTypeDetails`, so this header is what
