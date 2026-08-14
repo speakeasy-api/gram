@@ -22,6 +22,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auditlogs/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -39,10 +40,12 @@ const listAuditLogsPageSize = 50
 // Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
 // override) are shown under a collective label instead of the staff member's
 // email. Logs viewed within the Speakeasy org itself are not masked.
-const (
-	speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-	speakeasyTeamActorLabel     = "Speakeasy Team"
-)
+//
+// The label itself lives in the audit package because writers that already know
+// they are staff apply it at write time, where this mask cannot reach them: it
+// matches an actor id against a Gram user, and an actor authenticated outside
+// Gram has no such id.
+const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 type Service struct {
 	tracer trace.Tracer
@@ -149,7 +152,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	}
 	for _, log := range logs {
 		if log.ActorType == "user" && speakeasyActors[log.ActorID] {
-			log.ActorDisplayName = conv.PtrEmpty(speakeasyTeamActorLabel)
+			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
 		}
 	}
@@ -232,7 +235,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	}
 	for _, actor := range actors {
 		if speakeasyActors[actor.Value] {
-			actor.DisplayName = speakeasyTeamActorLabel
+			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}
 

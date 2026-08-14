@@ -28,6 +28,8 @@ const (
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
 
 	ActionOrganizationEnterpriseTrialDemoted Action = "organization:enterprise_trial_demoted"
+
+	ActionOrganizationEnterpriseTrialRearmed Action = "organization:enterprise_trial_rearmed"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -344,6 +346,60 @@ func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx r
 	action := ActionOrganizationEnterpriseTrialArmed
 
 	metadata, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+// LogOrganizationEnterpriseTrialRearmedEvent records an operator putting a
+// demoted trial back on. AccountType is the tier the organization was restored
+// to, and it is on the entry because the demotion's own entry is the only place
+// the tier it overwrote survives: a reader comparing the two learns whether the
+// re-arm gave the organization back what it had.
+type LogOrganizationEnterpriseTrialRearmedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	AccountType string
+	TrialEndsAt time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialRearmedEvent) error {
+	action := ActionOrganizationEnterpriseTrialRearmed
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"account_type":  event.AccountType,
 		"trial_ends_at": event.TrialEndsAt,
 	})
 	if err != nil {

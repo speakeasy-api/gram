@@ -13,8 +13,15 @@ import (
 )
 
 type LogRecord struct {
-	Action           string
-	ProjectID        uuid.NullUUID
+	Action    string
+	ProjectID uuid.NullUUID
+
+	// ActorID and ActorType are the authoritative record of who acted; the
+	// display name beside them is denormalized for rendering and is masked for
+	// Speakeasy staff. A test that asserts only the display name cannot tell an
+	// entry that identifies the actor from one that identifies nobody.
+	ActorID          string
+	ActorType        string
 	ActorDisplayName *string
 	SubjectType      string
 	SubjectDisplay   string
@@ -33,6 +40,8 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 	return LogRecord{
 		Action:           row.Action,
 		ProjectID:        row.ProjectID,
+		ActorID:          row.ActorID,
+		ActorType:        row.ActorType,
 		ActorDisplayName: conv.FromPGText[string](row.ActorDisplayName),
 		SubjectType:      row.SubjectType,
 		SubjectDisplay:   conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
