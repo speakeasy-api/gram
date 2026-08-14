@@ -163,9 +163,22 @@ func newAdminCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "workos-api-key",
-			Usage:    "WorkOS API key for user identity lookups",
-			EnvVars:  []string{"WORKOS_API_KEY"},
+			Name: "workos-api-key",
+			Usage: "WorkOS API key for user identity lookups and organization creation. " +
+				"Falls back to the same secret the server and worker read, so a deployment that already sets one does not need a second.",
+			EnvVars:  []string{"WORKOS_API_KEY", "GRAM_IDP_CLIENT_SECRET"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-endpoint",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
+			EnvVars:  []string{"WORKOS_API_URL"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "idp-client-id",
+			Usage:    "OIDC client ID for the identity provider",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: false,
 		},
 	}
