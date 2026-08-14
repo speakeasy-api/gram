@@ -82,7 +82,14 @@ SELECT
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE
-    (sqlc.narg('q')::text IS NULL OR om.name ILIKE '%' || sqlc.narg('q')::text || '%' OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%')
+    -- The id arms match whole values only: both columns are unique-indexed, so equality stays index-usable where a wildcard ILIKE would force a sequential scan on every keystroke.
+    (
+        sqlc.narg('q')::text IS NULL
+        OR om.name ILIKE '%' || sqlc.narg('q')::text || '%'
+        OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%'
+        OR om.id = sqlc.narg('q')::text
+        OR om.workos_id = sqlc.narg('q')::text
+    )
     AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
     AND (sqlc.arg('include_disabled')::boolean OR om.disabled_at IS NULL)
     AND (sqlc.narg('after_id')::text IS NULL OR om.id > sqlc.narg('after_id')::text)

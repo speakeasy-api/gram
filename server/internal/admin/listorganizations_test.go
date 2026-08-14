@@ -407,3 +407,50 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
 	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }
+
+type searchByIDCase struct {
+	name    string
+	q       string
+	wantIDs []string
+}
+
+func TestListOrganizations_SearchByID(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const (
+		alphaID   = "org_search_id_alpha"
+		bravoID   = "org_search_id_bravo"
+		charlieID = "org_search_id_charlie"
+
+		bravoWorkosID = "org_workos_placeholder_bravo"
+	)
+
+	workosID := bravoWorkosID
+	seedOrg(t, ctx, conn, orgFixture{id: alphaID, name: "Alpha Holdings", slug: "alpha-holdings", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: bravoID, name: "Bravo Holdings", slug: "bravo-holdings", workosID: &workosID, whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: charlieID, name: "Charlie Networks", slug: "charlie-networks", whitelisted: true})
+
+	cases := []searchByIDCase{
+		{name: "full organization id", q: alphaID, wantIDs: []string{alphaID}},
+		{name: "full workos id", q: bravoWorkosID, wantIDs: []string{bravoID}},
+		{name: "id no organization holds", q: "org_search_id_delta", wantIDs: nil},
+		// The id arms are exact, so a fragment of a real id matches nothing.
+		{name: "fragment of an organization id", q: "search_id_alpha", wantIDs: nil},
+		{name: "fragment of a workos id", q: "placeholder_bravo", wantIDs: nil},
+		{name: "name, unchanged by the id arms", q: "charlie", wantIDs: []string{charlieID}},
+	}
+
+	for _, c := range cases {
+		q := c.q
+		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Q: &q})
+		require.NoError(t, err, "searching for %s", c.name)
+
+		got := make([]string, len(res.Organizations))
+		for i, o := range res.Organizations {
+			got[i] = o.ID
+		}
+		require.ElementsMatch(t, c.wantIDs, got, "organizations matched by %s", c.name)
+	}
+}
