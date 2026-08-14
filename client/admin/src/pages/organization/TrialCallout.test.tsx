@@ -76,37 +76,27 @@ describe("TrialCallout", () => {
     expect(callout.textContent).not.toContain("-");
   });
 
-  // Both live states, not just the first. The callout draws for either one, so
-  // a state it draws for but offers nothing in is a banner with no way to act
-  // on it.
+  // Both live states, not just the first: the callout draws for either one, so
+  // a second action bar can come back in either one. The record's actions live
+  // in the header, which drew Disable and Extend trial about 90 pixels from
+  // these when the callout carried its own.
   it.each(["running", "ending_soon"] as const)(
-    "hosts the record's actions while the trial is %s",
+    "carries no actions of its own while the trial is %s",
     async (state) => {
-      const org = anOrganization({
-        trial_state: state,
-        trial_ends_at: TRIAL_ENDS_AT,
-      });
-      await renderWithApp(<TrialCallout org={org} />);
+      await renderWithApp(
+        <TrialCallout
+          org={anOrganization({
+            trial_state: state,
+            trial_ends_at: TRIAL_ENDS_AT,
+          })}
+        />,
+      );
 
-      const callout = screen.getByRole("status");
-      expect(
-        callout.contains(
-          screen.getByRole("button", { name: `Extend trial for ${org.name}` }),
-        ),
-      ).toBe(true);
+      // Everything this component renders, not only what is inside the status
+      // region. An action bar moved to a sibling of that region is still an
+      // action bar on the callout, and a scoped query cannot see it.
+      expect(screen.queryAllByRole("button")).toHaveLength(0);
+      expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
     },
   );
-
-  it("leaves extend off for a disabled organization, whatever its trial says", async () => {
-    const org = anOrganization({
-      trial_state: "running",
-      trial_ends_at: TRIAL_ENDS_AT,
-      disabled_at: "2026-03-04T00:00:00Z",
-    });
-    await renderWithApp(<TrialCallout org={org} />);
-
-    expect(
-      screen.queryByRole("button", { name: `Extend trial for ${org.name}` }),
-    ).toBeNull();
-  });
 });

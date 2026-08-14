@@ -1,6 +1,7 @@
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { TrialState } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { fmtDateShort } from "@/lib/utils";
 import { anOrganization } from "@/test/fixtures";
@@ -89,6 +90,69 @@ describe("RecordHeader", () => {
 
     expect(screen.getByRole("heading", { name: org.name })).toBeTruthy();
     expect(screen.getByText(TRIAL_LABELS.ending_soon)).toBeTruthy();
+  });
+
+  it("shows no trial mark on a record with no trial", async () => {
+    // `Trial` renders a bare dash for `none`, which is right in a table cell
+    // and reads as a stray hyphen beside a record name.
+    await renderWithApp(
+      <RecordHeader org={anOrganization({ trial_state: "none" })} />,
+    );
+
+    expect(screen.queryByText("-")).toBeNull();
+    expect(screen.queryByText(TRIAL_LABELS.none)).toBeNull();
+  });
+
+  it("shows no trial mark on a record the server sends no trial state for", async () => {
+    // A gate written as `!== "none"` alone draws the dash here.
+    await renderWithApp(<RecordHeader org={anOrganization()} />);
+
+    expect(screen.queryByText("-")).toBeNull();
+    expect(screen.queryByText(TRIAL_LABELS.none)).toBeNull();
+  });
+
+  it("still shows the dash when the server sends a state the client does not know", async () => {
+    // `Trial` renders the same bare dash for `none` and for an unrecognised
+    // value. Only `none` is "no trial"; an unrecognised state says this build
+    // is behind the server, and hiding it would hide that.
+    await renderWithApp(
+      <RecordHeader
+        org={anOrganization({ trial_state: "paused" as TrialState })}
+      />,
+    );
+
+    expect(screen.getByText("Trial state not recognised")).toBeTruthy();
+  });
+
+  // Both live states, not just the first: extend is offered on the header now
+  // that the callout carries no actions, and `canExtendTrial` inlined as
+  // `trial_state === "running"` passes the first case and fails this one.
+  it.each(["running", "ending_soon"] as const)(
+    "offers Extend trial while the trial is %s",
+    async (state) => {
+      const org = anOrganization({
+        trial_state: state,
+        trial_ends_at: "2026-05-06T00:00:00Z",
+      });
+      await renderWithApp(<RecordHeader org={org} />);
+
+      expect(
+        screen.getByRole("button", { name: `Extend trial for ${org.name}` }),
+      ).toBeTruthy();
+    },
+  );
+
+  it("leaves extend off for a disabled organization, whatever its trial says", async () => {
+    const org = anOrganization({
+      trial_state: "running",
+      trial_ends_at: "2026-05-06T00:00:00Z",
+      disabled_at: "2026-03-04T00:00:00Z",
+    });
+    await renderWithApp(<RecordHeader org={org} />);
+
+    expect(
+      screen.queryByRole("button", { name: `Extend trial for ${org.name}` }),
+    ).toBeNull();
   });
 
   it("offers Re-enable rather than Disable for a disabled organization", async () => {
