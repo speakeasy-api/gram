@@ -64,8 +64,9 @@ async function setupGoCaching() {
 
   const goModHash = hash.digest("hex");
 
-  const cacheKey = `${cacheNamespace}-${os}-${arch}-${goVersion}-${goModHash}`;
-  const partialKey = `${cacheNamespace}-${os}-${arch}-${goVersion}-`;
+  const version = 1; // Increment this to bust the Go cache
+  const cacheKey = `${cacheNamespace}-${version}-${os}-${arch}-${goVersion}-${goModHash}`;
+  const partialKey = `${cacheNamespace}-${version}-${os}-${arch}-${goVersion}-`;
   await fs.appendFile(env, `GH_CACHE_GO_KEY=go-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_GO_KEY_PARTIAL=go-${partialKey}\n`);
 
@@ -97,8 +98,9 @@ async function setupUVCaching() {
 
   const uvHash = hash.digest("hex");
 
-  const cacheKey = `${cacheNamespace}-${os}-${arch}-uv${uvVersion}-${uvHash}`;
-  const partialKey = `${cacheNamespace}-${os}-${arch}-uv${uvVersion}-`;
+  const version = 1; // Increment this to bust the uv cache
+  const cacheKey = `${cacheNamespace}-${version}-${os}-${arch}-uv${uvVersion}-${uvHash}`;
+  const partialKey = `${cacheNamespace}-${version}-${os}-${arch}-uv${uvVersion}-`;
   await fs.appendFile(env, `GH_CACHE_UV_KEY=uv-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_UV_KEY_PARTIAL=uv-${partialKey}\n`);
 
@@ -131,8 +133,9 @@ async function setupAubeCaching() {
 
   const lockfileHash = hash.digest("hex");
 
-  const cacheKey = `${cacheNamespace}-${os}-${arch}-aube${aubeMajorVersion}-${lockfileHash}`;
-  const partialKey = `${cacheNamespace}-${os}-${arch}-aube${aubeMajorVersion}-`;
+  const version = 1; // Increment this to bust the aube cache
+  const cacheKey = `${cacheNamespace}-${version}-${os}-${arch}-aube${aubeMajorVersion}-${lockfileHash}`;
+  const partialKey = `${cacheNamespace}-${version}-${os}-${arch}-aube${aubeMajorVersion}-`;
   await fs.appendFile(env, `GH_CACHE_AUBE_KEY=aube-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_AUBE_KEY_PARTIAL=aube-${partialKey}\n`);
 
