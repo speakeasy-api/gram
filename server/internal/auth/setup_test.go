@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -178,8 +179,9 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	authzProvisioner := authz.NewProvisioner(conn)
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cache.SuffixNone)
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
+	cacheSuffix := cache.Suffix("auth-" + t.Name() + "-" + uuid.NewString())
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
@@ -244,8 +246,9 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	authzProvisioner := authz.NewProvisioner(conn)
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cache.SuffixNone)
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
+	cacheSuffix := cache.Suffix("auth-" + t.Name() + "-" + uuid.NewString())
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
