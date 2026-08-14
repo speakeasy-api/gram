@@ -18,9 +18,35 @@ if (!process.env["GITHUB_ENV"]) {
 
 const env = process.env["GITHUB_ENV"];
 
+// Blacksmith transparently handles actions/cache on its runners, but a
+// GitHub-hosted workflow can populate the same default-branch key in GitHub's
+// backend. Keep the namespaces distinct so an exact GitHub-backed hit cannot
+// prevent a colocated entry from being populated on Blacksmith.
+const configuredCacheNamespace = process.env["CACHE_NAMESPACE"];
+
+if (
+  process.env["RUNNER_ENVIRONMENT"] === "github-hosted" &&
+  !configuredCacheNamespace
+) {
+  console.error(
+    "CACHE_NAMESPACE must be set explicitly on GitHub-hosted runners",
+  );
+  process.exit(1);
+}
+
+const cacheNamespace = configuredCacheNamespace || "blacksmith-v1";
+
+if (!/^[A-Za-z0-9._-]+$/.test(cacheNamespace)) {
+  console.error(
+    "CACHE_NAMESPACE may only contain letters, numbers, dots, underscores, and hyphens",
+  );
+  process.exit(1);
+}
+
 async function setupGoCaching() {
   const goBuildCache = execSync("go env GOCACHE", { encoding: "utf8" }).trim();
   const goModCache = execSync("go env GOMODCACHE", { encoding: "utf8" }).trim();
+  const goVersion = execSync("go env GOVERSION", { encoding: "utf8" }).trim();
 
   await fs.appendFile(env, `GOCACHE=${goBuildCache}\n`);
   await fs.appendFile(env, `GOMODCACHE=${goModCache}\n`);
@@ -38,9 +64,8 @@ async function setupGoCaching() {
 
   const goModHash = hash.digest("hex");
 
-  const version = 1; // Increment this if you need to bust the cache
-  const cacheKey = `${version}-${os}-${arch}-${goModHash}`;
-  const partialKey = `${version}-${os}-${arch}-`;
+  const cacheKey = `${cacheNamespace}-${os}-${arch}-${goVersion}-${goModHash}`;
+  const partialKey = `${cacheNamespace}-${os}-${arch}-${goVersion}-`;
   await fs.appendFile(env, `GH_CACHE_GO_KEY=go-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_GO_KEY_PARTIAL=go-${partialKey}\n`);
 
@@ -72,9 +97,8 @@ async function setupUVCaching() {
 
   const uvHash = hash.digest("hex");
 
-  const version = 1; // Increment this if you need to bust the cache
-  const cacheKey = `${version}-${os}-${arch}-uv${uvVersion}-${uvHash}`;
-  const partialKey = `${version}-${os}-${arch}-uv${uvVersion}-`;
+  const cacheKey = `${cacheNamespace}-${os}-${arch}-uv${uvVersion}-${uvHash}`;
+  const partialKey = `${cacheNamespace}-${os}-${arch}-uv${uvVersion}-`;
   await fs.appendFile(env, `GH_CACHE_UV_KEY=uv-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_UV_KEY_PARTIAL=uv-${partialKey}\n`);
 
@@ -107,9 +131,8 @@ async function setupAubeCaching() {
 
   const lockfileHash = hash.digest("hex");
 
-  const version = 1; // Increment this if you need to bust the cache
-  const cacheKey = `${version}-${os}-${arch}-aube${aubeMajorVersion}-${lockfileHash}`;
-  const partialKey = `${version}-${os}-${arch}-aube${aubeMajorVersion}-`;
+  const cacheKey = `${cacheNamespace}-${os}-${arch}-aube${aubeMajorVersion}-${lockfileHash}`;
+  const partialKey = `${cacheNamespace}-${os}-${arch}-aube${aubeMajorVersion}-`;
   await fs.appendFile(env, `GH_CACHE_AUBE_KEY=aube-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_AUBE_KEY_PARTIAL=aube-${partialKey}\n`);
 

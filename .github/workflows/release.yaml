@@ -25,6 +25,9 @@ jobs:
       publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
+      # npm trusted publishing requires this GitHub-hosted job, so keep its
+      # cache keys separate from the Blacksmith-backed CI namespace.
+      CACHE_NAMESPACE: github-v1
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,6 +37,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-github-v1
           env: false
 
       - name: Prepare GitHub Actions environment
