@@ -46,17 +46,6 @@ type Service interface {
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
 	ListShadowMCPInventoryUsers(context.Context, *ListShadowMCPInventoryUsersPayload) (res *ListShadowMCPInventoryUsersResult, err error)
-	// Create or modify a Shadow MCP URL allow decision for selected blocking
-	// policies.
-	UpsertShadowMCPInventoryPolicyBypass(context.Context, *UpsertShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
-	// Remove a Shadow MCP URL allow decision.
-	DeleteShadowMCPInventoryPolicyBypass(context.Context, *DeleteShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
-	// Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking
-	// policy by adding a risk_policy:block grant.
-	BlockShadowMCPInventoryServer(context.Context, *BlockShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryURLState, err error)
-	// Unblock a Shadow MCP server URL under an allow-by-default (allow_all)
-	// blocking policy by removing its risk_policy:block grant.
-	UnblockShadowMCPInventoryServer(context.Context, *UnblockShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryURLState, err error)
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
@@ -95,7 +84,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [22]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "blockShadowMCPInventoryServer", "unblockShadowMCPInventoryServer", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [18]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -156,15 +145,6 @@ type AuthzChallenge struct {
 	ResolvedBy *string
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string
-}
-
-// BlockShadowMCPInventoryServerPayload is the payload type of the access
-// service blockShadowMCPInventoryServer method.
-type BlockShadowMCPInventoryServerPayload struct {
-	ProjectID    string
-	ServerURL    string
-	PolicyID     string
-	SessionToken *string
 }
 
 // A group of consecutive challenges with the same dimensions that occurred
@@ -261,14 +241,6 @@ type DeleteRolePayload struct {
 	// The ID of the role to delete.
 	ID           string
 	ApikeyToken  *string
-	SessionToken *string
-}
-
-// DeleteShadowMCPInventoryPolicyBypassPayload is the payload type of the
-// access service deleteShadowMCPInventoryPolicyBypass method.
-type DeleteShadowMCPInventoryPolicyBypassPayload struct {
-	ProjectID    string
-	ServerURL    string
 	SessionToken *string
 }
 
@@ -601,25 +573,28 @@ type ShadowMCPInventoryServer struct {
 	CanonicalServerURL string
 	ServerSlug         string
 	URLHost            string
-	ServerName         *string
-	FirstSeen          string
-	LastSeen           string
-	LastCalled         *string
-	ObservedUseCount   int
-	UserCount          int
-	TopUsers           []string
-	Access             string
-	RequestCount       int
-	LatestRequest      *ShadowMCPInventoryRequestSummary
-	ApprovalRequest    *ShadowMCPInventoryApprovalRequest
-	AllowedPolicyIds   []string
+	// What the row identifies: a server URL observed or requested, or a local
+	// stdio command known only through its review. Absent means server_url.
+	TargetKind       *string
+	ServerName       *string
+	FirstSeen        string
+	LastSeen         string
+	LastCalled       *string
+	ObservedUseCount int
+	UserCount        int
+	TopUsers         []string
+	Access           string
+	RequestCount     int
+	LatestRequest    *ShadowMCPInventoryRequestSummary
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequest
+	AllowedPolicyIds []string
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
-// upsertShadowMCPInventoryPolicyBypass method.
+// resolveShadowMCPInventoryRequest method.
 type ShadowMCPInventoryURLState struct {
 	Access           string
 	RequestCount     int
@@ -643,15 +618,6 @@ type ShadowMCPInventoryUser struct {
 type ShadowMCPInventoryUserSource struct {
 	Source           string
 	ObservedUseCount int
-}
-
-// UnblockShadowMCPInventoryServerPayload is the payload type of the access
-// service unblockShadowMCPInventoryServer method.
-type UnblockShadowMCPInventoryServerPayload struct {
-	ProjectID    string
-	ServerURL    string
-	PolicyID     string
-	SessionToken *string
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service
@@ -692,15 +658,6 @@ type UpdateShadowMCPInventoryServerNamePayload struct {
 	ProjectID    string
 	ServerURL    string
 	Name         string
-}
-
-// UpsertShadowMCPInventoryPolicyBypassPayload is the payload type of the
-// access service upsertShadowMCPInventoryPolicyBypass method.
-type UpsertShadowMCPInventoryPolicyBypassPayload struct {
-	SessionToken *string
-	ProjectID    string
-	ServerURL    string
-	PolicyIds    []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

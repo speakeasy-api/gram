@@ -9,14 +9,16 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * The namespace of the reference.
  */
-export const TargetKind = {
+export const CreateRequestRequestBodyTargetKind = {
   ServerUrl: "server_url",
   StdioCommand: "stdio_command",
 } as const;
 /**
  * The namespace of the reference.
  */
-export type TargetKind = ClosedEnum<typeof TargetKind>;
+export type CreateRequestRequestBodyTargetKind = ClosedEnum<
+  typeof CreateRequestRequestBodyTargetKind
+>;
 
 export type CreateRequestRequestBody = {
   /**
@@ -30,12 +32,13 @@ export type CreateRequestRequestBody = {
   /**
    * The namespace of the reference.
    */
-  targetKind: TargetKind;
+  targetKind: CreateRequestRequestBodyTargetKind;
 };
 
 /** @internal */
-export const TargetKind$outboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
-  .enum(TargetKind);
+export const CreateRequestRequestBodyTargetKind$outboundSchema: z.ZodMiniEnum<
+  typeof CreateRequestRequestBodyTargetKind
+> = z.enum(CreateRequestRequestBodyTargetKind);
 
 /** @internal */
 export type CreateRequestRequestBody$Outbound = {
@@ -52,7 +55,7 @@ export const CreateRequestRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     note: z.string(),
     target: z.string(),
-    targetKind: TargetKind$outboundSchema,
+    targetKind: CreateRequestRequestBodyTargetKind$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

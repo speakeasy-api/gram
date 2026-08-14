@@ -904,36 +904,12 @@ type GetRiskPolicyStatusResponseBody struct {
 // CreateRiskPolicyBypassRequestResponseBody is the type of the "risk" service
 // "createRiskPolicyBypassRequest" endpoint HTTP response body.
 type CreateRiskPolicyBypassRequestResponseBody struct {
-	// The bypass request ID.
+	// The kind of request the token redeemed into.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The id of the created or refreshed request.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The risk policy ID.
-	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
-	// Optional target namespace for the request, such as server_url.
-	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// Optional display label for the target.
-	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	// Canonical key for the target.
-	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
-	// Selector dimensions for the request target.
-	TargetDimensions map[string]string `form:"target_dimensions,omitempty" json:"target_dimensions,omitempty" xml:"target_dimensions,omitempty"`
-	// Requester user ID.
-	RequesterUserID *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
-	// Requester email when known.
-	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
-	// Requester note.
-	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
-	// Current request status.
+	// The request's current status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// User ID that approved, denied, or revoked the request.
-	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
-	// Principal URNs granted when approved.
-	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
-	// Decision timestamp.
-	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
-	// Creation timestamp.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// Last update timestamp.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AcknowledgeRiskPolicyChallengeResponseBody is the type of the "risk" service
@@ -14842,34 +14818,14 @@ func NewGetRiskPolicyStatusGatewayError(body *GetRiskPolicyStatusGatewayErrorRes
 	return v
 }
 
-// NewCreateRiskPolicyBypassRequestRiskPolicyBypassRequestCreated builds a
+// NewCreateRiskPolicyBypassRequestPolicyBypassRedemptionCreated builds a
 // "risk" service "createRiskPolicyBypassRequest" endpoint result from a HTTP
 // "Created" response.
-func NewCreateRiskPolicyBypassRequestRiskPolicyBypassRequestCreated(body *CreateRiskPolicyBypassRequestResponseBody) *risk.RiskPolicyBypassRequest {
-	v := &risk.RiskPolicyBypassRequest{
-		ID:              *body.ID,
-		PolicyID:        *body.PolicyID,
-		TargetKind:      body.TargetKind,
-		TargetLabel:     body.TargetLabel,
-		TargetKey:       body.TargetKey,
-		RequesterUserID: *body.RequesterUserID,
-		RequesterEmail:  body.RequesterEmail,
-		Note:            body.Note,
-		Status:          *body.Status,
-		DecidedBy:       body.DecidedBy,
-		DecidedAt:       body.DecidedAt,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-	}
-	v.TargetDimensions = make(map[string]string, len(body.TargetDimensions))
-	for key, val := range body.TargetDimensions {
-		tk := key
-		tv := val
-		v.TargetDimensions[tk] = tv
-	}
-	v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
-	for i, val := range body.GrantedPrincipalUrns {
-		v.GrantedPrincipalUrns[i] = val
+func NewCreateRiskPolicyBypassRequestPolicyBypassRedemptionCreated(body *CreateRiskPolicyBypassRequestResponseBody) *risk.PolicyBypassRedemption {
+	v := &risk.PolicyBypassRedemption{
+		Kind:   *body.Kind,
+		ID:     *body.ID,
+		Status: *body.Status,
 	}
 
 	return v
@@ -20059,49 +20015,19 @@ func ValidateGetRiskPolicyStatusResponseBody(body *GetRiskPolicyStatusResponseBo
 // ValidateCreateRiskPolicyBypassRequestResponseBody runs the validations
 // defined on CreateRiskPolicyBypassRequestResponseBody
 func ValidateCreateRiskPolicyBypassRequestResponseBody(body *CreateRiskPolicyBypassRequestResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.PolicyID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
-	}
-	if body.TargetDimensions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("target_dimensions", "body"))
-	}
-	if body.RequesterUserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("requester_user_id", "body"))
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
-	if body.GrantedPrincipalUrns == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("granted_principal_urns", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.PolicyID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied" || *body.Status == "revoked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"requested", "approved", "denied", "revoked"}))
+	if body.Kind != nil {
+		if !(*body.Kind == "approval_request" || *body.Kind == "bypass_request") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"approval_request", "bypass_request"}))
 		}
-	}
-	if body.DecidedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

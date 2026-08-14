@@ -10,6 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export const Status = {
+  Unreviewed: "unreviewed",
   Requested: "requested",
   Approved: "approved",
   Denied: "denied",

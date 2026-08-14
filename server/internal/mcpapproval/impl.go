@@ -357,6 +357,49 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	return summaryView(fromGetRow(row)), nil
 }
 
+// AdmitBlockedServer is the block-link intake: a blocked employee's redeemed
+// token attaches them as a requester on the server's single review, evidence
+// and all, exactly as a proactive createRequest would. It implements the
+// risk service's ShadowMCPApprovalIntake seam — injected at wiring so the
+// block path and the API share one admission, and approval stays the only
+// flow a shadow-MCP ask can land in.
+//
+// The caller has already bound the redemption to the requester; the feature
+// gate still applies, and its forbidden error is the documented signal to
+// fall back to the legacy bypass request.
+func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (string, string, error) {
+	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return "", "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return "", "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	}
+
+	key, display, err := admittableServerURL(serverURL)
+	if err != nil {
+		return "", "", err
+	}
+
+	summary, err := s.admit(ctx, projectID, organizationID, admission{
+		targetKind:      targetKindServerURL,
+		targetRaw:       display,
+		targetKey:       key,
+		status:          statusRequested,
+		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		requesterID:     requesterUserID,
+		requesterEmail:  conv.PtrEmpty(requesterEmail),
+		note:            conv.PtrEmpty(strings.TrimSpace(note)),
+		actor:           requesterUserID,
+		actorEmail:      conv.PtrEmpty(requesterEmail),
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	return summary.ID, summary.Status, nil
+}
+
 // EnsureServerReview resolves the evidence dossier for a server URL, opening
 // one when none exists. It records no ask and no decision: the row is written
 // as unreviewed, stays out of the queue, and upgrades in place when someone
@@ -885,7 +928,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 }
 
 func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisionPayload) (*gen.ApprovalDecision, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
 	if err != nil {
 		return nil, err
 	}
@@ -922,6 +965,45 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		citedReportID = uuid.NullUUID{UUID: reportID, Valid: true}
 	}
 
+	granted := payload.GrantedPrincipalUrns
+	if payload.Decision == decisionDenied {
+		// A denial grants nobody anything, whatever the caller sent.
+		granted = nil
+	}
+	if payload.Decision == decisionApproved && len(granted) == 0 {
+		// An approval that names no principals covers everyone. The resolved
+		// all-users principal is stored rather than an empty set, so the
+		// decision row says who was actually given access instead of leaving
+		// a blank the reader must know the default for.
+		granted = []string{authz.AllUsersPrincipal().String()}
+	}
+	if granted == nil {
+		granted = []string{}
+	}
+
+	// Parsed and validated before the transaction: a bad principal is the
+	// caller's error and must cost no transaction — and since these URNs
+	// become enforcement grants below, a principal that does not resolve in
+	// the caller's organization would record an audience the grants can never
+	// enforce, so it is rejected rather than stored.
+	grantedPrincipals := make([]urn.Principal, 0, len(granted))
+	for _, principalURN := range granted {
+		principal, err := urn.ParsePrincipal(principalURN)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
+		}
+		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
+			// Only a verdict on the principal is the caller's error; an
+			// infrastructure failure during the lookup must not read as
+			// invalid input.
+			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+				return nil, oops.E(oops.CodeBadRequest, err, "granted principal does not resolve in this organization")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error validating granted principal").LogError(ctx, s.logger)
+		}
+		grantedPrincipals = append(grantedPrincipals, principal)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
@@ -945,6 +1027,15 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
 	}
 
+	// The request's organization and the session's must agree. Both derive
+	// from the same project — the request row was just resolved under the
+	// session's project id — so a mismatch means tenancy state is corrupt.
+	// Refuse rather than record a decision whose audit trail names one
+	// organization while its grants enforce in another.
+	if request.OrganizationID != organizationID {
+		return nil, oops.E(oops.CodeUnexpected, nil, "approval request organization mismatch").LogError(ctx, s.logger)
+	}
+
 	// A cited report is resolved against the request being decided and the
 	// caller's project before it is written, so a decision can never
 	// attribute research about one server to another.
@@ -959,15 +1050,6 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "error reading research report").LogError(ctx, s.logger)
 		}
-	}
-
-	granted := payload.GrantedPrincipalUrns
-	if payload.Decision == decisionDenied {
-		// A denial grants nobody anything, whatever the caller sent.
-		granted = nil
-	}
-	if granted == nil {
-		granted = []string{}
 	}
 
 	// The evidence is frozen as it stood on the request, and its version is
@@ -1012,6 +1094,36 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		Status:    statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
+	}
+
+	// The decision resolves the legacy bypass rows it answers too — in the
+	// same transaction — so no ask this review covers can stay pending in the
+	// legacy queue (and on the inventory's request counters) after the review
+	// is decided. That means every still-requested row for the same server,
+	// not only the promotion source: bypass rows are per-requester and only
+	// one of them is ever linked. Each transition is audited alongside the
+	// decision.
+	if err := s.drainLegacyBypassRequests(ctx, dbtx, request, projectID, payload.Decision, granted, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
+	}
+
+	// The decision enforces in the same transaction it records: the grant
+	// writes and the decision row commit or roll back together, so enforced
+	// state can never disagree with the recorded history. target_key is the
+	// canonical inventory URL for server_url targets — the same key the
+	// shadow-MCP block rules and this org's traffic converge on. An stdio
+	// target has no URL to key a grant on; its decision records without
+	// enforcing.
+	if request.TargetKind == targetKindServerURL {
+		if err := reconcileDecisionGrants(ctx, dbtx, request.OrganizationID, projectID, request.TargetKey, payload.Decision == decisionApproved, grantedPrincipals); err != nil {
+			// An inexpressible blast radius surfaces as the caller's error
+			// with its explanation intact; everything else is unexpected.
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) {
+				return nil, err
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error enforcing decision").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

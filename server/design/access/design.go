@@ -373,123 +373,6 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
-	Method("upsertShadowMCPInventoryPolicyBypass", func() {
-		Description("Create or modify a Shadow MCP URL allow decision for selected blocking policies.")
-		Security(security.Session)
-
-		Payload(func() {
-			Extend(ShadowMCPInventoryPolicyBypassForm)
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			POST("/rpc/access.upsertShadowMCPInventoryPolicyBypass")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "upsertShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-name-override", "upsertShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
-	})
-
-	Method("deleteShadowMCPInventoryPolicyBypass", func() {
-		Description("Remove a Shadow MCP URL allow decision.")
-		Security(security.Session)
-
-		Payload(func() {
-			Attribute("project_id", String, func() {
-				Format(FormatUUID)
-			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
-			})
-			Required("project_id", "server_url")
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			DELETE("/rpc/access.deleteShadowMCPInventoryPolicyBypass")
-			Param("project_id")
-			Param("server_url")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "deleteShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
-	})
-
-	Method("blockShadowMCPInventoryServer", func() {
-		Description("Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.")
-		Security(security.Session)
-
-		Payload(func() {
-			Attribute("project_id", String, func() {
-				Format(FormatUUID)
-			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
-			})
-			Attribute("policy_id", String, func() {
-				Format(FormatUUID)
-			})
-			Required("project_id", "server_url", "policy_id")
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			POST("/rpc/access.blockShadowMCPInventoryServer")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "blockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-name-override", "blockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BlockShadowMCPInventoryServer", "type": "mutation"}`)
-	})
-
-	Method("unblockShadowMCPInventoryServer", func() {
-		Description("Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.")
-		Security(security.Session)
-
-		Payload(func() {
-			Attribute("project_id", String, func() {
-				Format(FormatUUID)
-			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
-			})
-			Attribute("policy_id", String, func() {
-				Format(FormatUUID)
-			})
-			Required("project_id", "server_url", "policy_id")
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			DELETE("/rpc/access.unblockShadowMCPInventoryServer")
-			Param("project_id")
-			Param("server_url")
-			Param("policy_id")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "unblockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-name-override", "unblockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnblockShadowMCPInventoryServer", "type": "mutation"}`)
-	})
-
 	Method("resolveShadowMCPInventoryRequest", func() {
 		Description("Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.")
 		Security(security.Session)
@@ -870,7 +753,7 @@ var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalReq
 		Format(FormatUUID)
 	})
 	Attribute("status", String, func() {
-		Enum("requested", "approved", "denied")
+		Enum("unreviewed", "requested", "approved", "denied")
 	})
 	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
 })
@@ -881,6 +764,10 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("canonical_server_url", String)
 	Attribute("server_slug", String)
 	Attribute("url_host", String)
+	Attribute("target_kind", String, func() {
+		Description("What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.")
+		Enum("server_url", "stdio_command")
+	})
 	Attribute("server_name", String)
 	Attribute("first_seen", String, func() {
 		Format(FormatDateTime)

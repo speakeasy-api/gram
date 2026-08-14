@@ -32,10 +32,8 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/accessBlockShadowMCPInventoryServer.ts: {}
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteRole.ts: {}
-  src/funcs/accessDeleteShadowMCPInventoryPolicyBypass.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
@@ -49,11 +47,9 @@ trackedFiles:
   src/funcs/accessRequestAccess.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
   src/funcs/accessResolveShadowMCPInventoryRequest.ts: {}
-  src/funcs/accessUnblockShadowMCPInventoryServer.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
   src/funcs/accessUpdateShadowMCPInventoryServerName.ts: {}
-  src/funcs/accessUpsertShadowMCPInventoryPolicyBypass.ts: {}
   src/funcs/adminChatAnalysisGetSettings.ts: {}
   src/funcs/adminChatAnalysisTriggerAnalysis.ts: {}
   src/funcs/adminChatAnalysisUpsertBusinessMemorySettings.ts: {}
@@ -641,7 +637,6 @@ trackedFiles:
   src/models/components/authzchallenge.ts: {}
   src/models/components/awsiamcredential.ts: {}
   src/models/components/awskmskey.ts: {}
-  src/models/components/blockshadowmcpinventoryserverrequestbody.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
   src/models/components/builtinexclusionentry.ts: {}
   src/models/components/businessmemory.ts: {}
@@ -1056,6 +1051,7 @@ trackedFiles:
   src/models/components/pluginassignment.ts: {}
   src/models/components/pluginserver.ts: {}
   src/models/components/pluginskilldistribution.ts: {}
+  src/models/components/policybypassredemption.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
   src/models/components/project.ts: {}
@@ -1200,7 +1196,6 @@ trackedFiles:
   src/models/components/settoolvariationsgrouprequestbody.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
-  src/models/components/shadowmcpinventorypolicybypassform.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
   src/models/components/shadowmcpinventoryurlstate.ts: {}
@@ -1423,7 +1418,6 @@ trackedFiles:
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
-  src/models/operations/blockshadowmcpinventoryserver.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
@@ -1518,7 +1512,6 @@ trackedFiles:
   src/models/operations/deleteriskpolicy.ts: {}
   src/models/operations/deleterole.ts: {}
   src/models/operations/deleteservernameoverride.ts: {}
-  src/models/operations/deleteshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/deletesourceenvironmentlink.ts: {}
   src/models/operations/deletetemplate.ts: {}
   src/models/operations/deletetoolset.ts: {}
@@ -1889,7 +1882,6 @@ trackedFiles:
   src/models/operations/triggerchatanalysis.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/triggerskillsuggestion.ts: {}
-  src/models/operations/unblockshadowmcpinventoryserver.ts: {}
   src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmarkriskresultsfalsepositive.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
@@ -1946,7 +1938,6 @@ trackedFiles:
   src/models/operations/upsertmodelproviderkey.ts: {}
   src/models/operations/upsertotelforwardingconfig.ts: {}
   src/models/operations/upsertservernameoverride.ts: {}
-  src/models/operations/upsertshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/upsertskillefficacysettings.ts: {}
   src/models/operations/validateapikey.ts: {}
   src/models/operations/verifygcpiamcredential.ts: {}
@@ -1992,7 +1983,6 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
-  src/react-query/blockShadowMCPInventoryServer.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/challengeBuckets.core.ts: {}
@@ -2093,7 +2083,6 @@ trackedFiles:
   src/react-query/deleteRemoteSessionClient.ts: {}
   src/react-query/deleteRemoteSessionIssuer.ts: {}
   src/react-query/deleteRole.ts: {}
-  src/react-query/deleteShadowMCPInventoryPolicyBypass.ts: {}
   src/react-query/deleteSourceEnvironmentLink.ts: {}
   src/react-query/deleteTemplate.ts: {}
   src/react-query/deleteToolset.ts: {}
@@ -2663,7 +2652,6 @@ trackedFiles:
   src/react-query/triggers.ts: {}
   src/react-query/tunneledMcpServers.core.ts: {}
   src/react-query/tunneledMcpServers.ts: {}
-  src/react-query/unblockShadowMCPInventoryServer.ts: {}
   src/react-query/undistributeSkill.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
@@ -2716,7 +2704,6 @@ trackedFiles:
   src/react-query/upsertGlobalVariation.ts: {}
   src/react-query/upsertModelProviderKey.ts: {}
   src/react-query/upsertOtelForwardingConfig.ts: {}
-  src/react-query/upsertShadowMCPInventoryPolicyBypass.ts: {}
   src/react-query/upsertSkillEfficacySettings.ts: {}
   src/react-query/userSessionClient.core.ts: {}
   src/react-query/userSessionClient.ts: {}
@@ -3572,7 +3559,7 @@ examples:
         application/json: {"request_token": "<value>"}
       responses:
         "201":
-          application/json: {"created_at": "2024-06-13T10:48:05.276Z", "granted_principal_urns": ["<value 1>"], "id": "572db9cf-acf4-495b-81e3-16801f13d519", "policy_id": "290f5dd2-1c72-47b0-868b-4d0907cb7585", "requester_user_id": "<id>", "status": "approved", "target_dimensions": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2025-11-09T11:38:02.890Z"}
+          application/json: {"id": "572db9cf-acf4-495b-81e3-16801f13d519", "kind": "approval_request", "status": "approved"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -1387,14 +1387,15 @@ func newStartCommand() *cli.Command {
 			// One probe serves both the authority and tool-declarations slots:
 			// they are two views of the same remote prober.
 			remoteProber := remoteprobe.New(logger, guardianPolicy)
-			mcpapproval.Attach(mux, mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
+			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				mcpapprovalevidence.NewAssembler(
 					packagemeta.NewClient(guardianPolicy.PooledClient()),
 					telemetryrepo.New(chDB),
 					remoteProber,
 					remoteProber,
 					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
-				)))
+				))
+			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
@@ -1460,6 +1461,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
+				mcpApprovalService,
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
