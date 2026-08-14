@@ -167,7 +167,7 @@ const UsageSection = () => {
           )}
           {periodUsage?.credits != null &&
             periodUsage.includedCredits != null && (
-              <div className="pt-8">
+              <div className="pt-4">
                 <PlatformAdminOnlyPanel>
                   <UsageItem
                     label="Chat Based Credits (Polar)"
