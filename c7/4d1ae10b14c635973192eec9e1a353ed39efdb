@@ -1,0 +1,32 @@
+server/internal/authz/engine.go
+  s_0cf3a174e4a7ca::t_64c6621b271919 96-98
+.changeset/orgless-session-authz.md
+  s_0cf3a174e4a7ca::t_638bd1190044e6 1-5
+server/internal/access/impl.go
+  s_0cf3a174e4a7ca::t_53fd4e4b08f657 363-365
+server/internal/authz/context_test.go
+  s_0cf3a174e4a7ca::t_64c6621b271919 87-108
+.agents/skills/golang/SKILL.md
+  s_0cf3a174e4a7ca::t_53fd4e4b08f657 156,158,160
+  s_0cf3a174e4a7ca::t_065e0d973939fd 157
+server/internal/access/listusergrants_test.go
+  s_0cf3a174e4a7ca::t_53fd4e4b08f657 133-147
+.agents/skills/gram-rbac/SKILL.md
+  s_0cf3a174e4a7ca::t_53fd4e4b08f657 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c74d1ae10b14c635973192eec9e1a353ed39efdb",
+  "prompts": {},
+  "sessions": {
+    "s_0cf3a174e4a7ca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd7ad-4198-74d0-8626-b1726133398c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

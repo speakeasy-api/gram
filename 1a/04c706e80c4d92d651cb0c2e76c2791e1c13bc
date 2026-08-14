@@ -1,0 +1,21 @@
+.speakeasy/out.openapi.yaml
+  s_37eadf6510f36e::t_c51d60f8be00ad 66889
+client/dashboard/src/sdk/src/models/components/pluginassignment.ts
+  s_37eadf6510f36e::t_d8d2c82cb642f9 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1a04c706e80c4d92d651cb0c2e76c2791e1c13bc",
+  "prompts": {},
+  "sessions": {
+    "s_37eadf6510f36e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff651-c145-7c40-824b-af8fc4942e2a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
