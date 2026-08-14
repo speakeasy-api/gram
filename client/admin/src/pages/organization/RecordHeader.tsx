@@ -59,7 +59,9 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
             </a>
           </Button>
         )}
-        <OrganizationActions org={org} layout="buttons" />
+        {/* Lifecycle only. The action that resolves the trial belongs beside
+            the deadline it acts on, in the callout. */}
+        <OrganizationActions org={org} layout="buttons" actions="lifecycle" />
       </div>
     </div>
   );

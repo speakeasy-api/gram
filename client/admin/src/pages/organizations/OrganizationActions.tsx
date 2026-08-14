@@ -102,9 +102,14 @@ type OpenDialog = "disable" | "extend";
 export function OrganizationActions({
   org,
   layout,
+  actions = "all",
 }: {
   org: AdminOrganization;
   layout: "menu" | "buttons";
+  // Which of the record's actions this instance draws. The record shows two
+  // bars at once: lifecycle in the header, the trial's own resolution in the
+  // callout beside the deadline it acts on. `all` is every other surface.
+  actions?: "all" | "lifecycle" | "trial";
 }): JSX.Element {
   const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
@@ -117,6 +122,11 @@ export function OrganizationActions({
 
   const isDisabled = Boolean(org.disabled_at);
   const busy = disable.isPending || enable.isPending || extend.isPending;
+
+  // Read once and used by both layouts, so a menu caller cannot get a
+  // different answer from a buttons caller passing the same `actions`.
+  const showLifecycle = actions !== "trial";
+  const showExtend = actions !== "lifecycle" && canExtendTrial(org);
 
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
@@ -245,28 +255,29 @@ export function OrganizationActions({
             the control the operator just pressed drops the keyboard onto the
             body, and re-enabling is idempotent, so a second press costs a
             request and nothing else. */}
-        {isDisabled ? (
-          <Button
-            variant="outline"
-            size="xs"
-            aria-label={`Re-enable ${org.name}`}
-            aria-busy={busy}
-            onClick={runEnable}
-          >
-            Re-enable
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="xs"
-            aria-label={`Disable ${org.name}`}
-            aria-busy={busy}
-            onClick={(event) => openDialog("disable", event.currentTarget)}
-          >
-            Disable
-          </Button>
-        )}
-        {canExtendTrial(org) && (
+        {showLifecycle &&
+          (isDisabled ? (
+            <Button
+              variant="outline"
+              size="xs"
+              aria-label={`Re-enable ${org.name}`}
+              aria-busy={busy}
+              onClick={runEnable}
+            >
+              Re-enable
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="xs"
+              aria-label={`Disable ${org.name}`}
+              aria-busy={busy}
+              onClick={(event) => openDialog("disable", event.currentTarget)}
+            >
+              Disable
+            </Button>
+          ))}
+        {showExtend && (
           <Button
             variant="outline"
             size="xs"
@@ -299,25 +310,28 @@ export function OrganizationActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {isDisabled ? (
-            <DropdownMenuItem onSelect={runEnable}>Re-enable</DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem
-              variant="destructive"
-              // Opens the confirmation. The write waits for it: disabling cuts
-              // a customer off, and this menu sits one row away from four
-              // others.
-              //
-              // The trigger, not the item this fires on: the menu closes with
-              // the dialog opening and takes the item down with it, and the
-              // dialog has to give the keyboard back to something still on the
-              // page.
-              onSelect={() => openDialog("disable", menuTrigger.current)}
-            >
-              Disable
-            </DropdownMenuItem>
-          )}
-          {canExtendTrial(org) && (
+          {showLifecycle &&
+            (isDisabled ? (
+              <DropdownMenuItem onSelect={runEnable}>
+                Re-enable
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                variant="destructive"
+                // Opens the confirmation. The write waits for it: disabling
+                // cuts a customer off, and this menu sits one row away from
+                // four others.
+                //
+                // The trigger, not the item this fires on: the menu closes
+                // with the dialog opening and takes the item down with it, and
+                // the dialog has to give the keyboard back to something still
+                // on the page.
+                onSelect={() => openDialog("disable", menuTrigger.current)}
+              >
+                Disable
+              </DropdownMenuItem>
+            ))}
+          {showExtend && (
             <DropdownMenuItem
               onSelect={() => openDialog("extend", menuTrigger.current)}
             >

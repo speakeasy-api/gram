@@ -124,35 +124,21 @@ describe("RecordHeader", () => {
     expect(screen.getByText("Trial state not recognised")).toBeTruthy();
   });
 
-  // Both live states, not just the first: extend is offered on the header now
-  // that the callout carries no actions, and `canExtendTrial` inlined as
-  // `trial_state === "running"` passes the first case and fails this one.
-  it.each(["running", "ending_soon"] as const)(
-    "offers Extend trial while the trial is %s",
-    async (state) => {
-      const org = anOrganization({
-        trial_state: state,
-        trial_ends_at: "2026-05-06T00:00:00Z",
-      });
-      await renderWithApp(<RecordHeader org={org} />);
+  it("carries the record's lifecycle action and not the trial's", async () => {
+    // A live trial, so the trial action would be offered if this bar drew it.
+    // It belongs in the callout, beside the deadline it acts on.
+    await renderWithApp(
+      <RecordHeader
+        org={anOrganization({
+          trial_state: "ending_soon",
+          trial_ends_at: "2026-05-06T00:00:00Z",
+        })}
+      />,
+    );
 
-      expect(
-        screen.getByRole("button", { name: `Extend trial for ${org.name}` }),
-      ).toBeTruthy();
-    },
-  );
-
-  it("leaves extend off for a disabled organization, whatever its trial says", async () => {
-    const org = anOrganization({
-      trial_state: "running",
-      trial_ends_at: "2026-05-06T00:00:00Z",
-      disabled_at: "2026-03-04T00:00:00Z",
-    });
-    await renderWithApp(<RecordHeader org={org} />);
-
-    expect(
-      screen.queryByRole("button", { name: `Extend trial for ${org.name}` }),
-    ).toBeNull();
+    const labels = screen.queryAllByRole("button").map((b) => b.textContent);
+    expect(labels).toContain("Disable");
+    expect(labels).not.toContain("Extend trial");
   });
 
   it("offers Re-enable rather than Disable for a disabled organization", async () => {

@@ -112,6 +112,24 @@ async function renderFooter(org: AdminOrganization = ORG): Promise<void> {
   );
 }
 
+// The menu layout with a half of the actions asked for. Nothing ships this
+// today: the record's two split bars are both `buttons`. It exists so the gate
+// is tested where a future caller would first exercise it, rather than found
+// broken by that caller.
+async function renderMenuWith(
+  actions: "all" | "lifecycle" | "trial",
+): Promise<void> {
+  await renderWithApp(
+    <WriteReportProvider value={REPORTER}>
+      <OrganizationActions org={ORG} layout="menu" actions={actions} />
+    </WriteReportProvider>,
+  );
+  fireEvent.pointerDown(
+    screen.getByRole("button", { name: `Actions for ${ORG.name}` }),
+    { button: 0, ctrlKey: false, pointerType: "mouse" },
+  );
+}
+
 function menuItems(): string[] {
   return screen
     .queryAllByRole("menuitem")
@@ -287,6 +305,61 @@ describe("the row menu", () => {
     // A write that succeeded clears the banner an earlier one left behind:
     // the operator has just been told the current state of this record.
     expect(showFailure).toHaveBeenCalledWith(null);
+  });
+});
+
+// The record draws two bars at once, so each has to be able to ask for its own
+// half. Both layouts are gated, not just the one the record happens to use.
+describe("the actions prop", () => {
+  it.each([
+    ["all", ["Disable", "Extend trial"]],
+    ["lifecycle", ["Disable"]],
+    ["trial", ["Extend trial"]],
+  ] as ["all" | "lifecycle" | "trial", string[]][])(
+    "draws %s as buttons",
+    async (actions, expected) => {
+      await renderWithApp(
+        <WriteReportProvider value={REPORTER}>
+          <OrganizationActions org={ORG} layout="buttons" actions={actions} />
+        </WriteReportProvider>,
+      );
+
+      expect(
+        screen.queryAllByRole("button").map((button) => button.textContent),
+      ).toEqual(expected);
+    },
+  );
+
+  it.each([
+    ["all", ["Disable", "Extend trial"]],
+    ["lifecycle", ["Disable"]],
+    ["trial", ["Extend trial"]],
+  ] as ["all" | "lifecycle" | "trial", string[]][])(
+    "draws %s in the menu too",
+    async (actions, expected) => {
+      await renderMenuWith(actions);
+
+      expect(menuItems()).toEqual(expected);
+    },
+  );
+
+  it("still opens the trial dialog from a bar that draws no lifecycle action", async () => {
+    // The dialogs are mounted whatever this instance draws. A bar that offers
+    // one action has to be able to finish it.
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions org={ORG} layout="buttons" actions="trial" />
+      </WriteReportProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Extend trial for ${ORG.name}` }),
+    );
+    await screen.findByRole("dialog");
+
+    await submitDays("30");
+
+    expect(mocks.extendTrial).toHaveBeenCalledWith({ id: ORG.id, days: 30 });
   });
 });
 

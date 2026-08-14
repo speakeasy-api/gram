@@ -76,12 +76,10 @@ describe("TrialCallout", () => {
     expect(callout.textContent).not.toContain("-");
   });
 
-  // Both live states, not just the first: the callout draws for either one, so
-  // a second action bar can come back in either one. The record's actions live
-  // in the header, which drew Disable and Extend trial about 90 pixels from
-  // these when the callout carried its own.
+  // Both live states, not just the first: `canExtendTrial` inlined as
+  // `trial_state === "running"` passes the first case and fails this one.
   it.each(["running", "ending_soon"] as const)(
-    "carries no actions of its own while the trial is %s",
+    "carries the trial's own action and not the record's while %s",
     async (state) => {
       await renderWithApp(
         <TrialCallout
@@ -92,11 +90,48 @@ describe("TrialCallout", () => {
         />,
       );
 
-      // Everything this component renders, not only what is inside the status
-      // region. An action bar moved to a sibling of that region is still an
-      // action bar on the callout, and a scoped query cannot see it.
-      expect(screen.queryAllByRole("button")).toHaveLength(0);
-      expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+      // Screen-wide, not scoped to the status region: an action moved to a
+      // sibling of that region is still an action on the callout. Task 6b found
+      // that a `within(callout)` query cannot see one.
+      const labels = screen.queryAllByRole("button").map((b) => b.textContent);
+      expect(labels).toContain("Extend trial");
+      expect(labels).not.toContain("Disable");
     },
   );
+
+  it("puts the action at the far end of the callout, opposite the deadline", async () => {
+    await renderWithApp(
+      <TrialCallout
+        org={anOrganization({
+          trial_state: "running",
+          trial_ends_at: TRIAL_ENDS_AT,
+        })}
+      />,
+    );
+
+    // Read off the class, because happy-dom lays nothing out and this is the
+    // only account of the rule available here. The button belongs at the
+    // opposite end from the date it acts on, and the bar wraps rather than
+    // pushing the deadline off a narrow viewport.
+    const callout = screen.getByRole("status").className.split(" ");
+    expect(callout).toContain("justify-between");
+    expect(callout).toContain("flex-wrap");
+  });
+
+  it("offers no extension for a disabled organization, whatever its trial says", async () => {
+    // The server would take the request: nothing in the extend handler reads
+    // disabled_at. Offering it is offering to buy more of a trial nobody can
+    // use, and the callout is now the only place the record offers it at all.
+    await renderWithApp(
+      <TrialCallout
+        org={anOrganization({
+          trial_state: "running",
+          trial_ends_at: TRIAL_ENDS_AT,
+          disabled_at: "2026-03-04T00:00:00Z",
+        })}
+      />,
+    );
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
 });
