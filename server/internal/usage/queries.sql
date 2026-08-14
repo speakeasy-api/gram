@@ -10,11 +10,10 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
--- name: LockBillingMetadataByStripeCustomerID :one
+-- name: GetBillingMetadataOrganizationByStripeCustomerID :one
 SELECT organization_id
 FROM billing_metadata
-WHERE stripe_customer_id = @stripe_customer_id
-FOR UPDATE;
+WHERE stripe_customer_id = @stripe_customer_id;
 
 -- name: TryInsertStripeWebhookReceipt :one
 WITH inserted AS (

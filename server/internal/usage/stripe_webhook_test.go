@@ -308,6 +308,47 @@ func TestStripeWebhookConcurrentDuplicateDispatchesOnce(t *testing.T) {
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 }
 
+func TestStripeWebhookConcurrentDistinctEventsForSameCustomerDoNotSerialize(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	release := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, *repo.Queries, string, *stripeclient.WebhookEvent) error {
+		calls.Add(1)
+		<-release
+		return nil
+	})
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.verify = func(payload []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:         "event_" + string(payload),
+			Type:       "invoice.created",
+			ObjectID:   "invoice_" + string(payload),
+			CustomerID: "customer_placeholder",
+		}, nil
+	}
+
+	responses := make(chan int, 2)
+	go func() { responses <- serveStripeWebhook(service, "first").Code }()
+	go func() { responses <- serveStripeWebhook(service, "second").Code }()
+
+	require.Eventually(t, func() bool { return calls.Load() == 2 }, 5*time.Second, 10*time.Millisecond)
+	close(release)
+	released = true
+
+	require.Equal(t, http.StatusOK, <-responses)
+	require.Equal(t, http.StatusOK, <-responses)
+	require.EqualValues(t, 2, calls.Load())
+	require.Equal(t, 2, stripeWebhookReceiptCount(t, db))
+}
+
 func TestStripeWebhookHandlerFailureRollsBackForRetry(t *testing.T) {
 	t.Parallel()
 

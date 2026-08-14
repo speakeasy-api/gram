@@ -66,6 +66,19 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 	return i, err
 }
 
+const getBillingMetadataOrganizationByStripeCustomerID = `-- name: GetBillingMetadataOrganizationByStripeCustomerID :one
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_customer_id = $1
+`
+
+func (q *Queries) GetBillingMetadataOrganizationByStripeCustomerID(ctx context.Context, stripeCustomerID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getBillingMetadataOrganizationByStripeCustomerID, stripeCustomerID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
 FROM toolsets
@@ -184,20 +197,6 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 		return nil, err
 	}
 	return items, nil
-}
-
-const lockBillingMetadataByStripeCustomerID = `-- name: LockBillingMetadataByStripeCustomerID :one
-SELECT organization_id
-FROM billing_metadata
-WHERE stripe_customer_id = $1
-FOR UPDATE
-`
-
-func (q *Queries) LockBillingMetadataByStripeCustomerID(ctx context.Context, stripeCustomerID pgtype.Text) (string, error) {
-	row := q.db.QueryRow(ctx, lockBillingMetadataByStripeCustomerID, stripeCustomerID)
-	var organization_id string
-	err := row.Scan(&organization_id)
-	return organization_id, err
 }
 
 const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one

@@ -70,7 +70,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := repo.New(tx)
-	organizationID, err := queries.LockBillingMetadataByStripeCustomerID(ctx, pgtype.Text{String: event.CustomerID, Valid: true})
+	organizationID, err := queries.GetBillingMetadataOrganizationByStripeCustomerID(ctx, pgtype.Text{String: event.CustomerID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		logger.WarnContext(ctx, "skipping Stripe webhook event for an unknown customer")
