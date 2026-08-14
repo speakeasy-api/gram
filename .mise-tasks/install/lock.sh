@@ -23,12 +23,21 @@ mirror="$(mktemp -d)"
 trap 'rm -rf "$mirror"' EXIT
 
 cd "$root"
+
+# --others so a workspace package whose package.json is not staged yet still
+# reaches the mirror; without it pnpm would resolve against a workspace missing
+# that importer and write an incomplete lockfile. --exclude-standard keeps
+# node_modules and other ignored trees out.
+manifests() {
+  git ls-files --cached --others --exclude-standard '*package.json' ':!:**/node_modules/**'
+}
+
 cp pnpm-lock.yaml pnpm-workspace.yaml "$mirror/"
 cp -R patches "$mirror/patches"
 while IFS= read -r manifest; do
   mkdir -p "$mirror/$(dirname "$manifest")"
   cp "$manifest" "$mirror/$manifest"
-done < <(git ls-files '*package.json' ':!:**/node_modules/**')
+done < <(manifests)
 
 cd "$mirror"
 if [[ -n "${usage_package:-}" ]]; then
@@ -46,9 +55,14 @@ cd "$root"
 cp "$mirror/pnpm-lock.yaml" pnpm-lock.yaml
 while IFS= read -r manifest; do
   cmp -s "$mirror/$manifest" "$manifest" || cp "$mirror/$manifest" "$manifest"
-done < <(git ls-files '*package.json' ':!:**/node_modules/**')
+done < <(manifests)
 
 # Called by path, not `mise run`: a mise task's PATH can resolve to a different
 # mise than the one running it.
 bash .mise-tasks/check/lockfile.sh
-exec aube install
+
+# --frozen-lockfile so aube can only read what pnpm just wrote. A plain install
+# re-resolves whenever node_modules/.aube-state is stale, which is exactly when
+# this task has just changed a manifest. Not `exec`: bash skips the EXIT trap on
+# a successful exec, which would leak the mirror.
+aube install --frozen-lockfile
