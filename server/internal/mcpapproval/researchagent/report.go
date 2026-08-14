@@ -11,7 +11,7 @@ import (
 // ReportVersion is the shape version of the report document this package
 // produces. It is stored on every report row, so bump it when Document's
 // shape changes.
-const ReportVersion = 1
+const ReportVersion = 2
 
 // Claim provenance tiers. The separation is the report's core honesty
 // property: an admin must always be able to tell what a third party wrote
@@ -23,6 +23,28 @@ const (
 	TierObserved              = "observed"
 	TierIndependentlyReported = "independently_reported"
 	TierVendorClaim           = "vendor_claim"
+)
+
+// Source-reputation labels, the model's per-claim judgment of the sources a
+// claim rests on. Deliberately model-asserted rather than a curated domain
+// list: a list is stale the day it ships and says nothing about the long tail
+// of small publishers where most MCP vendors live. Reputation describes the
+// SOURCES, never the claim — a true statement can rest on a planted post, and
+// a reputable outlet can be wrong. Absence (reports written before the field
+// existed) reads as unknown, never as reputable.
+const (
+	// ReputationReputable: the vendor's own official documentation (for the
+	// vendor's stated posture), independent security organizations, CVE and
+	// advisory databases, established security firms, major press.
+	ReputationReputable = "reputable"
+
+	// ReputationMixed: a blend of reputable and weaker material, or sources
+	// of uncertain standing.
+	ReputationMixed = "mixed"
+
+	// ReputationLow: only anonymous forum posts, SEO content farms,
+	// freshly-registered blogs — material cheap to plant.
+	ReputationLow = "low"
 )
 
 // maxReportClaims caps a report at its most relevant findings. Research runs
@@ -97,6 +119,12 @@ type Claim struct {
 	// an untraceable claim is one the admin cannot defend. Observed-tier
 	// claims cite the deterministic briefing and may carry none.
 	Citations []Citation `json:"citations,omitempty"`
+
+	// SourceReputation is one of the Reputation* constants, or empty on
+	// reports that predate the field. Empty renders as unknown: a claim
+	// resting only on low-reputation sources must say so, and an old report
+	// simply does not say.
+	SourceReputation string `json:"source_reputation,omitempty"`
 }
 
 // Citation is one source reference.
@@ -176,7 +204,7 @@ var extractionSchema = json.RawMessage(`{
 			"items": {
 				"type": "object",
 				"additionalProperties": false,
-				"required": ["tier", "text", "citations"],
+				"required": ["tier", "text", "citations", "source_reputation"],
 				"properties": {
 					"tier": {
 						"type": "string",
@@ -184,6 +212,11 @@ var extractionSchema = json.RawMessage(`{
 						"description": "independently_reported = a third party wrote it about the server or its vendor; vendor_claim = the server's own vendor says it about itself."
 					},
 					"text": {"type": "string"},
+					"source_reputation": {
+						"type": "string",
+						"enum": ["reputable", "mixed", "low"],
+						"description": "Your judgment of the SOURCES this claim rests on, never of whether the claim is true. reputable = official vendor documentation (for the vendor's own stated posture), independent security organizations, CVE/advisory databases, established security firms, major press. low = only anonymous forum posts, SEO content farms, freshly-registered blogs, or other material cheap to plant. mixed = a blend, or sources of uncertain standing."
+					},
 					"citations": {
 						"type": "array",
 						"description": "Where each web-sourced claim came from. Empty only for observed-tier claims.",
@@ -204,8 +237,9 @@ var extractionSchema = json.RawMessage(`{
 }`)
 
 // validate drops web-tier claims without citations — an untraceable web claim
-// is one the admin cannot defend — and rejects unknown tiers and levels so a
-// drifted extraction fails loudly rather than storing junk.
+// is one the admin cannot defend — and rejects unknown tiers, levels, and
+// source reputations so a drifted extraction fails loudly rather than storing
+// junk.
 //
 // A citation is only a citation if it can be followed: the model writes these
 // after reading pages that are themselves untrusted, so a URL that is empty,
@@ -246,6 +280,14 @@ func (d *Document) validate() (int, error) {
 			// restating them is noise. Dropped silently — nothing is lost.
 			continue
 		case TierIndependentlyReported, TierVendorClaim:
+			// Empty stays valid — reports stored before the field existed
+			// carry none, and unknown is an honest state the review page
+			// renders as nothing. It is never promoted to reputable.
+			switch claim.SourceReputation {
+			case "", ReputationReputable, ReputationMixed, ReputationLow:
+			default:
+				return 0, fmt.Errorf("unknown source reputation %q", claim.SourceReputation)
+			}
 			// A claim with nothing to say is not a finding, and the approval
 			// page would render it as a blank row inside the top five.
 			if strings.TrimSpace(claim.Text) == "" {

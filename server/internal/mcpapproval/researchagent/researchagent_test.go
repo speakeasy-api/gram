@@ -180,7 +180,7 @@ func TestRun(t *testing.T) {
 			"summary": "Little is known.",
 			"coverage": {"level": "thin", "note": "one third-party mention"},
 			"claims": [
-				{"tier": "independently_reported", "text": "cited claim", "citations": [{"url": "https://example.com/a"}]},
+				{"tier": "independently_reported", "text": "cited claim", "citations": [{"url": "https://example.com/a"}], "source_reputation": "reputable"},
 				{"tier": "vendor_claim", "text": "uncited claim, must drop", "citations": []},
 				{"tier": "observed", "text": "briefing restatement, silently dropped — the evidence panel shows it"}
 			]
@@ -204,6 +204,7 @@ func TestRun(t *testing.T) {
 	require.Equal(t, researchagent.CoverageThin, document.Coverage.Level)
 	require.Len(t, document.Claims, 1, "the uncited web claim and the observed restatement are both dropped")
 	require.Equal(t, researchagent.TierIndependentlyReported, document.Claims[0].Tier)
+	require.Equal(t, researchagent.ReputationReputable, document.Claims[0].SourceReputation)
 	require.Equal(t, researchagent.Model, document.Run.Model)
 	require.Equal(t, 1, document.Run.DroppedUncitedClaims)
 
@@ -590,6 +591,47 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 	runner2 := researchagent.New(completions2, nil)
 	_, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
+}
+
+// Source reputation is the model's judgment of a claim's sources, so reports
+// stored before the field existed carry none. Absence reads as unknown and
+// passes — it must never be promoted to reputable — while an invented value
+// fails the run loudly like any other enum drift.
+func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
+	t.Parallel()
+
+	completions := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [
+			{"tier": "independently_reported", "text": "labelled", "citations": [{"url": "https://example.com/a"}], "source_reputation": "low"},
+			{"tier": "vendor_claim", "text": "unlabelled", "citations": [{"url": "https://example.com/b"}]}
+		]}`,
+	}
+
+	runner := researchagent.New(completions, nil)
+	encoded, _, err := runner.Run(t.Context(), runInput())
+	require.NoError(t, err)
+
+	var document researchagent.Document
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	require.Len(t, document.Claims, 2)
+	require.Equal(t, researchagent.ReputationLow, document.Claims[0].SourceReputation)
+	require.Empty(t, document.Claims[1].SourceReputation, "absence survives as unknown, not as a default")
+
+	completions2 := &scriptedCompletions{
+		turns: []*openrouter.CompletionResponse{
+			{Content: "done", Usage: openrouter.Usage{}},
+		},
+		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [
+			{"tier": "independently_reported", "text": "bad", "citations": [{"url": "https://example.com/a"}], "source_reputation": "trustworthy"}
+		]}`,
+	}
+	runner2 := researchagent.New(completions2, nil)
+	_, _, err = runner2.Run(t.Context(), runInput())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "source reputation")
 }
 
 // A tool failure becomes the tool's result so the agent can adapt, never by

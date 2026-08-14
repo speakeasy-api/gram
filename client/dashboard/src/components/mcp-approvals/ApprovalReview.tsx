@@ -654,6 +654,7 @@ type ReportClaim = {
   text: string;
   tier?: string;
   citations: string[];
+  sourceReputation?: string;
 };
 
 /**
@@ -678,6 +679,10 @@ function reportClaims(report: unknown): ReportClaim[] {
       text,
       tier: typeof record["tier"] === "string" ? record["tier"] : undefined,
       citations: citationURLs(record["citations"]),
+      sourceReputation:
+        typeof record["source_reputation"] === "string"
+          ? record["source_reputation"]
+          : undefined,
     });
   }
 
@@ -722,6 +727,35 @@ function tierLabel(tier: string): string {
   }
 }
 
+/**
+ * The model's own judgment of the sources a claim rests on — never a curated
+ * domain list. Unknown values, including absence on reports written before
+ * the field existed, render nothing: unknown must never read as reputable.
+ */
+function reputationLabel(reputation: string): string | null {
+  switch (reputation) {
+    case "reputable":
+      return "Reputable sources";
+    case "mixed":
+      return "Mixed-reputation sources";
+    case "low":
+      return "Low-reputation sources";
+    default:
+      return null;
+  }
+}
+
+function SourceReputationLabel({
+  reputation,
+}: {
+  reputation: string | undefined;
+}): JSX.Element | null {
+  const label = reputation === undefined ? null : reputationLabel(reputation);
+  if (label === null) return null;
+
+  return <span className="text-muted-foreground text-xs">{label}</span>;
+}
+
 function ReportClaims({ report }: { report: unknown }): JSX.Element | null {
   const claims = reportClaims(report);
   if (claims.length === 0) return null;
@@ -740,6 +774,7 @@ function ReportClaims({ report }: { report: unknown }): JSX.Element | null {
             {claim.citations.map((citation) => (
               <ExternalCitationLink key={citation} url={citation} truncate />
             ))}
+            <SourceReputationLabel reputation={claim.sourceReputation} />
           </div>
         </li>
       ))}
