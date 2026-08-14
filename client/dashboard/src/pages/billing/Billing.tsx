@@ -22,6 +22,7 @@ import { Stack } from "@/components/ui/Stack";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
@@ -70,8 +71,6 @@ function BillingInner() {
 
 const UsageSection = () => {
   const productTier = useProductTier();
-
-  const isAdmin = useIsPlatformAdmin();
 
   const { data: creditUsage } = useGetCreditUsage();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
@@ -143,17 +142,18 @@ const UsageSection = () => {
                 overageIncrement={1}
                 noMax={productTier === "enterprise"}
               />
-              {isAdmin &&
-                periodUsage.credits != null &&
+              {periodUsage.credits != null &&
                 periodUsage.includedCredits != null && (
-                  <UsageItem
-                    label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
-                    tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                    value={periodUsage.credits}
-                    included={periodUsage.includedCredits}
-                    overageIncrement={periodUsage.includedCredits}
-                    noMax={productTier === "enterprise"}
-                  />
+                  <PlatformAdminOnlyPanel>
+                    <UsageItem
+                      label="Chat Based Credits (Polar)"
+                      tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                      value={periodUsage.credits}
+                      included={periodUsage.includedCredits}
+                      overageIncrement={periodUsage.includedCredits}
+                      noMax={productTier === "enterprise"}
+                    />
+                  </PlatformAdminOnlyPanel>
                 )}
             </>
           ) : (
