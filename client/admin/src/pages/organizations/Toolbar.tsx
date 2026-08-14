@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useState, type JSX, type ReactNode } from "react";
+import { useEffect, useState, type JSX } from "react";
 
 import type {
   DataTableFeatures,
@@ -139,10 +139,8 @@ export function Toolbar(): JSX.Element {
  */
 export function TableActionBar<T extends RowData>({
   table,
-  hint,
 }: {
   table: DataTableInstance<T>;
-  hint?: ReactNode;
 }): JSX.Element {
   // Read off the table rather than walked a second time here, so the menu
   // cannot disagree with the table about how many columns are left.
@@ -152,7 +150,6 @@ export function TableActionBar<T extends RowData>({
     <div className="flex items-center gap-3 border-b px-3 py-2">
       <span className="text-muted-foreground text-xs">Nothing selected</span>
       <span className="flex-1" />
-      {hint}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="xs">

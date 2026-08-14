@@ -7,6 +7,8 @@ import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { cn } from "@/lib/utils";
 
+import { PeekTrigger } from "./rowActions";
+
 function fmtDateShort(iso?: string): string {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -20,6 +22,17 @@ const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
 // table does not rebuild its column model on every render. The header of each
 // column doubles as its label in the Columns control.
 export const ORG_COLUMNS = column.columns([
+  // First, not last: peek hides five columns while it is open, so a trailing
+  // control would slide sideways at the moment the operator is using it.
+  column.display({
+    id: "peek",
+    // A plain string, so the Columns control lists it as "Peek" rather than
+    // falling back to the column id.
+    header: "Peek",
+    // Hiding the control would put peek back out of reach of the keyboard.
+    enableHiding: false,
+    cell: ({ row }) => <PeekTrigger org={row.original} />,
+  }),
   column.accessor("name", {
     header: "Name",
     // The link, not the row, carries the keyboard path and the accessible

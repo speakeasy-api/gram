@@ -2,13 +2,13 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { useTable, type ColumnVisibilityState } from "@tanstack/react-table";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type JSX,
   type KeyboardEvent,
-  type MouseEvent,
 } from "react";
 
 import { dataTableFeatures, DataTable as Table } from "@/components/data-table";
@@ -24,7 +24,11 @@ import { cn } from "@/lib/utils";
 
 import { ORG_COLUMNS } from "./columns";
 import { PeekPanel } from "./PeekPanel";
-import { useOpenOrganization } from "./rowActions";
+import {
+  PEEK_TRIGGER_SELECTOR,
+  PeekProvider,
+  useOpenOrganization,
+} from "./rowActions";
 import { TableActionBar, Toolbar } from "./Toolbar";
 
 const ROUTE_ID = "/organizations/";
@@ -38,20 +42,6 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   free_trial_ends_at: false,
   created_at: false,
 };
-
-// Mac labels this key Option; everything else calls it Alt.
-const PEEK_KEY = navigator.userAgent.includes("Mac") ? "\u2325 Option" : "Alt";
-
-function PeekHint(): JSX.Element {
-  return (
-    <span className="text-muted-foreground hidden items-center gap-1 text-xs sm:flex">
-      <kbd className="bg-muted rounded border px-1.5 py-0.5 font-sans text-[11px] leading-none">
-        {PEEK_KEY}
-      </kbd>
-      + click a row to peek
-    </span>
-  );
-}
 
 const ARROW_STEP: Record<string, number | undefined> = {
   ArrowDown: 1,
@@ -79,9 +69,21 @@ export function OrganizationsList(): JSX.Element {
   const [columnVisibility, setColumnVisibility] =
     useState<ColumnVisibilityState>({});
 
-  // An id, not the record: a page or filter change replaces every row.
-  const [peekedId, setPeekedId] = useState<string>();
+  // An id and a name, not the record: a page or filter change replaces every
+  // row, and the panel renders from the live row. The name is carried only to
+  // word the announcement for a record that has already left the list.
+  const [peek, setPeek] = useState<{ id: string; name: string }>();
+  const peekedId = peek?.id;
   const peekedRow = useRef<HTMLTableRowElement>(null);
+  const scrollBox = useRef<HTMLDivElement>(null);
+
+  // Mounted for the life of the page. A live region that arrives in the same
+  // commit as its text is not reliably announced: the element has to be in the
+  // accessibility tree first.
+  const [announcement, setAnnouncement] = useState("");
+
+  // Raised while rendering, read by the effect that rescues the keyboard.
+  const [peekedRecordLeft, setPeekedRecordLeft] = useState(false);
 
   // One object is the source of both the request and the signature below. Two
   // hand-written lists drift: a slice that adds a filter to the request would
@@ -165,31 +167,57 @@ export function OrganizationsList(): JSX.Element {
   const peeked = peekedIndex === -1 ? undefined : rows[peekedIndex];
 
   // During render, not in an effect: an effect paints a dropped record first.
-  if (peekedId && !peeked) {
-    setPeekedId(undefined);
+  if (peek && !peeked) {
+    setPeek(undefined);
+    setAnnouncement(`Peek closed. ${peek.name} is no longer in the list.`);
+    setPeekedRecordLeft(true);
   }
 
   useEffect(() => {
     peekedRow.current?.scrollIntoView({ block: "nearest" });
   }, [peekedId]);
 
-  const closePeek = (): void => {
-    const link = peekedRow.current?.querySelector("a");
-    setPeekedId(undefined);
-    link?.focus();
-  };
-
-  const handleRowClick = (
-    org: AdminOrganization,
-    event: MouseEvent<HTMLTableRowElement>,
-  ): void => {
-    // Alt, not Meta (the browser's open-in-new-tab) and not Shift (range select).
-    if (event.altKey) {
-      setPeekedId(org.id);
-      return;
+  useEffect(() => {
+    if (!peekedRecordLeft) return;
+    setPeekedRecordLeft(false);
+    // Only where the panel took its focus down with it. An operator who paged
+    // or filtered the record away is already on a live control, and taking
+    // their place in the page is worse than the bug this rescues.
+    if (document.activeElement === document.body) {
+      scrollBox.current?.focus();
     }
-    openOrganization(org);
-  };
+  }, [peekedRecordLeft]);
+
+  const closePeek = useCallback((): void => {
+    const trigger = peekedRow.current?.querySelector<HTMLElement>(
+      PEEK_TRIGGER_SELECTOR,
+    );
+    setPeek(undefined);
+    setAnnouncement("Peek closed.");
+    trigger?.focus();
+  }, []);
+
+  const openPeek = useCallback((org: AdminOrganization): void => {
+    setPeek({ id: org.id, name: org.name });
+    setAnnouncement(`Peeking at ${org.name}.`);
+  }, []);
+
+  const togglePeek = useCallback(
+    (org: AdminOrganization): void => {
+      if (peekedId === org.id) {
+        closePeek();
+        return;
+      }
+      openPeek(org);
+    },
+    [peekedId, closePeek, openPeek],
+  );
+
+  // Memoised, or every trigger cell re-renders on every render of the list.
+  const peekControls = useMemo(
+    () => ({ peekedId, togglePeek }),
+    [peekedId, togglePeek],
+  );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!peeked || event.defaultPrevented) return;
@@ -206,7 +234,7 @@ export function OrganizationsList(): JSX.Element {
     const next = rows[peekedIndex + step];
     if (!next) return;
     event.preventDefault();
-    setPeekedId(next.id);
+    openPeek(next.original);
   };
 
   return (
@@ -222,75 +250,90 @@ export function OrganizationsList(): JSX.Element {
           </div>
         )}
 
-        {/* Stretch, so the panel takes its height from the row. */}
-        <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
-              <TableActionBar table={table} hint={<PeekHint />} />
+        {/* The only thing that speaks when the arrow keys swap the record under
+            a panel that already holds the focus. */}
+        <div role="status" className="sr-only">
+          {announcement}
+        </div>
 
-              <div
-                className={cn(
-                  "min-h-0 flex-1 overflow-auto",
-                  isPlaceholderData && "opacity-60",
-                )}
-              >
-                <Table>
-                  <Table.Header table={table} />
-                  <Table.Body>
-                    {rows.length === 0 ? (
-                      <Table.NoResultsMessage>
-                        <span className="text-muted-foreground text-sm">
-                          {emptyStateMessage(isLoading, isError)}
-                        </span>
-                      </Table.NoResultsMessage>
-                    ) : (
-                      rows.map((row) => {
-                        const isPeeked = row.id === peekedId;
-                        return (
-                          <Table.Row
-                            key={row.id}
-                            row={row}
-                            ref={isPeeked ? peekedRow : undefined}
-                            className={cn(isPeeked && "bg-muted")}
-                            onClick={handleRowClick}
-                          />
-                        );
-                      })
-                    )}
-                  </Table.Body>
-                </Table>
+        {/* Stretch, so the panel takes its height from the row. */}
+        <PeekProvider value={peekControls}>
+          <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
+                <TableActionBar table={table} />
+
+                <div
+                  ref={scrollBox}
+                  // A scroll box has to be reachable by keyboard in its own
+                  // right, and it is where focus lands when the peeked record
+                  // leaves the list with the keyboard on the panel. The focus
+                  // ring stays: nothing else on screen moves when focus
+                  // arrives here, so the ring is the only sign it did.
+                  tabIndex={-1}
+                  className={cn(
+                    "min-h-0 flex-1 overflow-auto",
+                    isPlaceholderData && "opacity-60",
+                  )}
+                >
+                  <Table>
+                    <Table.Header table={table} />
+                    <Table.Body>
+                      {rows.length === 0 ? (
+                        <Table.NoResultsMessage>
+                          <span className="text-muted-foreground text-sm">
+                            {emptyStateMessage(isLoading, isError)}
+                          </span>
+                        </Table.NoResultsMessage>
+                      ) : (
+                        rows.map((row) => {
+                          const isPeeked = row.id === peekedId;
+                          return (
+                            <Table.Row
+                              key={row.id}
+                              row={row}
+                              ref={isPeeked ? peekedRow : undefined}
+                              className={cn(isPeeked && "bg-muted")}
+                              onClick={openOrganization}
+                            />
+                          );
+                        })
+                      )}
+                    </Table.Body>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Inside the table's column, so it does not run under the panel. */}
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  disabled={isPlaceholderData || pager.stack.length === 0}
+                  onClick={goPrev}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  disabled={isPlaceholderData || !data?.next_cursor}
+                  onClick={goNext}
+                >
+                  Next
+                </Button>
               </div>
             </div>
 
-            {/* Inside the table's column, so it does not run under the panel. */}
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled={isPlaceholderData || pager.stack.length === 0}
-                onClick={goPrev}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled={isPlaceholderData || !data?.next_cursor}
-                onClick={goNext}
-              >
-                Next
-              </Button>
-            </div>
+            {peeked ? (
+              <PeekPanel
+                org={peeked.original}
+                onClose={closePeek}
+                className="w-100 shrink-0"
+              />
+            ) : null}
           </div>
-
-          {peeked ? (
-            <PeekPanel
-              org={peeked.original}
-              onClose={closePeek}
-              className="w-100 shrink-0"
-            />
-          ) : null}
-        </div>
+        </PeekProvider>
       </section>
     </div>
   );

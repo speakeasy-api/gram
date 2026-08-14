@@ -171,10 +171,17 @@ function rowFor(link: HTMLElement): HTMLTableRowElement {
   return row;
 }
 
-function peekOn(link: HTMLElement): void {
-  const cell = within(rowFor(link)).getAllByRole("cell").at(-1);
-  if (!cell) throw new Error("the row needs a cell to click");
-  fireEvent.click(cell, { altKey: true });
+// Found by the accessible name a screen reader announces, so the test reaches
+// the control the way an operator does. Waiting on it is also waiting for the
+// rows, and it is present whether or not the name column is visible.
+function peekTrigger(name: string): Promise<HTMLElement> {
+  return screen.findByRole("button", { name: `Peek at ${name}` });
+}
+
+async function peekOn(name: string): Promise<HTMLElement> {
+  const trigger = await peekTrigger(name);
+  fireEvent.click(trigger);
+  return trigger;
 }
 
 function peekPanel(): HTMLElement {
@@ -458,6 +465,7 @@ describe("organizations list", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
+      "Peek",
       "Name",
       "Slug",
       "Type",
@@ -472,6 +480,8 @@ describe("organizations list", () => {
         .getAllByRole("cell")
         .map((cell) => cell.textContent),
     ).toEqual([
+      // The peek control carries an icon and its name is on the button.
+      "",
       FIRST_ORG.name,
       FIRST_ORG.slug,
       FIRST_ORG.account_type,
@@ -491,8 +501,10 @@ describe("organizations list", () => {
     });
 
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-    const [, slugCell] = within(rowFor(link)).getAllByRole("cell");
-    if (!slugCell) throw new Error("the row needs a second cell");
+    // Past the peek control and the name link, so the click lands on the row
+    // body rather than on something that handles it first.
+    const [, , slugCell] = within(rowFor(link)).getAllByRole("cell");
+    if (!slugCell) throw new Error("the row needs a third cell");
 
     fireEvent.click(slugCell);
 
@@ -559,25 +571,29 @@ describe("organizations list peek", () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-
-    peekOn(link);
+    const trigger = await peekOn(FIRST_ORG.name);
 
     expect(
       within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
     ).toBeTruthy();
+    // The row's click handler navigates, and the control sits inside the row.
+    // A control that let the click through would leave the list entirely.
     expect(router.state.location.pathname).toBe("/organizations");
+
+    // happy-dom synthesises no click from Enter or Space, so the element type
+    // is what proves the keyboard can operate this control at all.
+    expect(trigger.tagName).toBe("BUTTON");
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Slug", "Type"]);
+    ).toEqual(["Peek", "Name", "Slug", "Type"]);
   });
 
   it("highlights the row it is peeking at and no other", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
 
-    peekOn(link);
+    await peekOn(FIRST_ORG.name);
 
     expect(isPeeked(link)).toBe(true);
     expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
@@ -588,13 +604,18 @@ describe("organizations list peek", () => {
   it("walks peek down the list and stops at the last row", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });
-    peekOn(first);
+    await peekOn(FIRST_ORG.name);
 
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
 
     expect(
       within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
     ).toBeTruthy();
+    // Nothing else speaks when the panel already holds the focus and the
+    // record under it changes.
+    expect(screen.getByRole("status").textContent).toBe(
+      `Peeking at ${SECOND_ORG.name}.`,
+    );
     expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
       true,
     );
@@ -608,8 +629,7 @@ describe("organizations list peek", () => {
 
   it("walks peek back up the list and stops at the first row", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const second = await screen.findByRole("link", { name: SECOND_ORG.name });
-    peekOn(second);
+    await peekOn(SECOND_ORG.name);
 
     fireEvent.keyDown(peekPanel(), { key: "ArrowUp" });
     expect(
@@ -624,8 +644,7 @@ describe("organizations list peek", () => {
 
   it("scrolls the row peek moves to into view", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
-    peekOn(first);
+    await peekOn(FIRST_ORG.name);
 
     const second = rowFor(screen.getByRole("link", { name: SECOND_ORG.name }));
     const scrollIntoView = vi.spyOn(second, "scrollIntoView");
@@ -635,19 +654,16 @@ describe("organizations list peek", () => {
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
-  it("closes on Escape and puts focus back on the row's name link", async () => {
+  it("closes on Escape and puts the keyboard back on the control", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-    peekOn(link);
+    const trigger = await peekOn(FIRST_ORG.name);
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
     expect(
       screen.queryByRole("complementary", { name: "Organization peek" }),
     ).toBeNull();
-    expect(document.activeElement).toBe(
-      screen.getByRole("link", { name: FIRST_ORG.name }),
-    );
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("gives the operator's own column visibility back when peek closes", async () => {
@@ -659,17 +675,17 @@ describe("organizations list peek", () => {
       expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
     });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-    peekOn(link);
+    await peekOn(FIRST_ORG.name);
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Type"]);
+    ).toEqual(["Peek", "Name", "Type"]);
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
+      "Peek",
       "Name",
       "Type",
       "Members",
@@ -690,14 +706,13 @@ describe("organizations list peek", () => {
     });
     expect(screen.queryByRole("columnheader", { name: "Name" })).toBeNull();
 
-    // The name link is gone with the column, so the row is reached by its slug.
-    const row = screen.getByText(FIRST_ORG.slug).closest("tr");
-    if (!row) throw new Error("the slug cell is not inside a row");
-    fireEvent.click(row, { altKey: true });
+    // The name link is gone with the column, and the control is not: it names
+    // the organization itself, so it is still reachable by that name.
+    await peekOn(FIRST_ORG.name);
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Slug", "Type"]);
+    ).toEqual(["Peek", "Name", "Slug", "Type"]);
     expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
@@ -709,7 +724,7 @@ describe("organizations list peek", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });
     const second = screen.getByRole("link", { name: SECOND_ORG.name });
-    peekOn(first);
+    await peekOn(FIRST_ORG.name);
 
     openOn(screen.getByRole("button", { name: "Columns" }));
     fireEvent.keyDown(screen.getByRole("menuitemcheckbox", { name: "Name" }), {
@@ -723,7 +738,7 @@ describe("organizations list peek", () => {
   it("leaves Escape to the Columns menu while it is open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });
-    peekOn(first);
+    await peekOn(FIRST_ORG.name);
 
     openOn(screen.getByRole("button", { name: "Columns" }));
     fireEvent.keyDown(screen.getByRole("menuitemcheckbox", { name: "Name" }), {
@@ -743,8 +758,7 @@ describe("organizations list peek", () => {
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-    peekOn(link);
+    await peekOn(FIRST_ORG.name);
     expect(peekPanel()).toBeTruthy();
 
     const next = await screen.findByRole("button", { name: "Next" });
@@ -762,6 +776,7 @@ describe("organizations list peek", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
+      "Peek",
       "Name",
       "Slug",
       "Type",
@@ -772,21 +787,198 @@ describe("organizations list peek", () => {
       "Created",
     ]);
   });
+
+  it("activating the control twice closes the panel again", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const trigger = await peekOn(FIRST_ORG.name);
+    expect(peekPanel()).toBeTruthy();
+
+    fireEvent.click(trigger);
+
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Peek closed.");
+  });
+
+  it("activating another row's control moves the peek to that row", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await peekOn(FIRST_ORG.name);
+    await peekOn(SECOND_ORG.name);
+
+    // A toggle keyed on "some panel is open" rather than on this row would
+    // close the panel here instead of moving it.
+    expect(
+      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      `Peeking at ${SECOND_ORG.name}.`,
+    );
+  });
+
+  it("the control reports whether its own panel is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const trigger = await peekOn(FIRST_ORG.name);
+    const other = await peekTrigger(SECOND_ORG.name);
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(other.getAttribute("aria-expanded")).toBe("false");
+
+    // Set only while the panel exists: aria-controls pointing at an absent id
+    // is invalid, so the row that is not peeked carries none.
+    expect(trigger.getAttribute("aria-controls")).toBe(peekPanel().id);
+    expect(other.hasAttribute("aria-controls")).toBe(false);
+  });
+
+  it("closing puts the keyboard back on the control that opened it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const trigger = await peekOn(FIRST_ORG.name);
+    // The panel takes the focus on mount, which is what puts Escape and the
+    // arrow keys within reach of the handler above the table.
+    expect(document.activeElement).toBe(peekPanel());
+
+    fireEvent.click(
+      within(peekPanel()).getByRole("button", { name: "Close peek" }),
+    );
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("keeps an empty status region on the page before anything is peeked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // A live region injected together with its text is not reliably announced,
+    // so the region has to be on the page before it has anything to say.
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  it("alt-clicking a row opens the organization rather than peeking at it", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const [, , slugCell] = within(rowFor(link)).getAllByRole("cell");
+    if (!slugCell) throw new Error("the row needs a third cell");
+
+    // The gesture is gone: browsers read Alt-click on an anchor as "save
+    // link", and the row's own handler carries no branch for it any more.
+    fireEvent.click(slugCell, { altKey: true });
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(
+        `/organizations/${FIRST_ORG.slug}`,
+      );
+    });
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+  });
+
+  it("will not let the Columns menu hide the control", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    const item = screen.getByRole("menuitemcheckbox", { name: "Peek" });
+    fireEvent.click(item);
+
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.getAttribute("aria-checked")).toBe("true");
+
+    // A locked item leaves the menu open, and an open Radix menu hides the
+    // rest of the page from the accessibility tree.
+    fireEvent.keyDown(item, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Peek" })).toBeTruthy();
+    });
+    expect(await peekTrigger(FIRST_ORG.name)).toBeTruthy();
+  });
+
+  it("puts the keyboard on the table, not on the body, when the peeked record leaves the list", async () => {
+    mocks.listOrganizations.mockImplementation((params) =>
+      Promise.resolve(
+        params?.cursor
+          ? { organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await peekOn(FIRST_ORG.name);
+    // The panel holds the focus, and it is about to unmount under it.
+    expect(document.activeElement).toBe(peekPanel());
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+
+    // The scroll box around the table, reached through the table it holds
+    // rather than by class: it is the nearest thing to where the operator was.
+    await waitFor(() => {
+      expect(document.activeElement).not.toBe(document.body);
+    });
+    expect(document.activeElement?.contains(screen.getByRole("table"))).toBe(
+      true,
+    );
+    // Worded apart from an operator's own close, which says nothing about why.
+    expect(screen.getByRole("status").textContent).toBe(
+      `Peek closed. ${FIRST_ORG.name} is no longer in the list.`,
+    );
+  });
+
+  it("leaves the keyboard on the pager when the operator pages the peeked record away", async () => {
+    mocks.listOrganizations.mockImplementation((params) =>
+      Promise.resolve(
+        params?.cursor
+          ? { organizations: [NEXT_PAGE_ORG], next_cursor: "cursor_page_three" }
+          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await peekOn(FIRST_ORG.name);
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    // The operator drove this from the pager, so their focus is already on a
+    // live control. An unguarded rescue would take it off them.
+    next.focus();
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+
+    expect(document.activeElement).toBe(next);
+  });
 });
 
 // The bar takes a table, so the last-column case is reachable here by handing
 // it a two column table rather than by clicking seven items shut through a
 // menu that closes each time.
 describe("TableActionBar", () => {
-  const [FIRST, SECOND] = ORG_COLUMNS;
-  if (!FIRST || !SECOND) throw new Error("ORG_COLUMNS needs two columns");
+  // Sliced, so the array carries the element type useTable asks for. Past the
+  // peek column, which opts out of hiding: the cases below are about the two
+  // rules the bar itself applies.
+  const MENU_COLUMNS = ORG_COLUMNS.slice(1, 3);
+
+  // Destructured off the tuple rather than off the slice, which widens each
+  // element back to a bare column definition.
+  const [, FIRST, SECOND] = ORG_COLUMNS;
+  if (!FIRST || !SECOND) throw new Error("ORG_COLUMNS needs three columns");
 
   // An accessor column takes its id from its key unless it names one, and that
   // id is what the visibility state is keyed by.
   const SECOND_ID = String(SECOND.id ?? SECOND.accessorKey);
-
-  // Sliced, so the array carries the element type useTable asks for.
-  const MENU_COLUMNS = ORG_COLUMNS.slice(0, 2);
 
   function ColumnsMenu({
     initialVisibility,
