@@ -97,7 +97,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial)",
+		"admin (login|callback|logout|get-project|update-organization|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -381,6 +381,10 @@ func ParseEndpoint(
 		adminExtendTrialFlags                 = flag.NewFlagSet("extend-trial", flag.ExitOnError)
 		adminExtendTrialBodyFlag              = adminExtendTrialFlags.String("body", "REQUIRED", "")
 		adminExtendTrialAdminSessionTokenFlag = adminExtendTrialFlags.String("admin-session-token", "", "")
+
+		adminCreateOrganizationFlags                 = flag.NewFlagSet("create-organization", flag.ExitOnError)
+		adminCreateOrganizationBodyFlag              = adminCreateOrganizationFlags.String("body", "REQUIRED", "")
+		adminCreateOrganizationAdminSessionTokenFlag = adminCreateOrganizationFlags.String("admin-session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -3388,6 +3392,7 @@ func ParseEndpoint(
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 	adminExtendTrialFlags.Usage = adminExtendTrialUsage
+	adminCreateOrganizationFlags.Usage = adminCreateOrganizationUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -4339,6 +4344,9 @@ func ParseEndpoint(
 
 			case "extend-trial":
 				epf = adminExtendTrialFlags
+
+			case "create-organization":
+				epf = adminCreateOrganizationFlags
 
 			}
 
@@ -6316,6 +6324,9 @@ func ParseEndpoint(
 			case "extend-trial":
 				endpoint = c.ExtendTrial()
 				data, err = adminc.BuildExtendTrialPayload(*adminExtendTrialBodyFlag, *adminExtendTrialAdminSessionTokenFlag)
+			case "create-organization":
+				endpoint = c.CreateOrganization()
+				data, err = adminc.BuildCreateOrganizationPayload(*adminCreateOrganizationBodyFlag, *adminCreateOrganizationAdminSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8772,6 +8783,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
+	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -9038,6 +9050,26 @@ func adminExtendTrialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin extend-trial --body '{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminCreateOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-organization --body '{\n      \"name\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.

@@ -463,4 +463,40 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminExtendTrial")
 	})
+
+	// Appended rather than inserted, for the diff-size reason the note above
+	// extendTrial gives: position cannot rename a generated type, but inserting
+	// mid-block makes goa reorder every declaration below it. A new method goes
+	// after this one.
+	Method("createOrganization", func() {
+		Description("Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("name")
+
+			// A body of one required string is structurally identical to several
+			// others in this design, and Goa's OpenAPI emitter deduplicates
+			// request bodies by shape, reusing whichever name it registered
+			// first. MinLength makes this shape its own, and an explicit
+			// typename stops a future identically-shaped body from taking it.
+			Meta("openapi:typename", "CreateOrganizationRequestBody")
+
+			// The length and character rules live in orgprovision.ValidateName,
+			// which the handler runs and which the signup path runs too. Only
+			// the emptiness floor is repeated here.
+			Attribute("name", String, "Display name for the new organization.", func() {
+				MinLength(1)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/organization.create")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminCreateOrganization")
+	})
 })

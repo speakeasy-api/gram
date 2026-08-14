@@ -24,13 +24,19 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -43,6 +49,11 @@ type Service struct {
 	oidc           *OIDCClient
 	sessions       *SessionStore
 	allowedOrigins []string
+
+	// workos creates organizations in the identity provider. Deployments with
+	// no WorkOS configuration get orgprovision.Unavailable, whose failure
+	// CreateOrganization reports rather than working around.
+	workos orgprovision.WorkOSOrganizationCreator
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -56,6 +67,7 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
+	workosClient orgprovision.WorkOSOrganizationCreator,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -76,6 +88,7 @@ func NewService(
 		sessions:       sessionStore,
 		verifier:       NewVerifier(logger, sessionStore, oidcClient),
 		allowedOrigins: allowedOrigins,
+		workos:         workosClient,
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -619,6 +632,135 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+// CreateOrganization creates an organization in WorkOS and then in Gram.
+//
+// The WorkOS create happens before the transaction opens, because it is the one
+// step that cannot be rolled back. Everything Gram stores is written inside a
+// single transaction afterwards, so a failure below leaves no organization row,
+// no role grants and no entitlements from this call.
+//
+// That is not the same as leaving nothing. Wherever the WorkOS webhook is
+// configured, organization.created arrives about ten seconds later and the sync
+// activity writes the organization row and its role grants anyway, without the
+// default entitlements this handler would have seeded. AGE-3213 covers that gap.
+// Retrying the create is still the right move: the derived ID makes the retry
+// land on that row rather than beside it.
+func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
+	name, err := orgprovision.ValidateName(payload.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
+	switch {
+	case errors.Is(err, orgprovision.ErrUnavailable):
+		// CodeInvalid and not CodeInvariantViolation, which reads like the
+		// better fit and is not. server/design/shared/errors.go maps
+		// invariant_violation to 500, and the admin app trusts a response body
+		// only below 500, so the explanation below would never reach the
+		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
+		// layer does not read that map.
+		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
+	case err != nil:
+		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(created.GramOrganizationID),
+		attr.SlogWorkOSOrganizationID(created.WorkOSOrganizationID),
+	)
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin organization creation transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := orgRepo.New(tx)
+
+	// A row can already exist under the derived ID: WorkOS fires
+	// organization.created the moment the call above returns, so the sync
+	// activity can win the race to insert it. That row's slug is already in the
+	// organization's URL, and re-deriving one would find the base taken by that
+	// very row and write a suffixed variant over it.
+	uniqueSlug := ""
+	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+	switch {
+	case err == nil:
+		uniqueSlug = existing.Slug
+	case errors.Is(err, pgx.ErrNoRows):
+		// Seeded with the WorkOS organization ID rather than randomness so a
+		// retry of the same create competes for one advisory-lock key instead
+		// of two.
+		base, baseErr := orgslug.StableBase(name, created.WorkOSOrganizationID)
+		if baseErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, baseErr, "derive organization slug").LogError(ctx, logger)
+		}
+		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
+		}
+
+		// Read again now that the lock is held. The read above was taken before
+		// it, and under READ COMMITTED the sync activity can hold the lock,
+		// insert this very row under slug base, and commit in the gap. Deciding
+		// from the stale read would then hand back a suffixed variant, and the
+		// upsert below writes slug unconditionally, so it would overwrite a slug
+		// already serving in the organization's URL.
+		afterLock, reReadErr := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+		switch {
+		case reReadErr == nil:
+			uniqueSlug = afterLock.Slug
+		case errors.Is(reReadErr, pgx.ErrNoRows):
+			found, findErr := orgslug.FindUnique(ctx, queries, base)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
+		}
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
+	}
+
+	// Keyed on the derived ID with ON CONFLICT (id) DO UPDATE, so a webhook that
+	// already created this organization is updated rather than duplicated. The
+	// FromWorkOS variants of this query are for the sync path and would insert a
+	// second row here.
+	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:   created.GramOrganizationID,
+		Name: name,
+		Slug: uniqueSlug,
+		// The unique index over workos_id is what turns a diverging ID
+		// derivation into a loud failure instead of a duplicate.
+		WorkosID: conv.ToPGText(created.WorkOSOrganizationID),
+		// On insert this changes nothing: the query already coalesces a null
+		// whitelisted to FALSE. It is a statement of intent at the call site
+		// rather than the mechanism, and it does carry weight on the conflict
+		// arm, where a null would preserve whatever the existing row holds and
+		// FALSE states that an operator creating an organization is not
+		// whitelisting it.
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create organization metadata").LogError(ctx, logger)
+	}
+
+	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "provision organization access defaults").LogError(ctx, logger)
+	}
+
+	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "seed organization default entitlements").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit organization creation transaction").LogError(ctx, logger)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.

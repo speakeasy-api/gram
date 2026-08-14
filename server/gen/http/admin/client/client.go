@@ -63,6 +63,10 @@ type Client struct {
 	// endpoint.
 	ExtendTrialDoer goahttp.Doer
 
+	// CreateOrganization Doer is the HTTP client used to make requests to the
+	// createOrganization endpoint.
+	CreateOrganizationDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -95,6 +99,7 @@ func NewClient(
 		ListOrganizationProjectsDoer: doer,
 		ListOrganizationsDoer:        doer,
 		ExtendTrialDoer:              doer,
+		CreateOrganizationDoer:       doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -386,6 +391,30 @@ func (c *Client) ExtendTrial() goa.Endpoint {
 		resp, err := c.ExtendTrialDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "extendTrial", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateOrganization returns an endpoint that makes HTTP requests to the admin
+// service createOrganization server.
+func (c *Client) CreateOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateOrganizationRequest(c.encoder)
+		decodeResponse = DecodeCreateOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createOrganization", err)
 		}
 		return decodeResponse(resp)
 	}

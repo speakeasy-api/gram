@@ -58033,6 +58033,15 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateOrganizationRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name for the new organization.
+          minLength: 1
+      required:
+        - name
     CreatePackageForm:
       type: object
       properties:

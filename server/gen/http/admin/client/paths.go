@@ -66,3 +66,8 @@ func ListOrganizationsAdminPath() string {
 func ExtendTrialAdminPath() string {
 	return "/admin/trial.extend"
 }
+
+// CreateOrganizationAdminPath returns the URL path to the admin service createOrganization HTTP endpoint.
+func CreateOrganizationAdminPath() string {
+	return "/admin/organization.create"
+}

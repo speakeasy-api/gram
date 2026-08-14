@@ -47,6 +47,12 @@ type Service interface {
 	// Only a running trial can be extended: one that has converted, has been
 	// demoted, or has already expired is rejected rather than re-armed.
 	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
+	// Creates an organization in WorkOS and in Gram, so an operator does not have
+	// to leave the admin app for the WorkOS dashboard. The organization starts
+	// with no members, is not whitelisted, and gets no trial. Idempotent against
+	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
+	// so both writers converge on one row.
+	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -69,7 +75,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial"}
+var MethodNames = [13]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -210,6 +216,14 @@ type CallbackResult struct {
 	Location string
 	// The admin session cookie value
 	SessionID string
+}
+
+// CreateOrganizationPayload is the payload type of the admin service
+// createOrganization method.
+type CreateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Display name for the new organization.
+	Name string
 }
 
 // DisableOrganizationPayload is the payload type of the admin service

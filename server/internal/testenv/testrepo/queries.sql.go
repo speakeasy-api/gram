@@ -44,6 +44,22 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countOrganizationsForWorkosIDFixture = `-- name: CountOrganizationsForWorkosIDFixture :one
+SELECT count(*)
+FROM organization_metadata
+WHERE workos_id = $1::text
+`
+
+// Test-only fixture for proving that two writers converged on one row instead
+// of creating two. Every read the API offers returns at most one organization,
+// so a duplicate row is invisible through it and only a count can see it.
+func (q *Queries) CountOrganizationsForWorkosIDFixture(ctx context.Context, workosID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationsForWorkosIDFixture, workosID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOutboxEntriesByEventType = `-- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
 FROM publish_outbox

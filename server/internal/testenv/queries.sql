@@ -211,6 +211,14 @@ SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, create
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: CountOrganizationsForWorkosIDFixture :one
+-- Test-only fixture for proving that two writers converged on one row instead
+-- of creating two. Every read the API offers returns at most one organization,
+-- so a duplicate row is invisible through it and only a count can see it.
+SELECT count(*)
+FROM organization_metadata
+WHERE workos_id = @workos_id::text;
+
 -- name: CreateOrganizationUserRelationshipFixture :exec
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)

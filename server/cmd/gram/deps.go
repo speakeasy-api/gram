@@ -69,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -612,6 +613,36 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
+	}
+}
+
+// newAdminWorkOSOrganizationCreator builds the WorkOS surface the admin server
+// uses to create organizations. With nothing configured it returns
+// orgprovision.Unavailable, so the create-organization endpoint reports that the
+// deployment cannot do this rather than inventing a local-only organization.
+//
+// It never fails. A missing key degrades one endpoint, and taking the admin
+// server down over it would take login, the organizations list, the detail page
+// and every update endpoint with it. The condition is logged at Error on
+// startup, which is what makes it visible before an operator goes looking.
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+	apiKey := c.String("workos-api-key")
+	haveRealKey := apiKey != "" && apiKey != "unset"
+	opts := workosClientOpts(c)
+
+	switch {
+	case haveRealKey:
+		logger.InfoContext(ctx, "using real WorkOS API key to create organizations")
+		return workos.NewClient(guardianPolicy, apiKey, opts)
+	case c.String("environment") != "local":
+		logger.ErrorContext(ctx, "organization creation is unavailable: no WorkOS API key configured")
+		return orgprovision.Unavailable{}
+	case opts.Endpoint != "":
+		logger.InfoContext(ctx, "using dev-idp mock-workos to create organizations")
+		return workos.NewClient(guardianPolicy, "dev-idp-mock", opts)
+	default:
+		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
+		return orgprovision.Unavailable{}
 	}
 }
 

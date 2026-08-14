@@ -348,6 +348,20 @@ export function extendTrial(
   });
 }
 
+export type CreateOrganizationRequest = {
+  name: string;
+};
+
+export function createOrganization(
+  body: CreateOrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type AdminProject = {
   id: string;
   name: string;
