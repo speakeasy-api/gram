@@ -95,16 +95,6 @@ services:
       timeout: 30s
       retries: 5
 
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.127.0
-    restart: unless-stopped
-    volumes:
-      - ./local/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
-    ports:
-      - "${OTLP_GRPC_PORT}:4317"
-    depends_on:
-      - lgtm
-
   # Tempo only makes a trace searchable once it has idled the trace out and cut
   # a block — seconds to a minute. Lookup by trace ID is immediate.
   lgtm:
@@ -113,7 +103,10 @@ services:
     ports:
       - "${GRAFANA_PORT}:3000" # Grafana UI
       - "${TEMPO_HTTP_PORT}:3200" # Tempo HTTP API
+      - "${LOKI_HTTP_PORT}:3100" # Loki HTTP API
       - "${PROMETHEUS_PORT}:9090" # Prometheus UI/API
+      - "${OTLP_GRPC_PORT}:4317" # OTLP gRPC receiver
+      - "${OTLP_HTTP_PORT}:4318" # OTLP HTTP receiver
     volumes:
       # Runs as root, so wipe this from inside the container rather than sudo:
       # docker compose exec lgtm sh -c 'rm -rf /data/*'

@@ -618,7 +618,7 @@ func newWorkerCommand() *cli.Command {
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
