@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import {
   getOrganization,
+  getOrganizationStats,
   getProject,
   getSession,
   listOrganizationMembers,
@@ -59,6 +60,13 @@ export function organizationsListQuery(
     queryFn: () => listOrganizations(params),
   });
 }
+
+// A constant, not a function: with no parameters there is no key to move, so
+// filtering the table cannot make these totals track the rows on screen.
+export const organizationsStatsQuery = queryOptions({
+  queryKey: ["gram-admin-organization-stats"] as const,
+  queryFn: getOrganizationStats,
+});
 
 // Named once, because the detail entry is reached two ways. The route takes an
 // id or a slug and each is its own entry, so this is the only thing the two
@@ -124,6 +132,10 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
     // Cancelling another organization's detail fetch costs that page a refetch
     // and nothing else, and only one detail query is ever in flight from here.
     qc.cancelQueries({ queryKey: [ORGANIZATION_KEY] }),
+    // Measured: the invalidation below cannot refire a fetch that is already
+    // running. React Query joins the open request instead of starting a second
+    // one, and its pre-write answer clears the invalidated flag as it lands.
+    qc.cancelQueries({ queryKey: organizationsStatsQuery.queryKey }),
   ]).then(() => undefined);
 }
 
@@ -171,6 +183,22 @@ export function writeOrganizationToCache(
       };
     },
   );
+
+  // Refetched, not written: the response holds one record and these are counts
+  // over all of them.
+  invalidateOrganizationStats(qc);
+}
+
+/**
+ * The other half of the cancel above, for a write that never lands. The stats
+ * read it dropped has nothing to replace it, and a first read cancelled before
+ * its answer holds no figures to fall back on, so the strip keeps three dashes
+ * until a focus or a remount asks again.
+ *
+ * Not awaited anywhere: the counts are the last thing on the page to matter.
+ */
+export function invalidateOrganizationStats(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: organizationsStatsQuery.queryKey });
 }
 
 export function projectQuery(

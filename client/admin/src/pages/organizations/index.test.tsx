@@ -28,9 +28,11 @@ import {
   GramAdminError,
   TRIAL_STATES,
   type AdminOrganization,
+  type AdminOrganizationStats,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { useState, type JSX } from "react";
 
@@ -51,6 +53,7 @@ const mocks = vi.hoisted(() => ({
       (params?: ListOrganizationsParams) => Promise<ListOrganizationsResult>
     >(),
   getSession: vi.fn(),
+  getOrganizationStats: vi.fn(),
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
@@ -72,6 +75,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     ...actual,
     listOrganizations: mocks.listOrganizations,
     getSession: mocks.getSession,
+    getOrganizationStats: mocks.getOrganizationStats,
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
@@ -135,6 +139,14 @@ const ORGS: AdminOrganization[] = [
     updated_at: "2026-04-07T00:00:00Z",
   },
 ];
+
+const STATS: AdminOrganizationStats = {
+  total: 12,
+  created_last_7_days: 3,
+  trials_ending_soon: 2,
+  disabled: 1,
+  disabled_last_7_days: 1,
+};
 
 // A page the cursor leads to. Nothing it holds appears on the first page, so a
 // row that survives the page change is a reused node rather than a match.
@@ -362,6 +374,8 @@ beforeEach(() => {
     email: "ops@example.test",
     name: "Ops",
   });
+  mocks.getOrganizationStats.mockReset();
+  mocks.getOrganizationStats.mockResolvedValue(STATS);
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(FIRST_ORG);
   mocks.listOrganizationProjects.mockReset();
@@ -707,6 +721,21 @@ describe("organizations list", () => {
     ).toBe("acme");
   });
 
+  it("counts a full set of types rather than calling it all of them", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: [...ACCOUNT_TYPE_OPTIONS] }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual([...ACCOUNT_TYPE_OPTIONS]);
+    });
+    // An organization can carry a type the picker does not offer, so every
+    // option at once is still a narrowing and must not read as "All types".
+    expect(filterTrigger("Type").getAttribute("aria-label")).toBe(
+      `Type filter: ${ACCOUNT_TYPE_OPTIONS.length} selected`,
+    );
+  });
+
   it("keeps an account type the picker does not offer", async () => {
     // ACCOUNT_TYPE_OPTIONS is the list the picker offers, not the list the
     // column can hold. Dropping a value from outside it would widen the view a
@@ -798,6 +827,21 @@ describe("organizations list", () => {
     );
   });
 
+  it("names every trial state at once rather than counting them", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ trial: [...TRIAL_STATES] }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().trial_states).toEqual([...TRIAL_STATES]);
+    });
+    // Every organization holds exactly one of these, so all of them is the
+    // whole platform. "6 selected" reads as a narrowing that is not there.
+    expect(filterTrigger("Trial").getAttribute("aria-label")).toBe(
+      "Trial filter: All trial states",
+    );
+  });
+
   it("keeps the sort when a filter is applied", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: urlFor({ sort: "name", dir: "asc" }),
@@ -815,21 +859,32 @@ describe("organizations list", () => {
     expect(url).toContain("dir=asc");
   });
 
-  it("returns to the first page when a filter is applied", async () => {
-    const { router } = await renderRouteTree(routeTree, {
-      initialPath: urlFor({ page: 3 }),
+  it("returns to the first page when the sheet applies the set already on", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ disabled: ["disabled"] }),
     });
 
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // Nothing in the URL moves, so the pager cannot notice on its own. Page
+    // three of a filter set is not the first page an operator asked for.
     await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().cursor).toBeUndefined();
     });
-    // Page three of the old filter set is not page three of the new one, and
-    // an operator who narrowed a list expects its first rows.
-    expect(currentSearch(router)).not.toContain("page");
   });
 
   it("keeps an unrecognised type on offer after the operator unchecks it", async () => {
@@ -895,6 +950,37 @@ describe("organizations list", () => {
     });
     // The cursor was minted by the previous filter set and points into a
     // different result set.
+    expect(lastListParams().cursor).toBeUndefined();
+  });
+
+  it("drops the cursor when the search box changes the term", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // The box writes to the URL itself, so nothing tells the pager. Only the
+    // signature the render compares can catch this one.
+    fireEvent.change(screen.getByLabelText("Search organizations"), {
+      target: { value: "acme" },
+    });
+
+    await waitFor(
+      () => {
+        expect(lastListParams().q).toBe("acme");
+      },
+      { timeout: 2000 },
+    );
     expect(lastListParams().cursor).toBeUndefined();
   });
 
@@ -2258,6 +2344,48 @@ describe("organizations list write actions", () => {
     );
   });
 
+  // Unlike the row, which repaints from the answer the write already returned.
+  it("asks for the platform totals again after a write", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+    const before = mocks.getOrganizationStats.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats.mock.calls.length).toBeGreaterThan(
+        before,
+      );
+    });
+  });
+
+  // The write drops the read in flight before it goes out. A write that then
+  // fails puts nothing in its place, and a first read holds no figures to fall
+  // back on, so the strip would keep the dashes it started with.
+  it("asks for the platform totals again when the write is refused", async () => {
+    mocks.disableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is already disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    // Held open, so the cancel catches it before it has answered once.
+    mocks.getOrganizationStats.mockReturnValueOnce(new Promise(() => {}));
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+    expect(mocks.getOrganizationStats.mock.calls.length).toBe(1);
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats.mock.calls.length).toBe(2);
+    });
+  });
+
   it("stays on the list while the operator works the menu it opened from a row", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
@@ -3065,10 +3193,7 @@ describe("organizationsSearchSchema", () => {
     ["reads a direction in the union", { dir: "desc" }, { dir: "desc" }],
     ["drops a direction outside the union", { dir: "sideways" }, {}],
     ["drops the old disabled flag when it is off", { disabled: false }, {}],
-    ["drops page 1, which is the default", { page: 1 }, {}],
-    ["drops a page below 1", { page: 0 }, {}],
-    ["drops a page between two whole ones", { page: 2.5 }, {}],
-    ["keeps a page past the first", { page: 2 }, { page: 2 }],
+    ["drops a key the schema does not declare", { page: 2 }, {}],
   ];
 
   it.each(cases)("%s", (_name, search, expected) => {

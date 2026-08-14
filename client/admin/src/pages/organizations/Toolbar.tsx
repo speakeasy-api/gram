@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import {
   FILTER_GROUPS,
   filterSummary,
-  filtersToSearch,
   optionsFor,
   type FilterGroupKey,
   type FilterSelection,
@@ -27,12 +26,21 @@ import {
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
+import { useApplyFilters } from "./applyFilters";
 import { FilterSheet } from "./FilterSheet";
 
 const ROUTE_ID = "/organizations/";
 const SEARCH_DEBOUNCE_MS = 300;
 
-export function Toolbar(): JSX.Element {
+type ToolbarProps = {
+  /**
+   * Changes whenever a control cleared the search term. A draft still inside
+   * the debounce reached no URL, so the box has nothing else to notice by.
+   */
+  searchCleared: number;
+};
+
+export function Toolbar({ searchCleared }: ToolbarProps): JSX.Element {
   const search = useSearch({ from: ROUTE_ID });
   const navigate = useNavigate({ from: ROUTE_ID });
 
@@ -55,6 +63,14 @@ export function Toolbar(): JSX.Element {
     if (draft.trim() !== committed) setDraft(committed);
   }
 
+  const [lastCleared, setLastCleared] = useState(searchCleared);
+  if (searchCleared !== lastCleared) {
+    setLastCleared(searchCleared);
+    // Dropping the draft drops the commit it had pending with it: the effect
+    // below is keyed on the draft, so its cleanup clears the timer.
+    if (draft !== "") setDraft("");
+  }
+
   useEffect(() => {
     const next = draft.trim();
     // A term that settles back on the committed one is not a change, so a typo
@@ -66,7 +82,6 @@ export function Toolbar(): JSX.Element {
         search: (prev: OrganizationsSearch) => ({
           ...prev,
           q: next || undefined,
-          page: undefined,
         }),
         // Keystroke rate. One history entry per burst of typing, not one per
         // keystroke.
@@ -93,17 +108,7 @@ export function Toolbar(): JSX.Element {
     disabled: search.disabled ?? [],
   };
 
-  const applyFilters = (next: FilterSelection): void => {
-    void navigate({
-      search: (prev: OrganizationsSearch) => ({
-        ...prev,
-        ...filtersToSearch(next),
-        // Page 1. The rows a page-two cursor points at were counted under the
-        // filters that minted it.
-        page: undefined,
-      }),
-    });
-  };
+  const applyFilters = useApplyFilters();
 
   const openFilters = (group: FilterGroupKey): void => {
     openedFrom.current = group;

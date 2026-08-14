@@ -254,6 +254,18 @@ export function listOrganizations(
   );
 }
 
+export type AdminOrganizationStats = {
+  total: number;
+  created_last_7_days: number;
+  trials_ending_soon: number;
+  disabled: number;
+  disabled_last_7_days: number;
+};
+
+export function getOrganizationStats(): Promise<AdminOrganizationStats> {
+  return gramAdminFetch<AdminOrganizationStats>("/admin/organizations.stats");
+}
+
 export type AdminProjectDetail = {
   id: string;
   name: string;
