@@ -1,4 +1,4 @@
-h1:apYXKwsBDd+VquEC87AF+rXYjCQGXtqSVbNBkad7hiE=
+h1:IfiHRfAvXar+DjF42FDlIFFsqyiq+7prEBiE61O2I20=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -340,3 +340,4 @@ h1:apYXKwsBDd+VquEC87AF+rXYjCQGXtqSVbNBkad7hiE=
 20260813140026_assistant-thread-events-trigger-instance-fkey-idx.sql h1:HOy5z8JXCh3rl8qfgYX7YXepyH8o4vezsEDruYeIT98=
 20260813150000_user-sessions-tool-selection.sql h1:6l17RI8mPHjZDTtBoUDL+EDSTouOLhTEhgWK0COmOz0=
 20260813230844_platform-mcp-onboarding-milestone-generation.sql h1:N9818ntJknuX+hIp9KZ0RGzCich+h0H2nIFmaXsSfkk=
+20260814095831_payg-billing-foundation.sql h1:++Wz/+C4L4CEUekUCe2U9I/+8AGT85XqQPSYeLRKVWU=
