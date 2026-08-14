@@ -147,6 +147,19 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
+// SeedOrganizationDefaultsTx enables baseline entitlements for every newly
+// provisioned organization. It is intentionally separate from trial seeding so
+// an explicit org-admin disable remains durable and absent rows stay disabled.
+func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	if _, err := repo.New(tx).EnableFeature(ctx, repo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeaturePlatformMCP),
+	}); err != nil {
+		return fmt.Errorf("enable default %s entitlement: %w", FeaturePlatformMCP, err)
+	}
+	return nil
+}
+
 // EnterpriseTrialBundle is the entitlement set an enterprise trial organization
 // receives at signup. A trial gates only on the time window, so identity (SSO,
 // SCIM) is included rather than held back as a conversion lever.
@@ -166,7 +179,6 @@ var EnterpriseTrialBundle = []Feature{
 	FeatureHooksBrowserLogin,
 	FeatureCustomModelKeys,
 	FeatureAIPlatformPushIntegrations,
-	FeaturePlatformMCP,
 	FeatureCustomerManagedEncryptionKeys,
 }
 

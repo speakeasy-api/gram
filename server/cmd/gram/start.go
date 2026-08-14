@@ -29,10 +29,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -352,6 +354,7 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_PLATFORM_MCP_LOCAL_FIXTURE"},
 			Value:   false,
 		},
+
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
@@ -909,6 +912,7 @@ func newStartCommand() *cli.Command {
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
+			var platformSelectedUseRecorder toolcallobserver.SuccessRecorder = platformmcp.NewSelectedUseRecorder(db)
 			remoteProxyManager := remotemcp.NewProxyManager(
 				logger,
 				tracerProvider,
@@ -920,6 +924,7 @@ func newStartCommand() *cli.Command {
 				billingRepo,
 				billingTracker,
 				toolDispositionCache,
+				platformSelectedUseRecorder,
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
@@ -1257,6 +1262,7 @@ func newStartCommand() *cli.Command {
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				authzProvisioner,
+				productfeatures.SeedOrganizationDefaultsTx,
 				productfeatures.SeedEnterpriseTrialBundleTx,
 				auditLogger,
 				trialEmailNotifier,
@@ -1271,11 +1277,24 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
+			if platformFixture != nil && pluginsGitHub == nil {
+				pluginsGitHub = &plugins.GitHubConfig{
+					Client:         localfixture.NewInMemoryGitHubPublisher(),
+					Org:            "local-fixture",
+					InstallationID: 1,
+				}
+				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
+			}
+
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			var pluginPublisher *plugins.Service
-			platformAdmission := platformmcp.NewAdmissionChecker(productFeatures, featureFlags, platformmcp.NewPostgresNewModelEligibility(db))
+			platformAdmission := platformmcp.NewAdmissionChecker(
+				productFeatures,
+				featureFlags,
+				platformmcp.NewPostgresNewModelEligibility(db),
+			)
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
@@ -1334,10 +1353,12 @@ func newStartCommand() *cli.Command {
 			if err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                 logger,
 				MeterProvider:          meterProvider,
+				TracerProvider:         tracerProvider,
 				Mux:                    mux,
 				DB:                     db,
 				Redis:                  redisClient,
 				ServerURL:              serverURL,
+				DashboardURL:           siteURL,
 				Environment:            c.String("environment"),
 				JWTSigningKey:          c.String(usersessions.JWTSigningKeyFlag),
 				ProductFeatures:        productFeatures,
@@ -1349,6 +1370,8 @@ func newStartCommand() *cli.Command {
 				Registry:               mcpRegistryClient,
 				GuardianPolicy:         guardianPolicy,
 				RemoteChallengeManager: remoteChallengeManager,
+				AuditLogger:            auditLogger,
+				PluginPublisher:        pluginPublisher,
 				LocalFixture:           platformFixture,
 			}); err != nil {
 				return err

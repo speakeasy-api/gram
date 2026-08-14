@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{{.Title}}</title>
+
+    <style>
+      html,
+      body {
+        --font-diatype:
+          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        --font-diatype-mono:
+          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        --color-base-white: hsl(0 0% 100%);
+        --color-base-black: hsl(0 0% 0%);
+        --color-neutral-100: hsl(0 0% 98%);
+        --color-neutral-200: hsl(0 0% 92%);
+        --color-neutral-700: hsl(0 0% 33%);
+        --color-neutral-800: hsl(0 0% 20%);
+        --color-feedback-green-100: hsl(102 35% 93%);
+        --color-feedback-green-300: hsl(99 30% 73%);
+        --color-feedback-green-700: hsl(105 24% 27%);
+        --color-brand-blue-600: hsl(215 71% 40%);
+        --text-default: var(--color-neutral-700);
+        --text-default-inverse: var(--color-neutral-100);
+        --text-default-success: var(--color-feedback-green-700);
+        --fill-neutral-highlight: var(--color-base-black);
+        --fill-neutral-default: var(--color-neutral-800);
+        --bg-surface-primary-default: var(--color-base-white);
+        --bg-surface-secondary-default: var(--color-neutral-100);
+        --bg-success-softest: var(--color-feedback-green-100);
+        --border-neutral-softest: var(--color-neutral-200);
+        --border-success-softest: var(--color-feedback-green-300);
+        --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        font-family: var(--font-diatype);
+        font-weight: 300;
+        color: var(--text-default);
+        background: var(--bg-surface-secondary-default);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      .main {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 6rem 1rem;
+      }
+
+      @media (min-width: 768px) {
+        .main {
+          padding: 6rem 2rem;
+        }
+      }
+
+      .auth-consent-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        width: 100%;
+        max-width: 30rem;
+        padding: 2rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        background: var(--bg-surface-primary-default);
+      }
+
+      .header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .header h1 {
+        margin: 0;
+        color: var(--fill-neutral-default);
+        font-size: 1.625rem;
+        font-weight: 300;
+        line-height: 150%;
+        text-wrap: balance;
+      }
+
+      .header p {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 175%;
+        text-wrap: balance;
+      }
+
+      .header strong,
+      .info dt,
+      .field-label {
+        color: var(--fill-neutral-default);
+        font-weight: 500;
+      }
+
+      .info {
+        margin: 0;
+        padding: 1rem 1.25rem;
+        border: solid 1px var(--border-neutral-softest);
+        background: var(--bg-surface-secondary-default);
+        font-size: 0.8125rem;
+      }
+
+      .info dt {
+        margin-top: 0.75rem;
+        font-size: 0.6875rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .info dt:first-child {
+        margin-top: 0;
+      }
+
+      .info dd {
+        margin: 0.25rem 0 0;
+        overflow-wrap: anywhere;
+        color: var(--text-default);
+        font-family: var(--font-diatype-mono);
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .field-label {
+        font-size: 0.8125rem;
+      }
+
+      .field select {
+        width: 100%;
+        padding: 0.75rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 6px;
+        color: var(--text-default);
+        background: var(--bg-surface-primary-default);
+        font: 400 0.875rem var(--font-diatype);
+      }
+
+      .field select:focus-visible,
+      .btn:focus-visible {
+        outline: 2px solid var(--color-brand-blue-600);
+        outline-offset: 2px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+      }
+
+      .actions form,
+      .actions .btn {
+        flex: 1;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 0.75rem 1.25rem;
+        border: solid 1px transparent;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: var(--font-diatype);
+        font-size: 0.875rem;
+        font-weight: 400;
+        text-align: center;
+        text-decoration: none;
+        text-transform: uppercase;
+        transition:
+          background-color 300ms var(--ease-in-out-quad),
+          color 300ms var(--ease-in-out-quad),
+          border-color 300ms var(--ease-in-out-quad);
+      }
+
+      .btn-primary {
+        color: var(--text-default-inverse);
+        background: var(--fill-neutral-default);
+      }
+
+      .btn-primary:hover {
+        background: var(--fill-neutral-highlight);
+      }
+
+      .btn-secondary {
+        border-color: var(--border-neutral-softest);
+        color: var(--fill-neutral-default);
+        background: var(--bg-surface-primary-default);
+      }
+
+      .btn-secondary:hover {
+        color: var(--fill-neutral-highlight);
+        background: var(--bg-surface-secondary-default);
+      }
+
+      .success-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem;
+        height: 3rem;
+        border: 1px solid var(--border-success-softest);
+        border-radius: 50%;
+        background: var(--bg-success-softest);
+      }
+
+      .success-icon svg {
+        width: 1.75rem;
+        height: 1.75rem;
+      }
+    </style>
+  </head>
+  <body{{if .AutoClose}} data-auto-close{{end}}>
+    <main class="main">
+      <section class="auth-consent-container" aria-labelledby="page-title">
+        {{if eq .Kind "organization"}}
+        <header class="header">
+          <h1 id="page-title">Choose an organization</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> requests access to Speakeasy AICP
+            Platform MCP.
+          </p>
+        </header>
+        <dl class="info">
+          <dt>After approval</dt>
+          <dd>Gram will redirect to {{.RedirectURI}}</dd>
+        </dl>
+        <form method="post" class="field">
+          <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+          <label class="field-label" for="organization_id"
+            >Organization to administer</label
+          >
+          <select id="organization_id" name="organization_id">
+            {{range .Organizations}}
+            <option value="{{.ID}}">{{.Name}}</option>
+            {{end}}
+          </select>
+          <button class="btn btn-primary" type="submit">Continue</button>
+        </form>
+        {{else if eq .Kind "connect"}}
+        <header class="header">
+          <h1 id="page-title">Connect Platform MCP</h1>
+          <p>
+            Allow <strong>{{.ClientName}}</strong> to administer
+            <strong>{{.OrganizationName}}</strong> through Speakeasy AICP
+            Platform MCP.
+          </p>
+        </header>
+        <dl class="info">
+          <dt>Application</dt>
+          <dd>{{.ClientName}}</dd>
+          <dt>Organization</dt>
+          <dd>{{.OrganizationName}}</dd>
+          <dt>Will redirect to</dt>
+          <dd>{{.RedirectURI}}</dd>
+        </dl>
+        <div class="actions">
+          <form method="post" data-single-submit>
+            <input type="hidden" name="state" value="{{.State}}" />
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <button class="btn btn-primary" type="submit" name="action" value="approve">
+              Give access
+            </button>
+          </form>
+          <form method="post" data-single-submit>
+            <input type="hidden" name="state" value="{{.State}}" />
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <button class="btn btn-secondary" type="submit" name="action" value="deny">
+              Cancel
+            </button>
+          </form>
+        </div>
+        {{else}}
+        <div class="success-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M20 6L9 17L4 12"
+              stroke="var(--text-default-success)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </div>
+        <header class="header">
+          <h1 id="page-title">Provider connected</h1>
+          <p>
+            Provider authorization is complete. Return to your agent to continue
+            setting up Speakeasy AICP Platform MCP.
+          </p>
+        </header>
+        <p class="info">You can close this window.</p>
+        {{end}}
+      </section>
+    </main>
+    {{if eq .Kind "connect"}}
+    <script nonce="{{.ScriptNonce}}">
+      for (const form of document.querySelectorAll("form[data-single-submit]")) {
+        form.addEventListener("submit", () => {
+          const submittedButton = form.querySelector("button");
+          if (submittedButton?.value) {
+            const action = document.createElement("input");
+            action.type = "hidden";
+            action.name = "action";
+            action.value = submittedButton.value;
+            form.append(action);
+          }
+          for (const button of document.querySelectorAll("form[data-single-submit] button")) {
+            button.disabled = true;
+          }
+          if (submittedButton) submittedButton.textContent = "Connecting…";
+        }, { once: true });
+      }
+    </script>
+    {{end}}
+    {{if .AutoClose}}<script nonce="{{.ScriptNonce}}">window.close()</script>{{end}}
+  </body>
+</html>

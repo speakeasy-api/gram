@@ -22,21 +22,41 @@ type GetSetupHandoffToolOutput struct {
 	CatalogRef     string `json:"catalog_ref"`
 	SetupURL       string `json:"setup_url"`
 	Intent         string `json:"intent"`
-	Handoff        string `json:"handoff"`
-	ExpiresAt      string `json:"expires_at"`
+	Handoff        string `json:"handoff,omitempty"`
+	ExpiresAt      string `json:"expires_at,omitempty"`
 }
 
 func registerSetupHandoffTool(server *mcp.Server, registrations *RegistrationService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
-		Description: "Create a single-use setup handoff for one reviewed MCP registration. Return the handoff only to the requesting user and never persist, log, or share it.",
+		Description: "Get the secure dashboard continuation for one reviewed MCP registration. Browser Catalogue entries return a server-owned dashboard Inspect URL, which contains the available setup and authorization actions; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSetupHandoffToolInput) (*mcp.CallToolResult, GetSetupHandoffToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
-		issued, err := registrations.IssueSetupHandoff(ctx, principal, IssueSetupHandoffInput(input))
+		setupInput := IssueSetupHandoffInput(input)
+		if isBrowserCatalogProviderKey(input.ProviderKey) {
+			if err := registrations.budgets.Handoff.Allow(ctx, principal); err != nil {
+				if budgetResult, ok := operationBudgetToolResult(err); ok {
+					return budgetResult, GetSetupHandoffToolOutput{}, nil
+				}
+				return nil, GetSetupHandoffToolOutput{}, err
+			}
+			setupURL, err := registrations.DashboardSetupURL(ctx, principal, setupInput)
+			if err != nil {
+				return nil, GetSetupHandoffToolOutput{}, err
+			}
+			return nil, GetSetupHandoffToolOutput{
+				RegistrationID: input.RegistrationID,
+				ProviderKey:    input.ProviderKey,
+				CatalogRef:     input.CatalogRef,
+				SetupURL:       setupURL,
+				Intent:         "dashboard_source_settings",
+			}, nil
+		}
+		issued, err := registrations.IssueSetupHandoff(ctx, principal, setupInput)
 		if err != nil {
 			if budgetResult, ok := operationBudgetToolResult(err); ok {
 				return budgetResult, GetSetupHandoffToolOutput{}, nil

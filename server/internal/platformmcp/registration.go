@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,12 +52,13 @@ var (
 // register_catalog_mcp call. The caller resolves catalog details before passing
 // this value to persistence; display metadata is deliberately not identity.
 type CatalogRegistrationRequest struct {
-	ProjectSlug      string
-	SourceKind       string
-	CatalogProvider  string
-	CatalogReference string
-	IdempotencyKey   string
-	InputHash        string
+	ProjectSlug       string
+	SourceKind        string
+	CatalogProvider   string
+	CatalogReference  string
+	ConfigurationHash string
+	IdempotencyKey    string
+	InputHash         string
 }
 
 type ResolvedProject struct {
@@ -126,6 +129,105 @@ func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Contex
 		return false, fmt.Errorf("check platform mcp catalog registration target eligibility: %w", err)
 	}
 	return eligible, nil
+}
+
+// ResolveRegistrationPendingSecretFields projects the persisted secret-header
+// state without reading or decrypting secret values. It is used for idempotent
+// registration replays so the agent is not sent back to dashboard setup after
+// the user has already completed it there.
+func (s *RegistrationStore) ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error) {
+	if s == nil || s.db == nil || registrationID == uuid.Nil {
+		return nil, ErrRegistrationInvalid
+	}
+	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve platform mcp registration secret setup state: %w", err)
+	}
+	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.RemoteMcpServerID.Valid {
+		return nil, ErrRegistrationInvalid
+	}
+	headers, err := remotemcprepo.New(s.db).ListServerHeaders(ctx, remotemcprepo.ListServerHeadersParams{
+		RemoteMcpServerID: registration.RemoteMcpServerID.UUID,
+		ProjectID:         project.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list platform mcp registration headers: %w", err)
+	}
+	configured := make(map[string]bool, len(headers))
+	for _, header := range headers {
+		configured[strings.ToLower(header.Name)] = header.IsSecret && header.Value.Valid && header.Value.String != ""
+	}
+	pending := make([]CatalogConfigurationField, 0, len(declared))
+	for _, field := range declared {
+		if field.Required && field.Secret && !configured[strings.ToLower(field.Name)] {
+			pending = append(pending, field)
+		}
+	}
+	return pending, nil
+}
+
+func (s *RegistrationStore) ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error) {
+	if s == nil || s.db == nil || registrationID == uuid.Nil {
+		return CatalogCandidate{}, ErrRegistrationInvalid
+	}
+	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CatalogCandidate{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return CatalogCandidate{}, fmt.Errorf("resolve platform mcp registration catalogue identity: %w", err)
+	}
+	if registration.CatalogProvider == "" || registration.CatalogReference == "" {
+		return CatalogCandidate{}, ErrRegistrationInvalid
+	}
+	return CatalogCandidate{ProviderKey: registration.CatalogProvider, CatalogRef: registration.CatalogReference}, nil
+}
+
+// ResolveRegistrationDashboardSetup derives the only dashboard continuation
+// target from the lifecycle-bound private resources. The agent never receives
+// the Remote MCP source URL or configuration values.
+func (s *RegistrationStore) ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error) {
+	if s == nil || s.db == nil || registrationID == uuid.Nil {
+		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
+	}
+	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return RegistrationDashboardSetup{}, fmt.Errorf("resolve platform mcp dashboard setup registration: %w", err)
+	}
+	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.McpServerID.Valid {
+		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
+	}
+	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	if err != nil {
+		return RegistrationDashboardSetup{}, fmt.Errorf("resolve platform mcp dashboard organization: %w", err)
+	}
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        registration.McpServerID.UUID,
+		ProjectID: project.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return RegistrationDashboardSetup{}, fmt.Errorf("resolve platform mcp dashboard server: %w", err)
+	}
+	if !server.RemoteMcpServerID.Valid || server.RemoteMcpServerID.UUID != registration.RemoteMcpServerID.UUID || !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != registration.UserSessionIssuerID.UUID {
+		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
+	}
+	mcpServerRoute := server.Slug.String
+	if !server.Slug.Valid || mcpServerRoute == "" {
+		mcpServerRoute = server.ID.String()
+	}
+	if organization.Slug == "" || mcpServerRoute == "" {
+		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
+	}
+	return RegistrationDashboardSetup{OrganizationSlug: organization.Slug, MCPServerRoute: mcpServerRoute}, nil
 }
 
 // BeginReceipt atomically establishes the 24-hour idempotency boundary. It
@@ -379,11 +481,14 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 // CompleteRegistration creates the local, private component stack only after a
 // reviewed catalog adapter has validated the remote endpoint. It does not call
 // management handlers, create plugin rows, or publish packages.
-func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error) {
+// CompleteRegistration resolves private resources from one server-validated
+// catalogue configuration. Tests and older internal callers use
+// CompleteRegistrationWithRemoteURL to build the equivalent empty configuration.
+func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, configuration resolvedCatalogConfiguration) (OperationReceipt, error) {
 	if s == nil || s.db == nil {
 		return OperationReceipt{}, ErrUnavailable
 	}
-	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(remoteURL) {
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 	connectionID, generation, err := principalConnection(principal)
@@ -529,7 +634,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 			return OperationReceipt{}, ErrRegistrationInvalid
 		}
 	} else if registrationComponentsEmpty(registration) && registration.Status == registrationStatusPending {
-		registration, err = s.createPrivateRegistrationComponents(ctx, tx, project, registration, remoteURL)
+		registration, err = s.createPrivateRegistrationComponents(ctx, tx, project, registration, configuration)
 		if err != nil {
 			return OperationReceipt{}, err
 		}
@@ -580,7 +685,11 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
 }
 
-func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Context, tx pgx.Tx, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, remoteURL string) (platformrepo.PlatformMcpCatalogRegistration, error) {
+func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error) {
+	return s.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{remoteURL: remoteURL})
+}
+
+func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Context, tx pgx.Tx, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, configuration resolvedCatalogConfiguration) (platformrepo.PlatformMcpCatalogRegistration, error) {
 	remoteID, err := uuid.NewV7()
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
@@ -599,16 +708,46 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	remoteSlug := "platform-mcp-remote-" + suffix
 	serverSlug := "platform-mcp-" + suffix
+	displayName := configuration.displayName
+	if displayName == "" {
+		displayName = "MCP Catalogue server"
+	}
 	remote, err := remotemcprepo.New(tx).CreateServer(ctx, remotemcprepo.CreateServerParams{
 		ID:            remoteID,
 		ProjectID:     project.ID,
-		Name:          optionalText("Platform MCP catalog source"),
+		Name:          optionalText(displayName + " source"),
 		Slug:          optionalText(remoteSlug),
 		TransportType: "streamable-http",
-		Url:           remoteURL,
+		Url:           configuration.remoteURL,
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp remote source: %w", err)
+	}
+	for _, header := range configuration.headers {
+		// Secret header values are collected only by the secure dashboard path.
+		// Reject a plaintext secret here rather than persisting it through the
+		// non-encrypting repository directly. An empty static value is deliberate:
+		// it satisfies the database's value-source invariant and remains pending
+		// until the dashboard replaces it through the encryption boundary.
+		if header.secret && header.value != "" {
+			return platformrepo.PlatformMcpCatalogRegistration{}, ErrCatalogConfigurationRejected
+		}
+		value := optionalText(header.value)
+		if header.secret {
+			value = pgtype.Text{Valid: true}
+		}
+		if _, err := remotemcprepo.New(tx).CreateServerHeader(ctx, remotemcprepo.CreateServerHeaderParams{
+			Name:                   header.name,
+			Description:            optionalText(header.description),
+			IsRequired:             header.required,
+			IsSecret:               header.secret,
+			Value:                  value,
+			ValueFromRequestHeader: pgtype.Text{},
+			RemoteMcpServerID:      remote.ID,
+			ProjectID:              project.ID,
+		}); err != nil {
+			return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp non-secret configuration header: %w", err)
+		}
 	}
 	issuer, err := usersessionsrepo.New(tx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          project.ID,
@@ -625,7 +764,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  serverID,
 		ProjectID:           project.ID,
-		Name:                optionalText("Platform MCP catalog server"),
+		Name:                optionalText(displayName),
 		Slug:                optionalText(serverSlug),
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
@@ -690,7 +829,7 @@ func registrationComponentsComplete(registration platformrepo.PlatformMcpCatalog
 }
 
 func validateCatalogRegistrationRequest(principal Principal, project ResolvedProject, request CatalogRegistrationRequest) error {
-	if principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || project.Slug == "" || request.ProjectSlug == "" || request.ProjectSlug != project.Slug || request.SourceKind == "" || request.CatalogProvider == "" || request.CatalogReference == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || request.InputHash == "" || request.InputHash != catalogRegistrationInputHash(request.ProjectSlug, request.SourceKind, request.CatalogProvider, request.CatalogReference) {
+	if principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || project.Slug == "" || request.ProjectSlug == "" || request.ProjectSlug != project.Slug || request.SourceKind == "" || request.CatalogProvider == "" || request.CatalogReference == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || request.InputHash == "" || request.InputHash != catalogRegistrationInputHash(request.ProjectSlug, request.SourceKind, request.CatalogProvider, request.CatalogReference, request.ConfigurationHash) {
 		return ErrRegistrationInvalid
 	}
 	return nil
@@ -726,8 +865,31 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 	}
 }
 
-func catalogRegistrationInputHash(projectSlug, sourceKind, catalogProvider, catalogReference string) string {
+func catalogConfigurationHash(values CatalogConfigurationValues) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var payload strings.Builder
+	for _, key := range keys {
+		payload.WriteString(key)
+		payload.WriteByte(0)
+		payload.WriteString(values[key])
+		payload.WriteByte(0)
+	}
+	digest := sha256.Sum256([]byte(payload.String()))
+	return hex.EncodeToString(digest[:])
+}
+
+func catalogRegistrationInputHash(projectSlug, sourceKind, catalogProvider, catalogReference string, configurationHash ...string) string {
 	payload := projectSlug + "\x00" + sourceKind + "\x00" + catalogProvider + "\x00" + catalogReference
+	if len(configurationHash) > 0 && configurationHash[0] != "" {
+		payload += "\x00" + configurationHash[0]
+	}
 	digest := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(digest[:])
 }

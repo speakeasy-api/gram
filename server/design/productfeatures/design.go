@@ -33,7 +33,7 @@ var _ = Service("features", func() {
 			Attribute("skills_enabled", Boolean, "Whether the Skills page is enabled for the organization")
 			Attribute("skill_capture_metadata_only", Boolean, "Whether skill capture stores activation metadata without requesting manifest content")
 			Attribute("ai_platform_push_integrations_enabled", Boolean, "Whether the organization can provision push integrations for AI platforms")
-			Attribute("platform_mcp_enabled", Boolean, "Whether the organization is eligible for the Gram Platform MCP capability")
+			Attribute("platform_mcp_enabled", Boolean, "Whether the organization can use the Gram Platform MCP capability")
 			Attribute("customer_managed_encryption_keys_enabled", Boolean, "Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption")
 			Attribute("remote_session_auto_refresh_enabled", Boolean, "Whether consent screens expose automatic remote-session refresh for the organization")
 			Attribute("remote_session_auto_refresh_enforced_enabled", Boolean, "Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference")
