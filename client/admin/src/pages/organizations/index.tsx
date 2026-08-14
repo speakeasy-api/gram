@@ -36,7 +36,7 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   member_count: false,
   workos_id: false,
   disabled_at: false,
-  free_trial_ends_at: false,
+  trial_state: false,
   created_at: false,
 };
 

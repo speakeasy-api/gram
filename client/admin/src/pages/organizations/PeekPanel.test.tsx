@@ -14,8 +14,13 @@ const ORG: AdminOrganization = {
   account_type: "pro",
   workos_id: "org_workos_placeholder_identifier",
   whitelisted: true,
+  // The stale pair, dated apart from the real trial on purpose. A panel back
+  // on `free_trial_ends_at` then shows the wrong date rather than the right
+  // one by coincidence.
   free_trial_started_at: "2026-02-01T00:00:00Z",
-  free_trial_ends_at: "2026-05-06T00:00:00Z",
+  free_trial_ends_at: "2026-11-12T00:00:00Z",
+  trial_state: "running",
+  trial_ends_at: "2026-05-06T00:00:00Z",
   member_count: 3,
   created_at: "2026-01-02T00:00:00Z",
   updated_at: "2026-01-07T00:00:00Z",
@@ -72,20 +77,21 @@ describe("PeekPanel", () => {
   it("renders the record it was handed, field by field", async () => {
     await renderWithApp(<PeekPanel org={ORG} onClose={noop} />);
 
-    const { workos_id: workosID, free_trial_ends_at: trialEndsAt } = ORG;
+    const { workos_id: workosID, trial_ends_at: trialEndsAt } = ORG;
     if (!workosID || !trialEndsAt) {
       throw new Error("the record under test needs its optional fields set");
     }
 
     expect(screen.getByRole("heading", { name: ORG.name })).toBeTruthy();
     expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
-      ["Type", "Trial ends", "Members", "Created", "Org id", "WorkOS id"],
+      ["Type", "Trial", "Members", "Created", "Org id", "WorkOS id"],
     );
     expect(
       screen.getAllByRole("definition").map((value) => value.textContent),
     ).toEqual([
       ORG.account_type,
-      shortDate(trialEndsAt),
+      // The same state-then-date reading as the row, out of the same helper.
+      `Running${shortDate(trialEndsAt)}`,
       String(ORG.member_count),
       shortDate(ORG.created_at),
       ORG.id,
@@ -96,13 +102,21 @@ describe("PeekPanel", () => {
   it("renders a dash for the optional fields a record leaves unset", async () => {
     await renderWithApp(
       <PeekPanel
-        org={{ ...ORG, workos_id: undefined, free_trial_ends_at: undefined }}
+        org={{
+          ...ORG,
+          workos_id: undefined,
+          // The stale pair stays set. A panel that never trialled has to read
+          // as a dash even while the defaulted column still dates it.
+          trial_state: "none",
+          trial_ends_at: undefined,
+        }}
         onClose={noop}
       />,
     );
 
     const values = screen.getAllByRole("definition");
     expect(values.at(1)?.textContent).toBe("-");
+    expect(values.at(1)?.querySelector('[data-slot="badge"]')).toBeNull();
     expect(values.at(-1)?.textContent).toBe("-");
     expect(screen.queryByRole("button", { name: "Copy WorkOS id" })).toBeNull();
   });

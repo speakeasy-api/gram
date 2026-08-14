@@ -2,19 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 
 import type { DataTableFeatures } from "@/components/data-table";
+import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { cn } from "@/lib/utils";
+import { cn, fmtDateShort } from "@/lib/utils";
 
 import { PeekTrigger } from "./PeekTrigger";
-
-function fmtDateShort(iso?: string): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString();
-}
 
 const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
 
@@ -95,18 +89,11 @@ export const ORG_COLUMNS = column.columns([
       </span>
     ),
   }),
-  column.accessor("free_trial_ends_at", {
-    header: "Trial ends",
-    cell: ({ row }) => (
-      <span
-        className={cn(
-          "text-sm",
-          !row.original.free_trial_ends_at && "text-muted-foreground",
-        )}
-      >
-        {fmtDateShort(row.original.free_trial_ends_at)}
-      </span>
-    ),
+  // "Trial", not "Trial ends": the cell reads as a state, and the end date is
+  // the detail underneath it rather than the column's subject.
+  column.accessor("trial_state", {
+    header: "Trial",
+    cell: ({ row }) => <Trial org={row.original} />,
   }),
   column.accessor("created_at", {
     header: "Created",
