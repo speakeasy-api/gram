@@ -247,6 +247,17 @@ describe("organizations list", () => {
     expect(lastListParams().q).toBe("acme");
   });
 
+  it("offers an id as a term the search box takes", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const input = screen.getByLabelText("Search organizations");
+
+    // The label names the target, not the terms, and it is pinned elsewhere
+    // because a screen reader announces it. An operator holding an
+    // organization id has only the placeholder to tell them it will match.
+    expect((input as HTMLInputElement).placeholder).toMatch(/\bid\b/i);
+  });
+
   it("holds a keystroke out of the URL until the debounce elapses", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
@@ -661,7 +672,9 @@ describe("organizations list peek", () => {
 
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
 
-    expect(scrollIntoView).toHaveBeenCalled();
+    // With the argument. `block: "center"` also counts as called, and it
+    // re-centres the whole list under every arrow press.
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
   });
 
   it("closes on Escape and puts the keyboard back on the control", async () => {
@@ -673,6 +686,19 @@ describe("organizations list peek", () => {
     expect(
       screen.queryByRole("complementary", { name: "Organization peek" }),
     ).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("returns the keyboard to the control of whichever row was peeked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekOn(SECOND_ORG.name);
+
+    fireEvent.keyDown(peekPanel(), { key: "Escape" });
+
+    // The second row on purpose. A close that looks the control up across the
+    // whole page instead of inside the peeked row finds the first row's one,
+    // and every other focus test here peeks the first row, so it passes on
+    // luck and sends an operator who peeked row 40 back to row 1.
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -979,6 +1005,26 @@ describe("organizations list peek", () => {
     expect(announcement()).toBe("");
   });
 
+  it("announces through one polite region that outlives every announcement", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const region = await screen.findByRole("status");
+
+    // Polite, or nothing is spoken at all and every assertion in this file
+    // about what the region says reads a dead feature's DOM text.
+    expect(region.getAttribute("aria-live")).toBe("polite");
+    // Off screen. Otherwise the announcements pile up as stray text above the
+    // table, where a sighted operator reads them and nobody asked for them.
+    expect(region.classList.contains("sr-only")).toBe(true);
+
+    await peekOn(FIRST_ORG.name);
+
+    // The same node. A region that arrives together with its text is not
+    // announced, and a region keyed by its own text is a new one every time,
+    // which is the same defect wearing a different hat.
+    expect(liveRegion()).toBe(region);
+    expect(announcement()).toBe(`Peeking at ${FIRST_ORG.name}.`);
+  });
+
   it("alt-clicking a row opens the organization rather than peeking at it", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
@@ -1052,6 +1098,16 @@ describe("organizations list peek", () => {
     expect(document.activeElement?.contains(screen.getByRole("table"))).toBe(
       true,
     );
+    // happy-dom focuses elements a browser will not, so "activeElement moved"
+    // is no evidence that focus could land there at all. Every focus
+    // assertion in this file has to check the target is focusable in its own
+    // right, and this is that check.
+    expect(document.activeElement?.getAttribute("tabindex")).toBe("-1");
+    // The box around the table and nothing wider. `contains(table)` is true
+    // of every ancestor up to the document, so a rescue that landed on the
+    // wrapper holding the pager would satisfy the line above and drop the
+    // operator somewhere they can no longer see the record they lost.
+    expect(document.activeElement?.contains(next)).toBe(false);
     // Named, or the operator arrives somewhere their screen reader announces
     // as nothing at all.
     expect(document.activeElement).toBe(
