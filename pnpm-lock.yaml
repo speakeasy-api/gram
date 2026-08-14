@@ -158,6 +158,9 @@ importers:
       happy-dom:
         specifier: ^20.11.1
         version: 20.11.1
+      react-grab:
+        specifier: ^0.1.48
+        version: 0.1.48(react@19.2.8)
       oxlint:
         specifier: ^1.71.0
         version: 1.77.0(oxlint-tsgolint@0.23.0)
