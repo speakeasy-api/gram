@@ -241,7 +241,7 @@ func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	require.Equal(t, "enterprise", detail.AccountType)
 }
 
-func TestRearmTrial_MarksTrialStartedInLoops(t *testing.T) {
+func TestRearmTrial_DoesNotRestartLoopsSequence(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, _ := newRearmService(t)
@@ -251,22 +251,8 @@ func TestRearmTrial_MarksTrialStartedInLoops(t *testing.T) {
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_loops", Days: 14})
 	require.NoError(t, err)
-	require.Equal(t, []string{"org_rearm_loops"}, notifier.started)
-}
-
-func TestRearmTrial_TrialStartedFailureDoesNotFailRearm(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn, _ := newRearmService(t)
-	notifier := &fakeTrialNotifier{startedErr: errors.New("loops unavailable")}
-	svc.trial = notifier
-	seedDemotedTrial(t, ctx, conn, "org_rearm_loops_fail", "enterprise")
-
-	res, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_loops_fail", Days: 14})
-	require.NoError(t, err)
-	require.Equal(t, "org_rearm_loops_fail", res.ID)
-	require.Equal(t, []string{"org_rearm_loops_fail"}, notifier.started)
-	require.False(t, readTrial(t, ctx, conn, "org_rearm_loops_fail").DemotedAt.Valid)
+	require.Empty(t, notifier.started)
+	require.Empty(t, notifier.inactive)
 }
 
 // MarkTrialDemoted only demotes an already-past ends_at, so a re-arm that

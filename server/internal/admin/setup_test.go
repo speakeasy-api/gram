@@ -73,12 +73,11 @@ type fakeTrialNotifier struct {
 	started     []string
 	inactive    []string
 	inactiveErr error
-	startedErr  error
 }
 
 func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
 	f.started = append(f.started, organizationID)
-	return f.startedErr
+	return nil
 }
 
 func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {

@@ -903,11 +903,6 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
 	)
 
-	// Demotion cleared trialActive. Re-enter the Loops sequence for the new run.
-	if err := s.trial.TrialStarted(ctx, payload.ID); err != nil {
-		logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err))
-	}
-
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
 }
 
