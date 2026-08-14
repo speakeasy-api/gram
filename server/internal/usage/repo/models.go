@@ -42,6 +42,19 @@ type BillingMetadatum struct {
 	UpdatedAt              pgtype.Timestamptz
 }
 
+type StripeInvoice struct {
+	StripeInvoiceID      string
+	OrganizationID       pgtype.Text
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	ServicePeriodStart   pgtype.Timestamptz
+	ServicePeriodEnd     pgtype.Timestamptz
+	InvoiceState         string
+	FinalizedAt          pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
 type StripeInvoiceAllocation struct {
 	ID                      uuid.UUID
 	OrganizationID          pgtype.Text

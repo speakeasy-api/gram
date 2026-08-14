@@ -93,6 +93,7 @@ type Activities struct {
 	temporalEnv                     *tenv.Environment
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectOpenRouterDailySpend     *activities.CollectOpenRouterDailySpend
+	settleStripeInvoiceAllocations  *activities.SettleStripeInvoiceAllocations
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
@@ -299,6 +300,7 @@ func NewActivities(
 		temporalEnv:                     temporalEnv,
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
 		collectOpenRouterDailySpend:     activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
+		settleStripeInvoiceAllocations:  activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
@@ -497,8 +499,16 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 	return a.collectOpenRouterCreditsMetrics.Do(ctx, args)
 }
 
-func (a *Activities) CollectOpenRouterDailySpend(ctx context.Context, args activities.CollectOpenRouterDailySpendArgs) error {
-	return a.collectOpenRouterDailySpend.Do(ctx, args)
+func (a *Activities) CollectOpenRouterDailySpend(ctx context.Context, args activities.CollectOpenRouterDailySpendArgs) (activities.CollectOpenRouterDailySpendResult, error) {
+	result, err := a.collectOpenRouterDailySpend.DoWithResult(ctx, args)
+	if err != nil {
+		return activities.CollectOpenRouterDailySpendResult{}, fmt.Errorf("collect OpenRouter daily spend: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SettleStripeInvoiceAllocations(ctx context.Context, args activities.SettleStripeInvoiceAllocationsArgs) error {
+	return a.settleStripeInvoiceAllocations.Do(ctx, args)
 }
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {

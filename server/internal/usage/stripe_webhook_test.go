@@ -40,6 +40,9 @@ type fakeStripeWebhookClient struct {
 	verify        func([]byte, string) (*stripeclient.WebhookEvent, error)
 	checkout      *stripeclient.CheckoutSessionState
 	checkoutError error
+	invoice       *stripeclient.InvoiceState
+	invoiceError  error
+	invoiceCalls  atomic.Int32
 	verifyCalls   atomic.Int32
 }
 
@@ -85,6 +88,27 @@ func (f *fakeStripeWebhookClient) GetMeterEventSummary(context.Context, stripecl
 	return 0, errors.New("not implemented")
 }
 
+func (f *fakeStripeWebhookClient) GetInvoice(context.Context, string) (*stripeclient.InvoiceState, error) {
+	f.invoiceCalls.Add(1)
+	return f.invoice, f.invoiceError
+}
+
+func (f *fakeStripeWebhookClient) CreateInvoiceItem(context.Context, stripeclient.CreateInvoiceItemInput) (*stripeclient.InvoiceItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) CreateCreditNote(context.Context, stripeclient.CreateCreditNoteInput) (*stripeclient.CreditNote, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) FindInvoiceItem(context.Context, stripeclient.FindInvoiceAllocationInput) (*stripeclient.InvoiceItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeStripeWebhookClient) FindCreditNote(context.Context, stripeclient.FindInvoiceAllocationInput) (*stripeclient.CreditNote, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string) (*stripeclient.WebhookEvent, error) {
 	f.verifyCalls.Add(1)
 	return f.verify(payload, signature)
@@ -94,7 +118,7 @@ func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
 	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: ""}
 }
 
-func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 	return stripeWebhookResult{newlyEnabledFeatures: nil}, nil
 }
 
@@ -118,6 +142,16 @@ func newStripeWebhookService(t *testing.T, customerID string, handler stripeWebh
 	require.NoError(t, err)
 
 	client := &fakeStripeWebhookClient{
+		invoice: &stripeclient.InvoiceState{
+			ID:                 "invoice_placeholder",
+			CustomerID:         customerID,
+			SubscriptionID:     "subscription_placeholder",
+			Currency:           "usd",
+			BillingReason:      "subscription_cycle",
+			Status:             "draft",
+			ServicePeriodStart: time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC),
+			ServicePeriodEnd:   time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+		},
 		verify: func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
 			return &stripeclient.WebhookEvent{
 				ID:         "event_placeholder",
@@ -153,6 +187,48 @@ func stripeWebhookReceiptCount(t *testing.T, db *pgxpool.Pool) int {
 	count, err := repo.New(db).CountStripeWebhookReceiptsFixture(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	return int(count)
+}
+
+func configurePaygInvoiceIdentity(t *testing.T, service *Service, subscriptionID string, billingCycleAnchor time.Time) {
+	t.Helper()
+
+	queries := repo.New(service.db)
+	_, err := queries.ActivatePaygBillingMetadata(t.Context(), repo.ActivatePaygBillingMetadataParams{
+		StripeSubscriptionID:     pgtype.Text{String: subscriptionID, Valid: true},
+		StripeBillingCycleAnchor: pgtype.Timestamptz{Time: billingCycleAnchor.UTC(), Valid: true},
+		BillingCycleAnchorDay:    int32(billingCycleAnchor.UTC().Day()),
+		OrganizationID:           stripeWebhookOrganizationID,
+		StripeCustomerID:         pgtype.Text{String: "customer_placeholder", Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, queries.ActivatePaygOrganization(t.Context(), stripeWebhookOrganizationID))
+	service.stripeHandler = service.serviceStripeWebhookHandler
+}
+
+func configureInvoiceWebhook(t *testing.T, service *Service, eventID string, invoice *stripeclient.InvoiceState) *fakeStripeWebhookClient {
+	t.Helper()
+
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.invoice = invoice
+	client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:         eventID,
+			Type:       "invoice.created",
+			Created:    time.Now().UTC(),
+			ObjectID:   invoice.ID,
+			CustomerID: "customer_placeholder",
+		}, nil
+	}
+	return client
+}
+
+func stripeInvoices(t *testing.T, db *pgxpool.Pool) []repo.StripeInvoice {
+	t.Helper()
+
+	invoices, err := repo.New(db).ListStripeInvoicesFixture(t.Context(), pgtype.Text{String: stripeWebhookOrganizationID, Valid: true})
+	require.NoError(t, err)
+	return invoices
 }
 
 func paygSchedulingIntentCount(t *testing.T, db *pgxpool.Pool) int {
@@ -331,12 +407,22 @@ func TestStripeWebhookAcknowledgesEventsWithoutDispatch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+			service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 				t.Fatal("handler must not run")
 				return stripeWebhookResult{}, nil
 			})
 			client, ok := service.stripeClient.(*fakeStripeWebhookClient)
 			require.True(t, ok)
+			client.invoice = &stripeclient.InvoiceState{
+				ID:                 "object_placeholder",
+				CustomerID:         test.customerID,
+				SubscriptionID:     "subscription_placeholder",
+				Currency:           "usd",
+				BillingReason:      "subscription_cycle",
+				Status:             "draft",
+				ServicePeriodStart: time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC),
+				ServicePeriodEnd:   time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+			}
 			client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
 				return &stripeclient.WebhookEvent{
 					ID:         "event_" + strings.ReplaceAll(test.name, " ", "_"),
@@ -348,6 +434,7 @@ func TestStripeWebhookAcknowledgesEventsWithoutDispatch(t *testing.T) {
 			}
 			require.Equal(t, http.StatusOK, serveStripeWebhook(service, "{}").Code)
 			require.Zero(t, stripeWebhookReceiptCount(t, db))
+			require.Zero(t, client.invoiceCalls.Load())
 		})
 	}
 }
@@ -356,7 +443,7 @@ func TestStripeWebhookSequentialDuplicateDispatchesOnce(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		calls.Add(1)
 		return stripeWebhookResult{}, nil
 	})
@@ -374,7 +461,7 @@ func TestStripeWebhookConcurrentDuplicateDispatchesOnce(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var enterOnce sync.Once
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		calls.Add(1)
 		enterOnce.Do(func() { close(entered) })
 		<-release
@@ -404,7 +491,7 @@ func TestStripeWebhookConcurrentDistinctEventsForSameCustomerDoNotSerialize(t *t
 			close(release)
 		}
 	}()
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		calls.Add(1)
 		<-release
 		return stripeWebhookResult{}, nil
@@ -414,7 +501,7 @@ func TestStripeWebhookConcurrentDistinctEventsForSameCustomerDoNotSerialize(t *t
 	client.verify = func(payload []byte, _ string) (*stripeclient.WebhookEvent, error) {
 		return &stripeclient.WebhookEvent{
 			ID:         "event_" + string(payload),
-			Type:       "invoice.created",
+			Type:       "invoice.payment_failed",
 			ObjectID:   "invoice_" + string(payload),
 			CustomerID: "customer_placeholder",
 		}, nil
@@ -438,7 +525,7 @@ func TestStripeWebhookHandlerFailureRollsBackForRetry(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		if calls.Add(1) == 1 {
 			return stripeWebhookResult{}, errors.New("transient handler failure")
 		}
@@ -449,6 +536,295 @@ func TestStripeWebhookHandlerFailureRollsBackForRetry(t *testing.T) {
 	require.Zero(t, stripeWebhookReceiptCount(t, db))
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "retry").Code)
 	require.EqualValues(t, 2, calls.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+}
+
+func TestStripeInvoiceCreatedPersistsImmutableBillingIdentity(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name        string
+		state       string
+		finalizedAt time.Time
+	}{
+		{name: "draft", state: "draft"},
+		{name: "open", state: "open", finalizedAt: periodStart.Add(2 * time.Hour)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+			configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+			invoice := &stripeclient.InvoiceState{
+				ID:                 "invoice_" + test.name,
+				CustomerID:         "customer_placeholder",
+				SubscriptionID:     "subscription_placeholder",
+				Currency:           "usd",
+				BillingReason:      "subscription_cycle",
+				Status:             test.state,
+				ServicePeriodStart: periodStart,
+				ServicePeriodEnd:   periodEnd,
+				FinalizedAt:        test.finalizedAt,
+			}
+			configureInvoiceWebhook(t, service, "event_"+test.name, invoice)
+
+			recorder := serveStripeWebhook(service, test.name)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+			rows := stripeInvoices(t, db)
+			require.Len(t, rows, 1)
+			row := rows[0]
+			require.Equal(t, invoice.ID, row.StripeInvoiceID)
+			require.Equal(t, stripeWebhookOrganizationID, row.OrganizationID.String)
+			require.True(t, row.OrganizationID.Valid)
+			require.Equal(t, invoice.CustomerID, row.StripeCustomerID)
+			require.Equal(t, invoice.SubscriptionID, row.StripeSubscriptionID)
+			require.True(t, periodStart.Equal(row.ServicePeriodStart.Time))
+			require.True(t, periodEnd.Equal(row.ServicePeriodEnd.Time))
+			require.Equal(t, test.state, row.InvoiceState)
+			if test.finalizedAt.IsZero() {
+				require.False(t, row.FinalizedAt.Valid)
+			} else {
+				require.True(t, row.FinalizedAt.Valid)
+				require.True(t, test.finalizedAt.Equal(row.FinalizedAt.Time))
+			}
+		})
+	}
+}
+
+func TestStripeInvoiceCreatedStoresCurrentStateForDelayedEvent(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	finalizedAt := periodStart.Add(3 * time.Hour)
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+	client := configureInvoiceWebhook(t, service, "event_delayed_invoice", &stripeclient.InvoiceState{
+		ID:                 "invoice_delayed",
+		CustomerID:         "customer_placeholder",
+		SubscriptionID:     "subscription_placeholder",
+		Currency:           "usd",
+		BillingReason:      "subscription_cycle",
+		Status:             "open",
+		ServicePeriodStart: periodStart,
+		ServicePeriodEnd:   periodEnd,
+		FinalizedAt:        finalizedAt,
+	})
+	client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:         "event_delayed_invoice",
+			Type:       "invoice.created",
+			Created:    periodStart.Add(-24 * time.Hour),
+			ObjectID:   "invoice_delayed",
+			CustomerID: "customer_placeholder",
+		}, nil
+	}
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "stale-event-payload").Code)
+	rows := stripeInvoices(t, db)
+	require.Len(t, rows, 1)
+	require.Equal(t, "open", rows[0].InvoiceState)
+	require.True(t, finalizedAt.Equal(rows[0].FinalizedAt.Time))
+}
+
+func TestStripeInvoiceRetrievalFailureRetriesWithoutReceipt(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+	client := configureInvoiceWebhook(t, service, "event_invoice_retrieval_retry", &stripeclient.InvoiceState{
+		ID:                 "invoice_retrieval_retry",
+		CustomerID:         "customer_placeholder",
+		SubscriptionID:     "subscription_placeholder",
+		Currency:           "usd",
+		BillingReason:      "subscription_cycle",
+		Status:             "draft",
+		ServicePeriodStart: periodStart,
+		ServicePeriodEnd:   periodStart.AddDate(0, 1, 0),
+	})
+	client.invoiceError = errors.New("Stripe retrieval unavailable")
+
+	require.Equal(t, http.StatusServiceUnavailable, serveStripeWebhook(service, "first").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	require.Empty(t, stripeInvoices(t, db))
+	require.EqualValues(t, 1, client.invoiceCalls.Load())
+
+	client.invoiceError = nil
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "retry").Code)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Len(t, stripeInvoices(t, db), 1)
+	require.EqualValues(t, 2, client.invoiceCalls.Load())
+}
+
+func TestStripeInvoiceCreatedDurablyIgnoresNonBillableInvoices(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name          string
+		billingReason string
+		periodStart   time.Time
+		periodEnd     time.Time
+	}{
+		{
+			name:          "free pre-anchor stub",
+			billingReason: "subscription_create",
+			periodStart:   anchor.AddDate(0, -1, 0),
+			periodEnd:     anchor,
+		},
+		{
+			name:          "unsupported billing reason",
+			billingReason: "manual",
+			periodStart:   anchor,
+			periodEnd:     anchor.AddDate(0, 1, 0),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+			configurePaygInvoiceIdentity(t, service, "subscription_placeholder", anchor)
+			configureInvoiceWebhook(t, service, "event_"+strings.ReplaceAll(test.name, " ", "_"), &stripeclient.InvoiceState{
+				ID:                 "invoice_" + strings.ReplaceAll(test.name, " ", "_"),
+				CustomerID:         "customer_placeholder",
+				SubscriptionID:     "subscription_placeholder",
+				Currency:           "usd",
+				BillingReason:      test.billingReason,
+				Status:             "draft",
+				ServicePeriodStart: test.periodStart,
+				ServicePeriodEnd:   test.periodEnd,
+			})
+
+			require.Equal(t, http.StatusOK, serveStripeWebhook(service, test.name).Code)
+			require.Empty(t, stripeInvoices(t, db))
+			require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+		})
+	}
+}
+
+func TestStripeInvoiceCreatedRejectsMismatchedFinancialIdentity(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		wantStatus int
+		mutate     func(*stripeclient.InvoiceState)
+	}{
+		{
+			name:       "wrong customer",
+			wantStatus: http.StatusBadRequest,
+			mutate:     func(invoice *stripeclient.InvoiceState) { invoice.CustomerID = "customer_other" },
+		},
+		{
+			name:       "wrong subscription",
+			wantStatus: http.StatusInternalServerError,
+			mutate:     func(invoice *stripeclient.InvoiceState) { invoice.SubscriptionID = "subscription_other" },
+		},
+		{
+			name:       "wrong currency",
+			wantStatus: http.StatusInternalServerError,
+			mutate:     func(invoice *stripeclient.InvoiceState) { invoice.Currency = "eur" },
+		},
+		{
+			name:       "unaligned period",
+			wantStatus: http.StatusInternalServerError,
+			mutate: func(invoice *stripeclient.InvoiceState) {
+				invoice.ServicePeriodStart = invoice.ServicePeriodStart.Add(time.Hour)
+				invoice.ServicePeriodEnd = invoice.ServicePeriodEnd.Add(time.Hour)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+			configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+			invoice := &stripeclient.InvoiceState{
+				ID:                 "invoice_" + strings.ReplaceAll(test.name, " ", "_"),
+				CustomerID:         "customer_placeholder",
+				SubscriptionID:     "subscription_placeholder",
+				Currency:           "usd",
+				BillingReason:      "subscription_cycle",
+				Status:             "draft",
+				ServicePeriodStart: periodStart,
+				ServicePeriodEnd:   periodEnd,
+			}
+			test.mutate(invoice)
+			configureInvoiceWebhook(t, service, "event_"+strings.ReplaceAll(test.name, " ", "_"), invoice)
+
+			require.Equal(t, test.wantStatus, serveStripeWebhook(service, test.name).Code)
+			require.Empty(t, stripeInvoices(t, db))
+			require.Zero(t, stripeWebhookReceiptCount(t, db))
+		})
+	}
+}
+
+func TestStripeInvoiceIDCannotRebindImmutableIdentity(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+	invoice := &stripeclient.InvoiceState{
+		ID:                 "invoice_immutable",
+		CustomerID:         "customer_placeholder",
+		SubscriptionID:     "subscription_placeholder",
+		Currency:           "usd",
+		BillingReason:      "subscription_cycle",
+		Status:             "draft",
+		ServicePeriodStart: periodStart,
+		ServicePeriodEnd:   periodEnd,
+	}
+	configureInvoiceWebhook(t, service, "event_immutable_first", invoice)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
+
+	rebound := *invoice
+	rebound.ServicePeriodStart = periodEnd
+	rebound.ServicePeriodEnd = periodEnd.AddDate(0, 1, 0)
+	configureInvoiceWebhook(t, service, "event_immutable_second", &rebound)
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "second").Code)
+
+	rows := stripeInvoices(t, db)
+	require.Len(t, rows, 1)
+	require.True(t, periodStart.Equal(rows[0].ServicePeriodStart.Time))
+	require.True(t, periodEnd.Equal(rows[0].ServicePeriodEnd.Time))
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+}
+
+func TestStripeInvoiceExactReplaySkipsCurrentStateRetrieval(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+	client := configureInvoiceWebhook(t, service, "event_invoice_exact_replay", &stripeclient.InvoiceState{
+		ID:                 "invoice_exact_replay",
+		CustomerID:         "customer_placeholder",
+		SubscriptionID:     "subscription_placeholder",
+		Currency:           "usd",
+		BillingReason:      "subscription_cycle",
+		Status:             "draft",
+		ServicePeriodStart: periodStart,
+		ServicePeriodEnd:   periodStart.AddDate(0, 1, 0),
+	})
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
+	require.EqualValues(t, 1, client.invoiceCalls.Load())
+
+	client.invoiceError = errors.New("Stripe retrieval unavailable")
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "replay").Code)
+	require.EqualValues(t, 1, client.invoiceCalls.Load())
+	require.Len(t, stripeInvoices(t, db), 1)
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 }
 

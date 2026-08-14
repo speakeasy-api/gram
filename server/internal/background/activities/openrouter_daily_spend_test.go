@@ -174,8 +174,9 @@ func TestCollectOpenRouterDailySpend_ContinuesAfterUpstreamFailure(t *testing.T)
 		}, nil).Once()
 
 	act := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client)
-	err := act.Do(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
-	require.ErrorContains(t, err, "management API unavailable")
+	result, err := act.DoWithResult(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
+	require.NoError(t, err)
+	require.Empty(t, result.ReadyOrganizationIDs)
 
 	queries := backgroundrepo.New(conn)
 	chatRows, err := queries.ListOpenRouterDailySpend(ctx, backgroundrepo.ListOpenRouterDailySpendParams{
@@ -230,8 +231,9 @@ func TestCollectOpenRouterDailySpend_RejectsUnrepresentableSpend(t *testing.T) {
 				}, nil).Once()
 
 			act := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client)
-			err := act.Do(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
-			require.ErrorContains(t, err, test.errText)
+			result, err := act.DoWithResult(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
+			require.NoError(t, err)
+			require.Empty(t, result.ReadyOrganizationIDs, test.errText)
 
 			rows, queryErr := backgroundrepo.New(conn).ListOpenRouterDailySpend(ctx, backgroundrepo.ListOpenRouterDailySpendParams{
 				OrganizationID: orgID,
@@ -269,30 +271,80 @@ func TestCollectOpenRouterDailySpend_ClampsToKeyCreationDay(t *testing.T) {
 	client.AssertExpectations(t)
 }
 
-func TestCollectOpenRouterDailySpend_ReportsGapOlderThanRecoveryWindow(t *testing.T) {
+func TestCollectOpenRouterDailySpend_RecoversStaleInvoiceDayBeyond96Hours(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	conn, orgID := setupOpenRouterDailySpendTest(t, "openrouter_daily_spend_gap")
-	createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyTypeChat, '1')
+	conn, orgID := setupOpenRouterDailySpendTest(t, "openrouter_daily_spend_stale_recovery")
+	keyHash := createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyTypeChat, '1')
 	queries := backgroundrepo.New(conn)
 
-	firstDay := utcDay(-6)
-	for _, day := range []time.Time{firstDay, firstDay.AddDate(0, 0, 2)} {
-		var spend pgtype.Numeric
-		require.NoError(t, spend.Scan("1"))
-		require.NoError(t, queries.UpsertOpenRouterDailySpend(ctx, backgroundrepo.UpsertOpenRouterDailySpendParams{
-			TargetOrganizationID: orgID,
-			TargetKeyType:        string(openrouter.KeyTypeChat),
-			TargetDay:            pgtype.Date{Time: day, Valid: true},
-			TargetSpendUsd:       spend,
-		}))
-	}
+	invoiceDay := utcDay(-7)
+	require.NoError(t, queries.SetOpenRouterAPIKeyCreatedAtFixture(ctx, backgroundrepo.SetOpenRouterAPIKeyCreatedAtFixtureParams{
+		CreatedAt:      pgtype.Timestamptz{Time: invoiceDay, InfinityModifier: pgtype.Finite, Valid: true},
+		OrganizationID: orgID,
+		KeyType:        "chat",
+	}))
+	require.NoError(t, queries.CreateStripeInvoiceFixture(ctx, backgroundrepo.CreateStripeInvoiceFixtureParams{
+		StripeInvoiceID:      "in_stale",
+		OrganizationID:       pgtype.Text{String: orgID, Valid: true},
+		StripeCustomerID:     "cus_stale",
+		StripeSubscriptionID: "sub_stale",
+		ServicePeriodStart:   pgtype.Timestamptz{Time: invoiceDay, InfinityModifier: pgtype.Finite, Valid: true},
+		ServicePeriodEnd:     pgtype.Timestamptz{Time: invoiceDay.AddDate(0, 0, 1), InfinityModifier: pgtype.Finite, Valid: true},
+		InvoiceState:         "open",
+		FinalizedAt:          pgtype.Timestamptz{Time: invoiceDay.AddDate(0, 0, 1), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	var stale pgtype.Numeric
+	require.NoError(t, stale.Scan("1"))
+	require.NoError(t, queries.UpsertOpenRouterDailySpend(ctx, backgroundrepo.UpsertOpenRouterDailySpendParams{
+		TargetOrganizationID: orgID,
+		TargetKeyType:        string(openrouter.KeyTypeChat),
+		TargetDay:            pgtype.Date{Time: invoiceDay, Valid: true},
+		TargetSpendUsd:       stale,
+	}))
 
 	client := &mockOpenRouterSpendClient{}
+	client.On("GetDailySpend", mock.Anything, keyHash, invoiceDay, utcDay(0)).
+		Return(openrouter.DailySpendResult{
+			Days:   []openrouter.DailySpendDay{{Day: invoiceDay, SpendUSD: "2.5"}},
+			Source: openrouter.DailySpendSourceAnalytics,
+		}, nil).Once()
 	act := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client)
-	err := act.Do(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: utcDay(-3), EndDay: utcDay(0)})
-	require.ErrorContains(t, err, "has 1 daily spend gaps before recovery window")
-	client.AssertNotCalled(t, "GetDailySpend", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	result, err := act.DoWithResult(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: utcDay(-4), EndDay: utcDay(0)})
+	require.NoError(t, err)
+	require.Equal(t, []string{orgID}, result.ReadyOrganizationIDs)
+	rows, err := queries.ListOpenRouterDailySpend(ctx, backgroundrepo.ListOpenRouterDailySpendParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "2.500000", numericString(t, rows[0].SpendUsd))
+	client.AssertExpectations(t)
+}
+
+func TestCollectOpenRouterDailySpend_ReturnsHealthyOrganizationWhenPeerFails(t *testing.T) {
+	t.Parallel()
+	conn, failedOrgID := setupOpenRouterDailySpendTest(t, "openrouter_daily_spend_org_isolation")
+	failedHash := createOpenRouterSpendTarget(t, conn, failedOrgID, openrouter.KeyTypeChat, '3')
+	healthyOrgID := "org-" + uuid.NewString()[:8]
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID: healthyOrgID, Name: "Healthy", Slug: healthyOrgID, WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	healthyHash := createOpenRouterSpendTarget(t, conn, healthyOrgID, openrouter.KeyTypeChat, '4')
+	startDay := utcDay(0)
+	endDay := utcDay(1)
+	client := &mockOpenRouterSpendClient{}
+	client.On("GetDailySpend", mock.Anything, failedHash, startDay, endDay).
+		Return(openrouter.DailySpendResult{}, errors.New("one org unavailable")).Once()
+	client.On("GetDailySpend", mock.Anything, healthyHash, startDay, endDay).
+		Return(openrouter.DailySpendResult{Source: openrouter.DailySpendSourceAnalytics}, nil).Once()
+
+	result, err := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client).
+		DoWithResult(t.Context(), activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
+	require.NoError(t, err)
+	require.Equal(t, []string{healthyOrgID}, result.ReadyOrganizationIDs)
+	client.AssertExpectations(t)
 }
 
 func TestCollectOpenRouterDailySpend_NewKeyHasNoHistoricalGap(t *testing.T) {

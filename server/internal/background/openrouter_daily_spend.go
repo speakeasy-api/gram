@@ -19,7 +19,9 @@ const (
 	openRouterDailySpendScheduleID          = "v1:collect-openrouter-daily-spend-schedule"
 	openRouterDailySpendScheduledWorkflowID = "v1:collect-openrouter-daily-spend/scheduled"
 
-	openRouterDailySpendLookbackDays        = 3
+	// Four completed days keeps the last invoice day in the +76h final
+	// observation collected immediately before settlement.
+	openRouterDailySpendLookbackDays        = 4
 	openRouterDailySpendActivityMaxAttempts = 3
 	openRouterDailySpendActivityTimeout     = 2 * time.Hour
 	// Schedule-to-close covers all three two-hour attempts, retry backoff, and
@@ -45,11 +47,23 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 	})
 
 	var a *Activities
+	var collected activities.CollectOpenRouterDailySpendResult
 	if err := workflow.ExecuteActivity(ctx, a.CollectOpenRouterDailySpend, activities.CollectOpenRouterDailySpendArgs{
 		StartDay: startDay,
 		EndDay:   endDay,
-	}).Get(ctx, nil); err != nil {
+	}).Get(ctx, &collected); err != nil {
 		return fmt.Errorf("collect openrouter daily spend: %w", err)
+	}
+
+	// Settlement consumes only the durable rows written by the successful
+	// collection above. A failed or exhausted collection never bills a stale
+	// snapshot.
+	if err := workflow.ExecuteActivity(ctx, a.SettleStripeInvoiceAllocations, activities.SettleStripeInvoiceAllocationsArgs{
+		Now:                                    workflow.Now(ctx).UTC(),
+		RestrictOpenRouterToReadyOrganizations: true,
+		OpenRouterReadyOrganizationIDs:         collected.ReadyOrganizationIDs,
+	}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("settle Stripe invoice allocations: %w", err)
 	}
 
 	return nil
