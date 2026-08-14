@@ -311,3 +311,278 @@ SELECT *
 FROM billing_cycle_usage
 WHERE organization_id = @organization_id::text
 ORDER BY cycle_start;
+
+-- name: GetTUMMeteringOrganization :one
+SELECT
+    billing_metadata.organization_id
+  , billing_metadata.stripe_customer_id
+  , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_billing_cycle_anchor
+  , organization_metadata.gram_account_type
+FROM billing_metadata
+JOIN organization_metadata
+  ON organization_metadata.id = billing_metadata.organization_id
+WHERE billing_metadata.organization_id = @organization_id;
+
+-- name: ListTUMBillingCyclesForReporting :many
+SELECT *
+FROM billing_cycle_usage
+WHERE organization_id = @organization_id
+  AND cycle_start >= @first_paid_cycle_start
+ORDER BY cycle_start;
+
+-- name: FreezeTUMBillingCycleBaseline :one
+UPDATE billing_cycle_usage
+SET billed_tum_tokens = tum_tokens,
+    billed_frozen_at = @frozen_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @billing_cycle_usage_id
+  AND billed_tum_tokens IS NULL
+  AND billed_frozen_at IS NULL
+RETURNING *;
+
+-- name: FreezeMissedTUMBillingCycleBaseline :one
+-- If reporting was unavailable for the entire +48h..+72h window, the closed
+-- invoice received no immutable baseline. Record zero as billed so the full
+-- finalized usage becomes one carry-forward allocation instead of disappearing.
+UPDATE billing_cycle_usage
+SET billed_tum_tokens = 0,
+    billed_frozen_at = @frozen_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @billing_cycle_usage_id
+  AND billed_tum_tokens IS NULL
+  AND billed_frozen_at IS NULL
+  AND finalized_at IS NOT NULL
+RETURNING *;
+
+-- name: CreateTUMMeterReportIntent :one
+WITH locked_cycle AS (
+  SELECT id, organization_id, cycle_start, cycle_end
+  FROM billing_cycle_usage
+  WHERE billing_cycle_usage.organization_id = @organization_id
+    AND billing_cycle_usage.id = @billing_cycle_usage_id
+  FOR UPDATE
+), report_totals AS (
+  SELECT
+      COALESCE(MAX(stripe_meter_reports.seq), 0)::int AS max_seq
+    , COALESCE(SUM(stripe_meter_reports.delta_tokens) FILTER (
+        WHERE stripe_meter_reports.delivery_state IN ('pending', 'ambiguous', 'confirmed')
+      ), 0)::bigint AS intended_tokens
+  FROM locked_cycle
+  LEFT JOIN stripe_meter_reports
+    ON stripe_meter_reports.organization_id = locked_cycle.organization_id
+   AND stripe_meter_reports.cycle_start = locked_cycle.cycle_start
+), intended AS (
+  SELECT
+      locked_cycle.*
+    , report_totals.max_seq + 1 AS next_seq
+    , sqlc.arg(target_tum_tokens)::bigint - report_totals.intended_tokens AS delta_tokens
+  FROM locked_cycle
+  CROSS JOIN report_totals
+)
+INSERT INTO stripe_meter_reports (
+    organization_id
+  , billing_cycle_usage_id
+  , cycle_start
+  , cycle_end
+  , seq
+  , stripe_customer_id
+  , stripe_meter_event_name
+  , stripe_identifier
+  , delta_tokens
+  , event_timestamp
+  , delivery_state
+)
+SELECT
+    intended.organization_id
+  , intended.id
+  , intended.cycle_start
+  , intended.cycle_end
+  , intended.next_seq
+  , @stripe_customer_id
+  , @stripe_meter_event_name
+  , 'tum:' || intended.organization_id || ':' || to_char(intended.cycle_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') || ':' || intended.next_seq::text
+  , intended.delta_tokens
+  , @event_timestamp
+  , 'pending'
+FROM intended
+WHERE intended.delta_tokens <> 0
+RETURNING *;
+
+-- name: ListTUMMeterReportsForDelivery :many
+SELECT *
+FROM stripe_meter_reports
+WHERE organization_id = @organization_id
+  AND delivery_state IN ('pending', 'ambiguous')
+  AND billing_cycle_usage_id IS NOT NULL
+  AND cycle_end IS NOT NULL
+  AND stripe_customer_id IS NOT NULL
+  AND stripe_meter_event_name IS NOT NULL
+  AND stripe_identifier IS NOT NULL
+  AND event_timestamp IS NOT NULL
+  AND (first_attempted_at IS NULL OR first_attempted_at > @retry_after)
+ORDER BY cycle_start, seq
+LIMIT 1;
+
+-- name: BeginTUMMeterReportAttempt :one
+UPDATE stripe_meter_reports
+SET first_attempted_at = COALESCE(first_attempted_at, @attempted_at),
+    last_attempted_at = @attempted_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND delivery_state IN ('pending', 'ambiguous')
+  AND (first_attempted_at IS NULL OR first_attempted_at > @retry_after)
+RETURNING *;
+
+-- name: ConfirmTUMMeterReport :execrows
+UPDATE stripe_meter_reports
+SET delivery_state = 'confirmed',
+    confirmed_at = @confirmed_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND delivery_state IN ('pending', 'ambiguous');
+
+-- name: MarkTUMMeterReportAmbiguous :execrows
+UPDATE stripe_meter_reports
+SET delivery_state = 'ambiguous',
+    ambiguous_at = COALESCE(ambiguous_at, @ambiguous_at),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND delivery_state IN ('pending', 'ambiguous');
+
+-- name: ListStaleTUMMeterReportCycles :many
+SELECT
+    stripe_meter_reports.billing_cycle_usage_id
+  , stripe_meter_reports.cycle_start
+  , stripe_meter_reports.cycle_end
+  , stripe_meter_reports.stripe_customer_id
+  , MIN(stripe_meter_reports.reconciled_at)::timestamptz AS absence_observed_at
+FROM stripe_meter_reports
+WHERE organization_id = @organization_id
+  AND delivery_state IN ('pending', 'ambiguous')
+  AND billing_cycle_usage_id IS NOT NULL
+  AND cycle_end IS NOT NULL
+  AND stripe_customer_id IS NOT NULL
+GROUP BY
+    stripe_meter_reports.billing_cycle_usage_id
+  , stripe_meter_reports.cycle_start
+  , stripe_meter_reports.cycle_end
+  , stripe_meter_reports.stripe_customer_id
+HAVING bool_and(
+  stripe_meter_reports.first_attempted_at IS NOT NULL
+  AND stripe_meter_reports.first_attempted_at <= @retry_after
+)
+ORDER BY cycle_start
+LIMIT 1;
+
+-- name: GetTUMMeterReportTotals :one
+SELECT
+    COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state = 'confirmed'), 0)::bigint AS confirmed_tokens
+  , COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state IN ('pending', 'ambiguous', 'confirmed')), 0)::bigint AS intended_tokens
+FROM stripe_meter_reports
+WHERE organization_id = @organization_id
+  AND billing_cycle_usage_id = @billing_cycle_usage_id;
+
+-- name: ConfirmReconciledTUMMeterReports :execrows
+UPDATE stripe_meter_reports
+SET delivery_state = 'confirmed',
+    confirmed_at = COALESCE(confirmed_at, @reconciled_at),
+    reconciled_at = @reconciled_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND billing_cycle_usage_id = @billing_cycle_usage_id
+  AND delivery_state IN ('pending', 'ambiguous')
+  AND first_attempted_at IS NOT NULL
+  AND first_attempted_at <= @retry_after;
+
+-- name: MarkReconciledTUMMeterReportsMissing :execrows
+UPDATE stripe_meter_reports
+SET delivery_state = 'reconciled_missing',
+    reconciled_at = @reconciled_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND billing_cycle_usage_id = @billing_cycle_usage_id
+  AND delivery_state IN ('pending', 'ambiguous')
+  AND first_attempted_at IS NOT NULL
+  AND first_attempted_at <= @retry_after;
+
+-- name: NoteTUMMeterReportReconciliation :execrows
+UPDATE stripe_meter_reports
+SET reconciled_at = @reconciled_at,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND billing_cycle_usage_id = @billing_cycle_usage_id
+  AND delivery_state IN ('pending', 'ambiguous')
+  AND first_attempted_at IS NOT NULL
+  AND first_attempted_at <= @retry_after;
+
+-- name: CreateTUMCarryAllocation :execrows
+INSERT INTO stripe_invoice_allocations (
+    organization_id
+  , source_kind
+  , source_key
+  , seq
+  , source_period_start
+  , source_period_end
+  , source_snapshot_usd
+  , delta_tokens
+  , original_tum_unit_price_usd
+  , amount_usd
+  , idempotency_key
+  , delivery_state
+)
+SELECT
+    billing_cycle_usage.organization_id
+  , 'tum_cycle'
+  , extract(epoch FROM billing_cycle_usage.cycle_start)::bigint::text || ':' || extract(epoch FROM billing_cycle_usage.cycle_end)::bigint::text
+  , 1
+  , billing_cycle_usage.cycle_start
+  , billing_cycle_usage.cycle_end
+  , round(billing_cycle_usage.tum_tokens::numeric * sqlc.arg(tum_unit_price_usd)::text::numeric, 6)
+  , billing_cycle_usage.tum_tokens - billing_cycle_usage.billed_tum_tokens
+  , sqlc.arg(tum_unit_price_usd)::text::numeric
+  , round(billing_cycle_usage.tum_tokens::numeric * sqlc.arg(tum_unit_price_usd)::text::numeric, 2)
+    - round(billing_cycle_usage.billed_tum_tokens::numeric * sqlc.arg(tum_unit_price_usd)::text::numeric, 2)
+  , 'tum-carry:' || billing_cycle_usage.organization_id || ':' || extract(epoch FROM billing_cycle_usage.cycle_start)::bigint::text
+  , 'pending'
+FROM billing_cycle_usage
+WHERE billing_cycle_usage.organization_id = @organization_id
+  AND billing_cycle_usage.id = @billing_cycle_usage_id
+  AND billing_cycle_usage.billed_tum_tokens IS NOT NULL
+  AND billing_cycle_usage.finalized_at IS NOT NULL
+  AND billing_cycle_usage.tum_tokens <> billing_cycle_usage.billed_tum_tokens
+ON CONFLICT (organization_id, source_kind, source_key, seq) DO NOTHING;
+
+-- name: ListTUMMeterReportsFixture :many
+SELECT *
+FROM stripe_meter_reports
+WHERE organization_id = @organization_id
+ORDER BY cycle_start, seq;
+
+-- name: CreateLegacyTUMMeterReportFixture :one
+INSERT INTO stripe_meter_reports (
+    organization_id
+  , cycle_start
+  , seq
+  , delta_tokens
+  , delivery_state
+) VALUES (
+    @organization_id
+  , @cycle_start
+  , @seq
+  , @delta_tokens
+  , 'confirmed'
+)
+RETURNING *;
+
+-- name: ListTUMCarryAllocationsFixture :many
+SELECT *
+FROM stripe_invoice_allocations
+WHERE organization_id = @organization_id
+  AND source_kind = 'tum_cycle'
+ORDER BY source_period_start, seq;

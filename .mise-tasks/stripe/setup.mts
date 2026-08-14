@@ -319,6 +319,7 @@ async function main() {
 
   const settings: Record<string, string> = {
     STRIPE_PRICE_ID_TUM: price.id,
+    STRIPE_METER_ID_TUM: meter.id,
     STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
   };
   if (prompted) {
