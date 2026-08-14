@@ -2211,7 +2211,8 @@ jobs:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # The scan itself takes ~3s; this only guards against a hung npx install.
-    timeout-minutes: 5
+    # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
+    timeout-minutes: 12
     env:
       # Pin the CLI so a new release cannot turn a green PR red without a commit.
       IMPECCABLE_VERSION: "3.4.0"
