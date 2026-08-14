@@ -126,9 +126,11 @@ if (!FIRST_ORG || !SECOND_ORG) throw new Error("ORGS needs two rows");
 
 // The columns render a date through toLocaleDateString, so the expected text
 // has to come out of the same formatter. Reading the field off the fixture is
-// what the assertion is for: the format is not.
+// what the assertion is for: the format is not. UTC, because that is the zone
+// the API states these dates in and the zone the table renders them in; see
+// `utils.test.ts`.
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 function lastListParams(): ListOrganizationsParams {
@@ -179,6 +181,21 @@ function rowFor(link: HTMLElement): HTMLTableRowElement {
   const row = link.closest("tr");
   if (!row) throw new Error("the name link is not inside a row");
   return row;
+}
+
+// Taken by the header above it, not by counting cells. A column added beside
+// this one otherwise leaves the assertion reading its neighbour and still
+// passing or failing for reasons that have nothing to do with what it names.
+function cellUnder(row: HTMLElement, header: string): HTMLElement {
+  const at = screen
+    .getAllByRole("columnheader")
+    .map((column) => column.textContent)
+    .indexOf(header);
+  if (at < 0) throw new Error(`no ${header} column on the page`);
+
+  const cell = within(row).getAllByRole("cell").at(at);
+  if (!cell) throw new Error(`the row has no cell under ${header}`);
+  return cell;
 }
 
 // Found by the accessible name a screen reader announces, so the test reaches
@@ -526,10 +543,11 @@ describe("organizations list", () => {
       // column's own constant would move this expectation along with it.
       `${workosID.substring(0, 12)}...`,
       shortDate(disabledAt),
-      // The state leads and the end date follows it. The stale pair on this
-      // record carries a different date, so a cell back on the old field
-      // fails here on the date alone.
-      `Running${shortDate(trialEndsAt)}`,
+      // The state leads and the end date follows it, and the date says what it
+      // is: the header reads `Trial` and no longer does. The stale pair on this
+      // record carries a different date, so a cell back on the old field fails
+      // here on the date alone.
+      `Running ends ${shortDate(trialEndsAt)}`,
       shortDate(FIRST_ORG.created_at),
     ]);
   });
@@ -542,10 +560,33 @@ describe("organizations list", () => {
     expect(SECOND_ORG.free_trial_ends_at).toBeTruthy();
 
     const link = await screen.findByRole("link", { name: SECOND_ORG.name });
-    const [, , , , , , , trialCell] = within(rowFor(link)).getAllByRole("cell");
+    const trialCell = cellUnder(rowFor(link), "Trial");
 
-    expect(trialCell?.textContent).toBe("-");
-    expect(trialCell?.querySelector('[data-slot="badge"]')).toBeNull();
+    // The dash is what an operator reads; the words behind it are what a
+    // screen reader is given in place of a hyphen it announces as nothing.
+    expect(trialCell.textContent).toBe("-No trial");
+    expect(trialCell.querySelector('[data-slot="badge"]')).toBeNull();
+  });
+
+  it("lets the operator hide the trial column like any other", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    expect(screen.getByRole("columnheader", { name: "Trial" })).toBeTruthy();
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    const item = screen.getByRole("menuitemcheckbox", { name: "Trial" });
+    // Nothing about this column justifies pinning it on screen. An operator
+    // working a list of a hundred organizations gets to put away the columns
+    // they are not reading, and the bar locks a column only to keep the table
+    // from emptying out.
+    expect(item.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(item);
+
+    // The open menu hides the rest of the page from the accessibility tree, so
+    // wait for a column that stays before reading the one that went.
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("columnheader", { name: "Trial" })).toBeNull();
   });
 
   it("opens the organization when the operator clicks the row body", async () => {

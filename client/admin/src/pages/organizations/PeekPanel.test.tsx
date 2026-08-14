@@ -46,8 +46,11 @@ function Peeking(): JSX.Element {
   );
 }
 
+// UTC, because the panel reads these dates in UTC. See `utils.test.ts`: an
+// API date is midnight UTC, and rendering it in the reader's own zone names the
+// day before west of Greenwich.
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 function iconOf(button: HTMLElement): SVGElement {
@@ -91,7 +94,7 @@ describe("PeekPanel", () => {
     ).toEqual([
       ORG.account_type,
       // The same state-then-date reading as the row, out of the same helper.
-      `Running${shortDate(trialEndsAt)}`,
+      `Running ends ${shortDate(trialEndsAt)}`,
       String(ORG.member_count),
       shortDate(ORG.created_at),
       ORG.id,
@@ -115,7 +118,9 @@ describe("PeekPanel", () => {
     );
 
     const values = screen.getAllByRole("definition");
-    expect(values.at(1)?.textContent).toBe("-");
+    // A dash for the eye, and "No trial" for a reader that would otherwise be
+    // told nothing at all. `Trial.test.tsx` holds the two halves apart.
+    expect(values.at(1)?.textContent).toBe("-No trial");
     expect(values.at(1)?.querySelector('[data-slot="badge"]')).toBeNull();
     expect(values.at(-1)?.textContent).toBe("-");
     expect(screen.queryByRole("button", { name: "Copy WorkOS id" })).toBeNull();

@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { Trial } from "@/components/Trial";
 import { badgeTone } from "@/lib/badgeTone";
-import type { AdminOrganization, TrialState } from "@/lib/gramAdminApi";
+import {
+  TRIAL_STATES,
+  type AdminOrganization,
+  type TrialState,
+} from "@/lib/gramAdminApi";
 
 const TRIAL_ENDS_AT = "2026-05-06T00:00:00Z";
 
@@ -23,12 +27,17 @@ const ORG: AdminOrganization = {
   updated_at: "2026-01-07T00:00:00Z",
 };
 
+// Walked at runtime, so a seventh state added to `TRIAL_STATES` fails a test
+// here whether or not the type annotation in `Trial.tsx` survived the edit
+// that added it.
+const DATED_STATES = TRIAL_STATES.filter((state) => state !== "none");
+
 function orgWith(trial: Partial<AdminOrganization>): AdminOrganization {
   return { ...ORG, ...trial };
 }
 
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 function renderTrial(org: AdminOrganization): void {
@@ -39,14 +48,34 @@ function renderTrial(org: AdminOrganization): void {
   );
 }
 
+function cell(): HTMLElement {
+  return screen.getByTestId("trial");
+}
+
 function trialText(): string {
-  return screen.getByTestId("trial").textContent ?? "";
+  return cell().textContent ?? "";
+}
+
+// What a sighted operator reads: the sr-only half is stripped, and the
+// aria-hidden half is not.
+function visibleText(): string {
+  return Array.from(cell().querySelectorAll(".sr-only")).reduce(
+    (text, hidden) => text.replace(hidden.textContent ?? "", ""),
+    trialText(),
+  );
+}
+
+// What a screen reader announces: the dash is aria-hidden, so it is not part
+// of the accessible name and the sr-only text is.
+function accessibleText(): string {
+  return Array.from(cell().querySelectorAll('[aria-hidden="true"]')).reduce(
+    (text, hidden) => text.replace(hidden.textContent ?? "", ""),
+    trialText(),
+  );
 }
 
 function queryBadge(): HTMLElement | null {
-  return screen
-    .getByTestId("trial")
-    .querySelector<HTMLElement>('[data-slot="badge"]');
+  return cell().querySelector<HTMLElement>('[data-slot="badge"]');
 }
 
 function badge(): HTMLElement {
@@ -63,15 +92,19 @@ describe("Trial", () => {
 
     // The stale field carries a date on this record. A dash is the only
     // reading that proves the cell is not on the old field.
-    expect(trialText()).toBe("-");
+    expect(visibleText()).toBe("-");
     expect(queryBadge()).toBeNull();
+    // A lone hyphen is announced as nothing, and this cell's whole value is
+    // that hyphen.
+    expect(accessibleText()).toBe("No trial");
   });
 
   it("reads a dash when the API sends no trial state at all", () => {
     renderTrial(ORG);
 
-    expect(trialText()).toBe("-");
+    expect(visibleText()).toBe("-");
     expect(queryBadge()).toBeNull();
+    expect(accessibleText()).toBe("No trial");
   });
 
   it("falls back to the dash for a state this build does not know", () => {
@@ -84,8 +117,22 @@ describe("Trial", () => {
     );
 
     // Not the raw enum name, and not a crash.
-    expect(trialText()).toBe("-");
+    expect(visibleText()).toBe("-");
     expect(queryBadge()).toBeNull();
+  });
+
+  it("does not pass an unrecognised state off as no trial", () => {
+    renderTrial(orgWith({ trial_state: "paused" as TrialState }));
+    const unrecognised = accessibleText();
+    cleanup();
+
+    renderTrial(orgWith({ trial_state: "none" }));
+
+    // Both read as a dash, which is right. Calling a state the server derived
+    // "no trial" is the laundering this column exists to stop, and a reader
+    // who cannot tell the two apart has no way to report the first.
+    expect(unrecognised).not.toBe(accessibleText());
+    expect(unrecognised).toBe("Trial state not recognised");
   });
 
   it("puts the end date beside a running trial and tones it as normal", () => {
@@ -93,7 +140,7 @@ describe("Trial", () => {
       orgWith({ trial_state: "running", trial_ends_at: TRIAL_ENDS_AT }),
     );
 
-    expect(trialText()).toBe(`Running${shortDate(TRIAL_ENDS_AT)}`);
+    expect(trialText()).toBe(`Running ends ${shortDate(TRIAL_ENDS_AT)}`);
     // Neutral, not warning: the server has a separate state for a trial about
     // to end, and toning every running trial as urgent wastes it.
     expect(badge().className).toContain(badgeTone.neutral);
@@ -104,8 +151,20 @@ describe("Trial", () => {
       orgWith({ trial_state: "ending_soon", trial_ends_at: TRIAL_ENDS_AT }),
     );
 
-    expect(trialText()).toBe(`Ending soon${shortDate(TRIAL_ENDS_AT)}`);
+    expect(trialText()).toBe(`Ending soon ends ${shortDate(TRIAL_ENDS_AT)}`);
     expect(badge().className).toContain(badgeTone.warning);
+  });
+
+  it("says the date is an end date, and separates it from the state", () => {
+    renderTrial(
+      orgWith({ trial_state: "running", trial_ends_at: TRIAL_ENDS_AT }),
+    );
+
+    // The header reads `Trial` and no longer says what the date is, so the
+    // cell has to. The space is in the text, not only in the flex gap: a
+    // copied cell otherwise reads `Running5/6/2026`.
+    expect(trialText()).toContain(` ends ${shortDate(TRIAL_ENDS_AT)}`);
+    expect(trialText()).not.toContain(`Running${shortDate(TRIAL_ENDS_AT)}`);
   });
 
   it("renders a running trial differently from one that is ending soon", () => {
@@ -154,40 +213,42 @@ describe("Trial", () => {
     expect(badge().className).toContain(badgeTone.success);
   });
 
-  it("carries every state on a badge rather than as bare text", () => {
-    const states: TrialState[] = [
-      "running",
-      "ending_soon",
-      "expired",
-      "demoted",
-      "converted",
-    ];
+  it.each(DATED_STATES)(
+    "shows no date for %s where the record carries none",
+    (state) => {
+      renderTrial(orgWith({ trial_state: state, trial_ends_at: undefined }));
 
-    for (const state of states) {
+      // `free_trial_ends_at` still dates this record. Falling back to it,
+      // which is the shape a "be defensive about a missing date" edit takes,
+      // is this ticket's own bug coming back. A trailing bare `ends`, or a
+      // `Running-`, is the other way this goes wrong.
+      expect(trialText()).not.toContain(shortDate("2026-11-12T00:00:00Z"));
+      expect(trialText()).not.toContain("ends");
+      expect(trialText()).not.toContain("-");
+      expect(trialText()).toBe(badge().textContent);
+    },
+  );
+
+  it.each(DATED_STATES)(
+    "carries %s on a badge rather than as bare text",
+    (state) => {
       renderTrial(
         orgWith({ trial_state: state, trial_ends_at: TRIAL_ENDS_AT }),
       );
-      // The badge's own element, so text dropped out of a badge fails here
-      // even where the words are unchanged. The variant, not the classes it
-      // expands to: the tone rides in `className` and would satisfy a class
-      // assertion on its own.
+
+      // The badge's own element, so text dropped out of a badge fails here even
+      // where the words are unchanged. The variant, not the classes it expands
+      // to: the tone rides in `className` and would satisfy a class assertion on
+      // its own.
       expect(badge().textContent).not.toBe("");
       expect(badge().getAttribute("data-variant")).toBe("outline");
-      cleanup();
-    }
-  });
+    },
+  );
 
   it("gives each state its own words, so shared tones stay apart", () => {
     const labels = new Set<string>();
-    const states: TrialState[] = [
-      "running",
-      "ending_soon",
-      "expired",
-      "demoted",
-      "converted",
-    ];
 
-    for (const state of states) {
+    for (const state of DATED_STATES) {
       renderTrial(orgWith({ trial_state: state }));
       labels.add(badge().textContent ?? "");
       cleanup();
@@ -195,6 +256,6 @@ describe("Trial", () => {
 
     // `expired` and `demoted` share a tone. Their words are the only thing
     // left to tell them apart.
-    expect(labels.size).toBe(states.length);
+    expect(labels.size).toBe(DATED_STATES.length);
   });
 });

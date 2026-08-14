@@ -179,16 +179,24 @@ export async function logout(): Promise<void> {
 }
 
 // Derived server-side from the `trials` table, so it is the only trustworthy
-// account of whether an organization ever trialled. Written out as a union
-// rather than as `string`: a typo in a state name has to be a build failure,
-// because every surface that reads it maps the state to a colour.
-export type TrialState =
-  | "none"
-  | "running"
-  | "ending_soon"
-  | "expired"
-  | "demoted"
-  | "converted";
+// account of whether an organization ever trialled.
+//
+// A runtime list with the union derived from it, rather than a bare union: a
+// test can then walk every state the server can send, so a seventh state added
+// here fails a test as well as the build. A type annotation alone is one
+// careless edit from being deleted, and nothing would notice.
+export const TRIAL_STATES = [
+  "none",
+  "running",
+  "ending_soon",
+  "expired",
+  "demoted",
+  "converted",
+] as const;
+
+// Not `string`: a typo in a state name has to be a build failure, because
+// every surface that reads it maps the state to a colour.
+export type TrialState = (typeof TRIAL_STATES)[number];
 
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.

@@ -73,9 +73,11 @@ function longDate(iso: string): string {
 }
 
 // The trial is a date without a clock wherever it is read, so it does not come
-// out of `longDate` with the timestamps around it.
+// out of `longDate` with the timestamps around it. UTC, because that is the
+// zone the API states these dates in and the zone they are rendered in; see
+// `utils.test.ts`.
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 // The field rows carry no role, so a test reaches one by its label and takes
@@ -137,7 +139,7 @@ describe("organization detail", () => {
     // against the list's cell, which is the only way two pages that could
     // drift apart are held together.
     expect(valueBeside("Trial").textContent).toBe(
-      `Running${shortDate(trialEndsAt)}`,
+      `Running ends ${shortDate(trialEndsAt)}`,
     );
     expect(
       trial.parentElement?.querySelector('[data-slot="badge"]'),
@@ -163,7 +165,7 @@ describe("organization detail", () => {
     // `free_trial_ends_at` still dates this record, which is the whole reason
     // the page was moved off it.
     expect(ORG.free_trial_ends_at).toBeTruthy();
-    expect(valueBeside("Trial").textContent).toBe("-");
+    expect(valueBeside("Trial").textContent).toBe("-No trial");
   });
 
   it("renders every projects cell out of the record that produced it", async () => {
