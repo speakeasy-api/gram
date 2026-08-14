@@ -8,15 +8,19 @@ import { useCallback } from "react";
 
 import {
   cancelOrganizationFetches,
+  invalidateOrganizations,
   invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
+  bulkUpdateAccountType,
   disableOrganization,
   enableOrganization,
   extendTrial,
   type AdminOrganization,
+  type BulkUpdateAccountTypeRequest,
+  type BulkUpdateAccountTypeResult,
   type ExtendTrialRequest,
   type TrialState,
 } from "@/lib/gramAdminApi";
@@ -102,6 +106,22 @@ export function useEnableOrganization(): OrganizationWrite<string> {
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
     onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+// The one write that does not answer with a record, so it invalidates rather
+// than repainting from the response: the answer is two lists of ids.
+export function useBulkUpdateAccountType(): UseMutationResult<
+  BulkUpdateAccountTypeResult,
+  Error,
+  BulkUpdateAccountTypeRequest
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BulkUpdateAccountTypeRequest) =>
+      bulkUpdateAccountType(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: () => invalidateOrganizations(qc),
   });
 }
 

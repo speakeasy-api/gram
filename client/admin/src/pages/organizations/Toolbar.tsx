@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 
 import type {
   DataTableFeatures,
@@ -180,12 +180,22 @@ export function Toolbar({ searchCleared }: ToolbarProps): JSX.Element {
 export function TableActionBar<T extends RowData>({
   table,
   onColumnToggled,
+  bulkActions,
 }: {
   table: DataTableInstance<T>;
   // Told after a toggle lands, so a page that overrides what this menu writes
   // can answer a request the menu cannot satisfy on its own.
   onColumnToggled?: (columnId: string, label: string) => void;
+  // Shown in place of "Nothing selected", so the strip keeps its height and no
+  // row moves under the pointer. A table with no select column never has a
+  // selection, so it never shows these.
+  bulkActions?: ReactNode;
 }): JSX.Element {
+  // The row model, not the selection state: the state is a map of row ids and
+  // it can name a row this page no longer holds, which would count a record
+  // that is not on screen and not in what the bulk action sends.
+  const selectedCount = table.getSelectedRowModel().rows.length;
+
   // Read off the table rather than walked a second time here, so the menu
   // cannot disagree with the table about how many columns are left.
   //
@@ -199,7 +209,23 @@ export function TableActionBar<T extends RowData>({
 
   return (
     <div className="flex items-center gap-3 border-b px-3 py-2">
-      <span className="text-muted-foreground text-xs">Nothing selected</span>
+      {selectedCount === 0 ? (
+        <span className="text-muted-foreground text-xs">Nothing selected</span>
+      ) : (
+        <>
+          {/* The bar is generic over the record, so the count is bare here and
+              the confirmation names what is being counted. */}
+          <span className="text-xs">{selectedCount} selected</span>
+          {bulkActions}
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => table.resetRowSelection()}
+          >
+            Clear selection
+          </Button>
+        </>
+      )}
       <span className="flex-1" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -246,10 +272,12 @@ export function TableActionBar<T extends RowData>({
 }
 
 // A header is a renderable in general, and only a string carries a label a
-// screen reader can announce here. The id is the readable fallback.
+// screen reader can announce here. A column drawing a control instead names
+// itself through its meta, and the id is the readable fallback.
 function columnLabel<T extends RowData>(
   column: Column<DataTableFeatures, T>,
 ): string {
-  const { header } = column.columnDef;
+  const { header, meta } = column.columnDef;
+  if (meta?.label) return meta.label;
   return typeof header === "string" ? header : column.id;
 }

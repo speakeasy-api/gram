@@ -201,6 +201,16 @@ export function invalidateOrganizationStats(qc: QueryClient): void {
   void qc.invalidateQueries({ queryKey: organizationsStatsQuery.queryKey });
 }
 
+// For a write that answers with ids rather than records, so there is nothing to
+// put in the cache. Both keys and the whole of each: the operator can act on
+// rows from any page under any filter.
+export function invalidateOrganizations(qc: QueryClient): Promise<void> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: organizationsListQuery().queryKey }),
+    qc.invalidateQueries({ queryKey: [ORGANIZATION_KEY] }),
+  ]).then(() => undefined);
+}
+
 export function projectQuery(
   idOrSlug: string,
 ): AdminQuery<AdminProjectDetail, readonly ["gram-admin-project", string]> {
