@@ -18,6 +18,9 @@ func TestParseSiteOrigin(t *testing.T) {
 		{name: "trailing path is dropped", input: "http://localhost:3000/dashboard", want: "http://localhost:3000"},
 		{name: "port is part of the origin", input: "https://localhost:5173", want: "https://localhost:5173"},
 		{name: "case normalized", input: "HTTPS://App.Example.COM", want: "https://app.example.com"},
+		{name: "default https port is dropped", input: "https://app.example.com:443", want: "https://app.example.com"},
+		{name: "default http port is dropped", input: "http://app.example.com:80", want: "http://app.example.com"},
+		{name: "non-default port is kept", input: "https://app.example.com:8443", want: "https://app.example.com:8443"},
 		{name: "empty", input: "", want: ""},
 		{name: "relative", input: "/dashboard", want: ""},
 		{name: "scheme without host", input: "https://", want: ""},
@@ -52,6 +55,12 @@ func TestSafeRedirectPath(t *testing.T) {
 		{name: "same-origin absolute URL with query", input: "https://app.example.com/p?tab=settings", want: "/p?tab=settings"},
 		{name: "same-origin absolute URL without a path", input: "https://app.example.com", want: "/"},
 		{name: "same-origin absolute URL, mixed case host", input: "https://APP.example.com/dashboard", want: "/dashboard"},
+		{name: "same-origin absolute URL spelling the default port", input: "https://app.example.com:443/dashboard", want: "/dashboard"},
+
+		// An encoded slash is not a path separator to a browser, and the escaped
+		// form is what goes back out in the Location header, so "/%2F%2Fevil.com"
+		// stays a same-origin path rather than becoming "///evil.com".
+		{name: "encoded slashes stay a path", input: "/%2F%2Fattacker.example.net", want: "/%2F%2Fattacker.example.net"},
 
 		// AIS-428: a backslash after the leading slash is read by browsers as a
 		// second slash, turning the value into a protocol-relative reference.

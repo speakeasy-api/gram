@@ -15,7 +15,26 @@ func parseSiteOrigin(rawSiteURL string) string {
 		return ""
 	}
 
-	return strings.ToLower(parsed.Scheme + "://" + parsed.Host)
+	return canonicalOrigin(parsed.Scheme, parsed.Host)
+}
+
+// canonicalOrigin renders a "scheme://host" with the scheme's default port
+// dropped, so "https://app.example.com:443" and "https://app.example.com"
+// compare equal. Browsers never spell out a default port, but a configured
+// site URL may well, and a mismatch there is silent: every absolute redirect
+// would fall back to the sign-in landing page instead of the destination.
+func canonicalOrigin(scheme, host string) string {
+	scheme = strings.ToLower(scheme)
+	host = strings.ToLower(host)
+
+	switch scheme {
+	case "https":
+		host = strings.TrimSuffix(host, ":443")
+	case "http":
+		host = strings.TrimSuffix(host, ":80")
+	}
+
+	return scheme + "://" + host
 }
 
 // safeRedirectPath normalizes a caller-supplied post-login destination into a
@@ -58,7 +77,7 @@ func safeRedirectPath(raw string, allowedOrigin string) string {
 	// with an empty scheme. Compare on Host alone so that userinfo tricks such as
 	// "https://app.example.com@evil.com/" are judged by "evil.com".
 	if parsed.Scheme != "" || parsed.Host != "" {
-		origin := strings.ToLower(parsed.Scheme + "://" + parsed.Host)
+		origin := canonicalOrigin(parsed.Scheme, parsed.Host)
 		if allowedOrigin == "" || origin != allowedOrigin {
 			return ""
 		}
