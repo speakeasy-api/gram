@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -316,6 +318,18 @@ const (
 	listOrganizationsMaxLimit     = 100
 )
 
+// The columns the ORDER BY ladder in AdminListOrganizations knows. The opaque
+// ids are absent on purpose: an order built from them tells an operator nothing.
+var listOrganizationsSortColumns = map[string]bool{
+	"name":          true,
+	"slug":          true,
+	"account_type":  true,
+	"member_count":  true,
+	"created_at":    true,
+	"disabled_at":   true,
+	"trial_ends_at": true,
+}
+
 func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
 	queries := repo.New(s.db)
 
@@ -331,20 +345,56 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		limit = int32(l)
 	}
 
-	// Over-fetch one row to learn whether a next page exists.
+	// Sort or page selects offset paging. Without either, the request keeps the
+	// cursor walk the shipped dashboard still depends on.
+	offsetMode := payload.Sort != nil || payload.Page != nil
+
+	// An unknown sort key falls back to the default order instead of failing: the
+	// value comes from a URL operators paste to each other, and a typo should not
+	// break the page.
+	sortBy := ""
+	if payload.Sort != nil {
+		if key := strings.ToLower(*payload.Sort); listOrganizationsSortColumns[key] {
+			sortBy = key
+		}
+	}
+	sortDir := "asc"
+	if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
+		sortDir = "desc"
+	}
+
+	var afterID pgtype.Text
+	var pageOffset int64
+	fetchLimit := limit
+	if offsetMode {
+		pageOffset = listOrganizationsOffset(payload.Page, limit)
+	} else {
+		afterID = conv.PtrToPGText(payload.Cursor)
+		// Over-fetch one row to learn whether a next page exists.
+		fetchLimit = limit + 1
+	}
+
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
 		Q:               conv.PtrToPGText(payload.Q),
 		AccountType:     conv.PtrToPGText(payload.AccountType),
 		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
-		AfterID:         conv.PtrToPGText(payload.Cursor),
-		PageLimit:       limit + 1,
+		AfterID:         afterID,
+		SortBy:          sortBy,
+		SortDir:         sortDir,
+		PageOffset:      pageOffset,
+		PageLimit:       fetchLimit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").LogError(ctx, s.logger)
 	}
 
+	var total int64
+	if len(rows) > 0 {
+		total = rows[0].TotalCount
+	}
+
 	var nextCursor *string
-	if len(rows) > int(limit) {
+	if !offsetMode && len(rows) > int(limit) {
 		rows = rows[:limit]
 		id := rows[limit-1].ID
 		nextCursor = &id
@@ -358,7 +408,25 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	return &gen.AdminListOrganizationsResult{
 		Organizations: orgs,
 		NextCursor:    nextCursor,
+		Total:         total,
 	}, nil
+}
+
+// listOrganizationsOffset turns a 1-based page number into a row offset, with
+// pages below 1 clamping to the first page.
+func listOrganizationsOffset(page *int, limit int32) int64 {
+	n := int64(1)
+	if page != nil && *page > 1 {
+		n = int64(*page)
+	}
+
+	// Cap the page so that a hand-typed page number cannot overflow the multiply
+	// into a negative offset, which Postgres rejects.
+	if maxPage := math.MaxInt64/int64(limit) + 1; n > maxPage {
+		n = maxPage
+	}
+
+	return (n - 1) * int64(limit)
 }
 
 func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {

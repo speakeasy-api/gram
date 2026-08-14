@@ -1675,6 +1675,9 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			includeDisabled   *bool
 			cursor            *string
 			limit             *int
+			sort              *string
+			direction         *string
+			page              *int
 			adminSessionToken *string
 			err               error
 		)
@@ -1712,6 +1715,25 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				limit = &pv
 			}
 		}
+		sortRaw := qp.Get("sort")
+		if sortRaw != "" {
+			sort = &sortRaw
+		}
+		directionRaw := qp.Get("direction")
+		if directionRaw != "" {
+			direction = &directionRaw
+		}
+		{
+			pageRaw := qp.Get("page")
+			if pageRaw != "" {
+				v, err2 := strconv.ParseInt(pageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page", pageRaw, "integer"))
+				}
+				pv := int(v)
+				page = &pv
+			}
+		}
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw
@@ -1719,7 +1741,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListOrganizationsPayload(q, accountType, includeDisabled, cursor, limit, adminSessionToken)
+		payload = NewListOrganizationsPayload(q, accountType, includeDisabled, cursor, limit, sort, direction, page, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

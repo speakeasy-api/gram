@@ -129,10 +129,11 @@ var AdminListOrganizationProjectsResult = Type("AdminListOrganizationProjectsRes
 })
 
 var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
-	Required("organizations")
+	Required("organizations", "total")
 
 	Attribute("organizations", ArrayOf(AdminOrganization), "The page of organizations.")
-	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
+	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted. Omitted in offset mode.")
+	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
 var _ = Service("admin", func() {
@@ -340,8 +341,11 @@ var _ = Service("admin", func() {
 			Attribute("q", String, "Search term applied to name and slug (case-insensitive substring).")
 			Attribute("account_type", String, "Filter by gram_account_type (e.g. free, pro, enterprise).")
 			Attribute("include_disabled", Boolean, "Include organizations with disabled_at set. Defaults to false.")
-			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.")
+			Attribute("direction", String, "Sort direction, asc or desc. Any other value sorts ascending.")
+			Attribute("page", Int, "1-based page number for offset paging (default 1). Supplying it selects offset paging.")
 		})
 
 		Result(AdminListOrganizationsResult)
@@ -354,6 +358,9 @@ var _ = Service("admin", func() {
 			Param("include_disabled")
 			Param("cursor")
 			Param("limit")
+			Param("sort")
+			Param("direction")
+			Param("page")
 			Response(StatusOK)
 		})
 

@@ -158,7 +158,8 @@ WHERE id = @organization_id;
 -- Test-only fixture that lets seeders populate every column on
 -- organization_metadata. Prefer this over CreateOrganizationMetadata when a
 -- test needs to exercise filters that depend on account type, workos linkage,
--- disabled state, whitelist flag, or trial window.
+-- disabled state, whitelist flag, trial window, or age. Omit created_at to keep
+-- the column default.
 INSERT INTO organization_metadata (
     id,
     name,
@@ -168,7 +169,8 @@ INSERT INTO organization_metadata (
     whitelisted,
     free_trial_started_at,
     free_trial_ends_at,
-    disabled_at
+    disabled_at,
+    created_at
 ) VALUES (
     @id,
     @name,
@@ -178,7 +180,8 @@ INSERT INTO organization_metadata (
     @whitelisted,
     @free_trial_started_at,
     @free_trial_ends_at,
-    sqlc.narg('disabled_at')::timestamptz
+    sqlc.narg('disabled_at')::timestamptz,
+    COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
 );
 
 -- name: CreateOrganizationUserRelationshipFixture :exec

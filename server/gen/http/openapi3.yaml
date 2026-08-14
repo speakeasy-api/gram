@@ -617,11 +617,11 @@ paths:
                     description: Include organizations with disabled_at set. Defaults to false.
                     type: boolean
                 - allowEmptyValue: true
-                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
                   in: query
                   name: cursor
                   schema:
-                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
                     type: string
                 - allowEmptyValue: true
                   description: Page size (default 50, max 100).
@@ -629,6 +629,28 @@ paths:
                   name: limit
                   schema:
                     description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+                  in: query
+                  name: sort
+                  schema:
+                    description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+                    type: string
+                - allowEmptyValue: true
+                  description: Sort direction, asc or desc. Any other value sorts ascending.
+                  in: query
+                  name: direction
+                  schema:
+                    description: Sort direction, asc or desc. Any other value sorts ascending.
+                    type: string
+                - allowEmptyValue: true
+                  description: 1-based page number for offset paging (default 1). Supplying it selects offset paging.
+                  in: query
+                  name: page
+                  schema:
+                    description: 1-based page number for offset paging (default 1). Supplying it selects offset paging.
                     format: int64
                     type: integer
             responses:
@@ -55445,14 +55467,19 @@ components:
             properties:
                 next_cursor:
                     type: string
-                    description: Cursor for the next page; empty when exhausted.
+                    description: Cursor for the next page; empty when exhausted. Omitted in offset mode.
                 organizations:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminOrganization'
                     description: The page of organizations.
+                total:
+                    type: integer
+                    description: Number of organizations matching the filters, before paging.
+                    format: int64
             required:
                 - organizations
+                - total
         AdminOpenRouterKey:
             type: object
             properties:

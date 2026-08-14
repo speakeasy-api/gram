@@ -1962,6 +1962,15 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Sort != nil {
+			values.Add("sort", *p.Sort)
+		}
+		if p.Direction != nil {
+			values.Add("direction", *p.Direction)
+		}
+		if p.Page != nil {
+			values.Add("page", fmt.Sprintf("%v", *p.Page))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

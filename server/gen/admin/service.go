@@ -79,8 +79,10 @@ type AdminListOrganizationProjectsResult struct {
 type AdminListOrganizationsResult struct {
 	// The page of organizations.
 	Organizations []*AdminOrganization
-	// Cursor for the next page; empty when exhausted.
+	// Cursor for the next page; empty when exhausted. Omitted in offset mode.
 	NextCursor *string
+	// Number of organizations matching the filters, before paging.
+	Total int64
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -240,10 +242,20 @@ type ListOrganizationsPayload struct {
 	AccountType *string
 	// Include organizations with disabled_at set. Defaults to false.
 	IncludeDisabled *bool
-	// Pagination cursor: id of the last item from the previous page.
+	// Pagination cursor: id of the last item from the previous page. Ignored when
+	// sort or page is supplied.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
+	// Column to sort by: name, slug, account_type, member_count, created_at,
+	// disabled_at or trial_ends_at. Any other value sorts by id. Supplying it
+	// selects offset paging.
+	Sort *string
+	// Sort direction, asc or desc. Any other value sorts ascending.
+	Direction *string
+	// 1-based page number for offset paging (default 1). Supplying it selects
+	// offset paging.
+	Page *int
 }
 
 // LoginPayload is the payload type of the admin service login method.

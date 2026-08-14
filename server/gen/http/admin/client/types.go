@@ -141,8 +141,10 @@ type ListOrganizationProjectsResponseBody struct {
 type ListOrganizationsResponseBody struct {
 	// The page of organizations.
 	Organizations []*AdminOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
-	// Cursor for the next page; empty when exhausted.
+	// Cursor for the next page; empty when exhausted. Omitted in offset mode.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Number of organizations matching the filters, before paging.
+	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -3181,6 +3183,7 @@ func NewListOrganizationProjectsGatewayError(body *ListOrganizationProjectsGatew
 func NewListOrganizationsAdminListOrganizationsResultOK(body *ListOrganizationsResponseBody) *admin.AdminListOrganizationsResult {
 	v := &admin.AdminListOrganizationsResult{
 		NextCursor: body.NextCursor,
+		Total:      *body.Total,
 	}
 	v.Organizations = make([]*admin.AdminOrganization, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -3535,6 +3538,9 @@ func ValidateListOrganizationProjectsResponseBody(body *ListOrganizationProjects
 func ValidateListOrganizationsResponseBody(body *ListOrganizationsResponseBody) (err error) {
 	if body.Organizations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
 	}
 	for _, e := range body.Organizations {
 		if e != nil {

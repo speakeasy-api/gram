@@ -202,7 +202,7 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -245,6 +245,30 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
+	var sort *string
+	{
+		if adminListOrganizationsSort != "" {
+			sort = &adminListOrganizationsSort
+		}
+	}
+	var direction *string
+	{
+		if adminListOrganizationsDirection != "" {
+			direction = &adminListOrganizationsDirection
+		}
+	}
+	var page *int
+	{
+		if adminListOrganizationsPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListOrganizationsPage, 10, strconv.IntSize)
+			val := int(v)
+			page = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+		}
+	}
 	var adminSessionToken *string
 	{
 		if adminListOrganizationsAdminSessionToken != "" {
@@ -257,6 +281,9 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Sort = sort
+	v.Direction = direction
+	v.Page = page
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

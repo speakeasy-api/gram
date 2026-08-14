@@ -51,51 +51,78 @@ WHERE p.slug = @slug
   AND p.deleted IS FALSE;
 
 -- name: AdminListOrganizations :many
-SELECT
-    om.id,
-    om.name,
-    om.slug,
-    om.gram_account_type AS account_type,
-    om.workos_id,
-    om.whitelisted,
-    om.disabled_at,
-    om.free_trial_started_at,
-    om.free_trial_ends_at,
-    -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
-    CASE
-        WHEN t.organization_id IS NULL THEN 'none'
-        WHEN t.converted_at IS NOT NULL THEN 'converted'
-        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
-        WHEN t.ends_at <= now() THEN 'expired'
-        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
-        ELSE 'running'
-    END::text AS trial_state,
-    t.ends_at AS trial_ends_at,
-    om.created_at,
-    om.updated_at,
-    (
-        SELECT count(*)
-        FROM organization_user_relationships our
-        WHERE our.organization_id = om.id
-          AND our.deleted IS FALSE
-    )::bigint AS member_count
-FROM organization_metadata om
-LEFT JOIN trials t ON t.organization_id = om.id
-WHERE
-    -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
-    -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
-    (
-        sqlc.narg('q')::text IS NULL
-        OR om.name ILIKE '%' || sqlc.narg('q')::text || '%'
-        OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%'
-        OR om.id = sqlc.narg('q')::text
-        OR om.workos_id = sqlc.narg('q')::text
-    )
-    AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
-    AND (sqlc.arg('include_disabled')::boolean OR om.disabled_at IS NULL)
-    AND (sqlc.narg('after_id')::text IS NULL OR om.id > sqlc.narg('after_id')::text)
-ORDER BY om.id ASC
-LIMIT sqlc.arg('page_limit')::int;
+-- Two paging modes share this query. A caller that supplies no sort key gets the
+-- cursor walk it always had: the sort ladder collapses to all-NULL and the
+-- tiebreaker alone orders the rows. A caller that supplies one gets offset paging.
+WITH filtered AS (
+    SELECT
+        om.id,
+        om.name,
+        om.slug,
+        om.gram_account_type AS account_type,
+        om.workos_id,
+        om.whitelisted,
+        om.disabled_at,
+        om.free_trial_started_at,
+        om.free_trial_ends_at,
+        -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state,
+        t.ends_at AS trial_ends_at,
+        om.created_at,
+        om.updated_at,
+        (
+            SELECT count(*)
+            FROM organization_user_relationships our
+            WHERE our.organization_id = om.id
+              AND our.deleted IS FALSE
+        )::bigint AS member_count,
+        count(*) OVER ()::bigint AS total_count
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    WHERE
+        -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
+        -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
+        (
+            sqlc.narg('q')::text IS NULL
+            OR om.name ILIKE '%' || sqlc.narg('q')::text || '%'
+            OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%'
+            OR om.id = sqlc.narg('q')::text
+            OR om.workos_id = sqlc.narg('q')::text
+        )
+        AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
+        AND (sqlc.arg('include_disabled')::boolean OR om.disabled_at IS NULL)
+        AND (sqlc.narg('after_id')::text IS NULL OR om.id > sqlc.narg('after_id')::text)
+)
+SELECT * FROM filtered
+-- The sort key stays a bound parameter, never an interpolated column name, so no
+-- caller input reaches the parser. NULLS LAST on every arm keeps empty dates at
+-- the bottom whichever way the direction points.
+ORDER BY
+    CASE WHEN sqlc.arg('sort_by')::text = 'name' AND sqlc.arg('sort_dir')::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'name' AND sqlc.arg('sort_dir')::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'disabled_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'disabled_at' AND sqlc.arg('sort_dir')::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'trial_ends_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'trial_ends_at' AND sqlc.arg('sort_dir')::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
+    id ASC
+LIMIT sqlc.arg('page_limit')::int
+OFFSET sqlc.arg('page_offset')::bigint;
 
 -- name: AdminUpdateOrganization :exec
 -- Admin-only mutation. Both fields are optional — caller passes NULL to skip
