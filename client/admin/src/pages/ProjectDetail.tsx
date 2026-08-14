@@ -41,8 +41,10 @@ function CountTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function ProjectDetail(): JSX.Element {
-  const { idOrSlug } = useParams({ from: "/projects/$idOrSlug" });
+// The id arrives as a prop rather than out of `useParams`, because this page is
+// reached by two routes: the global project list and the organization record's
+// own project view. Each names the parameter differently.
+export function ProjectDetail({ idOrSlug }: { idOrSlug: string }): JSX.Element {
   const navigate = useNavigate();
   const router = useRouter();
 
@@ -158,4 +160,9 @@ export function ProjectDetail(): JSX.Element {
       </section>
     </div>
   );
+}
+
+export function ProjectDetailRoute(): JSX.Element {
+  const { idOrSlug } = useParams({ from: "/projects/$idOrSlug" });
+  return <ProjectDetail idOrSlug={idOrSlug} />;
 }

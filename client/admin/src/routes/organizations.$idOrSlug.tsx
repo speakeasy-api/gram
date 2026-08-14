@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { OrganizationDetail } from "@/pages/OrganizationDetail";
+import { RecordLayout } from "@/pages/organization/RecordLayout";
 
 export const Route = createFileRoute("/organizations/$idOrSlug")({
-  component: OrganizationDetail,
+  component: RecordLayout,
 });

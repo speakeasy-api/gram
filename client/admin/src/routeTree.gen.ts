@@ -14,6 +14,10 @@ import { Route as OrganizationsIndexRouteImport } from './routes/organizations.i
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsIdOrSlugRouteImport } from './routes/projects.$idOrSlug'
+import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organizations.$idOrSlug.index'
+import { Route as OrganizationsIdOrSlugMembersRouteImport } from './routes/organizations.$idOrSlug.members'
+import { Route as OrganizationsIdOrSlugProjectsIndexRouteImport } from './routes/organizations.$idOrSlug.projects.index'
+import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from './routes/organizations.$idOrSlug.projects.$projectIdOrSlug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,28 +44,63 @@ const ProjectsIdOrSlugRoute = ProjectsIdOrSlugRouteImport.update({
   path: '/projects/$idOrSlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrganizationsIdOrSlugIndexRoute =
+  OrganizationsIdOrSlugIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
+const OrganizationsIdOrSlugMembersRoute =
+  OrganizationsIdOrSlugMembersRouteImport.update({
+    id: '/members',
+    path: '/members',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
+const OrganizationsIdOrSlugProjectsIndexRoute =
+  OrganizationsIdOrSlugProjectsIndexRouteImport.update({
+    id: '/projects/',
+    path: '/projects/',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
+const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
+  OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport.update({
+    id: '/projects/$projectIdOrSlug',
+    path: '/projects/$projectIdOrSlug',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRoute
+  '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
+  '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
+  '/organizations/$idOrSlug/projects/$projectIdOrSlug': typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  '/organizations/$idOrSlug/projects/': typeof OrganizationsIdOrSlugProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
+  '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
+  '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugIndexRoute
+  '/organizations/$idOrSlug/projects/$projectIdOrSlug': typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  '/organizations/$idOrSlug/projects': typeof OrganizationsIdOrSlugProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRoute
+  '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
+  '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
+  '/organizations/$idOrSlug/projects/$projectIdOrSlug': typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  '/organizations/$idOrSlug/projects/': typeof OrganizationsIdOrSlugProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -71,13 +110,20 @@ export interface FileRouteTypes {
     | '/projects/$idOrSlug'
     | '/organizations/'
     | '/projects/'
+    | '/organizations/$idOrSlug/members'
+    | '/organizations/$idOrSlug/'
+    | '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+    | '/organizations/$idOrSlug/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/organizations'
     | '/projects'
+    | '/organizations/$idOrSlug/members'
+    | '/organizations/$idOrSlug'
+    | '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+    | '/organizations/$idOrSlug/projects'
   id:
     | '__root__'
     | '/'
@@ -85,11 +131,15 @@ export interface FileRouteTypes {
     | '/projects/$idOrSlug'
     | '/organizations/'
     | '/projects/'
+    | '/organizations/$idOrSlug/members'
+    | '/organizations/$idOrSlug/'
+    | '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+    | '/organizations/$idOrSlug/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  OrganizationsIdOrSlugRoute: typeof OrganizationsIdOrSlugRoute
+  OrganizationsIdOrSlugRoute: typeof OrganizationsIdOrSlugRouteWithChildren
   ProjectsIdOrSlugRoute: typeof ProjectsIdOrSlugRoute
   OrganizationsIndexRoute: typeof OrganizationsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
@@ -132,12 +182,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdOrSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/organizations/$idOrSlug/': {
+      id: '/organizations/$idOrSlug/'
+      path: '/'
+      fullPath: '/organizations/$idOrSlug/'
+      preLoaderRoute: typeof OrganizationsIdOrSlugIndexRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
+    '/organizations/$idOrSlug/members': {
+      id: '/organizations/$idOrSlug/members'
+      path: '/members'
+      fullPath: '/organizations/$idOrSlug/members'
+      preLoaderRoute: typeof OrganizationsIdOrSlugMembersRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
+    '/organizations/$idOrSlug/projects/': {
+      id: '/organizations/$idOrSlug/projects/'
+      path: '/projects'
+      fullPath: '/organizations/$idOrSlug/projects/'
+      preLoaderRoute: typeof OrganizationsIdOrSlugProjectsIndexRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
+    '/organizations/$idOrSlug/projects/$projectIdOrSlug': {
+      id: '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+      path: '/projects/$projectIdOrSlug'
+      fullPath: '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+      preLoaderRoute: typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
   }
 }
 
+interface OrganizationsIdOrSlugRouteChildren {
+  OrganizationsIdOrSlugMembersRoute: typeof OrganizationsIdOrSlugMembersRoute
+  OrganizationsIdOrSlugIndexRoute: typeof OrganizationsIdOrSlugIndexRoute
+  OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute: typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  OrganizationsIdOrSlugProjectsIndexRoute: typeof OrganizationsIdOrSlugProjectsIndexRoute
+}
+
+const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
+  OrganizationsIdOrSlugMembersRoute: OrganizationsIdOrSlugMembersRoute,
+  OrganizationsIdOrSlugIndexRoute: OrganizationsIdOrSlugIndexRoute,
+  OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute:
+    OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute,
+  OrganizationsIdOrSlugProjectsIndexRoute:
+    OrganizationsIdOrSlugProjectsIndexRoute,
+}
+
+const OrganizationsIdOrSlugRouteWithChildren =
+  OrganizationsIdOrSlugRoute._addFileChildren(
+    OrganizationsIdOrSlugRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  OrganizationsIdOrSlugRoute: OrganizationsIdOrSlugRoute,
+  OrganizationsIdOrSlugRoute: OrganizationsIdOrSlugRouteWithChildren,
   ProjectsIdOrSlugRoute: ProjectsIdOrSlugRoute,
   OrganizationsIndexRoute: OrganizationsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
