@@ -22,6 +22,8 @@ organization's slug can be the same string, and the read that produced the
 response resolved either, so a write could return a different organization than
 the one it changed. Addressing one of these writes by slug now returns a
 not-found instead of a success describing an organization that was never
-touched. Reading an organization by slug is unchanged.
+touched. Reading an organization by slug still works, and when the same string
+is one organization's id and another's slug the exact id match now wins instead
+of the database picking either row.
 
 The admin dashboard row action and confirmation dialog follow.

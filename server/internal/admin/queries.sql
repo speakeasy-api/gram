@@ -208,7 +208,10 @@ LIMIT 200;
 -- id; a read-after-write that allowed slugs could then describe a different
 -- organization than the one just written, and the operator would see a 200
 -- reporting the write never happened. Reads that are not following a write pass
--- allow_slug true, which the dashboard relies on.
+-- allow_slug true, which the dashboard relies on. The ORDER BY settles the same
+-- collision for those reads: when the argument is one organization's id and
+-- another's slug both rows match, and LIMIT 1 on its own would pick either, so
+-- the exact id match is sorted first.
 SELECT
     om.id,
     om.name,
@@ -241,4 +244,5 @@ FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
+ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;

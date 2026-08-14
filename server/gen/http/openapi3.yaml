@@ -365,7 +365,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/DisableOrganizationRequestBody'
+                            $ref: '#/components/schemas/EnableOrganizationRequestBody'
             responses:
                 "200":
                     description: OK response.
@@ -60317,6 +60317,15 @@ components:
             required:
                 - organization_id
                 - key_type
+        EnableOrganizationRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Organization ID.
+                    minLength: 1
+            required:
+                - id
         EncryptOpenRouterKeyRequestBody:
             type: object
             properties:

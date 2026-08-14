@@ -385,6 +385,29 @@ func TestAdminOrganizationWrites_ReturnTheOrganizationWritten(t *testing.T) {
 	require.True(t, readOrgState(t, ctx, conn, "org_shadow").Whitelisted, "the update must not land on the organization whose slug collides")
 }
 
+func TestGetOrganization_PrefersIDOverAnotherOrganizationsSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// GetOrganization is the one read that still resolves slugs, so the same
+	// id/slug collision reaches it. Both rows satisfy the predicate and LIMIT 1
+	// on its own leaves the winner to the planner, so the query sorts the exact
+	// id match first. Without that ORDER BY this assertion depends on the plan
+	// rather than on the query, which is the state it is here to rule out.
+	seedOrg(t, ctx, conn, orgFixture{id: "org_read_collide", name: "Target", slug: "target-read", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_read_shadow", name: "Shadow", slug: "org_read_collide", whitelisted: true})
+
+	byID, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_read_collide"})
+	require.NoError(t, err)
+	require.Equal(t, "org_read_collide", byID.ID, "an exact id match must win over another organization's slug")
+
+	// Slug lookup is unchanged when nothing else claims the string as an id.
+	bySlug, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "target-read"})
+	require.NoError(t, err)
+	require.Equal(t, "org_read_collide", bySlug.ID)
+}
+
 func TestDisableOrganization_TouchesOnlyTheTargetRow(t *testing.T) {
 	t.Parallel()
 

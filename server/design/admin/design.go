@@ -273,6 +273,11 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("id")
 
+			// Disable and enable take structurally identical payloads, and Goa's
+			// OpenAPI emitter deduplicates request bodies by shape, so without an
+			// explicit typename both endpoints publish the same schema name.
+			Meta("openapi:typename", "DisableOrganizationRequestBody")
+
 			Attribute("id", String, "Organization ID.", func() {
 				MinLength(1)
 			})
@@ -294,6 +299,9 @@ var _ = Service("admin", func() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("id")
+
+			// See disableOrganization for why this needs an explicit typename.
+			Meta("openapi:typename", "EnableOrganizationRequestBody")
 
 			Attribute("id", String, "Organization ID.", func() {
 				MinLength(1)
