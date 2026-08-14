@@ -263,29 +263,37 @@ export function SignalDrawer({
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
 
-  // Which signal is on screen is a URL param, so browser back/forward swaps it
-  // while the drawer stays mounted — and every piece of state here belongs to
-  // the signal it was started from, so none of it may outlive a switch. An open
-  // exclusion editor would go on targeting the previous signal's rule; a
-  // pending dismissal would clear the previous signal's findings under the new
-  // signal's name; a collection still in flight would leave the new signal's
-  // action spinning (and must not open that dialog at all — hence the key
-  // compare below); and the back-from-editor transition would replay for a
-  // signal whose editor was never opened. Tracked by key rather than by the
-  // signal object so a list refetch's new identity doesn't discard live state;
-  // clearing on mount is a no-op.
-  const activeSignalKey = useRef<string | null>(null);
+  // Signal and window both live in the URL, so back/forward can swap either
+  // while the drawer stays mounted, and a dismissal belongs to the pair it was
+  // started from: surfacing one after a swap would confirm the previous
+  // selection's findings under the new one's name, or leave its action
+  // spinning. Bumping the token makes an in-flight collection drop its result —
+  // and its spinner reset — rather than land on the new selection; the request
+  // itself still runs to completion. Keyed by timestamps rather than Date
+  // identity, and by signal key rather than the signal object, so neither an
+  // equal window nor a list refetch discards a live collection.
+  const collectionToken = useRef(0);
+  const windowFrom = window.from?.getTime();
+  const windowTo = window.to?.getTime();
   useEffect(() => {
-    activeSignalKey.current = signal?.key ?? null;
-    setExclusionState(null);
+    collectionToken.current += 1;
     setPendingDismiss(null);
     setCollecting(false);
+  }, [signal?.key, windowFrom, windowTo]);
+
+  // Editor state follows the signal alone: an open editor would go on targeting
+  // the previous signal's rule, and the back-from-editor slide would replay for
+  // a signal whose editor was never opened. The window is deliberately absent —
+  // the rule and evidence the editor seeds from are unwindowed, so a date
+  // change must not discard a half-filled form.
+  useEffect(() => {
+    setExclusionState(null);
     setReturningFromEditor(false);
   }, [signal?.key]);
 
   const openSignalDismiss = async () => {
     if (!signal) return;
-    const requestKey = signal.key;
+    const token = collectionToken.current;
     setCollecting(true);
     try {
       const results = await collectFindingsForRules(
@@ -293,16 +301,16 @@ export function SignalDrawer({
         [signal.ruleId],
         window,
       );
-      if (activeSignalKey.current !== requestKey) return;
+      if (collectionToken.current !== token) return;
       setPendingDismiss(results);
     } catch {
-      if (activeSignalKey.current !== requestKey) return;
+      if (collectionToken.current !== token) return;
       toast.error("Failed to load this signal's findings.");
     } finally {
-      // Same guard: the switch already cleared the flag for the new signal, so
-      // a late-settling request must not clear it out from under a collection
-      // the operator started there.
-      if (activeSignalKey.current === requestKey) setCollecting(false);
+      // Same guard: the switch already cleared the flag for the new selection,
+      // so a late-settling request must not clear it out from under a
+      // collection the operator started there.
+      if (collectionToken.current === token) setCollecting(false);
     }
   };
 
