@@ -56007,7 +56007,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: IDs of the organizations whose account type was set.
+                    description: 'IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.'
             description: Outcome of a bulk account type change.
             required:
                 - updated_ids
@@ -57204,6 +57204,7 @@ components:
                         minLength: 1
                     description: Organization IDs to update.
                     minItems: 1
+                    maxItems: 1000
             required:
                 - ids
                 - account_type

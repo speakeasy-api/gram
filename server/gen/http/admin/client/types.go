@@ -139,7 +139,8 @@ type UpdateOrganizationResponseBody struct {
 // BulkUpdateAccountTypeResponseBody is the type of the "admin" service
 // "bulkUpdateAccountType" endpoint HTTP response body.
 type BulkUpdateAccountTypeResponseBody struct {
-	// IDs of the organizations whose account type was set.
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
 	UpdatedIds []string `form:"updated_ids,omitempty" json:"updated_ids,omitempty" xml:"updated_ids,omitempty"`
 	// IDs from the request that matched no organization, deduplicated and in
 	// request order. Nothing was written for these.

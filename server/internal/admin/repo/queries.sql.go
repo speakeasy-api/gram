@@ -26,9 +26,8 @@ type AdminBulkUpdateAccountTypeParams struct {
 	Ids         []string
 }
 
-// Bulk sibling of AdminUpdateOrganization. One statement rather than a loop, so
-// the whole batch lands or none of it does. Returns the ids it touched, which is
-// how the caller learns which of its ids matched nothing.
+// One statement rather than a loop, so every id is matched against one snapshot.
+// RETURNING is how the caller learns which of its ids matched nothing.
 func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkUpdateAccountTypeParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, adminBulkUpdateAccountType, arg.AccountType, arg.Ids)
 	if err != nil {

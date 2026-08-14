@@ -11,6 +11,10 @@ that matched no organization. A stale id in the paste therefore costs the
 operator that one row rather than the whole batch, and the response says which
 row it was instead of leaving them to compare lists by hand.
 
+One call carries at most 1000 organization ids. That is far above any selection
+an operator can realistically make in the dashboard, and it keeps a mistaken
+paste from producing a response that echoes the whole input back.
+
 Both write paths now accept only `free`, `pro` and `enterprise`, matched exactly.
 The single-organization update endpoint used to take any string at all, so a
 typo or a difference of capitalisation was written straight to the record and

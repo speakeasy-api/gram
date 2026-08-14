@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var AdminOrganization = Type("AdminOrganization", func() {
@@ -151,13 +152,13 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 	Description("Outcome of a bulk account type change.")
 	Required("updated_ids", "missing_ids")
 
-	Attribute("updated_ids", ArrayOf(String), "IDs of the organizations whose account type was set.")
+	Attribute("updated_ids", ArrayOf(String), "IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.")
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
 })
 
-// Shared so the single and bulk write paths cannot drift apart into accepting
-// different sets.
-var accountTypes = []any{"free", "pro", "enterprise"}
+// Shared so the two write paths, and the service's own copy of the check,
+// cannot drift into accepting different sets.
+var accountTypes = conv.AnySlice(constants.AccountTypes)
 
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
@@ -298,13 +299,11 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("ids", "account_type")
 
-			// See disableOrganization for why this needs an explicit typename.
-			Meta("openapi:typename", "BulkUpdateAccountTypeRequestBody")
-
 			Attribute("ids", ArrayOf(String, func() {
 				MinLength(1)
 			}), "Organization IDs to update.", func() {
 				MinLength(1)
+				MaxLength(constants.MaxBulkAccountTypeIDs)
 			})
 			Attribute("account_type", String, "New gram_account_type for every listed organization.", func() {
 				Enum(accountTypes...)

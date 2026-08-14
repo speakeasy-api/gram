@@ -94,7 +94,8 @@ var MethodNames = [16]string{"login", "callback", "logout", "getProject", "updat
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
 type AdminBulkUpdateAccountTypeResult struct {
-	// IDs of the organizations whose account type was set.
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
 	UpdatedIds []string
 	// IDs from the request that matched no organization, deduplicated and in
 	// request order. Nothing was written for these.

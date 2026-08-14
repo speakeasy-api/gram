@@ -166,6 +166,9 @@ func BuildBulkUpdateAccountTypePayload(adminBulkUpdateAccountTypeBody string, ad
 		if len(body.Ids) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1, true))
 		}
+		if len(body.Ids) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1000, false))
+		}
 		for _, e := range body.Ids {
 			if utf8.RuneCountInString(e) < 1 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids[*]", e, utf8.RuneCountInString(e), 1, true))

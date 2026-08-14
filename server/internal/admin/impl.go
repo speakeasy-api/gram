@@ -590,6 +590,11 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	// See ExtendTrial: the design bounds this too, but generated validation only
+	// runs at the HTTP boundary.
+	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
+		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
+	}
 
 	queries := repo.New(s.db)
 	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
@@ -604,6 +609,10 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 }
 
 func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUpdateAccountTypePayload) (*gen.AdminBulkUpdateAccountTypeResult, error) {
+	if !constants.IsAccountType(payload.AccountType) {
+		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
+	}
+
 	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
 		AccountType: payload.AccountType,
 		Ids:         payload.Ids,
@@ -617,8 +626,8 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 		written[id] = struct{}{}
 	}
 
-	// An id that matched nothing is the operator's stale paste, and naming it is
-	// the only way they can tell the batch fell short of what they asked for.
+	// Naming the ids that matched nothing is the only way the operator can tell
+	// the batch fell short.
 	missing := make([]string, 0, len(payload.Ids))
 	seen := make(map[string]struct{}, len(payload.Ids))
 	for _, id := range payload.Ids {

@@ -141,7 +141,8 @@ type UpdateOrganizationResponseBody struct {
 // BulkUpdateAccountTypeResponseBody is the type of the "admin" service
 // "bulkUpdateAccountType" endpoint HTTP response body.
 type BulkUpdateAccountTypeResponseBody struct {
-	// IDs of the organizations whose account type was set.
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
 	UpdatedIds []string `form:"updated_ids" json:"updated_ids" xml:"updated_ids"`
 	// IDs from the request that matched no organization, deduplicated and in
 	// request order. Nothing was written for these.
@@ -6160,6 +6161,9 @@ func ValidateBulkUpdateAccountTypeRequestBody(body *BulkUpdateAccountTypeRequest
 	}
 	if len(body.Ids) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1, true))
+	}
+	if len(body.Ids) > 1000 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1000, false))
 	}
 	for _, e := range body.Ids {
 		if utf8.RuneCountInString(e) < 1 {

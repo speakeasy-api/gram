@@ -245,9 +245,8 @@ SET
 WHERE id = @id;
 
 -- name: AdminBulkUpdateAccountType :many
--- Bulk sibling of AdminUpdateOrganization. One statement rather than a loop, so
--- the whole batch lands or none of it does. Returns the ids it touched, which is
--- how the caller learns which of its ids matched nothing.
+-- One statement rather than a loop, so every id is matched against one snapshot.
+-- RETURNING is how the caller learns which of its ids matched nothing.
 UPDATE organization_metadata
 SET
     gram_account_type = @account_type::text,
