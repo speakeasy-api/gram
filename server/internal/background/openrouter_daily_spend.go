@@ -22,7 +22,10 @@ const (
 	openRouterDailySpendLookbackDays        = 3
 	openRouterDailySpendActivityMaxAttempts = 3
 	openRouterDailySpendActivityTimeout     = 2 * time.Hour
-	openRouterDailySpendWorkflowRunTimeout  = 7 * time.Hour
+	// Schedule-to-close covers all three two-hour attempts, retry backoff, and
+	// queueing delay. The workflow gets a further hour to record the result.
+	openRouterDailySpendActivityScheduleToCloseTimeout = 7 * time.Hour
+	openRouterDailySpendWorkflowRunTimeout             = openRouterDailySpendActivityScheduleToCloseTimeout + time.Hour
 )
 
 func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
@@ -31,7 +34,8 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 	startDay := endDay.AddDate(0, 0, -openRouterDailySpendLookbackDays)
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: openRouterDailySpendActivityTimeout,
+		StartToCloseTimeout:    openRouterDailySpendActivityTimeout,
+		ScheduleToCloseTimeout: openRouterDailySpendActivityScheduleToCloseTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Minute,
 			BackoffCoefficient: 2,

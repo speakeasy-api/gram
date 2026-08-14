@@ -76,4 +76,5 @@ func TestOpenRouterDailySpendScheduleOptions(t *testing.T) {
 	require.Equal(t, openRouterDailySpendScheduledWorkflowID, action.ID)
 	require.Equal(t, "test-task-queue", action.TaskQueue)
 	require.Equal(t, openRouterDailySpendWorkflowRunTimeout, action.WorkflowRunTimeout)
+	require.Greater(t, openRouterDailySpendWorkflowRunTimeout, openRouterDailySpendActivityScheduleToCloseTimeout)
 }

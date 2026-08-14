@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"strings"
 	"time"
 
@@ -206,9 +207,37 @@ func validateDailySpendResult(result openrouter.DailySpendResult, startDay, endD
 		if spend.Int.Sign() < 0 {
 			return nil, fmt.Errorf("result day %s has negative spend", dayKey)
 		}
+		if err := validateDailySpendNumeric(spend); err != nil {
+			return nil, fmt.Errorf("result day %s: %w", dayKey, err)
+		}
 		spendByDay[dayKey] = spend
 	}
 	return spendByDay, nil
+}
+
+// validateDailySpendNumeric ensures PostgreSQL NUMERIC(14,6) can persist the
+// upstream decimal without rounding or overflowing. Multiplying by 10^6 must
+// produce an integer no larger than the column's 14-digit scaled maximum.
+func validateDailySpendNumeric(spend pgtype.Numeric) error {
+	scaled := new(big.Int).Set(spend.Int)
+	scaledExponent := int64(spend.Exp) + 6
+	if scaledExponent >= 0 {
+		scaled.Mul(scaled, new(big.Int).Exp(big.NewInt(10), big.NewInt(scaledExponent), nil))
+	} else {
+		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(-scaledExponent), nil)
+		quotient, remainder := new(big.Int), new(big.Int)
+		quotient.QuoRem(scaled, divisor, remainder)
+		if remainder.Sign() != 0 {
+			return errors.New("spend has more than 6 non-zero fractional digits")
+		}
+		scaled = quotient
+	}
+
+	maxScaled := new(big.Int).Sub(new(big.Int).Exp(big.NewInt(10), big.NewInt(14), nil), big.NewInt(1))
+	if scaled.Cmp(maxScaled) > 0 {
+		return errors.New("spend exceeds NUMERIC(14,6) precision")
+	}
+	return nil
 }
 
 func exactUTCDay(value time.Time) (time.Time, error) {

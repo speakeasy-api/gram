@@ -194,35 +194,54 @@ func TestCollectOpenRouterDailySpend_ContinuesAfterUpstreamFailure(t *testing.T)
 	client.AssertExpectations(t)
 }
 
-func TestCollectOpenRouterDailySpend_RollsBackOneKeysBatch(t *testing.T) {
+func TestCollectOpenRouterDailySpend_RejectsUnrepresentableSpend(t *testing.T) {
 	t.Parallel()
-	ctx := t.Context()
-	conn, orgID := setupOpenRouterDailySpendTest(t, "openrouter_daily_spend_atomic")
-	chatHash := createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyTypeChat, 'e')
-	startDay := utcDay(0)
-	endDay := utcDay(2)
 
-	client := &mockOpenRouterSpendClient{}
-	client.On("GetDailySpend", mock.Anything, chatHash, startDay, endDay).
-		Return(openrouter.DailySpendResult{
-			Days: []openrouter.DailySpendDay{
-				{Day: startDay, SpendUSD: "1"},
-				{Day: startDay.AddDate(0, 0, 1), SpendUSD: "999999999999999"},
-			},
-			Source: openrouter.DailySpendSourceAnalytics,
-		}, nil).Once()
+	tests := map[string]struct {
+		dbName  string
+		spend   string
+		errText string
+	}{
+		"fractional scale": {
+			dbName:  "openrouter_daily_spend_fractional_scale",
+			spend:   "0.0000001",
+			errText: "more than 6 non-zero fractional digits",
+		},
+		"integer precision": {
+			dbName:  "openrouter_daily_spend_integer_precision",
+			spend:   "100000000",
+			errText: "exceeds NUMERIC(14,6) precision",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			conn, orgID := setupOpenRouterDailySpendTest(t, test.dbName)
+			chatHash := createOpenRouterSpendTarget(t, conn, orgID, openrouter.KeyTypeChat, 'e')
+			startDay := utcDay(0)
+			endDay := utcDay(1)
 
-	act := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client)
-	err := act.Do(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
-	require.ErrorContains(t, err, "numeric field overflow")
+			client := &mockOpenRouterSpendClient{}
+			client.On("GetDailySpend", mock.Anything, chatHash, startDay, endDay).
+				Return(openrouter.DailySpendResult{
+					Days:   []openrouter.DailySpendDay{{Day: startDay, SpendUSD: test.spend}},
+					Source: openrouter.DailySpendSourceAnalytics,
+				}, nil).Once()
 
-	rows, queryErr := backgroundrepo.New(conn).ListOpenRouterDailySpend(ctx, backgroundrepo.ListOpenRouterDailySpendParams{
-		OrganizationID: orgID,
-		KeyType:        string(openrouter.KeyTypeChat),
-	})
-	require.NoError(t, queryErr)
-	require.Empty(t, rows, "a later day failure must roll back earlier days for the key")
-	client.AssertExpectations(t)
+			act := activities.NewCollectOpenRouterDailySpend(testenv.NewLogger(t), conn, client)
+			err := act.Do(ctx, activities.CollectOpenRouterDailySpendArgs{StartDay: startDay, EndDay: endDay})
+			require.ErrorContains(t, err, test.errText)
+
+			rows, queryErr := backgroundrepo.New(conn).ListOpenRouterDailySpend(ctx, backgroundrepo.ListOpenRouterDailySpendParams{
+				OrganizationID: orgID,
+				KeyType:        string(openrouter.KeyTypeChat),
+			})
+			require.NoError(t, queryErr)
+			require.Empty(t, rows)
+			client.AssertExpectations(t)
+		})
+	}
 }
 
 func TestCollectOpenRouterDailySpend_ClampsToKeyCreationDay(t *testing.T) {
