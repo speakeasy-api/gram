@@ -31,13 +31,36 @@ check_inputs() {
     overlays+=("$line")
   done < <(yq -r "${source_key}.overlays[].location" "$workflow")
 
-  args=(--schema "$schema")
-  for overlay in "${overlays[@]}"; do
-    args+=(--overlay "$overlay")
-  done
-  result=$(speakeasy overlay apply "${args[@]}")
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  step=0
+  current="$schema"
 
-  if ! diff -q <(echo "$result") "$output" >/dev/null 2>&1; then
+  # `speakeasy overlay apply --overlay` is a string, not a slice: passing several
+  # flags keeps only the last one, silently. Each overlay needs its own pass.
+  for overlay in "${overlays[@]}"; do
+    step=$((step + 1))
+    speakeasy overlay apply --schema "$current" --overlay "$overlay" >"${work}/${step}.yaml"
+    current="${work}/${step}.yaml"
+  done
+
+  # This function reproduces the Gram-Internal pipeline by hand, so a
+  # transformation it does not know about would make it compare the wrong file.
+  while IFS= read -r transformation; do
+    step=$((step + 1))
+    case "$transformation" in
+      removeUnused)
+        speakeasy openapi transform remove-unused --schema "$current" --out "${work}/${step}.yaml"
+        ;;
+      *)
+        echo "gen:sdk --check cannot reproduce the '${transformation}' transformation." >&2
+        exit 1
+        ;;
+    esac
+    current="${work}/${step}.yaml"
+  done < <(yq -r "${source_key}.transformations[]? | keys | .[]" "$workflow")
+
+  if ! diff -q "$current" "$output" >/dev/null 2>&1; then
     echo "Gram-Internal OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
     exit 1
   fi
