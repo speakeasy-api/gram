@@ -145,6 +145,23 @@ WHERE stripe_customer_id IS NOT NULL;
 
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
 
+-- Durable completion receipts for accepted Stripe webhooks. A row commits
+-- atomically with the handler's database effects.
+CREATE TABLE IF NOT EXISTS stripe_webhook_receipts (
+  stripe_event_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_webhook_receipts_pkey PRIMARY KEY (stripe_event_id),
+  CONSTRAINT stripe_webhook_receipts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS stripe_webhook_receipts_organization_id_idx
+ON stripe_webhook_receipts (organization_id);
+
 -- Durable per-billing-cycle "tokens under management" (TUM) snapshots for an
 -- organization. ClickHouse telemetry expires (telemetry_logs after 90 days,
 -- chat_token_summaries after 730 days), so rows here are the permanent record
