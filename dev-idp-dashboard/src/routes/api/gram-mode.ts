@@ -30,9 +30,12 @@ function detectMode(): Mode | null {
     process.env["GRAM_IDP_BASE_URL"],
   ];
 
+  // Compared against `URL.hostname`, which is canonical (lower-cased, IDNs in
+  // punycode), so the configured name goes through the same parser rather than
+  // being trusted as typed.
   const hostnames = new Set([dev.hostname]);
-  const remote = process.env["GRAM_DEV_HOSTNAME"];
-  if (remote) hostnames.add(remote);
+  const remote = parseURL(`https://${process.env["GRAM_DEV_HOSTNAME"] ?? ""}`);
+  if (remote?.hostname) hostnames.add(remote.hostname);
 
   for (const candidate of candidates) {
     const url = parseURL(candidate);

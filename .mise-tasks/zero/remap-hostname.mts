@@ -363,7 +363,14 @@ function main(): void {
     "                -k /Library/Keychains/System.keychain rootCA.pem",
   );
   console.log(
-    "       else:  install mkcert on that machine and run `mkcert -install`",
+    "       else:  install mkcert there, drop this rootCA.pem into its",
+  );
+  console.log('              "$(mkcert -CAROOT)", then run `mkcert -install`.');
+  console.log(
+    "              Running mkcert -install alone would trust a root CA that",
+  );
+  console.log(
+    "              machine generated itself, which signs nothing here.",
   );
   console.log();
   console.log("  3. From that same machine, check it:");
