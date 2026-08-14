@@ -32,7 +32,7 @@ WHERE organization_id = @organization_id
 INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
 VALUES (
     @organization_id,
-    'enterprise',
+    @tier,
     @created_at,
     @ends_at,
     sqlc.narg('converted_at')::timestamptz,
@@ -93,15 +93,11 @@ RETURNING *;
 --   * converted_at IS NULL is load-bearing. A mid-trial conversion leaves ends_at
 --     in the future, so nothing else would reject it.
 --   * ends_at > clock_timestamp() is load-bearing. It is the ordinary case.
---   * demoted_at IS NULL is forward-looking. MarkTrialDemoted only demotes an
---     already-expired trial and nothing moves ends_at forward afterwards, so in
---     every state the application can currently reach it is subsumed by the
---     ends_at condition. It is kept as defence against a future re-arm path.
+--   * demoted_at IS NULL is defence in depth: no writer leaves demoted_at set
+--     with ends_at in the future.
 --
--- Extending a demoted trial is deliberately not the same as re-arming it:
--- demotion also disabled the organization's model provider keys and nothing in
--- this repository can re-enable them, so clearing demoted_at would advertise a
--- running trial whose keys stay dead (AGE-3208).
+-- Extending a demoted trial is not re-arming it: a re-arm also revives the
+-- model provider keys and restores the account type. See RearmTrial.
 --
 -- Two things this query deliberately does not check:
 --
@@ -123,6 +119,36 @@ WHERE organization_id = @organization_id
   AND converted_at IS NULL
   AND demoted_at IS NULL
   AND ends_at > clock_timestamp();
+
+-- name: RearmTrial :one
+-- Operator-initiated reinstatement of a demoted trial. Returns the tier the
+-- trial grants, which the handler writes back onto the organization.
+--
+-- ends_at moves to a window measured from now, not left where it is:
+-- MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
+-- alone leaves a row the next sweep demotes again.
+--
+-- converted_at IS NULL guards nothing today, because MarkTrialConverted has no
+-- production caller. It is written for the conversion path that will (AGE-3218).
+UPDATE trials
+SET demoted_at = NULL,
+    ends_at = clock_timestamp() + make_interval(days => @rearm_for_days::int),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND demoted_at IS NOT NULL
+  AND converted_at IS NULL
+RETURNING tier, ends_at;
+
+-- name: RestoreOrganizationFromTrial :one
+-- Undoes DemoteOrganizationToFree's two writes. whitelisted is set
+-- unconditionally because demotion cleared it and the signup arming path never
+-- writes it, so replaying that path would leave the book-a-demo gate up.
+UPDATE organization_metadata
+SET gram_account_type = @account_type,
+    whitelisted = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id
+RETURNING name, slug;
 
 -- name: DemoteOrganizationToFree :one
 -- Drops the organization to the free tier and back behind the dashboard

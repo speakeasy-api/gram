@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -49,6 +50,7 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	svc := &Service{
 		logger: logger,
 		db:     conn,
+		audit:  audit.NewLogger(),
 	}
 
 	return ctx, svc, conn
