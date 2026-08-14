@@ -13,7 +13,15 @@ import (
 )
 
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
-WITH filtered AS (
+WITH search AS (
+    -- Identical to AdminListOrganizations, escaping included: a pasted id that
+    -- reaches the rows through an escaped pattern and the total through an
+    -- unescaped one gives the pager a count that disagrees with what it shows.
+    SELECT
+        $2::text AS term,
+        '%' || replace(replace(replace($2::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+),
+filtered AS (
     SELECT
         CASE
             WHEN t.organization_id IS NULL THEN 'none'
@@ -25,16 +33,21 @@ WITH filtered AS (
         END::text AS trial_state
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    CROSS JOIN search
     WHERE
         (
-            $2::text IS NULL
-            OR om.name ILIKE '%' || $2::text || '%'
-            OR om.slug ILIKE '%' || $2::text || '%'
-            OR om.id = $2::text
-            OR om.workos_id = $2::text
+            search.term IS NULL
+            OR om.name ILIKE search.pattern
+            OR om.slug ILIKE search.pattern
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
         )
         AND (coalesce(cardinality($3::text[]), 0) = 0 OR om.gram_account_type = ANY($3::text[]))
-        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
+        AND (
+            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
 )
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
@@ -372,7 +385,17 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 }
 
 const adminListOrganizations = `-- name: AdminListOrganizations :many
-WITH filtered AS (
+WITH search AS (
+    -- Escaped once here rather than per arm so the name and the slug arm cannot
+    -- drift apart. Backslash goes first or it escapes the escapes that follow.
+    -- Every id in both id spaces contains underscores and _ is a
+    -- single-character wildcard, so an unescaped pasted id draws incidental
+    -- matches out of the name and slug arms.
+    SELECT
+        $6::text AS term,
+        '%' || replace(replace(replace($6::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+),
+filtered AS (
     SELECT
         om.id,
         om.name,
@@ -403,22 +426,30 @@ WITH filtered AS (
         )::bigint AS member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
+        -- They compare case-insensitively because a real WorkOS id embeds an uppercase ULID and a log pipeline hands the operator a lowercased copy of it.
         -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
         (
-            $6::text IS NULL
-            OR om.name ILIKE '%' || $6::text || '%'
-            OR om.slug ILIKE '%' || $6::text || '%'
-            OR om.id = $6::text
-            OR om.workos_id = $6::text
+            search.term IS NULL
+            OR om.name ILIKE search.pattern
+            OR om.slug ILIKE search.pattern
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
         )
         -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
         -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
         -- would drop every row instead of keeping every row.
         AND (coalesce(cardinality($7::text[]), 0) = 0 OR om.gram_account_type = ANY($7::text[]))
         -- No empty arm: the handler resolves an absent filter to {active}.
-        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
+        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
+        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        AND (
+            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
+            OR lower(om.id) = lower(search.term)
+            OR lower(om.workos_id) = lower(search.term)
+        )
         AND ($9::text IS NULL OR om.id > $9::text)
 )
 SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
