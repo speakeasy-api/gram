@@ -98,6 +98,14 @@ type fakeStripeAPI struct {
 	meterEventParams       *stripesdk.BillingMeterEventCreateParams
 	meterSummaryParams     *stripesdk.BillingMeterEventSummaryListParams
 	meterSummaries         []*stripesdk.BillingMeterEventSummary
+	invoiceRetrieveParams  *stripesdk.InvoiceRetrieveParams
+	invoice                *stripesdk.Invoice
+	invoiceItemParams      *stripesdk.InvoiceItemCreateParams
+	invoiceItemListParams  *stripesdk.InvoiceItemListParams
+	invoiceItems           []*stripesdk.InvoiceItem
+	creditNoteParams       *stripesdk.CreditNoteCreateParams
+	creditNoteListParams   *stripesdk.CreditNoteListParams
+	creditNotes            []*stripesdk.CreditNote
 	calls                  int
 	err                    error
 }
@@ -132,6 +140,60 @@ func (f *fakeStripeAPI) listMeterEventSummaries(_ context.Context, params *strip
 	return func(yield func(*stripesdk.BillingMeterEventSummary, error) bool) {
 		for _, summary := range f.meterSummaries {
 			if !yield(summary, nil) {
+				return
+			}
+		}
+		if f.err != nil {
+			yield(nil, f.err)
+		}
+	}
+}
+
+func (f *fakeStripeAPI) retrieveInvoice(_ context.Context, _ string, params *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error) {
+	f.calls++
+	f.invoiceRetrieveParams = params
+	return f.invoice, f.err
+}
+
+func (f *fakeStripeAPI) createInvoiceItem(_ context.Context, params *stripesdk.InvoiceItemCreateParams) (*stripesdk.InvoiceItem, error) {
+	f.calls++
+	f.invoiceItemParams = params
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &stripesdk.InvoiceItem{ID: "ii_test"}, nil
+}
+
+func (f *fakeStripeAPI) listInvoiceItems(_ context.Context, params *stripesdk.InvoiceItemListParams) stripesdk.Seq2[*stripesdk.InvoiceItem, error] {
+	f.calls++
+	f.invoiceItemListParams = params
+	return func(yield func(*stripesdk.InvoiceItem, error) bool) {
+		for _, item := range f.invoiceItems {
+			if !yield(item, nil) {
+				return
+			}
+		}
+		if f.err != nil {
+			yield(nil, f.err)
+		}
+	}
+}
+
+func (f *fakeStripeAPI) createCreditNote(_ context.Context, params *stripesdk.CreditNoteCreateParams) (*stripesdk.CreditNote, error) {
+	f.calls++
+	f.creditNoteParams = params
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &stripesdk.CreditNote{ID: "cn_test"}, nil
+}
+
+func (f *fakeStripeAPI) listCreditNotes(_ context.Context, params *stripesdk.CreditNoteListParams) stripesdk.Seq2[*stripesdk.CreditNote, error] {
+	f.calls++
+	f.creditNoteListParams = params
+	return func(yield func(*stripesdk.CreditNote, error) bool) {
+		for _, note := range f.creditNotes {
+			if !yield(note, nil) {
 				return
 			}
 		}
@@ -486,6 +548,173 @@ func TestWritesWrapStripeErrors(t *testing.T) {
 	})
 	require.ErrorIs(t, err, apiErr)
 	require.ErrorContains(t, err, "create Stripe Checkout session")
+}
+
+func TestGetInvoiceMapsSubscriptionPeriodAndState(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	finalized := end.Add(72 * time.Hour)
+	api := &fakeStripeAPI{invoice: &stripesdk.Invoice{
+		ID:              "in_placeholder",
+		Customer:        &stripesdk.Customer{ID: "cus_placeholder"},
+		Currency:        stripesdk.CurrencyUSD,
+		BillingReason:   stripesdk.InvoiceBillingReasonSubscriptionCycle,
+		Status:          stripesdk.InvoiceStatusOpen,
+		PeriodStart:     start.Unix(),
+		PeriodEnd:       end.Unix(),
+		AmountRemaining: 1234,
+		Parent: &stripesdk.InvoiceParent{SubscriptionDetails: &stripesdk.InvoiceParentSubscriptionDetails{
+			Subscription: &stripesdk.Subscription{ID: "sub_placeholder"},
+		}},
+		StatusTransitions: &stripesdk.InvoiceStatusTransitions{FinalizedAt: finalized.Unix()},
+	}}
+
+	state, err := (&client{api: api}).GetInvoice(t.Context(), "in_placeholder")
+	require.NoError(t, err)
+	require.Equal(t, &InvoiceState{
+		ID:                 "in_placeholder",
+		CustomerID:         "cus_placeholder",
+		SubscriptionID:     "sub_placeholder",
+		Currency:           "usd",
+		BillingReason:      "subscription_cycle",
+		Status:             "open",
+		ServicePeriodStart: start,
+		ServicePeriodEnd:   end,
+		FinalizedAt:        finalized,
+		AmountRemaining:    1234,
+	}, state)
+	require.Len(t, api.invoiceRetrieveParams.Expand, 1)
+	require.Equal(t, "parent.subscription_details.subscription", stripesdk.StringValue(api.invoiceRetrieveParams.Expand[0]))
+}
+
+func TestCreateInvoiceItemUsesExactFinancialIdentity(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 1)
+	api := &fakeStripeAPI{}
+	item, err := (&client{api: api}).CreateInvoiceItem(t.Context(), CreateInvoiceItemInput{
+		CustomerID:     "cus_placeholder",
+		SubscriptionID: "sub_placeholder",
+		InvoiceID:      "in_placeholder",
+		Description:    "OpenRouter chat usage",
+		AmountCents:    1001,
+		PeriodStart:    start,
+		PeriodEnd:      end,
+		AllocationKey:  "allocation_placeholder",
+		IdempotencyKey: "openrouter:<ORG_ID>:2026-07-01:1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, &InvoiceItem{ID: "ii_test", InvoiceID: "in_placeholder", Currency: "usd", AmountCents: 1001}, item)
+	params := api.invoiceItemParams
+	require.EqualValues(t, 1001, stripesdk.Int64Value(params.Amount))
+	require.Equal(t, "usd", stripesdk.StringValue(params.Currency))
+	require.Equal(t, "cus_placeholder", stripesdk.StringValue(params.Customer))
+	require.Equal(t, "sub_placeholder", stripesdk.StringValue(params.Subscription))
+	require.Equal(t, "in_placeholder", stripesdk.StringValue(params.Invoice))
+	require.Equal(t, "OpenRouter chat usage", stripesdk.StringValue(params.Description))
+	require.False(t, stripesdk.BoolValue(params.Discountable))
+	require.Equal(t, start.Unix(), stripesdk.Int64Value(params.Period.Start))
+	require.Equal(t, end.Add(-time.Second).Unix(), stripesdk.Int64Value(params.Period.End))
+	require.Equal(t, "allocation_placeholder", params.Metadata[allocationMetadataKey])
+	require.Equal(t, "openrouter:<ORG_ID>:2026-07-01:1", stripesdk.StringValue(params.IdempotencyKey))
+}
+
+func TestCreateCreditNoteUsesCustomerBalanceForPostPaymentCredit(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	note, err := (&client{api: api}).CreateCreditNote(t.Context(), CreateCreditNoteInput{
+		InvoiceID:         "in_placeholder",
+		Description:       "OpenRouter usage correction",
+		AmountCents:       250,
+		CreditAmountCents: 200,
+		AllocationKey:     "allocation_placeholder",
+		IdempotencyKey:    "openrouter:<ORG_ID>:2026-07-01:2",
+	})
+	require.NoError(t, err)
+	require.Equal(t, &CreditNote{ID: "cn_test", InvoiceID: "in_placeholder", Currency: "usd", AmountCents: 250}, note)
+	params := api.creditNoteParams
+	require.Equal(t, "in_placeholder", stripesdk.StringValue(params.Invoice))
+	require.EqualValues(t, 250, stripesdk.Int64Value(params.Amount))
+	require.EqualValues(t, 200, stripesdk.Int64Value(params.CreditAmount))
+	require.Equal(t, "none", stripesdk.StringValue(params.EmailType))
+	require.Equal(t, "OpenRouter usage correction", stripesdk.StringValue(params.Memo))
+	require.Equal(t, "order_change", stripesdk.StringValue(params.Reason))
+	require.Equal(t, "allocation_placeholder", params.Metadata[allocationMetadataKey])
+	require.Equal(t, "openrouter:<ORG_ID>:2026-07-01:2", stripesdk.StringValue(params.IdempotencyKey))
+}
+
+func TestFindInvoiceAllocationValidatesFinancialData(t *testing.T) {
+	t.Parallel()
+
+	invoice := &stripesdk.Invoice{ID: "in_placeholder"}
+	tests := []struct {
+		name      string
+		item      *stripesdk.InvoiceItem
+		note      *stripesdk.CreditNote
+		findNote  bool
+		wantID    string
+		wantError string
+	}{
+		{
+			name:   "invoice item match",
+			item:   &stripesdk.InvoiceItem{ID: "ii_placeholder", Invoice: invoice, Currency: stripesdk.CurrencyUSD, Amount: 125, Metadata: map[string]string{allocationMetadataKey: "allocation_placeholder"}},
+			wantID: "ii_placeholder",
+		},
+		{
+			name:      "invoice item amount mismatch",
+			item:      &stripesdk.InvoiceItem{ID: "ii_placeholder", Invoice: invoice, Currency: stripesdk.CurrencyUSD, Amount: 124, Metadata: map[string]string{allocationMetadataKey: "allocation_placeholder"}},
+			wantError: "different financial data",
+		},
+		{
+			name:     "credit note match",
+			note:     &stripesdk.CreditNote{ID: "cn_placeholder", Invoice: invoice, Currency: stripesdk.CurrencyUSD, Amount: 125, Metadata: map[string]string{allocationMetadataKey: "allocation_placeholder"}},
+			findNote: true,
+			wantID:   "cn_placeholder",
+		},
+		{
+			name:      "credit note invoice mismatch",
+			note:      &stripesdk.CreditNote{ID: "cn_placeholder", Invoice: &stripesdk.Invoice{ID: "in_other"}, Currency: stripesdk.CurrencyUSD, Amount: 125, Metadata: map[string]string{allocationMetadataKey: "allocation_placeholder"}},
+			findNote:  true,
+			wantError: "different financial data",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			api := &fakeStripeAPI{invoiceItems: []*stripesdk.InvoiceItem{test.item}, creditNotes: []*stripesdk.CreditNote{test.note}}
+			input := FindInvoiceAllocationInput{InvoiceID: "in_placeholder", AllocationKey: "allocation_placeholder", AmountCents: 125}
+			var id string
+			if test.findNote {
+				found, err := (&client{api: api}).FindCreditNote(t.Context(), input)
+				if found != nil {
+					id = found.ID
+				}
+				if test.wantError != "" {
+					require.ErrorContains(t, err, test.wantError)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, "in_placeholder", stripesdk.StringValue(api.creditNoteListParams.Invoice))
+			} else {
+				found, err := (&client{api: api}).FindInvoiceItem(t.Context(), input)
+				if found != nil {
+					id = found.ID
+				}
+				if test.wantError != "" {
+					require.ErrorContains(t, err, test.wantError)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, "in_placeholder", stripesdk.StringValue(api.invoiceItemListParams.Invoice))
+			}
+			require.Equal(t, test.wantID, id)
+		})
+	}
 }
 
 func TestVerifyWebhook(t *testing.T) {

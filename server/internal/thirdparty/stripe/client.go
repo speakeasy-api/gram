@@ -22,6 +22,7 @@ const (
 	organizationSlugMetadataKey = "organization_slug"
 	meterCustomerPayloadKey     = "stripe_customer_id"
 	meterValuePayloadKey        = "value"
+	allocationMetadataKey       = "gram_billing_allocation"
 )
 
 // ErrWebhookNotConfigured indicates that webhook verification cannot run because
@@ -74,6 +75,11 @@ type Client interface {
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
 	CreateMeterEvent(context.Context, CreateMeterEventInput) error
 	GetMeterEventSummary(context.Context, GetMeterEventSummaryInput) (float64, error)
+	GetInvoice(context.Context, string) (*InvoiceState, error)
+	CreateInvoiceItem(context.Context, CreateInvoiceItemInput) (*InvoiceItem, error)
+	CreateCreditNote(context.Context, CreateCreditNoteInput) (*CreditNote, error)
+	FindInvoiceItem(context.Context, FindInvoiceAllocationInput) (*InvoiceItem, error)
+	FindCreditNote(context.Context, FindInvoiceAllocationInput) (*CreditNote, error)
 	VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error)
 	Catalog() Catalog
 }
@@ -171,6 +177,68 @@ type GetMeterEventSummaryInput struct {
 	End time.Time
 }
 
+// InvoiceState is the current Stripe invoice state required by pass-through
+// billing. Amounts are Stripe minor units.
+type InvoiceState struct {
+	ID                 string
+	CustomerID         string
+	SubscriptionID     string
+	Currency           string
+	BillingReason      string
+	Status             string
+	ServicePeriodStart time.Time
+	ServicePeriodEnd   time.Time
+	FinalizedAt        time.Time
+	AmountRemaining    int64
+}
+
+// CreateInvoiceItemInput adds one allocation to a draft Stripe invoice.
+type CreateInvoiceItemInput struct {
+	CustomerID     string
+	SubscriptionID string
+	InvoiceID      string
+	Description    string
+	AmountCents    int64
+	PeriodStart    time.Time
+	PeriodEnd      time.Time
+	AllocationKey  string
+	IdempotencyKey string
+}
+
+// InvoiceItem identifies a confirmed Stripe invoice item.
+type InvoiceItem struct {
+	ID          string
+	InvoiceID   string
+	Currency    string
+	AmountCents int64
+}
+
+// CreateCreditNoteInput credits one allocation against a finalized invoice.
+type CreateCreditNoteInput struct {
+	InvoiceID         string
+	Description       string
+	AmountCents       int64
+	CreditAmountCents int64
+	AllocationKey     string
+	IdempotencyKey    string
+}
+
+// CreditNote identifies a confirmed Stripe credit note.
+type CreditNote struct {
+	ID          string
+	InvoiceID   string
+	Currency    string
+	AmountCents int64
+}
+
+// FindInvoiceAllocationInput finds a prior Stripe write by durable allocation
+// metadata after its idempotency window has elapsed.
+type FindInvoiceAllocationInput struct {
+	InvoiceID     string
+	AllocationKey string
+	AmountCents   int64
+}
+
 // WebhookEvent is the verified Stripe event envelope consumed by webhook handlers.
 type WebhookEvent struct {
 	// ID is Stripe's globally unique event identifier.
@@ -198,6 +266,11 @@ type stripeAPI interface {
 	retrieveCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error)
 	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
 	listMeterEventSummaries(context.Context, *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error]
+	retrieveInvoice(context.Context, string, *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error)
+	createInvoiceItem(context.Context, *stripesdk.InvoiceItemCreateParams) (*stripesdk.InvoiceItem, error)
+	listInvoiceItems(context.Context, *stripesdk.InvoiceItemListParams) stripesdk.Seq2[*stripesdk.InvoiceItem, error]
+	createCreditNote(context.Context, *stripesdk.CreditNoteCreateParams) (*stripesdk.CreditNote, error)
+	listCreditNotes(context.Context, *stripesdk.CreditNoteListParams) stripesdk.Seq2[*stripesdk.CreditNote, error]
 }
 
 type sdkAPI struct {
@@ -238,6 +311,38 @@ func (s *sdkAPI) createMeterEvent(ctx context.Context, params *stripesdk.Billing
 
 func (s *sdkAPI) listMeterEventSummaries(ctx context.Context, params *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error] {
 	return s.client.V1BillingMeterEventSummaries.List(ctx, params).All(ctx)
+}
+
+func (s *sdkAPI) retrieveInvoice(ctx context.Context, id string, params *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error) {
+	invoice, err := s.client.V1Invoices.Retrieve(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK retrieve invoice: %w", err)
+	}
+	return invoice, nil
+}
+
+func (s *sdkAPI) createInvoiceItem(ctx context.Context, params *stripesdk.InvoiceItemCreateParams) (*stripesdk.InvoiceItem, error) {
+	item, err := s.client.V1InvoiceItems.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create invoice item: %w", err)
+	}
+	return item, nil
+}
+
+func (s *sdkAPI) listInvoiceItems(ctx context.Context, params *stripesdk.InvoiceItemListParams) stripesdk.Seq2[*stripesdk.InvoiceItem, error] {
+	return s.client.V1InvoiceItems.List(ctx, params).All(ctx)
+}
+
+func (s *sdkAPI) createCreditNote(ctx context.Context, params *stripesdk.CreditNoteCreateParams) (*stripesdk.CreditNote, error) {
+	note, err := s.client.V1CreditNotes.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create credit note: %w", err)
+	}
+	return note, nil
+}
+
+func (s *sdkAPI) listCreditNotes(ctx context.Context, params *stripesdk.CreditNoteListParams) stripesdk.Seq2[*stripesdk.CreditNote, error] {
+	return s.client.V1CreditNotes.List(ctx, params).All(ctx)
 }
 
 type client struct {
@@ -427,6 +532,179 @@ func (c *client) GetMeterEventSummary(ctx context.Context, input GetMeterEventSu
 	return total, nil
 }
 
+func (c *client) GetInvoice(ctx context.Context, id string) (*InvoiceState, error) {
+	if id == "" {
+		return nil, errors.New("invoice id is required")
+	}
+
+	params := new(stripesdk.InvoiceRetrieveParams)
+	params.AddExpand("parent.subscription_details.subscription")
+	invoice, err := c.api.retrieveInvoice(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve Stripe invoice: %w", err)
+	}
+	if invoice == nil {
+		return nil, errors.New("retrieve Stripe invoice: empty response")
+	}
+
+	state := &InvoiceState{
+		ID:                 invoice.ID,
+		CustomerID:         "",
+		SubscriptionID:     "",
+		Currency:           string(invoice.Currency),
+		BillingReason:      string(invoice.BillingReason),
+		Status:             string(invoice.Status),
+		ServicePeriodStart: time.Unix(invoice.PeriodStart, 0).UTC(),
+		ServicePeriodEnd:   time.Unix(invoice.PeriodEnd, 0).UTC(),
+		FinalizedAt:        time.Time{},
+		AmountRemaining:    invoice.AmountRemaining,
+	}
+	if invoice.Customer != nil {
+		state.CustomerID = invoice.Customer.ID
+	}
+	if invoice.Parent != nil && invoice.Parent.SubscriptionDetails != nil && invoice.Parent.SubscriptionDetails.Subscription != nil {
+		state.SubscriptionID = invoice.Parent.SubscriptionDetails.Subscription.ID
+	}
+	if invoice.StatusTransitions != nil && invoice.StatusTransitions.FinalizedAt > 0 {
+		state.FinalizedAt = time.Unix(invoice.StatusTransitions.FinalizedAt, 0).UTC()
+	}
+	return state, nil
+}
+
+func (c *client) CreateInvoiceItem(ctx context.Context, input CreateInvoiceItemInput) (*InvoiceItem, error) {
+	if input.IdempotencyKey == "" || input.AllocationKey == "" {
+		return nil, errMissingIdempotencyKey
+	}
+	if input.CustomerID == "" || input.SubscriptionID == "" || input.InvoiceID == "" {
+		return nil, errors.New("customer, subscription, and invoice ids are required")
+	}
+	if input.AmountCents <= 0 {
+		return nil, errors.New("invoice item amount must be positive")
+	}
+	if input.PeriodStart.IsZero() || !input.PeriodEnd.After(input.PeriodStart) {
+		return nil, errors.New("invoice item period is invalid")
+	}
+
+	params := new(stripesdk.InvoiceItemCreateParams)
+	params.Amount = new(input.AmountCents)
+	params.Currency = stripesdk.String(string(stripesdk.CurrencyUSD))
+	params.Customer = stripesdk.String(input.CustomerID)
+	params.Subscription = stripesdk.String(input.SubscriptionID)
+	params.Invoice = stripesdk.String(input.InvoiceID)
+	params.Description = stripesdk.String(input.Description)
+	params.Discountable = new(false)
+	params.Period = &stripesdk.InvoiceItemCreatePeriodParams{
+		Start: new(input.PeriodStart.Unix()),
+		End:   new(input.PeriodEnd.Add(-time.Second).Unix()),
+	}
+	params.Metadata = map[string]string{allocationMetadataKey: input.AllocationKey}
+	params.SetIdempotencyKey(input.IdempotencyKey)
+
+	item, err := c.api.createInvoiceItem(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create Stripe invoice item: %w", err)
+	}
+	if item == nil || item.ID == "" {
+		return nil, errors.New("create Stripe invoice item: empty response")
+	}
+	return &InvoiceItem{
+		ID:          item.ID,
+		InvoiceID:   input.InvoiceID,
+		Currency:    "usd",
+		AmountCents: input.AmountCents,
+	}, nil
+}
+
+func (c *client) CreateCreditNote(ctx context.Context, input CreateCreditNoteInput) (*CreditNote, error) {
+	if input.IdempotencyKey == "" || input.AllocationKey == "" {
+		return nil, errMissingIdempotencyKey
+	}
+	if input.InvoiceID == "" {
+		return nil, errors.New("invoice id is required")
+	}
+	if input.AmountCents <= 0 || input.CreditAmountCents < 0 || input.CreditAmountCents > input.AmountCents {
+		return nil, errors.New("credit note amount is invalid")
+	}
+
+	params := new(stripesdk.CreditNoteCreateParams)
+	params.Invoice = stripesdk.String(input.InvoiceID)
+	params.Amount = new(input.AmountCents)
+	if input.CreditAmountCents > 0 {
+		params.CreditAmount = new(input.CreditAmountCents)
+	}
+	params.EmailType = stripesdk.String("none")
+	params.Memo = stripesdk.String(input.Description)
+	params.Metadata = map[string]string{allocationMetadataKey: input.AllocationKey}
+	params.Reason = stripesdk.String(string(stripesdk.CreditNoteReasonOrderChange))
+	params.SetIdempotencyKey(input.IdempotencyKey)
+
+	note, err := c.api.createCreditNote(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create Stripe credit note: %w", err)
+	}
+	if note == nil || note.ID == "" {
+		return nil, errors.New("create Stripe credit note: empty response")
+	}
+	return &CreditNote{
+		ID:          note.ID,
+		InvoiceID:   input.InvoiceID,
+		Currency:    "usd",
+		AmountCents: input.AmountCents,
+	}, nil
+}
+
+func (c *client) FindInvoiceItem(ctx context.Context, input FindInvoiceAllocationInput) (*InvoiceItem, error) {
+	if input.InvoiceID == "" || input.AllocationKey == "" || input.AmountCents <= 0 {
+		return nil, errors.New("invoice id, allocation key, and positive amount are required")
+	}
+	params := new(stripesdk.InvoiceItemListParams)
+	params.Invoice = stripesdk.String(input.InvoiceID)
+	params.Limit = stripesdk.Int64(100)
+	for item, err := range c.api.listInvoiceItems(ctx, params) {
+		if err != nil {
+			return nil, fmt.Errorf("list Stripe invoice items: %w", err)
+		}
+		if item == nil || item.Metadata[allocationMetadataKey] != input.AllocationKey {
+			continue
+		}
+		invoiceID := ""
+		if item.Invoice != nil {
+			invoiceID = item.Invoice.ID
+		}
+		if invoiceID != input.InvoiceID || item.Currency != stripesdk.CurrencyUSD || item.Amount != input.AmountCents {
+			return nil, errors.New("stripe invoice item allocation metadata matches different financial data")
+		}
+		return &InvoiceItem{ID: item.ID, InvoiceID: invoiceID, Currency: string(item.Currency), AmountCents: item.Amount}, nil
+	}
+	return nil, nil
+}
+
+func (c *client) FindCreditNote(ctx context.Context, input FindInvoiceAllocationInput) (*CreditNote, error) {
+	if input.InvoiceID == "" || input.AllocationKey == "" || input.AmountCents <= 0 {
+		return nil, errors.New("invoice id, allocation key, and positive amount are required")
+	}
+	params := new(stripesdk.CreditNoteListParams)
+	params.Invoice = stripesdk.String(input.InvoiceID)
+	params.Limit = stripesdk.Int64(100)
+	for note, err := range c.api.listCreditNotes(ctx, params) {
+		if err != nil {
+			return nil, fmt.Errorf("list Stripe credit notes: %w", err)
+		}
+		if note == nil || note.Metadata[allocationMetadataKey] != input.AllocationKey {
+			continue
+		}
+		invoiceID := ""
+		if note.Invoice != nil {
+			invoiceID = note.Invoice.ID
+		}
+		if invoiceID != input.InvoiceID || note.Currency != stripesdk.CurrencyUSD || note.Amount != input.AmountCents {
+			return nil, errors.New("stripe credit note allocation metadata matches different financial data")
+		}
+		return &CreditNote{ID: note.ID, InvoiceID: invoiceID, Currency: string(note.Currency), AmountCents: note.Amount}, nil
+	}
+	return nil, nil
+}
+
 func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error) {
 	if !IsConfigured(c.webhookSecret) {
 		return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
@@ -526,6 +804,38 @@ func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInp
 func (s *stubClient) GetMeterEventSummary(ctx context.Context, _ GetMeterEventSummaryInput) (float64, error) {
 	s.logger.DebugContext(ctx, "stub Stripe meter event summary skipped")
 	return 0, nil
+}
+
+func (s *stubClient) GetInvoice(context.Context, string) (*InvoiceState, error) {
+	return nil, errors.New("retrieve Stripe invoice is unavailable locally")
+}
+
+func (s *stubClient) CreateInvoiceItem(ctx context.Context, input CreateInvoiceItemInput) (*InvoiceItem, error) {
+	s.logger.DebugContext(ctx, "stub Stripe invoice item skipped")
+	return &InvoiceItem{
+		ID:          "ii_local_stub",
+		InvoiceID:   input.InvoiceID,
+		Currency:    "usd",
+		AmountCents: input.AmountCents,
+	}, nil
+}
+
+func (s *stubClient) CreateCreditNote(ctx context.Context, input CreateCreditNoteInput) (*CreditNote, error) {
+	s.logger.DebugContext(ctx, "stub Stripe credit note skipped")
+	return &CreditNote{
+		ID:          "cn_local_stub",
+		InvoiceID:   input.InvoiceID,
+		Currency:    "usd",
+		AmountCents: input.AmountCents,
+	}, nil
+}
+
+func (s *stubClient) FindInvoiceItem(context.Context, FindInvoiceAllocationInput) (*InvoiceItem, error) {
+	return nil, nil
+}
+
+func (s *stubClient) FindCreditNote(context.Context, FindInvoiceAllocationInput) (*CreditNote, error) {
+	return nil, nil
 }
 
 func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {

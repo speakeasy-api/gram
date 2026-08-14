@@ -715,6 +715,37 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 	return i, err
 }
 
+const getPaygInvoiceIdentity = `-- name: GetPaygInvoiceIdentity :one
+SELECT
+    billing_metadata.stripe_customer_id
+  , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_billing_cycle_anchor
+  , organization_metadata.gram_account_type
+FROM billing_metadata
+JOIN organization_metadata
+  ON organization_metadata.id = billing_metadata.organization_id
+WHERE billing_metadata.organization_id = $1
+`
+
+type GetPaygInvoiceIdentityRow struct {
+	StripeCustomerID         pgtype.Text
+	StripeSubscriptionID     pgtype.Text
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	GramAccountType          string
+}
+
+func (q *Queries) GetPaygInvoiceIdentity(ctx context.Context, organizationID string) (GetPaygInvoiceIdentityRow, error) {
+	row := q.db.QueryRow(ctx, getPaygInvoiceIdentity, organizationID)
+	var i GetPaygInvoiceIdentityRow
+	err := row.Scan(
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.GramAccountType,
+	)
+	return i, err
+}
+
 const getTUMMeterReportTotals = `-- name: GetTUMMeterReportTotals :one
 SELECT
     COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state = 'confirmed'), 0)::bigint AS confirmed_tokens
@@ -926,6 +957,44 @@ func (q *Queries) ListStaleTUMMeterReportCycles(ctx context.Context, arg ListSta
 			&i.CycleEnd,
 			&i.StripeCustomerID,
 			&i.AbsenceObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStripeInvoicesFixture = `-- name: ListStripeInvoicesFixture :many
+SELECT stripe_invoice_id, organization_id, stripe_customer_id, stripe_subscription_id, service_period_start, service_period_end, invoice_state, finalized_at, created_at, updated_at
+FROM stripe_invoices
+WHERE organization_id = $1
+ORDER BY service_period_start, stripe_invoice_id
+`
+
+func (q *Queries) ListStripeInvoicesFixture(ctx context.Context, organizationID pgtype.Text) ([]StripeInvoice, error) {
+	rows, err := q.db.Query(ctx, listStripeInvoicesFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StripeInvoice
+	for rows.Next() {
+		var i StripeInvoice
+		if err := rows.Scan(
+			&i.StripeInvoiceID,
+			&i.OrganizationID,
+			&i.StripeCustomerID,
+			&i.StripeSubscriptionID,
+			&i.ServicePeriodStart,
+			&i.ServicePeriodEnd,
+			&i.InvoiceState,
+			&i.FinalizedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1592,4 +1661,64 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertStripeInvoice = `-- name: UpsertStripeInvoice :one
+INSERT INTO stripe_invoices (
+    stripe_invoice_id
+  , organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+  , service_period_start
+  , service_period_end
+  , invoice_state
+  , finalized_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+ON CONFLICT (stripe_invoice_id) DO UPDATE
+SET
+    invoice_state = EXCLUDED.invoice_state
+  , finalized_at = EXCLUDED.finalized_at
+  , updated_at = clock_timestamp()
+WHERE stripe_invoices.organization_id = EXCLUDED.organization_id
+  AND stripe_invoices.stripe_customer_id = EXCLUDED.stripe_customer_id
+  AND stripe_invoices.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+  AND stripe_invoices.service_period_start = EXCLUDED.service_period_start
+  AND stripe_invoices.service_period_end = EXCLUDED.service_period_end
+RETURNING stripe_invoice_id
+`
+
+type UpsertStripeInvoiceParams struct {
+	StripeInvoiceID      string
+	OrganizationID       pgtype.Text
+	StripeCustomerID     string
+	StripeSubscriptionID string
+	ServicePeriodStart   pgtype.Timestamptz
+	ServicePeriodEnd     pgtype.Timestamptz
+	InvoiceState         string
+	FinalizedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertStripeInvoice(ctx context.Context, arg UpsertStripeInvoiceParams) (string, error) {
+	row := q.db.QueryRow(ctx, upsertStripeInvoice,
+		arg.StripeInvoiceID,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+		arg.StripeSubscriptionID,
+		arg.ServicePeriodStart,
+		arg.ServicePeriodEnd,
+		arg.InvoiceState,
+		arg.FinalizedAt,
+	)
+	var stripe_invoice_id string
+	err := row.Scan(&stripe_invoice_id)
+	return stripe_invoice_id, err
 }

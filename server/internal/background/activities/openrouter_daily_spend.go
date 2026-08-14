@@ -30,6 +30,12 @@ type CollectOpenRouterDailySpendArgs struct {
 	EndDay time.Time
 }
 
+// CollectOpenRouterDailySpendResult identifies organizations whose chat spend
+// is fresh and gap-free for every known invoice source day.
+type CollectOpenRouterDailySpendResult struct {
+	ReadyOrganizationIDs []string
+}
+
 // CollectOpenRouterDailySpend stores billing-grade daily spend for every live
 // platform-managed OpenRouter key.
 type CollectOpenRouterDailySpend struct {
@@ -51,27 +57,34 @@ func NewCollectOpenRouterDailySpend(
 }
 
 func (c *CollectOpenRouterDailySpend) Do(ctx context.Context, args CollectOpenRouterDailySpendArgs) error {
+	_, err := c.DoWithResult(ctx, args)
+	return err
+}
+
+func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args CollectOpenRouterDailySpendArgs) (CollectOpenRouterDailySpendResult, error) {
 	startDay, err := exactUTCDay(args.StartDay)
 	if err != nil {
-		return fmt.Errorf("validate openrouter spend start day: %w", err)
+		return CollectOpenRouterDailySpendResult{}, fmt.Errorf("validate openrouter spend start day: %w", err)
 	}
 	endDay, err := exactUTCDay(args.EndDay)
 	if err != nil {
-		return fmt.Errorf("validate openrouter spend end day: %w", err)
+		return CollectOpenRouterDailySpendResult{}, fmt.Errorf("validate openrouter spend end day: %w", err)
 	}
 	if !startDay.Before(endDay) {
-		return errors.New("validate openrouter spend range: start day must precede end day")
+		return CollectOpenRouterDailySpendResult{}, errors.New("validate openrouter spend range: start day must precede end day")
 	}
 
 	queries := repo.New(c.db)
 	targets, err := queries.ListOpenRouterDailySpendTargets(ctx)
 	if err != nil {
-		return fmt.Errorf("list openrouter daily spend targets: %w", err)
+		return CollectOpenRouterDailySpendResult{}, fmt.Errorf("list openrouter daily spend targets: %w", err)
 	}
 
 	var failures []error
+	readyOrganizations := make(map[string]struct{})
 	for i, target := range targets {
 		keyType := openrouter.KeyType(target.KeyType)
+		isChat := keyType == openrouter.KeyTypeChat
 		if err := keyType.Validate(); err != nil {
 			failures = append(failures, fmt.Errorf("collect spend for organization %s: %w", target.OrganizationID, err))
 			c.recordHeartbeat(ctx, i+1, len(targets))
@@ -83,7 +96,25 @@ func (c *CollectOpenRouterDailySpend) Do(ctx context.Context, args CollectOpenRo
 		if createdDay.After(targetStart) {
 			targetStart = createdDay
 		}
+		if isChat {
+			recoveryStart, err := queries.GetOpenRouterDailySpendRecoveryStartDay(ctx, repo.GetOpenRouterDailySpendRecoveryStartDayParams{
+				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
+				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
+				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},
+			})
+			if err != nil {
+				failures = append(failures, fmt.Errorf("find spend recovery start for organization %s: %w", target.OrganizationID, err))
+				c.recordHeartbeat(ctx, i+1, len(targets))
+				continue
+			}
+			if recoveryStart.Valid && recoveryStart.Time.Before(targetStart) {
+				targetStart = startOfUTCDay(recoveryStart.Time)
+			}
+		}
 		if !targetStart.Before(endDay) {
+			if isChat {
+				readyOrganizations[target.OrganizationID] = struct{}{}
+			}
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
 		}
@@ -117,29 +148,42 @@ func (c *CollectOpenRouterDailySpend) Do(ctx context.Context, args CollectOpenRo
 				attr.SlogOpenRouterKeyType(target.KeyType),
 				attr.SlogError(err),
 			)
+			c.recordHeartbeat(ctx, i+1, len(targets))
+			continue
+		}
+		if isChat {
+			missing, err := queries.CountOpenRouterInvoiceSpendGaps(ctx, repo.CountOpenRouterInvoiceSpendGapsParams{
+				TargetKeyType:        target.KeyType,
+				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
+				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
+				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},
+			})
+			if err != nil {
+				failures = append(failures, fmt.Errorf("check invoice spend gaps for organization %s: %w", target.OrganizationID, err))
+			} else if missing > 0 {
+				failures = append(failures, fmt.Errorf("organization %s has %d unresolved invoice spend gaps", target.OrganizationID, missing))
+			} else {
+				readyOrganizations[target.OrganizationID] = struct{}{}
+			}
 		}
 		c.recordHeartbeat(ctx, i+1, len(targets))
 	}
 
-	// A gap before StartDay is outside the overlapping recovery window. Start
-	// from the first stored row so rollout and newly created keys do not alert
-	// for history the collector never had an opportunity to fetch.
+	result := CollectOpenRouterDailySpendResult{
+		ReadyOrganizationIDs: make([]string, 0, len(readyOrganizations)),
+	}
 	for _, target := range targets {
-		missing, err := queries.CountOpenRouterDailySpendGaps(ctx, repo.CountOpenRouterDailySpendGapsParams{
-			TargetOrganizationID: target.OrganizationID,
-			TargetKeyType:        target.KeyType,
-			TargetCutoffDay:      pgtype.Date{Time: startDay, InfinityModifier: pgtype.Finite, Valid: true},
-		})
-		if err != nil {
-			failures = append(failures, fmt.Errorf("check spend gaps for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err))
-			continue
-		}
-		if missing > 0 {
-			failures = append(failures, fmt.Errorf("organization %s key type %s has %d daily spend gaps before recovery window", target.OrganizationID, target.KeyType, missing))
+		if _, ready := readyOrganizations[target.OrganizationID]; ready {
+			result.ReadyOrganizationIDs = append(result.ReadyOrganizationIDs, target.OrganizationID)
+			delete(readyOrganizations, target.OrganizationID)
 		}
 	}
 
-	return errors.Join(failures...)
+	if len(failures) > 0 {
+		c.logger.WarnContext(ctx, "some OpenRouter daily spend targets were not ready",
+			attr.SlogError(errors.Join(failures...)))
+	}
+	return result, nil
 }
 
 func (c *CollectOpenRouterDailySpend) storeTargetDays(

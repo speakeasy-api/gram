@@ -589,3 +589,52 @@ FROM stripe_invoice_allocations
 WHERE organization_id = @organization_id
   AND source_kind = 'tum_cycle'
 ORDER BY source_period_start, seq;
+
+-- name: GetPaygInvoiceIdentity :one
+SELECT
+    billing_metadata.stripe_customer_id
+  , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_billing_cycle_anchor
+  , organization_metadata.gram_account_type
+FROM billing_metadata
+JOIN organization_metadata
+  ON organization_metadata.id = billing_metadata.organization_id
+WHERE billing_metadata.organization_id = @organization_id;
+
+-- name: UpsertStripeInvoice :one
+INSERT INTO stripe_invoices (
+    stripe_invoice_id
+  , organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+  , service_period_start
+  , service_period_end
+  , invoice_state
+  , finalized_at
+) VALUES (
+    @stripe_invoice_id
+  , @organization_id
+  , @stripe_customer_id
+  , @stripe_subscription_id
+  , @service_period_start
+  , @service_period_end
+  , @invoice_state
+  , @finalized_at
+)
+ON CONFLICT (stripe_invoice_id) DO UPDATE
+SET
+    invoice_state = EXCLUDED.invoice_state
+  , finalized_at = EXCLUDED.finalized_at
+  , updated_at = clock_timestamp()
+WHERE stripe_invoices.organization_id = EXCLUDED.organization_id
+  AND stripe_invoices.stripe_customer_id = EXCLUDED.stripe_customer_id
+  AND stripe_invoices.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+  AND stripe_invoices.service_period_start = EXCLUDED.service_period_start
+  AND stripe_invoices.service_period_end = EXCLUDED.service_period_end
+RETURNING stripe_invoice_id;
+
+-- name: ListStripeInvoicesFixture :many
+SELECT *
+FROM stripe_invoices
+WHERE organization_id = @organization_id
+ORDER BY service_period_start, stripe_invoice_id;
