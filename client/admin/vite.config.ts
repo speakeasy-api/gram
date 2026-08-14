@@ -54,15 +54,10 @@ export default defineConfig(({ command }) => {
     throw new Error("GRAM_ADMIN_BACKEND_URL must be set in development");
   }
 
-  // Origin of the customer-facing Gram app, which serves /rpc/auth.login. This
-  // app is on a different origin, so it has no runtime way to learn it and it
-  // has to be baked in. Empty is tolerated: impersonationUrl() returns
-  // undefined and callers drop the action rather than ship a dead link.
+  // Baked in: a different origin, so there is no runtime way to learn it.
+  // Empty disables the link.
   const appUrl = process.env["GRAM_APP_URL"] || "";
-  // Parsed, not prefix-matched. A build sends an operator to this origin to
-  // authenticate, so a plaintext value would put a login flow on the wire
-  // unprotected, and a bare `https://` passes a prefix test while naming no
-  // host. Failing here beats shipping a bundle that carries the bad origin.
+  // An operator authenticates at this origin, so plaintext is a downgrade.
   if (appUrl) {
     let parsed: URL;
     try {

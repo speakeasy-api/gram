@@ -6,12 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestOrganizationSlugFromDestinationURL pins the destination URL shapes the
-// admin dashboard emits. The admin dashboard builds them in
-// client/admin/src/lib/impersonation.ts and puts them in the `redirect` query
-// parameter of the login URL, which becomes loginState.FinalDestinationURL.
-// A shape this function rejects has no visible failure mode: the operator
-// silently lands on their own default organization instead of the target.
+// Pins the shapes client/admin/src/lib/impersonation.ts emits. A rejected
+// shape fails silently: the operator lands on their own default org.
 func TestOrganizationSlugFromDestinationURL(t *testing.T) {
 	t.Parallel()
 
