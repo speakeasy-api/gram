@@ -254,6 +254,24 @@ func TestFetchPage_ExtractsStructuredAndMalformedHTML(t *testing.T) {
 			body:     `<div><p>Readable up to the break.<li>Also readable.<table><tr><td>Last cell`,
 			contains: []string{"Readable up to the break.", "Also readable.", "Last cell"},
 		},
+		{
+			// Foreign-content breakout: browsers pop an unclosed svg when a
+			// block-level HTML tag opens, so a broken icon in a header must
+			// not swallow the rest of the page.
+			name: "an unclosed svg does not swallow the page",
+			body: `<header><svg viewBox="0 0 24 24"><path d="M0 0h24"/><text>icon label</text>
+				<p>Content after the broken icon.</p><div>And the rest of the page.</div></header>`,
+			contains: []string{"Content after the broken icon.", "And the rest of the page."},
+			excludes: []string{"icon label"},
+		},
+		{
+			// An unclosed template genuinely captures the rest of the
+			// document in a browser, so staying dark is the faithful read.
+			name:     "an unclosed template stays inert",
+			body:     `<p>Visible lead.</p><template><p>inert body`,
+			contains: []string{"Visible lead."},
+			excludes: []string{"inert body"},
+		},
 	}
 
 	for _, tt := range tests {
