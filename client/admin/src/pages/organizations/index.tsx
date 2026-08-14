@@ -13,6 +13,7 @@ import {
 
 import { dataTableFeatures, DataTable as Table } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
+import { useAnnouncer } from "@/hooks/use-announcer";
 import { organizationsListQuery } from "@/lib/adminQueries";
 import {
   errorMessage,
@@ -51,10 +52,6 @@ const PEEK_COLUMN_OVERRIDES: ColumnVisibilityState = {
   name: true,
 };
 
-// Appended to every other announcement so an unchanged sentence still changes
-// the text node. Zero-width, so nothing is spoken and nothing takes up space.
-const ZERO_WIDTH_SPACE = "\u200b";
-
 const ARROW_STEP: Record<string, number | undefined> = {
   ArrowDown: 1,
   ArrowUp: -1,
@@ -90,15 +87,7 @@ export function OrganizationsList(): JSX.Element {
   const peekPanel = useRef<HTMLElement>(null);
   const scrollBox = useRef<HTMLDivElement>(null);
 
-  // Mounted for the life of the page. A live region that arrives in the same
-  // commit as its text is not reliably announced: the element has to be in the
-  // accessibility tree first.
-  //
-  // The count rides along because a region is announced when its text changes.
-  // Organization names are not unique, so the same sentence can be set twice
-  // running; React bails on an equal string, the DOM text never moves, and the
-  // operator hears nothing while the panel visibly swaps records.
-  const [announcement, setAnnouncement] = useState({ text: "", count: 0 });
+  const { announce, announced } = useAnnouncer();
 
   // Raised while rendering, read by the effect that rescues the keyboard.
   const [peekedRecordLeft, setPeekedRecordLeft] = useState(false);
@@ -113,10 +102,6 @@ export function OrganizationsList(): JSX.Element {
   // the list query alone, and a sighted operator presses Re-enable, sees
   // nothing happen and is told nothing about why.
   const [writeFailure, setWriteFailure] = useState<string | null>(null);
-
-  const announce = useCallback((text: string): void => {
-    setAnnouncement((previous) => ({ text, count: previous.count + 1 }));
-  }, []);
 
   // One object, memoised: it is a context value, and a fresh one on every
   // render would re-render every row's actions on every keystroke in the
@@ -401,21 +386,18 @@ export function OrganizationsList(): JSX.Element {
         )}
 
         {/* The only thing that speaks when the arrow keys swap the record under
-            a panel that already holds the focus.
+            a panel that already holds the focus. Mounted for the life of the
+            page: a region that arrives in the same commit as its text is not
+            reliably announced.
 
             `aria-live` is written out as well as implied by the role, and it is
             load-bearing rather than belt and braces: an open Radix modal hides
             the rest of the page with `aria-hidden`, and the one exemption that
             package makes is for elements carrying this attribute by name.
             Without it the region goes down with the app container and a write
-            that fails behind a dialog is announced to nobody. The zero-width
-            alternates with the count so that a sentence set twice running
-            still reaches the accessibility tree as a change. It is not
-            announced, and it is not rendered anywhere a sighted operator
-            reads. */}
+            that fails behind a dialog is announced to nobody. */}
         <div role="status" aria-live="polite" className="sr-only">
-          {announcement.text}
-          {announcement.count % 2 === 1 ? ZERO_WIDTH_SPACE : ""}
+          {announced}
         </div>
 
         {/* Both providers wrap the panel as well as the table: the row menu and
