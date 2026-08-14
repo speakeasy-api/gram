@@ -41,17 +41,14 @@ function CopyValue({
   label: string;
   value: string;
 }): JSX.Element {
-  const [copied, setCopied] = useState(false);
+  // The value copied, not a flag. Peek swaps the record under a mounted panel,
+  // and a flag would stand as a confirmation against an id never copied,
+  // including where the write resolves after the swap.
+  const [copiedValue, setCopiedValue] = useState<string>();
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const copied = copiedValue === value;
 
   useEffect(() => () => clearTimeout(timer.current), []);
-
-  // Peek swaps rows under the same element, so the confirmation would otherwise
-  // stand against an id it was never given.
-  useEffect(() => {
-    clearTimeout(timer.current);
-    setCopied(false);
-  }, [value]);
 
   return (
     <span className="flex items-center gap-1">
@@ -65,9 +62,12 @@ function CopyValue({
           if (!navigator.clipboard?.writeText) return;
           // A check over a failed write sends the operator off with the wrong id.
           void navigator.clipboard.writeText(value).then(() => {
-            setCopied(true);
+            setCopiedValue(value);
             clearTimeout(timer.current);
-            timer.current = setTimeout(() => setCopied(false), COPY_CONFIRM_MS);
+            timer.current = setTimeout(
+              () => setCopiedValue(undefined),
+              COPY_CONFIRM_MS,
+            );
           }, noop);
         }}
       >

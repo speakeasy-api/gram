@@ -21,7 +21,25 @@ const ORG: AdminOrganization = {
   updated_at: "2026-01-07T00:00:00Z",
 };
 
+const OTHER_ORG: AdminOrganization = {
+  ...ORG,
+  id: "org_placeholder_two",
+  name: "Placeholder Two",
+};
+
 const COPY_CONFIRM_MS = 1500;
+
+// Peek swaps the record under a mounted panel, so a test does too rather than
+// re-rendering, which would reset the state under test on its own.
+function Peeking(): JSX.Element {
+  const [org, setOrg] = useState(ORG);
+  return (
+    <>
+      <button onClick={() => setOrg(OTHER_ORG)}>next record</button>
+      <PeekPanel org={org} onClose={noop} />
+    </>
+  );
+}
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString();
@@ -135,24 +153,6 @@ describe("PeekPanel", () => {
   });
 
   it("drops the confirmation when peek moves to another record", async () => {
-    const OTHER: AdminOrganization = {
-      ...ORG,
-      id: "org_placeholder_two",
-      name: "Placeholder Two",
-    };
-
-    // Peek swaps the record under a mounted panel, so the test does too rather
-    // than re-rendering, which would reset the state under test on its own.
-    function Peeking(): JSX.Element {
-      const [org, setOrg] = useState(ORG);
-      return (
-        <>
-          <button onClick={() => setOrg(OTHER)}>next record</button>
-          <PeekPanel org={org} onClose={noop} />
-        </>
-      );
-    }
-
     await renderWithApp(<Peeking />);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy Org id" }));
@@ -160,6 +160,27 @@ describe("PeekPanel", () => {
     expect(screen.getByRole("button", { name: "Org id copied" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "next record" }));
+
+    const control = screen.getByRole("button", { name: "Copy Org id" });
+    expect(iconOf(control).classList.contains("lucide-copy")).toBe(true);
+  });
+
+  it("keeps a write that lands after the move off the new record", async () => {
+    let land = noop;
+    writeText.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          land = () => resolve();
+        }),
+    );
+    await renderWithApp(<Peeking />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Org id" }));
+    fireEvent.click(screen.getByRole("button", { name: "next record" }));
+
+    await act(async () => {
+      land();
+    });
 
     const control = screen.getByRole("button", { name: "Copy Org id" });
     expect(iconOf(control).classList.contains("lucide-copy")).toBe(true);
