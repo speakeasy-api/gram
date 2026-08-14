@@ -90,7 +90,9 @@ export default function OrgHome(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
+      {/* fullWidth + noPadding so the welcome banner can run edge to edge;
+          everything else re-applies the page column below. */}
+      <Page.Body fullWidth noPadding className="gap-0">
         <RequireScope
           scope={["org:read", "project:read", "org:admin"]}
           level="page"
@@ -281,9 +283,9 @@ function OrgHomeInner() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        <OrgWelcomeBanner />
+      <OrgWelcomeBanner />
 
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-8 pb-24">
         <div className="flex items-center gap-2">
           <SearchBar
             value={search}

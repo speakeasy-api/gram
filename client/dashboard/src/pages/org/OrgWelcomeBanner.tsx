@@ -10,6 +10,9 @@ import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { Link } from "react-router";
 
+// Matches the page column OrgHome applies to everything below the banner.
+const COLUMN_CLASS = "mx-auto w-full max-w-7xl px-8";
+
 type RouteCard = {
   index: string;
   title: string;
@@ -69,27 +72,37 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   if (!visible) return null;
 
   return (
-    <section className="border-border border">
-      {/* Deep bottom padding leaves room for the cards to overlap the hero. */}
-      <div
-        className={cn(
-          BRAND_MESH_SURFACE_CLASS,
-          "flex flex-col gap-4 px-6 pt-10 pb-10 md:px-11 md:pt-11 md:pb-28",
-        )}
-      >
+    // Section runs the full width of the content area; the column class below
+    // keeps its contents aligned with the rest of the page.
+    <section className="border-muted dark:border-border/50 w-full border-b">
+      <div className={cn(BRAND_MESH_SURFACE_CLASS, "w-full")}>
         <BrandMeshLayers />
-        <span className="text-eyebrow">Welcome to Speakeasy</span>
-        <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] md:text-[60px]">
-          Choose your
-          <br />
-          first move
-        </h2>
+        {/* Deep bottom padding leaves room for the cards to overlap the hero. */}
+        <div
+          className={cn(
+            COLUMN_CLASS,
+            "flex flex-col gap-4 pt-10 pb-10 md:pt-11 md:pb-28",
+          )}
+        >
+          <span className="text-eyebrow">Welcome to Speakeasy</span>
+          <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] md:text-[60px]">
+            Choose your
+            <br />
+            first move
+          </h2>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 px-6 pb-6 md:-mt-20 md:grid-cols-3 md:px-11 md:pb-10">
-        {cards.map((card) => (
-          <RouteCardLink key={card.index} card={card} />
-        ))}
+      {/* flow-root keeps the cards' negative margin from collapsing out
+          through the band, which would drag the band up over the hero. */}
+      <div className="bg-muted/20 flow-root w-full">
+        <div className={cn(COLUMN_CLASS, "pb-6 md:pb-10")}>
+          <div className="grid grid-cols-1 gap-4 md:-mt-20 md:grid-cols-3">
+            {cards.map((card) => (
+              <RouteCardLink key={card.index} card={card} />
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );
