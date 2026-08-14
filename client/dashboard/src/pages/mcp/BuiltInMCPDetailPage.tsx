@@ -57,14 +57,14 @@ function BuiltInOverviewTab({ mcpUrl }: { mcpUrl: string }) {
     <Stack className="mb-4">
       <PageSection
         heading="Hosted URL"
-        description="The URL to connect to this MCP server from Claude Desktop, Cursor, or any MCP-compatible client."
+        description="The URL to connect to this MCP server from ChatGPT Desktop, Claude Desktop, Cursor, or any MCP-compatible client."
       >
         <CodeBlock className="mb-2">{mcpUrl}</CodeBlock>
       </PageSection>
 
       <PageSection
         heading="Install Page"
-        description="Share this page to give simple instructions for getting started with this MCP server in Cursor or Claude Desktop."
+        description="Share this page to give simple instructions for getting started with this MCP server in ChatGPT Desktop, Cursor, or Claude Desktop."
       >
         <div className="bg-muted/20 flex items-center gap-2 border p-2">
           <CodeBlock

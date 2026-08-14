@@ -27,6 +27,8 @@ describe("formatPlatform", () => {
     expect(formatPlatform("CODEX_WEB")).toBe("Codex Web");
     expect(formatPlatform("chatgpt")).toBe("ChatGPT");
     expect(formatPlatform("ChatGPT")).toBe("ChatGPT");
+    expect(formatPlatform("chatgpt-desktop")).toBe("ChatGPT Desktop");
+    expect(formatPlatform("ChatGPT Desktop")).toBe("ChatGPT Desktop");
     expect(formatPlatform("chatgpt-work")).toBe("ChatGPT Work");
     expect(formatPlatform("opencode")).toBe("opencode");
     expect(formatPlatform("litellm")).toBe("LiteLLM");

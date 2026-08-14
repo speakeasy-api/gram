@@ -974,6 +974,154 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
 }
 
+// TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs verifies that a public
+// MCP server renders the ChatGPT Desktop custom-connector flow, including the
+// Business & Enterprise admin note and the None-auth instruction.
+func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "chatgpt-desktop-public-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Public ChatGPT Desktop Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("public toolset with no security inputs"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
+	assert.Contains(t, body, "ChatGPT Desktop", "should label the ChatGPT Desktop install target")
+	assert.Contains(t, body, "Developer mode", "should tell users to enable Developer mode")
+	assert.Contains(t, body, "Add custom connector", "should render the custom connector step")
+	assert.Contains(t, body, "Leave authentication as <strong>None</strong>", "public servers should use None auth")
+	assert.Contains(t, body, "For Business &amp; Enterprise", "should render the Business & Enterprise admin note")
+	assert.NotContains(t, body, "Set authentication to <strong>Token</strong>", "public servers should not ask for Token auth")
+	assert.NotContains(t, body, "Set authentication to <strong>OAuth</strong>", "public servers should not ask for OAuth")
+	assert.NotContains(t, body, "mcp-remote", "ChatGPT Desktop cannot run local MCP proxies")
+}
+
+// TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs verifies that a
+// private Gram-key server tells ChatGPT Desktop users to use Token auth and
+// does not offer the mcp-remote workaround (ChatGPT is remote-HTTPS only).
+func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "chatgpt-desktop-private-" + uuid.New().String()[:8]
+	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private ChatGPT Desktop Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
+	assert.Contains(t, body, "Set authentication to <strong>Token</strong>", "private servers should use Token auth")
+	assert.Contains(t, body, "Authorization: Bearer", "should explain how ChatGPT sends the token")
+	assert.Contains(t, body, "cannot set additional custom HTTP headers", "should explain the header limitation")
+	assert.Contains(t, body, "For Business &amp; Enterprise", "should still render the Business & Enterprise admin note")
+	assert.NotContains(t, body, "Leave authentication as <strong>None</strong>", "private servers should not suggest None auth")
+	assert.NotContains(t, body, "Set authentication to <strong>OAuth</strong>", "gram-key servers should not suggest OAuth")
+	assert.NotContains(t, body, "mcp-remote", "ChatGPT Desktop cannot run local MCP proxies")
+}
+
+// TestServeInstallPage_ChatGPTDesktop_OAuth verifies that an OAuth-gated
+// server tells ChatGPT Desktop users to choose OAuth rather than Token or None.
+func TestServeInstallPage_ChatGPTDesktop_OAuth(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "chatgpt-desktop-oauth-" + uuid.NewString()[:8]
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "OAuth ChatGPT Desktop Toolset",
+		Slug:                   "chatgpt-desktop-oauth-ts-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("OAuth-gated toolset for ChatGPT Desktop install instructions"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+
+	_, err = ti.toolsetRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = ti.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
+	assert.Contains(t, body, "Set authentication to <strong>OAuth</strong>", "OAuth-gated servers should use OAuth")
+	assert.NotContains(t, body, "Set authentication to <strong>Token</strong>", "OAuth-gated servers should not ask for Token auth")
+	assert.NotContains(t, body, "Leave authentication as <strong>None</strong>", "OAuth-gated servers should not suggest None auth")
+	assert.NotContains(t, body, "GRAM_KEY", "OAuth-gated install must not ask for a Gram key")
+}
+
 // TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
 // AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
 // the GRAM_KEY Authorization header (or gram-environment) in the install snippets.

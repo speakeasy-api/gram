@@ -340,7 +340,7 @@ function MCPOverview() {
       </Page.Section.Title>
       <Page.Section.Description>
         Pre-configured MCP servers provided by the platform for your project.
-        Connect from Claude Desktop, Cursor, or any MCP client.
+        Connect from ChatGPT Desktop, Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
