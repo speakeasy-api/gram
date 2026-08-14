@@ -98,12 +98,16 @@ Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GI
 
 Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL.md`, "Database migrations" section). Activate that skill any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`.
 
-### Absolute URLs in dev env vars
+### Absolute URLs in dev env vars, and remote dev access
 
 Some env vars holding absolute URLs are opened by a browser, and others are dialed by a process on the machine running the stack. `docs/remote-dev-access.md` explains the split and `zero:remap-hostname` encodes it. This matters whenever you add or change such a var, and it is why `localhost` in this repo's env must never be blanket find-and-replaced.
 
+That task also backs the opt-in setup for running the stack on one machine and browsing it from another (a devbox, a cloud VM, a spare laptop).
+
 <important>
 Do not proactively set up, suggest, or mention remote access. It is opt-in, inert unless a user runs it, and irrelevant to almost every task. Bring it up only if the user specifically asks about reaching the dev stack from another machine.
+
+If they do ask, read `docs/remote-dev-access.md` first and note that **some steps run on the machine the user browses from, which you cannot reach**. Running the stack and the mise task is not the whole job: the user must trust the mkcert root CA on that other machine themselves, or every page will show a certificate warning. Tell them that explicitly and hand them the commands — do not report the setup as finished when only the host half is done.
 </important>
 
 ## Mise CLI

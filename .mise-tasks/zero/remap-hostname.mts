@@ -256,10 +256,52 @@ function main(): void {
     set(key, value);
   }
 
+  const sitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
+
   console.log(`✅ Browser-facing URLs now point at ${host}`);
+  console.log();
+  console.log("Next steps:");
+  console.log();
+  console.log("  1. On THIS machine:  ./zero");
   console.log(
-    "   Run `./zero` to regenerate certs for the new hostname and restart the stack.",
+    "     Regenerates the TLS certificate for the new hostname and restarts the stack.",
   );
+  console.log();
+  console.log(
+    "  2. On the machine you BROWSE FROM — nobody can do this step for you, and",
+  );
+  console.log(
+    "     without it every page shows a certificate warning. Copy this file over",
+  );
+  console.log("     and trust it, once:");
+  console.log();
+  console.log(`       ${caRootFile()}`);
+  console.log();
+  console.log(
+    "       macOS: sudo security add-trusted-cert -d -r trustRoot \\",
+  );
+  console.log(
+    "                -k /Library/Keychains/System.keychain rootCA.pem",
+  );
+  console.log();
+  console.log(`  3. From that same machine, check it:`);
+  console.log(`       curl -k https://${host}:${sitePort}/`);
+  console.log();
+  console.log("docs/remote-dev-access.md covers the rest.");
+}
+
+/** Path to the mkcert root CA, for the copy-it-over instruction. */
+function caRootFile(): string {
+  try {
+    const root = execFileSync("mkcert", ["-CAROOT"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (root) return `${root}/rootCA.pem`;
+  } catch {
+    // mkcert not resolvable — fall back to naming the file generically.
+  }
+  return '"$(mkcert -CAROOT)"/rootCA.pem';
 }
 
 main();

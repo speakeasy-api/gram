@@ -24,6 +24,11 @@ You do **not** need this to browse the stack on the machine running it.
 
 ## Setup
 
+Two machines are involved, and it matters which one you are on. Below, **host**
+is the machine running the stack and **client** is the machine you browse from.
+
+### 1. On the host
+
 ```sh
 # Read the hostname from the local tailscale daemon
 mise run zero:remap-hostname --detect
@@ -35,30 +40,46 @@ mise run zero:remap-hostname --host devbox.example.ts.net
 ```
 
 `./zero` regenerates the TLS certificate — the new hostname joins `localhost` and
-`host.docker.internal` on the same cert — and restarts the stack. Then browse
-`https://<your-host>:$GRAM_SITE_PORT`.
+`host.docker.internal` on the same cert — and restarts the stack.
 
 Settings land in `mise.local.toml`, which is gitignored, so your hostname never
 leaves the machine.
 
-### Trusting the certificate on the other machine
+### 2. On the client: trust the certificate
+
+**This step cannot be done from the host, and skipping it means every page shows
+a certificate warning.**
 
 The stack uses a [mkcert](https://github.com/FiloSottile/mkcert) certificate
-signed by a root CA that only exists on the machine that generated it. The
-browser is elsewhere, so that machine needs the CA too. Copy
-`$(mkcert -CAROOT)/rootCA.pem` across and trust it once:
+signed by a root CA that exists only on the host. The browser is on the client,
+so the client needs that CA. Copy `$(mkcert -CAROOT)/rootCA.pem` over — the task
+prints its full path — and trust it once:
 
 ```sh
-# macOS
+# on the CLIENT
 sudo security add-trusted-cert -d -r trustRoot \
   -k /Library/Keychains/System.keychain rootCA.pem
 ```
 
-If you lack admin rights on the machine running the stack, `mkcert -install`
-there will fail and abort `./zero`. Set `GRAM_TLS_SKIP_CA_TRUST=1` in
-`mise.local.toml` to downgrade that to a warning: registering the CA locally only
-matters for a browser running on that machine, and everything headless is pointed
-at the CA file explicitly.
+### 3. On the client: check it
+
+```sh
+# on the CLIENT — -k first, so a routing problem is not confused with a cert one
+curl -k https://<your-host>:$GRAM_SITE_PORT/
+
+# then without -k, which also confirms the CA is trusted
+curl https://<your-host>:$GRAM_SITE_PORT/
+```
+
+Then browse `https://<your-host>:$GRAM_SITE_PORT`.
+
+### If you lack admin rights on the host
+
+`mkcert -install` will fail there and abort `./zero`. Set
+`GRAM_TLS_SKIP_CA_TRUST=1` in `mise.local.toml` to downgrade that to a warning.
+Registering the CA on the host only matters for a browser running on the host;
+everything headless is pointed at the CA file explicitly, and the client needs
+the CA in its own trust store either way.
 
 ## Worktrees
 
