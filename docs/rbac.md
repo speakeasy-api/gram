@@ -26,17 +26,19 @@ Examples:
 
 ```text
 user:user_01abc
-role:admin
-role:member
-role:custom-builder
+role:global:00000000-0000-0000-0000-000000000001
+role:global:00000000-0000-0000-0000-000000000002
+role:organization:00000000-0000-0000-0000-000000000003
 ```
+
+Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
 The current RBAC implementation supports `user` and `role` principals, but there is no hard limitation to those two. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
 
 A request's effective grants are normally loaded from both:
 
 - the authenticated user principal, such as `user:user_01abc`
-- the user's organization role principal, such as `role:admin` or `role:custom-builder`
+- the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
 This lets us give most access through roles while still allowing direct user grants when needed.
 
@@ -140,14 +142,14 @@ principal + scope + selector = grant
 Example:
 
 ```text
-role:member has project:read on project 018f...
+role:global:00000000-0000-0000-0000-000000000002 has project:read on project 018f...
 ```
 
 In database shape:
 
 ```json
 {
-  "principal_urn": "role:member",
+  "principal_urn": "role:global:00000000-0000-0000-0000-000000000002",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -385,9 +387,9 @@ org:admin
 Grants assign that vocabulary to principals:
 
 ```text
-role:admin has project:write on every project
-role:member has mcp:connect on every MCP server
-role:custom-support has mcp:connect on toolset_123, tool=search_docs
+role:global:00000000-0000-0000-0000-000000000001 has project:write on every project
+role:global:00000000-0000-0000-0000-000000000002 has mcp:connect on every MCP server
+role:organization:00000000-0000-0000-0000-000000000003 has mcp:connect on toolset_123, tool=search_docs
 ```
 
 The practical distinction is simple: add a grant when the permission already exists but another principal needs it. Add a scope only when the product needs a new kind of permission that should be independently assignable. Most changes should add or modify grants, not scopes.
@@ -475,7 +477,7 @@ The principal list usually contains the user and their role:
 
 ```text
 user:user_01abc
-role:member
+role:global:00000000-0000-0000-0000-000000000002
 ```
 
 The engine then evaluates checks in memory against the loaded grants.
@@ -529,7 +531,7 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open Team page and manage members                                                                     | `org:admin`                                                                                                  | Organization ID                                                       | The current Team page is page-gated on `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Open Billing                                                                                          | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Billing management sections and portal actions are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Manage organization API keys or generate agent tokens                                                 | `org:admin`                                                                                                  | Organization ID                                                       | API key listing and creation are admin-only in the dashboard.                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| View organization domains, org logs, webhooks, identity, audit logs, device agent                     | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, device-agent token generation, and fleet configuration, requires `org:admin`.                                                                                                                                                                                                                                                                                                                                                |
+| View organization domains, org logs, webhooks, identity, audit logs, device agent                     | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, and device-agent token generation, requires `org:admin`. The Device Agent Setup tab stays readable for org readers, but the fleet Configuration tab is admin-only to both view and change: its Configuration tab is hidden from non-admins and `agent.getConfiguration`/`agent.updateConfiguration` both require `org:admin`.                                                                                                |
 | View MCP Connections and automatic session refresh policy                                             | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Changing the organization-wide automatic session refresh policy requires `org:admin`. Revoking connections requires `project:write` for the selected project.                                                                                                                                                                                                                                                                                                                                                               |
 | View organization collections                                                                         | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Collection create/update/delete and MCP server attach/detach actions require `org:admin`. Adding collection content to a project can additionally require `project:write` for that project.                                                                                                                                                                                                                                                                                                                                 |
 | Open project home                                                                                     | `project:read`                                                                                               | Project ID                                                            | `project:write` also opens it through scope expansion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -752,7 +754,7 @@ Grant row:
 ```json
 {
   "organization_id": "org_123",
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -782,7 +784,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -812,7 +814,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:builder",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000011",
   "scope": "project:write",
   "selectors": {
     "resource_kind": "project",
@@ -842,7 +844,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -870,7 +872,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -907,7 +909,7 @@ Grant rows:
 ```json
 [
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",
@@ -915,7 +917,7 @@ Grant rows:
     }
   },
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",

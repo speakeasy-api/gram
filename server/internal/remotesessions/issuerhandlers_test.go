@@ -20,7 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -999,6 +1001,83 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 	}))
 	t.Cleanup(server.Close)
 	return server
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackIssuer(t *testing.T) {
+	t.Parallel()
+
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	_, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, "http://identity.example")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "HTTPS outside local loopback")
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureRedirect(t *testing.T) {
+	t.Parallel()
+
+	redirected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://identity.example/.well-known/oauth-authorization-server", http.StatusFound)
+	}))
+	t.Cleanup(redirected.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, redirected.URL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "redirect target must use HTTPS outside local loopback")
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T) {
+	t.Parallel()
+
+	for name, testCase := range map[string]struct {
+		endpoint string
+		message  string
+	}{
+		"authorization_endpoint": {endpoint: "http://identity.example/authorize", message: "must use HTTPS outside local loopback"},
+		"token_endpoint":         {endpoint: "http://identity.example/token", message: "must use HTTPS or the same local loopback origin"},
+		"jwks_uri":               {endpoint: "http://identity.example/jwks", message: "must use HTTPS"},
+		"registration_endpoint":  {endpoint: "http://identity.example/register", message: "must use HTTPS"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := fakeIssuerServer(t, func(doc map[string]any) {
+				doc[name] = testCase.endpoint
+			})
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+
+			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "issuer metadata "+name+" "+testCase.message)
+		})
+	}
+}
+
+func TestDiscoverIssuerMetadataRejectsInsecureLoopbackServerEndpoints(t *testing.T) {
+	t.Parallel()
+
+	for name, endpoint := range map[string]string{
+		"jwks_uri":              "http://127.0.0.1/jwks",
+		"registration_endpoint": "http://localhost/register",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := fakeIssuerServer(t, func(doc map[string]any) {
+				doc[name] = endpoint
+			})
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+
+			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "issuer metadata "+name+" must use HTTPS")
+		})
+	}
 }
 
 func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {

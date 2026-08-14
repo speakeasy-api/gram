@@ -3344,7 +3344,7 @@ type PluginServerResponseBody struct {
 type PluginAssignmentResponseBody struct {
 	// Unique assignment identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Principal URN (e.g. role:engineering, user:id, or *).
+	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
 }

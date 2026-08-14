@@ -1,6 +1,7 @@
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
-import { RequireScope } from "@/components/require-scope";
-import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -9,22 +10,24 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/Sidebar";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRBAC } from "@/hooks/useRBAC";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useOrgRoutes } from "@/routes";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Icon } from "@/components/ui/Icon";
-import * as React from "react";
-import { Link } from "react-router";
-import { GramLogo } from "./gram-logo";
+
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
-import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { GramLogo } from "./gram-logo";
+import { Icon } from "@/components/ui/Icon";
+import { Link } from "react-router";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
+import { RequireScope } from "@/components/require-scope";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 import { TrialStatusCard } from "./trial-status-card";
+import { WorkspaceSwitcher } from "./workspace-switcher";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -62,6 +65,8 @@ export function OrgSidebar({
     throwOnError: false,
   });
   const isPlatformAdmin = useIsPlatformAdmin();
+  const { enabled: isPlatformMcpDashboardEnabled } =
+    usePlatformMcpDashboardVisibility();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -73,6 +78,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
+    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -118,6 +124,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
+    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -189,6 +196,14 @@ export function OrgSidebar({
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
+                  ...(isPlatformMcpDashboardEnabled
+                    ? [
+                        {
+                          item: orgRoutes.platformMcp,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===

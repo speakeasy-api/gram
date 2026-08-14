@@ -6,28 +6,27 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 type Composite struct {
-	polar   *polar.Client
+	billing billing.Tracker
 	posthog *posthog.Posthog
 	logger  *slog.Logger
 }
 
 var _ billing.Tracker = (*Composite)(nil)
 
-func New(polar *polar.Client, posthog *posthog.Posthog, logger *slog.Logger) *Composite {
+func New(billingTracker billing.Tracker, posthog *posthog.Posthog, logger *slog.Logger) *Composite {
 	return &Composite{
-		polar:   polar,
+		billing: billingTracker,
 		posthog: posthog,
 		logger:  logger.With(attr.SlogComponent("usage_tracker")),
 	}
 }
 
 func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
-	c.polar.TrackModelUsage(ctx, event)
+	c.billing.TrackModelUsage(ctx, event)
 
 	properties := map[string]any{
 		"organization_id":         event.OrganizationID,
@@ -55,7 +54,7 @@ func (c *Composite) TrackModelUsage(ctx context.Context, event billing.ModelUsag
 }
 
 func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
-	c.polar.TrackToolCallUsage(ctx, event)
+	c.billing.TrackToolCallUsage(ctx, event)
 
 	properties := map[string]any{
 		"organization_id":      event.OrganizationID,
@@ -111,7 +110,7 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 }
 
 func (c *Composite) TrackPromptCallUsage(ctx context.Context, event billing.PromptCallUsageEvent) {
-	c.polar.TrackPromptCallUsage(ctx, event)
+	c.billing.TrackPromptCallUsage(ctx, event)
 
 	properties := map[string]any{
 		"organization_id":      event.OrganizationID,
@@ -157,7 +156,7 @@ func (c *Composite) TrackPromptCallUsage(ctx context.Context, event billing.Prom
 }
 
 func (c *Composite) TrackPlatformUsage(ctx context.Context, events []billing.PlatformUsageEvent) {
-	c.polar.TrackPlatformUsage(ctx, events)
+	c.billing.TrackPlatformUsage(ctx, events)
 }
 
 // for product metrics we create our own heuristic to estimate tool call success

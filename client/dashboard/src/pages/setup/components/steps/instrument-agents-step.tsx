@@ -1,12 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Terminal, ChevronRight, MonitorCog, Wrench } from "lucide-react";
+import { Terminal, MonitorCog, Wrench } from "lucide-react";
 import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { cn } from "@/lib/utils";
+import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
-import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "../platform-logos";
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
@@ -112,53 +111,15 @@ export function InstrumentAgentsStep({
               const status = platformStatus[platform.id] ?? "not_started";
 
               return (
-                <button
+                <AgentPlatformPickerItem
                   key={platform.id}
-                  type="button"
+                  platformId={platform.id}
+                  name={platform.name}
+                  description={platform.description}
+                  complete={status === "complete"}
+                  statusBadge={platformStatusBadge(status)}
                   onClick={() => setDrawerPlatformId(platform.id)}
-                  className={cn(
-                    "flex w-full items-center gap-4 border p-4 text-left transition-all",
-                    status === "complete"
-                      ? "border-foreground/10 bg-secondary/20"
-                      : "border-border bg-card hover:border-foreground/20",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 flex-shrink-0 items-center justify-center",
-                      status === "complete"
-                        ? "bg-foreground/10"
-                        : "bg-secondary",
-                    )}
-                  >
-                    {PLATFORM_LOGOS[platform.id] ? (
-                      <img
-                        src={PLATFORM_LOGOS[platform.id]}
-                        alt={platform.name}
-                        className={cn(
-                          "h-5 w-5",
-                          INVERT_LOGO_IN_DARK.has(platform.id) && "dark:invert",
-                        )}
-                      />
-                    ) : (
-                      <span className="text-foreground text-sm font-semibold">
-                        {platform.name.charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-foreground text-sm font-medium">
-                        {platform.name}
-                      </p>
-                      {platformStatusBadge(status)}
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {platform.description}
-                    </p>
-                  </div>
-                  <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                </button>
+                />
               );
             })}
 

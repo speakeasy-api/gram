@@ -44,6 +44,22 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countOrganizationsForWorkosIDFixture = `-- name: CountOrganizationsForWorkosIDFixture :one
+SELECT count(*)
+FROM organization_metadata
+WHERE workos_id = $1::text
+`
+
+// Test-only fixture for proving that two writers converged on one row instead
+// of creating two. Every read the API offers returns at most one organization,
+// so a duplicate row is invisible through it and only a count can see it.
+func (q *Queries) CountOrganizationsForWorkosIDFixture(ctx context.Context, workosID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationsForWorkosIDFixture, workosID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOutboxEntriesByEventType = `-- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
 FROM publish_outbox
@@ -142,7 +158,8 @@ INSERT INTO organization_metadata (
     whitelisted,
     free_trial_started_at,
     free_trial_ends_at,
-    disabled_at
+    disabled_at,
+    created_at
 ) VALUES (
     $1,
     $2,
@@ -152,7 +169,8 @@ INSERT INTO organization_metadata (
     $6,
     $7,
     $8,
-    $9::timestamptz
+    $9::timestamptz,
+    COALESCE($10::timestamptz, clock_timestamp())
 )
 `
 
@@ -166,12 +184,14 @@ type CreateOrganizationMetadataFixtureParams struct {
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
 }
 
 // Test-only fixture that lets seeders populate every column on
 // organization_metadata. Prefer this over CreateOrganizationMetadata when a
 // test needs to exercise filters that depend on account type, workos linkage,
-// disabled state, whitelist flag, or trial window.
+// disabled state, whitelist flag, trial window, or age. Omit created_at to keep
+// the column default.
 func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg CreateOrganizationMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createOrganizationMetadataFixture,
 		arg.ID,
@@ -183,6 +203,7 @@ func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg Cre
 		arg.FreeTrialStartedAt,
 		arg.FreeTrialEndsAt,
 		arg.DisabledAt,
+		arg.CreatedAt,
 	)
 	return err
 }
@@ -290,6 +311,19 @@ func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const forceSoftDeleteOrganizationUserRelationshipsFixture = `-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+`
+
+// Test-only fixture for seeding a removed member. The deleted column is
+// generated from deleted_at, so a soft delete has to set the timestamp.
+func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationshipsFixture, organizationID)
+	return err
+}
+
 const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
@@ -375,6 +409,46 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 		return nil, err
 	}
 	return items, nil
+}
+
+const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
+SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
+FROM organization_metadata
+WHERE id = $1
+`
+
+type GetOrganizationMetadataStateFixtureRow struct {
+	DisabledAt        pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	Whitelisted       bool
+	GramAccountType   string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+// Test-only fixture for asserting what a write to organization_metadata did
+// and did not touch. disabled_at comes back at full precision: the admin API
+// renders it as a second-resolution RFC3339 string, which hides a timestamp
+// that moved by microseconds. workos_last_event_id is the WorkOS webhook
+// cursor, which only the webhook path may write. created_at and updated_at are
+// the reference points for "did this write stamp the moment of the action":
+// comparing a stamp against them keeps the comparison inside the database
+// clock, which the test host's clock can drift from.
+// gram_account_type and whitelisted are the two columns trial demotion drops,
+// so a write that only extends a trial has to leave both exactly where it found
+// them.
+func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id string) (GetOrganizationMetadataStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMetadataStateFixture, id)
+	var i GetOrganizationMetadataStateFixtureRow
+	err := row.Scan(
+		&i.DisabledAt,
+		&i.WorkosLastEventID,
+		&i.Whitelisted,
+		&i.GramAccountType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getOutboxEntry = `-- name: GetOutboxEntry :one
@@ -1300,6 +1374,28 @@ type SetProjectSlugFixtureParams struct {
 
 func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
+	return err
+}
+
+const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
+UPDATE organization_metadata
+SET workos_last_event_id = $1
+WHERE id = $2
+`
+
+type SetWorkosLastEventIDFixtureParams struct {
+	WorkosLastEventID pgtype.Text
+	ID                string
+}
+
+// Test-only fixture for seeding the WorkOS webhook cursor on an organization
+// that already exists. Deliberately kept out of
+// CreateOrganizationMetadataFixture: several branches add columns to that
+// INSERT at once, and a column added mid-list renumbers every positional
+// placeholder after it in the generated code, which a hand-resolved merge can
+// get wrong while still compiling.
+func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
+	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
 	return err
 }
 
