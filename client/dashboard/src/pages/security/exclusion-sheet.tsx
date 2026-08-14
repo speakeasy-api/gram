@@ -24,7 +24,6 @@ import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSu
 import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
@@ -63,10 +62,11 @@ export type ExclusionSheetState =
        * picker; absent for the Exclusions tab / Policy Center buttons, which
        * have no finding and open straight onto the criteria box. */
       results?: RiskResult[];
-      /** The Watchdog signal the create was started from. Signals cluster on
-       * one rule, so this pre-fills the "Any <rule> finding" option — and
-       * makes it the default — even before any evidence rows have loaded. */
-      signal?: RiskSignal;
+      /** The detection rule the create is pre-targeted at, for an opener that
+       * knows it independently of the findings — a Watchdog signal clusters on
+       * one rule. Pre-fills the "Any <rule> finding" option and makes it the
+       * default, even before any evidence rows have loaded. */
+      presetRuleId?: string;
     }
   | { mode: "edit"; exclusion: RiskExclusion };
 
@@ -138,10 +138,7 @@ export function ExclusionEditor({
   const formKey =
     state.mode === "edit"
       ? `edit-${state.exclusion.id}`
-      : // The signal key participates so a signal-originated create remounts
-        // when the drawer switches signals even while both have no evidence
-        // rows loaded yet.
-        `create-${state.signal?.key ?? ""}-${(state.results ?? []).map((r) => r.id).join(",")}`;
+      : `create-${(state.results ?? []).map((r) => r.id).join(",")}`;
 
   return (
     <ExclusionForm
@@ -252,7 +249,7 @@ function ExclusionForm({
 }: ExclusionFormProps) {
   const editing = state.mode === "edit" ? state.exclusion : null;
   const results = state.mode === "create" ? (state.results ?? []) : [];
-  const signal = state.mode === "create" ? state.signal : undefined;
+  const presetRuleId = state.mode === "create" ? state.presetRuleId : undefined;
   const single = results.length === 1 ? results[0] : undefined;
 
   // Risk Events and Risk Overview null the raw match at the API boundary, so
@@ -271,14 +268,13 @@ function ExclusionForm({
 
   // Ready-made rules for the selection. Always at least ["custom"], so an
   // edit or a no-finding create renders no picker and opens on the DSL box.
-  // A signal supplies its rule directly, so the rule option is on offer even
-  // before evidence rows load.
-  const options = exclusionOptions(results, exact, signal?.ruleId);
+  // A pre-targeted rule is on offer even before any findings load.
+  const options = exclusionOptions(results, exact, presetRuleId);
   const [choice, setChoice] = useState<ExclusionOption["value"]>(() => {
-    // A signal-originated create defaults to the rule option: the flow began
-    // as "stop flagging this signal", which is the whole rule cluster, not
-    // any one matched value.
-    if (signal && options.some((o) => o.value === "rule")) return "rule";
+    // A pre-targeted create opens on the rule option: the flow began as "stop
+    // flagging this signal", which is the whole rule cluster, not any one
+    // matched value. The option is always present when the id is.
+    if (presetRuleId) return "rule";
     // A pending exact option is not savable yet, so never open on it —
     // selecting it is the gesture that fires the reveal.
     return (

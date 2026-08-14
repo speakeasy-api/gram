@@ -66,13 +66,14 @@ function shared<K extends "ruleId" | "source">(
 // finding — its plaintext comes from the finding itself on the chat surfaces,
 // or from `exact` on the masked list pages, where the raw match never reaches
 // the browser until it is unmasked. Rule and source rules need every selected
-// row to agree on that field — except `signalRuleId`, which a signal-originated
-// create supplies directly: the Watchdog signal already names the rule, so the
-// rule option must not depend on evidence rows having loaded.
+// row to agree on that field — except `presetRuleId`, which an opener that
+// already knows the rule (the Watchdog signal drawer) supplies directly, so the
+// rule option doesn't depend on findings having loaded. The selection wins when
+// it determines a rule of its own.
 export function exclusionOptions(
   results: RiskResult[],
   exact?: ExactCandidate,
-  signalRuleId?: string,
+  presetRuleId?: string,
 ): ExclusionOption[] {
   const options: ExclusionOption[] = [];
 
@@ -92,7 +93,7 @@ export function exclusionOptions(
     });
   }
 
-  const ruleId = shared(results, "ruleId") ?? signalRuleId;
+  const ruleId = shared(results, "ruleId") ?? presetRuleId;
   if (ruleId) {
     options.push({
       value: "rule",

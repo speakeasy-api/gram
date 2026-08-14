@@ -247,7 +247,11 @@ export function SignalDrawer({
     // to — the "Any <rule> finding" option even before evidence rows load.
     // Evidence rows still ride along for the exact-value option and the
     // custom branch's findings context.
-    setExclusionState({ mode: "create", results: evidence, signal });
+    setExclusionState({
+      mode: "create",
+      results: evidence,
+      presetRuleId: signal.ruleId,
+    });
   };
 
   // Judge-backed signals get false-positive dismissal as the signal-level
@@ -256,15 +260,20 @@ export function SignalDrawer({
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
 
-  // The drawer stays mounted across signal switches and closes, so a
-  // collection that was in flight when either happened must not open the
-  // confirm dialog with the previous signal's findings. The ref tracks the
-  // currently displayed signal; a finished collection only lands if it still
-  // matches.
+  // Which signal is on screen is a URL param, so browser back/forward swaps it
+  // while the drawer stays mounted — and every piece of state here snapshots
+  // the signal it was started from, so none of it may outlive a switch. An open
+  // exclusion editor would go on targeting the previous signal's rule, a
+  // pending dismissal would clear the previous signal's findings under the new
+  // signal's name, and a collection still in flight must not open that dialog
+  // at all. Tracked by key rather than by the signal object so a list refetch's
+  // new identity doesn't discard live state; clearing on mount is a no-op.
   const activeSignalKey = useRef<string | null>(null);
   useEffect(() => {
     activeSignalKey.current = signal?.key ?? null;
-  }, [signal]);
+    setExclusionState(null);
+    setPendingDismiss(null);
+  }, [signal?.key]);
 
   const openSignalDismiss = async () => {
     if (!signal) return;
