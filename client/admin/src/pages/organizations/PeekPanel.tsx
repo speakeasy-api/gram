@@ -10,6 +10,10 @@ import { cn } from "@/lib/utils";
 
 const COPY_CONFIRM_MS = 1500;
 
+// One panel is on the page at a time, so a constant is enough and the row's
+// trigger can point `aria-controls` at it without threading an id through.
+export const PEEK_PANEL_ID = "organization-peek-panel";
+
 function noop(): void {}
 
 function fmtDateShort(iso?: string): string {
@@ -95,6 +99,7 @@ export function PeekPanel({
   return (
     <aside
       ref={root}
+      id={PEEK_PANEL_ID}
       tabIndex={-1}
       aria-label="Organization peek"
       className={cn("flex flex-col rounded-lg border outline-none", className)}
