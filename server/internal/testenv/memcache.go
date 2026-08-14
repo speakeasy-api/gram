@@ -40,10 +40,20 @@ func (m *memoryCache) Get(ctx context.Context, key string, value any) error {
 }
 
 func (m *memoryCache) GetAndDelete(ctx context.Context, key string, value any) error {
-	if err := m.Get(ctx, key, value); err != nil {
-		return err
+	// Atomic lookup+removal under one lock, mirroring Redis GETDEL: exactly
+	// one concurrent caller wins the entry, and the entry is consumed even
+	// when it fails to decode.
+	m.mu.Lock()
+	raw, ok := m.entries[key]
+	delete(m.entries, key)
+	m.mu.Unlock()
+	if !ok {
+		return errors.New("no cache entry for key")
 	}
-	return m.Delete(ctx, key)
+	if err := json.Unmarshal(raw, value); err != nil {
+		return errors.New("unmarshal cache entry: " + err.Error())
+	}
+	return nil
 }
 
 func (m *memoryCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {

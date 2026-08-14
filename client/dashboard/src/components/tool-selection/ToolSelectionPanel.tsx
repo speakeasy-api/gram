@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronRight, Wrench, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
 import {
@@ -205,16 +205,21 @@ export function ToolSelectionPanel({
   const filteredServers = useMemo(() => {
     if (!q) return servers;
     return servers
-      .map((server) => ({
-        ...server,
-        tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
-      }))
-      .filter(
-        (s) =>
-          s.tools.length > 0 ||
-          s.name.toLowerCase().includes(q) ||
-          (s.namePrefix ?? "").toLowerCase().includes(q),
-      );
+      .map((server) => {
+        // A server-name/prefix match keeps the full tool list — the user
+        // found the server, not a subset of its tools.
+        if (
+          server.name.toLowerCase().includes(q) ||
+          (server.namePrefix ?? "").toLowerCase().includes(q)
+        ) {
+          return server;
+        }
+        return {
+          ...server,
+          tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
+        };
+      })
+      .filter((s) => s.tools.length > 0);
   }, [servers, q]);
 
   useEffect(() => {
@@ -223,24 +228,13 @@ export function ToolSelectionPanel({
     }
   }, [q, filteredServers]);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += e.deltaY;
-    }
-  }, []);
-
   const annotationSectionVisible = annotationSelectionSupported;
   const annotationsDimmed = mode === "tools" && selectedTools.length > 0;
   const toolsDimmed = mode === "annotations" && selectedAnnotations.length > 0;
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div
-        ref={scrollRef}
-        onWheel={handleWheel}
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {annotationSectionVisible && (
           <div className={cn(annotationsDimmed && "opacity-60")}>
             <div className="px-3 pt-5 pb-3">
@@ -402,8 +396,10 @@ function ServerRow({
 
   const q = query.toLowerCase();
 
-  const selectedCount = selectedTools.filter(
-    (t) => t.serverId === server.id,
+  const selectedCount = serverTools.filter((tool) =>
+    selectedTools.some(
+      (t) => t.serverId === server.id && t.toolName === tool.name,
+    ),
   ).length;
   const total = serverTools.length;
   const allSelected =
@@ -516,6 +512,7 @@ function ServerRow({
     <div className="border-border border-b last:border-b-0">
       <div
         role="button"
+        aria-expanded={isExpanded}
         tabIndex={0}
         onClick={() => onToggleExpanded(server.id)}
         onKeyDown={(e) => {

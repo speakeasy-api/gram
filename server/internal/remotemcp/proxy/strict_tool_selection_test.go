@@ -52,6 +52,47 @@ func TestProxy_Post_StrictRejectsMalformedToolsCallBeforeUpstream(t *testing.T) 
 	require.Contains(t, rr.Body.String(), "malformed tools/call request")
 }
 
+func TestProxy_Post_StrictRejectsMalformedToolsListBeforeUpstream(t *testing.T) {
+	t.Parallel()
+
+	var upstreamHits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.StrictToolSelection = true
+
+	rr, err := postJSON(t, p, `{"jsonrpc":"2.0","id":8,"method":"tools/list","params":"not-an-object"}`)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), upstreamHits.Load())
+	require.Contains(t, rr.Body.String(), "-32602")
+	require.Contains(t, rr.Body.String(), "malformed tools/list request")
+}
+
+func TestProxy_Post_NonStrictForwardsMalformedToolsList(t *testing.T) {
+	t.Parallel()
+
+	var upstreamHits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":8,"error":{"code":-32602,"message":"upstream says no"}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	rr, err := postJSON(t, p, `{"jsonrpc":"2.0","id":8,"method":"tools/list","params":"not-an-object"}`)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), upstreamHits.Load())
+	require.Contains(t, rr.Body.String(), "upstream says no")
+}
+
 func TestProxy_Post_StrictRejectsDuplicateJSONMembersBeforeUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +300,25 @@ func TestProxy_Post_StrictSubstitutesUnreadableSSETerminalToolsList(t *testing.T
 	require.NoError(t, err)
 	require.NotContains(t, rr.Body.String(), "not-an-array")
 	require.Contains(t, rr.Body.String(), "unreadable tools/list response")
+}
+
+func TestProxy_Post_StrictRelaysNon2xxSSEDataEventsVerbatim(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("data: upstream challenge\n\n")) //nolint:misspell // literal body
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.StrictToolSelection = true
+
+	rr, err := postJSON(t, p, strictToolsListRequest)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+	require.Contains(t, rr.Body.String(), "upstream challenge")
 }
 
 func TestProxy_Post_StrictDropsUndecodableSSEDataEventOnToolsList(t *testing.T) {

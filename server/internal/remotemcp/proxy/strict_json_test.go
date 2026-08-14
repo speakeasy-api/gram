@@ -40,6 +40,16 @@ func TestValidateStrictJSONRPCBody(t *testing.T) {
 			wantErr: "trailing data",
 		},
 		{
+			name:    "trailing close bracket",
+			body:    `{"jsonrpc":"2.0","id":1,"method":"ping"}]`,
+			wantErr: "trailing data",
+		},
+		{
+			name:    "trailing close brace",
+			body:    `{"jsonrpc":"2.0","id":1,"method":"ping"}}`,
+			wantErr: "trailing data",
+		},
+		{
 			name:    "empty body",
 			body:    "",
 			wantErr: "empty JSON-RPC message body",

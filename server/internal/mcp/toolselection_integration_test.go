@@ -176,9 +176,9 @@ func TestToolSelection_NameSnapshotNarrowsListAndCall(t *testing.T) {
 	// upstream env, which is fine — it must NOT be "tool not found").
 	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("reader"), access, nil)
 	if err != nil {
-		require.Contains(t, err.Error(), "not found")
+		require.Contains(t, err.Error(), "tool not found")
 	} else {
-		require.Contains(t, w.Body.String(), "not found")
+		require.Contains(t, w.Body.String(), "tool not found")
 	}
 
 	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("writer"), access, nil)

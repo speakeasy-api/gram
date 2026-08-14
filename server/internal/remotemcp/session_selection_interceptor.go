@@ -101,8 +101,11 @@ func sdkTypesAnnotations(annotations *mcp.ToolAnnotations) *types.ToolAnnotation
 // Upstream JSON-RPC error responses pass through untouched — they carry no
 // tool inventory. Successful results are rebuilt in upstream order; an
 // empty result is a valid outcome and is committed as an empty array.
-// Live-matched survivors are witnessed AFTER the filtered response commits,
-// so a failed relay never leaves call authorization behind.
+// Live-matched survivors are witnessed AFTER the filtered result is
+// accepted into the response, so a page that failed filtering never leaves
+// call authorization behind. (Delivery to the client can still fail later;
+// that does not widen anything — the witness only records tools whose
+// upstream-declared hints the live grant already covers.)
 func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Context, list *proxy.ToolsListResponse) error {
 	if list == nil {
 		return fmt.Errorf("session tool selection: nil tools/list response")
@@ -145,8 +148,9 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 		}
 	}
 
-	// Commit the filtered response before witnessing: a failed commit must
-	// never leave call authorization behind for a page that was not relayed.
+	// Commit the filtered result before witnessing: a failed commit must
+	// never leave call authorization behind for a page that was not
+	// accepted.
 	if err := list.SetTools(allowed); err != nil {
 		return fmt.Errorf("commit session-filtered tools/list result: %w", err)
 	}

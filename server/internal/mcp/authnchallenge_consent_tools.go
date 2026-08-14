@@ -210,7 +210,9 @@ func chosenToolSelection(form url.Values, inventory *consentToolInventory) (*too
 	}
 
 	// Annotation grants: vocabulary-checked, no duplicates within or across
-	// the two mode fields, live only where the stamped gate allows it.
+	// the two mode fields. Live-vs-snapshot is the consenting subject's own
+	// choice — there is no server-side gate — and every granted annotation
+	// must match at least one displayed tool below.
 	grantModes := map[string]toolfilter.AnnotationMode{}
 	for _, name := range form["tool_annotations"] {
 		if !slices.Contains(toolfilter.KnownAnnotations, name) {

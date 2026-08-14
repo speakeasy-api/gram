@@ -32,7 +32,10 @@ func ValidateStrictJSONRPCBody(raw []byte) error {
 	if err := validateStrictFrom(dec, tok); err != nil {
 		return err
 	}
-	if dec.More() {
+	// dec.More() reports false when the next byte is ] or } even outside a
+	// container, so it would accept `{...}]`. Only a clean EOF proves there
+	// is no trailing data.
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return errors.New("trailing data after JSON-RPC message")
 	}
 	return nil

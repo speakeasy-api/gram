@@ -588,6 +588,17 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		if err := p.runToolsListRequestInterceptors(ctx, toolsListReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
+	} else if p.StrictToolSelection && userRequestMethod(userReq) == methodToolsList {
+		// A tools/list whose params fail to decode would forward without a
+		// typed view, skipping both the response interceptors and the
+		// fail-closed response guard — a lenient upstream could relay the
+		// full unfiltered inventory. Reject it here instead.
+		responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+			Code:    RejectCodeInvalidParams,
+			Message: "malformed tools/list request",
+			Data:    nil,
+		})
+		return nil
 	}
 
 	resourcesReadReq, _ := resourcesReadRequestFromUserRequest(userReq)
@@ -1020,12 +1031,15 @@ func (p *Proxy) relaySSEStream(
 			}
 		}
 
-		// Undecodable data events on a strict tools/list stream are dropped
-		// rather than relayed: one of them may be the terminal response, and
-		// relaying it verbatim would hand the client unfiltered inventory the
-		// selection interceptors never saw. Comments and keepalives carry no
+		// Undecodable data events on a successful strict tools/list stream
+		// are dropped rather than relayed: one of them may be the terminal
+		// response, and relaying it verbatim would hand the client unfiltered
+		// inventory the selection interceptors never saw. Only 2xx responses
+		// can carry that inventory — non-2xx bodies are auth challenges and
+		// upstream errors, relayed intact. Comments and keepalives carry no
 		// data and still relay below.
-		if msg == nil && len(data) > 0 && p.StrictToolSelection && toolsListReq != nil {
+		if msg == nil && len(data) > 0 && p.StrictToolSelection && toolsListReq != nil &&
+			upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300 {
 			p.Logger.WarnContext(ctx, "dropping undecodable SSE event on tools/list under strict tool selection",
 				attr.SlogComponent("remotemcp.proxy"))
 			return nil

@@ -761,7 +761,7 @@
               value="approve"
               id="consent-approve-button"
               class="btn btn-primary"
-              {{if .ShowToolsIsland}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give Access
             </button>

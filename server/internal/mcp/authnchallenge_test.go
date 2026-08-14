@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -1529,6 +1530,68 @@ func postRefreshGrant(t *testing.T, ti *testInstance, mcpSlug, clientID, refresh
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleToken(w, req))
 	return w
+}
+
+// TestHandleTokenCode_ToolSelectionResourceBinding asserts an authorization
+// code carrying a selection consented on a sibling endpoint (codes are
+// cached issuer-wide) fails redemption with invalid_grant instead of
+// minting a token that would immediately fail the serve path's resource
+// check.
+func TestHandleTokenCode_ToolSelectionResourceBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+
+	redeem := func(resource string) *httptest.ResponseRecorder {
+		selection, err := toolfilter.NewSessionSelection(resource, uuid.New(), []toolfilter.AllowEntry{
+			{Type: toolfilter.AllowTypeTool, Name: "a", Mode: nil, Tools: nil},
+		})
+		require.NoError(t, err)
+		code := "code-" + uuid.NewString()
+		require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+			Code:                        code,
+			FlowID:                      "",
+			UserSessionIssuerID:         toolset.UserSessionIssuerID.UUID,
+			UserSessionClientID:         client.ID,
+			ClientID:                    client.ClientID,
+			RedirectURI:                 "http://127.0.0.1:51423/callback",
+			CodeChallenge:               base64.RawURLEncoding.EncodeToString(sum[:]),
+			CodeChallengeMethod:         "S256",
+			Subject:                     urn.NewUserSubject("code-user-" + uuid.NewString()),
+			DesiredSessionDurationHours: 0,
+			ToolSelection:               selection,
+			CreatedAt:                   time.Now(),
+		}))
+
+		form := url.Values{}
+		form.Set("grant_type", "authorization_code")
+		form.Set("code", code)
+		form.Set("redirect_uri", "http://127.0.0.1:51423/callback")
+		form.Set("client_id", client.ClientID)
+		form.Set("code_verifier", verifier)
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.HandleToken(w, req))
+		return w
+	}
+
+	w := redeem("toolset:" + uuid.NewString())
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "invalid_grant")
+	require.Contains(t, w.Body.String(), "different MCP endpoint")
+
+	w = redeem("toolset:" + toolset.ID.String())
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "access_token")
 }
 
 // TestHandleTokenRefresh_ToolSelectionResourceBinding asserts a restrictive

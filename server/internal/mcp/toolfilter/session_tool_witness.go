@@ -118,9 +118,9 @@ func NewSessionToolWitnessStore(logger *slog.Logger, adapter cache.Cache) *Sessi
 // pair. requestCursor is the cursor the client requested (empty for a first
 // page, which replaces the record wholesale); nextCursor is the upstream's
 // continuation (empty completes the listing). Callers commit the filtered
-// response first and witness after, so a failed relay never leaves
-// authorization behind. Errors are logged, never surfaced — a witness
-// failure narrows live matching, it must not fail the relay.
+// result first and witness after, so a page that failed filtering never
+// leaves authorization behind. Errors are logged, never surfaced — a
+// witness failure narrows live matching, it must not fail the relay.
 func (s *SessionToolWitnessStore) WitnessPage(ctx context.Context, grantID, sessionID, requestCursor string, tools []WitnessedTool, nextCursor string) {
 	if grantID == "" || sessionID == "" {
 		return

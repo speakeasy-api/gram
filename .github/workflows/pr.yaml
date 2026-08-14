@@ -1798,6 +1798,10 @@ jobs:
         run: aube run knip
         working-directory: client/dashboard
 
+      - name: Rebuild committed consent island bundle
+        run: aube run build:consent
+        working-directory: client/dashboard
+
       - name: Check for dirty files
         run: mise run git:porcelain
 

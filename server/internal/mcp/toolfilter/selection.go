@@ -48,10 +48,9 @@ const (
 // freezes the annotation's matching tool names at approval time into the
 // entry's own Tools array; live re-matches the server's declared hints at
 // serve time, so new or renamed tools carrying the annotation join the
-// session. Live is only offered on servers whose
-// mcp_servers.tool_annotation_grant_mode asserts the upstream is trusted,
-// and the mode is stamped at approval — flipping that gate later affects
-// new consents only.
+// session. The mode is the consenting subject's own choice, stamped at
+// approval; proxied live grants are additionally constrained to tools
+// captured for the session by the listing witness.
 type AnnotationMode string
 
 const (

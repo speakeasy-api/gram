@@ -395,6 +395,37 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	require.Contains(t, script, `guardActionButtons("button[data-refresh-link]", "Refreshing…")`)
 }
 
+// TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled pins the
+// non-island path's gate: with the rollout flag off, disconnected required
+// services must still disable Give Access.
+func TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:      "Demo",
+		MCPSlug:         "example",
+		MCPRouteBase:    "mcp",
+		State:           "state",
+		CSRFToken:       "csrf",
+		SubjectDisplay:  "user@example.com",
+		RedirectURI:     "http://127.0.0.1/cb",
+		ScriptURL:       "/mcp/consent-page-test.js",
+		ConsentEnabled:  false,
+		FirstParty:      false,
+		ShowToolsIsland: false,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	buttonStart := strings.Index(html, `value="approve"`)
+	require.NotEqual(t, -1, buttonStart)
+	buttonRegion := html[buttonStart:]
+	buttonEnd := strings.Index(buttonRegion, ">")
+	require.NotEqual(t, -1, buttonEnd)
+	require.Contains(t, buttonRegion[:buttonEnd], "disabled")
+}
+
 func TestConsentTemplateToolAccessIsland(t *testing.T) {
 	t.Parallel()
 

@@ -246,6 +246,16 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	var toolSelection []byte
 	if grant.ToolSelection != nil {
+		// Codes are cached issuer-wide, so a sibling endpoint sharing the
+		// issuer could otherwise redeem this code and mint a session whose
+		// selection is bound to another endpoint's resource — rejected at use
+		// time anyway, but failing the redemption is cheaper than a
+		// 200-then-401 loop.
+		if grant.ToolSelection.Resource != endpointToolSelectionResource(endpoint) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint")
+		}
 		encoded, merr := json.Marshal(grant.ToolSelection)
 		if merr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
