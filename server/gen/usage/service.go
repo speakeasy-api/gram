@@ -190,6 +190,8 @@ type UsageTiers struct {
 	Free *TierLimits
 	// The limits for the pro tier
 	Pro *TierLimits
+	// The limits for the pay-as-you-go tier
+	Payg *TierLimits
 	// The limits for the enterprise tier
 	Enterprise *TierLimits
 }

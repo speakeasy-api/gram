@@ -98,13 +98,14 @@ func TestCheckCreditBalance_BypassesSpecialLimitOrgs(t *testing.T) {
 func TestCheckCreditBalance_BypassesPaidAccountTypes(t *testing.T) {
 	t.Parallel()
 
-	// Pro/enterprise are bounded by the OpenRouter key cap, not this gate
+	// Paid tiers are bounded by the OpenRouter key cap, not this gate
 	// (Phase 0). Repo would error if called.
 	repo := &fakeBillingRepo{storedErr: errors.New("must not be called")}
 	svc := newServiceWithBilling(t, repo)
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-pro", "pro"))
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-ent", "enterprise"))
+	for _, tier := range []billing.Tier{billing.TierPro, billing.TierPayg, billing.TierEnterprise} {
+		require.NoError(t, svc.checkCreditBalance(t.Context(), "org-paid", string(tier)))
+	}
 }
 
 func TestCheckCreditBalance_AllowsOnCacheMiss(t *testing.T) {

@@ -102,6 +102,8 @@ type GetUsageTiersResponseBody struct {
 	Free *TierLimitsResponseBody `form:"free,omitempty" json:"free,omitempty" xml:"free,omitempty"`
 	// The limits for the pro tier
 	Pro *TierLimitsResponseBody `form:"pro,omitempty" json:"pro,omitempty" xml:"pro,omitempty"`
+	// The limits for the pay-as-you-go tier
+	Payg *TierLimitsResponseBody `form:"payg,omitempty" json:"payg,omitempty" xml:"payg,omitempty"`
 	// The limits for the enterprise tier
 	Enterprise *TierLimitsResponseBody `form:"enterprise,omitempty" json:"enterprise,omitempty" xml:"enterprise,omitempty"`
 }
@@ -1975,6 +1977,7 @@ func NewGetUsageTiersUsageTiersOK(body *GetUsageTiersResponseBody) *usage.UsageT
 	v := &usage.UsageTiers{}
 	v.Free = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Free)
 	v.Pro = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Pro)
+	v.Payg = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Payg)
 	v.Enterprise = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Enterprise)
 
 	return v
@@ -2687,6 +2690,9 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 	if body.Pro == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pro", "body"))
 	}
+	if body.Payg == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("payg", "body"))
+	}
 	if body.Enterprise == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enterprise", "body"))
 	}
@@ -2697,6 +2703,11 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 	}
 	if body.Pro != nil {
 		if err2 := ValidateTierLimitsResponseBody(body.Pro); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Payg != nil {
+		if err2 := ValidateTierLimitsResponseBody(body.Payg); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}

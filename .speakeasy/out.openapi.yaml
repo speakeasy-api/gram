@@ -55288,7 +55288,7 @@ components:
       properties:
         account_type:
           type: string
-          description: Gram account type (e.g. free, pro, enterprise).
+          description: Gram account type (e.g. free, pro, payg, enterprise).
         created_at:
           type: string
           description: The creation date of the organization.
@@ -75941,7 +75941,7 @@ components:
       properties:
         account_type:
           type: string
-          description: New gram_account_type (e.g. free, pro, enterprise).
+          description: New gram_account_type (e.g. free, pro, payg, enterprise).
         id:
           type: string
           description: Organization ID.
@@ -77117,11 +77117,14 @@ components:
           $ref: '#/components/schemas/TierLimits'
         free:
           $ref: '#/components/schemas/TierLimits'
+        payg:
+          $ref: '#/components/schemas/TierLimits'
         pro:
           $ref: '#/components/schemas/TierLimits'
       required:
         - free
         - pro
+        - payg
         - enterprise
     UserAccount:
       type: object

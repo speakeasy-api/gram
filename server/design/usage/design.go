@@ -40,9 +40,10 @@ var TierLimits = Type("TierLimits", func() {
 var UsageTiers = Type("UsageTiers", func() {
 	Attribute("free", TierLimits, "The limits for the free tier")
 	Attribute("pro", TierLimits, "The limits for the pro tier")
+	Attribute("payg", TierLimits, "The limits for the pay-as-you-go tier")
 	Attribute("enterprise", TierLimits, "The limits for the enterprise tier")
 
-	Required("free", "pro", "enterprise")
+	Required("free", "pro", "payg", "enterprise")
 })
 
 // TUMPeriodDay is one UTC day of tokens under management within a billing

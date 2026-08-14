@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -168,7 +168,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		return err
 	}
 
-	if !slices.Contains([]string{"pro", "enterprise"}, authCtx.AccountType) {
+	if !canCreateCustomDomain(authCtx.AccountType) {
 		return oops.E(oops.CodeUnauthorized, err, "custom domain registration is not supported for free account").LogError(ctx, s.logger)
 	}
 
@@ -194,6 +194,15 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	}
 
 	return nil
+}
+
+func canCreateCustomDomain(accountType string) bool {
+	switch billing.Tier(accountType) {
+	case billing.TierPro, billing.TierPayg, billing.TierEnterprise:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPayload) (res *gen.CustomDomain, err error) {

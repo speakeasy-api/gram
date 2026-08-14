@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -15,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  updateOrganization: vi.fn(),
 }));
 
 // Only the endpoints this route reaches are replaced. The rest of the module
@@ -27,6 +34,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    updateOrganization: mocks.updateOrganization,
   };
 });
 
@@ -90,6 +98,15 @@ function valueBeside(label: string): HTMLElement {
   return value;
 }
 
+// A Radix select opens on pointerdown, not on click.
+function openOn(trigger: HTMLElement): void {
+  fireEvent.pointerDown(trigger, {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
+}
+
 // A Radix tab trigger selects on mousedown, not on click. The panel only
 // mounts once the organization lands, so the trigger is awaited.
 async function selectTab(name: string): Promise<void> {
@@ -121,6 +138,8 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [PROJECT] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [MEMBER] });
+  mocks.updateOrganization.mockReset();
+  mocks.updateOrganization.mockResolvedValue({ ...ORG, account_type: "payg" });
 });
 
 afterEach(cleanup);
@@ -212,5 +231,32 @@ describe("organization detail", () => {
       longDate(lastLogin),
       longDate(MEMBER.created_at),
     ]);
+  });
+
+  it("moves an organization onto payg", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    openOn(await screen.findByRole("combobox"));
+    fireEvent.click(await screen.findByRole("option", { name: "payg" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+    // The confirmation names the move, so the operator reads what they are
+    // about to commit before the request goes.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(`${ORG.account_type} → payg`);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    // The type reaches the API as the string the operator chose. Only the
+    // fields they touched are sent.
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledWith({
+        id: ORG.id,
+        account_type: "payg",
+        whitelisted: undefined,
+      });
+    });
   });
 });

@@ -1123,6 +1123,25 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
 		},
+		Payg: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          0,
+			IncludedServers:            0,
+			IncludedCredits:            0,
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer:   0,
+			FeatureBullets: []string{
+				"Oauth 2.1 proxy support",
+				"Register your own OAuth server",
+				"Custom domain",
+				"30 day log retention",
+				"SSO",
+				"Audit logs",
+				"Self-hosting Gram dataplane",
+			},
+			IncludedBullets: []string{},
+			AddOnBullets:    []string{},
+		},
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
 			IncludedToolCalls:          0,
