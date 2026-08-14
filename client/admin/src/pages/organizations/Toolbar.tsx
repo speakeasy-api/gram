@@ -92,7 +92,7 @@ export function Toolbar(): JSX.Element {
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2" />
         <Input
           aria-label="Search organizations"
-          placeholder="Search by name or slug..."
+          placeholder="Search by name, slug or id..."
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className="w-full py-1.5 pr-2 pl-8"
