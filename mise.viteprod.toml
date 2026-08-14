@@ -5,6 +5,11 @@
 ## Both the Gram server and dashboard (client) are accessed on
 ## https://app.getgram.ai.
 GRAM_SERVER_URL = false
+## Unset for the same reason, and it matters more: the dashboard build PREFERS
+## this over GRAM_SERVER_URL, so on a machine that opted into remote dev access
+## (zero:remap-hostname) it would bake that machine's hostname into a production
+## bundle.
+GRAM_SERVER_PUBLIC_URL = false
 ## Unset on purpose: one image serves every environment, so any value here
 ## would send the dev admin dashboard into production data. Disables the link.
 GRAM_APP_URL = false

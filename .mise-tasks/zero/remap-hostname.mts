@@ -44,6 +44,13 @@
  *                            browser-facing half gets its own var, which
  *                            client/dashboard/vite.config.ts prefers when set.
  *
+ *   GRAM_APP_URL             Baked into the admin dashboard, which builds an
+ *                            impersonation link out of it
+ *                            (client/admin/src/lib/impersonation.ts) for an
+ *                            operator to click. It defaults to GRAM_SERVER_URL,
+ *                            which stays local, so without this the link would
+ *                            be dead on the machine doing the browsing.
+ *
  *   GRAM_ADMIN_ALLOWED_ORIGINS
  *                            Lists BOTH origins. AdminOriginCheck 403s every
  *                            unsafe method whose Origin is not named, so listing
@@ -99,6 +106,7 @@ function browserFacing(host: string): Record<string, string> {
   return {
     GRAM_SITE_URL: `https://${host}:{{env.GRAM_SITE_PORT}}`,
     GRAM_SERVER_PUBLIC_URL: `https://${host}:{{env.GRAM_SERVER_PORT}}`,
+    GRAM_APP_URL: `https://${host}:{{env.GRAM_SERVER_PORT}}`,
     GRAM_ADMIN_SERVER_URL: `https://${host}:{{env.GRAM_ADMIN_DASHBOARD_PORT}}`,
     GRAM_ADMIN_ALLOWED_ORIGINS: `https://${host}:{{env.GRAM_ADMIN_DASHBOARD_PORT}},https://localhost:{{env.GRAM_ADMIN_DASHBOARD_PORT}}`,
     GRAM_IDP_BASE_URL: `http://${host}:{{env.GRAM_DEVIDP_PORT}}/oauth2`,
