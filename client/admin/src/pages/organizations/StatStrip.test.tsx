@@ -424,6 +424,19 @@ describe("organizations stat strip placement", () => {
     ).toBeTruthy();
   });
 
+  it("reads left to right in the order the design puts the figures", async () => {
+    await renderList();
+
+    // Every other assertion in this file finds a cell by its label, so the
+    // three could be dealt out in any order and nothing else here would notice.
+    // The first span of each is its label.
+    expect(
+      within(strip())
+        .getAllByRole("button")
+        .map((control) => control.querySelector("span")?.textContent),
+    ).toEqual(["Organizations", "Trials ending in 7 days", "Disabled"]);
+  });
+
   it("offers each figure as a control the keyboard reaches", async () => {
     await renderList();
 
