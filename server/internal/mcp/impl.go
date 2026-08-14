@@ -148,6 +148,11 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	// userSessionRefreshReplayCache retains the encrypted winner response.
+	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
+
+	// userSessionRefreshReplayCoordination elects the database rotation winner.
+	userSessionRefreshReplayCoordination cache.Cache
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -373,13 +378,19 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:  sessionclientinfo.NewStore(redisClient, 0),
-		identityResolver:   identityResolver,
-		userSessionSigner:  userSessionSigner,
-		remoteChallengeMgr: remoteChallengeMgr,
-		remoteProxyManager: remoteProxyManager,
-		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
-		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
+		userSessionRefreshReplayCache: cache.NewTypedObjectCache[userSessionRefreshReplay](
+			logger.With(attr.SlogCacheNamespace("user_session_refresh_replay")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		userSessionRefreshReplayCoordination: cacheImpl,
+		sessionClientInfo:                    sessionclientinfo.NewStore(redisClient, 0),
+		identityResolver:                     identityResolver,
+		userSessionSigner:                    userSessionSigner,
+		remoteChallengeMgr:                   remoteChallengeMgr,
+		remoteProxyManager:                   remoteProxyManager,
+		tunnelManager:                        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:                         newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
 	}
 }
 
