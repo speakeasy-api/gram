@@ -135,6 +135,27 @@ describe("Trial", () => {
     expect(unrecognised).toBe("Trial state not recognised");
   });
 
+  // `TRIAL_DISPLAY` is an object literal, so it inherits `Object.prototype`.
+  // Indexing it with one of these names returns a truthy function, and the
+  // unknown-state branch is skipped: an empty badge, announcing nothing. The
+  // `paused` case above cannot catch it, because `paused` is genuinely absent
+  // from the prototype chain.
+  it.each(["constructor", "toString", "valueOf", "hasOwnProperty"])(
+    "reads the inherited key %s as an unrecognised state",
+    (inherited) => {
+      renderTrial(
+        orgWith({
+          trial_state: inherited as TrialState,
+          trial_ends_at: TRIAL_ENDS_AT,
+        }),
+      );
+
+      expect(visibleText()).toBe("-");
+      expect(queryBadge()).toBeNull();
+      expect(accessibleText()).toBe("Trial state not recognised");
+    },
+  );
+
   it("puts the end date beside a running trial and tones it as normal", () => {
     renderTrial(
       orgWith({ trial_state: "running", trial_ends_at: TRIAL_ENDS_AT }),

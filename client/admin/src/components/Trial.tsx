@@ -36,11 +36,21 @@ const TRIAL_DISPLAY: Record<Exclude<TrialState, "none">, TrialDisplay> = {
 const DISPLAY_BY_STATE: Record<string, TrialDisplay | undefined> =
   TRIAL_DISPLAY;
 
+// Own properties only. A plain object literal inherits `Object.prototype`, so
+// indexing it with `constructor` or `toString` returns a truthy function and
+// the unknown-state branch below never runs, rendering an empty badge with no
+// announcement at all. That is the one thing this component must not do.
+function displayFor(state: string): TrialDisplay | undefined {
+  return Object.hasOwn(TRIAL_DISPLAY, state)
+    ? DISPLAY_BY_STATE[state]
+    : undefined;
+}
+
 // The one account of an organization's trial. The row, the peek panel and the
 // detail page all render this, so the same organization cannot read one way in
 // the list and another way on its own page.
 export function Trial({ org }: { org: AdminOrganization }): JSX.Element {
-  const display = DISPLAY_BY_STATE[org.trial_state ?? ""];
+  const display = displayFor(org.trial_state ?? "");
 
   if (!display) {
     // A lone hyphen is the entire value of this cell, and a screen reader
