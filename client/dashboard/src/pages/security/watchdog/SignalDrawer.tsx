@@ -17,7 +17,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
 import {
@@ -245,8 +245,9 @@ export function SignalDrawer({
     if (!signal) return;
     // The signal itself carries the rule, so the sheet offers — and defaults
     // to — the "Any <rule> finding" option even before evidence rows load.
-    // Whatever evidence has arrived by now rides along for the exact-value
-    // option and the custom branch's findings context; opening before the
+    // Whatever evidence has arrived by now rides along for the custom branch's
+    // findings context — and, only where the rule has a lone evidence row, the
+    // exact-value option, which needs a single finding. Opening before the
     // query resolves makes this a rule-only create, since the snapshot
     // deliberately doesn't refill as rows land — that would rebuild the form
     // under an operator who is already typing.
@@ -272,21 +273,26 @@ export function SignalDrawer({
   // itself still runs to completion. Keyed by timestamps rather than Date
   // identity, and by signal key rather than the signal object, so neither an
   // equal window nor a list refetch discards a live collection.
+  //
+  // Both resets run before paint: a passive effect would let the swap commit
+  // first, painting one frame of the previous selection's dialog or editor
+  // under the new signal's name.
   const collectionToken = useRef(0);
   const windowFrom = window.from?.getTime();
   const windowTo = window.to?.getTime();
-  useEffect(() => {
+  useLayoutEffect(() => {
     collectionToken.current += 1;
     setPendingDismiss(null);
     setCollecting(false);
   }, [signal?.key, windowFrom, windowTo]);
 
   // Editor state follows the signal alone: an open editor would go on targeting
-  // the previous signal's rule, and the back-from-editor slide would replay for
-  // a signal whose editor was never opened. The window is deliberately absent —
-  // the rule and evidence the editor seeds from are unwindowed, so a date
-  // change must not discard a half-filled form.
-  useEffect(() => {
+  // the previous signal's rule (and keep the sheet's close affordance hidden),
+  // and the back-from-editor slide would replay for a signal whose editor was
+  // never opened. The window is deliberately absent — the rule and evidence the
+  // editor seeds from are unwindowed, so a date change must not discard a
+  // half-filled form.
+  useLayoutEffect(() => {
     setExclusionState(null);
     setReturningFromEditor(false);
   }, [signal?.key]);
