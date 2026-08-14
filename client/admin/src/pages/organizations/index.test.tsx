@@ -621,6 +621,48 @@ describe("organizations list", () => {
     expect(picker("Type").textContent).toContain("All types");
   });
 
+  it("holds the list open so a second value can be picked off it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openFilters("Type");
+    // The trigger is clicked once and only once. Every other test here goes
+    // through `chooseFilter`, which reopens a closed list, so a picker that
+    // shut itself on each choice would pass all of them: the operator would be
+    // reopening the list for every value, and nothing would say so.
+    fireEvent.click(picker("Type"));
+    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+
+    expect(picker("Type").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("option", { name: "free" }));
+    expect(picker("Type").getAttribute("aria-expanded")).toBe("true");
+
+    applyFilters();
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["free", "enterprise"]);
+    });
+  });
+
+  it("gives the keyboard back to the trigger after applying", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+
+    await openFilters("Trial");
+    await chooseFilter("Trial", "Expired");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // Escape is not the only way out of the sheet. Applying unmounts the same
+    // subtree, and must not leave the keyboard on it either.
+    expect(document.activeElement).toBe(filterTrigger("Trial"));
+    await waitFor(() => {
+      expect(lastListParams().trial_states).toEqual(["expired"]);
+    });
+  });
+
   it("clears every filter and leaves the search term alone", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: urlFor({

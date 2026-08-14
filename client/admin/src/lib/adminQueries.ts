@@ -133,10 +133,11 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
 // can move the row out from under the operator who just acted on it.
 //
 // One consequence, accepted rather than overlooked: the default list request
-// omits include_disabled, so a row that has just been disabled keeps its place
-// on a page whose filter no longer describes it, until something else fetches
-// that page. The alternative is dropping the row from under the operator the
-// moment they act on it, which is worse.
+// sends no disabled_states, which asks for active organizations only, so a row
+// that has just been disabled keeps its place on a page whose filter no longer
+// describes it, until something else fetches that page. The alternative is
+// dropping the row from under the operator the moment they act on it, which is
+// worse.
 //
 // It lives beside the keys rather than at a call site for the reason at the top
 // of this file: a key spelled out by hand is how a write updates the server and
