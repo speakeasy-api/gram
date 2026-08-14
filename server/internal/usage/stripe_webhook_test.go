@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -17,16 +18,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
+	"google.golang.org/protobuf/proto"
 
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -51,22 +55,6 @@ func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripec
 
 func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	return f.checkout, f.checkoutError
-}
-
-type captureKeyRefresher struct {
-	calls   atomic.Int32
-	limit   int
-	keyType openrouter.KeyType
-	err     error
-}
-
-func (c *captureKeyRefresher) ScheduleOpenRouterKeyRefresh(_ context.Context, _ string, keyType openrouter.KeyType, limit *int) error {
-	c.calls.Add(1)
-	c.keyType = keyType
-	if limit != nil {
-		c.limit = *limit
-	}
-	return c.err
 }
 
 type captureFeatureCache struct {
@@ -161,6 +149,30 @@ func stripeWebhookReceiptCount(t *testing.T, db *pgxpool.Pool) int {
 	count, err := repo.New(db).CountStripeWebhookReceiptsFixture(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	return int(count)
+}
+
+func paygSchedulingIntentCount(t *testing.T, db *pgxpool.Pool) int {
+	t.Helper()
+
+	rows, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+
+	count := 0
+	for _, row := range rows {
+		var event webhooksv1.Event
+		require.NoError(t, proto.Unmarshal(row.Message, &event))
+		if event.GetEventType() != string(events.OrganizationBillingV1.EventType()) {
+			continue
+		}
+
+		var payload events.AuditLogCreatedPayloadV1
+		require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+		if payload.Action == string(audit.ActionOrganizationPaygActivated) {
+			count++
+		}
+	}
+
+	return count
 }
 
 func TestAttachStripeWebhookRoute(t *testing.T) {
@@ -436,7 +448,7 @@ func TestStripeWebhookHandlerFailureRollsBackForRetry(t *testing.T) {
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 }
 
-func configurePaygCheckout(t *testing.T, service *Service, eventID, subscriptionID, subscriptionStatus string) (*captureKeyRefresher, *captureFeatureCache) {
+func configurePaygCheckout(t *testing.T, service *Service, eventID, subscriptionID, subscriptionStatus string) *captureFeatureCache {
 	t.Helper()
 
 	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
@@ -460,20 +472,18 @@ func configurePaygCheckout(t *testing.T, service *Service, eventID, subscription
 		SubscriptionStatus:     subscriptionStatus,
 		BillingCycleAnchor:     time.Date(2026, time.August, 23, 9, 0, 0, 0, time.UTC),
 	}
-	refresher := &captureKeyRefresher{}
 	featureCache := &captureFeatureCache{enabled: nil}
-	service.keyRefresher = refresher
 	service.productFeatures = featureCache
 	service.auditLogger = audit.NewLogger()
 	service.stripeHandler = service.serviceStripeWebhookHandler
-	return refresher, featureCache
+	return featureCache
 }
 
 func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	refresher, featureCache := configurePaygCheckout(t, service, "event_activation", "subscription_activation", "active")
+	featureCache := configurePaygCheckout(t, service, "event_activation", "subscription_activation", "active")
 	baseline, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
 	require.NoError(t, err)
 
@@ -488,9 +498,7 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "payg", organization.GramAccountType)
 	require.True(t, organization.Whitelisted)
-	require.EqualValues(t, 1, refresher.calls.Load())
-	require.Equal(t, openrouter.KeyTypeChat, refresher.keyType)
-	require.Equal(t, paygOpenRouterChatCreditLimit, refresher.limit)
+	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
 
 	expectedFeatures := append([]productfeatures.Feature{productfeatures.FeaturePlatformMCP}, productfeatures.EnterpriseTrialBundle...)
 	expectedFeatures = append(expectedFeatures, productfeatures.FeatureSkills)
@@ -520,7 +528,7 @@ func TestStripeCheckoutCompletionPreservesTrialFeatureChoices(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	_, featureCache := configurePaygCheckout(t, service, "event_trial", "subscription_trial", "trialing")
+	featureCache := configurePaygCheckout(t, service, "event_trial", "subscription_trial", "trialing")
 	ctx := t.Context()
 	tx := testenv.BeginTx(t, ctx, db)
 	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, stripeWebhookOrganizationID))
@@ -558,7 +566,7 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	refresher, _ := configurePaygCheckout(t, service, "event_first", "subscription_replay", "past_due")
+	configurePaygCheckout(t, service, "event_first", "subscription_replay", "past_due")
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
 
 	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
@@ -575,7 +583,7 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	}
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "second").Code)
 
-	require.EqualValues(t, 1, refresher.calls.Load())
+	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
 	require.Equal(t, 2, stripeWebhookReceiptCount(t, db))
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
 	require.NoError(t, err)
@@ -586,22 +594,22 @@ func TestStripeCheckoutExactReplaySkipsCurrentStateRetrieval(t *testing.T) {
 	t.Parallel()
 
 	service, _ := newStripeWebhookService(t, "customer_placeholder", nil)
-	refresher, _ := configurePaygCheckout(t, service, "event_exact_replay", "subscription_exact_replay", "active")
+	configurePaygCheckout(t, service, "event_exact_replay", "subscription_exact_replay", "active")
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
 
 	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
 	require.True(t, ok)
 	client.checkoutError = errors.New("Stripe retrieval unavailable")
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "replay").Code)
-	require.EqualValues(t, 1, refresher.calls.Load())
+	require.Equal(t, 1, paygSchedulingIntentCount(t, service.db))
 }
 
-func TestStripeCheckoutSchedulerFailureRollsBackActivation(t *testing.T) {
+func TestStripeCheckoutAuditFailureRollsBackActivationAndSchedulingIntent(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	refresher, featureCache := configurePaygCheckout(t, service, "event_scheduler_failure", "subscription_scheduler_failure", "active")
-	refresher.err = errors.New("scheduler unavailable")
+	featureCache := configurePaygCheckout(t, service, "event_audit_failure", "subscription_audit_failure", "active")
+	service.auditLogger = nil
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "failure").Code)
 
@@ -612,6 +620,7 @@ func TestStripeCheckoutSchedulerFailureRollsBackActivation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, "payg", organization.GramAccountType)
 	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	require.Zero(t, paygSchedulingIntentCount(t, db))
 	require.Empty(t, featureCache.snapshot())
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
 	require.NoError(t, err)
@@ -622,7 +631,7 @@ func TestStripeCheckoutSubscriptionConflictRollsBackTrialConversion(t *testing.T
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	refresher, _ := configurePaygCheckout(t, service, "event_conflict", "subscription_new", "active")
+	configurePaygCheckout(t, service, "event_conflict", "subscription_new", "active")
 	ctx := t.Context()
 	require.NoError(t, repo.New(db).SetStripeSubscriptionFixture(ctx, repo.SetStripeSubscriptionFixtureParams{
 		StripeSubscriptionID: pgtype.Text{String: "subscription_existing", Valid: true},
@@ -643,18 +652,49 @@ func TestStripeCheckoutSubscriptionConflictRollsBackTrialConversion(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, "subscription_existing", metadata.StripeSubscriptionID.String)
 	require.Zero(t, stripeWebhookReceiptCount(t, db))
-	require.Zero(t, refresher.calls.Load())
+}
+
+func TestStripeCheckoutRejectsDuplicateSubscriptionOwners(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_duplicate_owners", "subscription_duplicate", "active")
+	ctx := t.Context()
+	require.NoError(t, repo.New(db).SetStripeSubscriptionFixture(ctx, repo.SetStripeSubscriptionFixtureParams{
+		StripeSubscriptionID: pgtype.Text{String: "subscription_duplicate", Valid: true},
+		OrganizationID:       stripeWebhookOrganizationID,
+	}))
+
+	const otherOrganizationID = "org_placeholder_other"
+	require.NoError(t, orgrepo.New(db).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   otherOrganizationID,
+		Name: "Other Placeholder Organization",
+		Slug: "other-placeholder-organization",
+	}))
+	require.NoError(t, repo.New(db).CreateStripeSubscriptionBillingMetadataFixture(ctx, repo.CreateStripeSubscriptionBillingMetadataFixtureParams{
+		OrganizationID:       otherOrganizationID,
+		StripeCustomerID:     pgtype.Text{String: "customer_placeholder_other", Valid: true},
+		StripeSubscriptionID: pgtype.Text{String: "subscription_duplicate", Valid: true},
+	}))
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "duplicate").Code)
+
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(ctx, stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.NotEqual(t, "payg", organization.GramAccountType)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	require.Zero(t, paygSchedulingIntentCount(t, db))
 }
 
 func TestStripeCheckoutTerminalStateIsDurableNoop(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	refresher, _ := configurePaygCheckout(t, service, "event_terminal", "subscription_terminal", "canceled")
+	configurePaygCheckout(t, service, "event_terminal", "subscription_terminal", "canceled")
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "terminal").Code)
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
-	require.Zero(t, refresher.calls.Load())
+	require.Zero(t, paygSchedulingIntentCount(t, db))
 	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.False(t, metadata.StripeSubscriptionID.Valid)

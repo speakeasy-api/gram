@@ -54,7 +54,6 @@ type Service struct {
 	auditLogger     *audit.Logger
 	posthogClient   *posthog.Posthog
 	openRouter      openrouter.Provisioner
-	keyRefresher    openrouter.KeyRefresher
 	stripeClient    stripeclient.Client
 	stripeHandler   stripeWebhookHandler
 	featureFlags    feature.Provider
@@ -68,7 +67,7 @@ type productFeatureCacheUpdater interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openrouter.KeyRefresher, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -90,7 +89,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auditLogger:     auditLogger,
 		posthogClient:   posthogClient,
 		openRouter:      openRouter,
-		keyRefresher:    keyRefresher,
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		featureFlags:    featureFlags,
