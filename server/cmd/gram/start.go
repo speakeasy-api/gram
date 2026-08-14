@@ -699,7 +699,10 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			var openRouter openrouter.Provisioner
+			var openRouter interface {
+				openrouter.Provisioner
+				openrouter.SpendClient
+			}
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
@@ -1565,6 +1568,7 @@ func newStartCommand() *cli.Command {
 						ChatMessageWriter:         chatWriter,
 						ChatClient:                chatClient,
 						OpenRouter:                openRouter,
+						OpenRouterSpend:           openRouter,
 						K8sClient:                 k8sClient,
 						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
 						SiteURL:                   siteURL,
