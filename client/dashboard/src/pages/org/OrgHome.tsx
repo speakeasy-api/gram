@@ -286,29 +286,29 @@ function OrgHomeInner() {
       <OrgWelcomeBanner />
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
-        <div className="flex items-center gap-2">
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            placeholder="Search projects..."
-            className="flex-1"
-          />
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          {canAdmin && (
-            <AddNewMenu
-              onCreateProject={() => setCreateDialogOpen(true)}
-              onInviteMember={() => orgRoutes.team.goTo()}
-              onManageRoles={() => orgRoutes.access.roles.goTo()}
-            />
-          )}
-        </div>
-
         {/* `items-start` so each column is only as tall as its content — the
             default stretch left the Projects card padded with dead space
             whenever the rail was taller, which is the common case for orgs
             with one or two projects. */}
         <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-[1fr_420px] 2xl:grid-cols-[1fr_500px]">
-          <main className="flex min-w-0 flex-col gap-3">
+          <main className="flex min-w-0 flex-col gap-6">
+            <div className="flex items-center gap-2">
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Search projects..."
+                className="flex-1"
+              />
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+              {canAdmin && (
+                <AddNewMenu
+                  onCreateProject={() => setCreateDialogOpen(true)}
+                  onInviteMember={() => orgRoutes.team.goTo()}
+                  onManageRoles={() => orgRoutes.access.roles.goTo()}
+                />
+              )}
+            </div>
+
             {/* List rows run edge to edge; grid cards need the card's own
                 padding so they do not collide with its border. */}
             <Card.Dashboard
@@ -974,7 +974,7 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
           Activity will appear here as your team makes changes.
         </Text>
       ) : (
-        <ol className="divide-border divide-y">
+        <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {preview.map((log) => (
             <li
               key={log.id}
@@ -1060,7 +1060,7 @@ function RecentChallengesCompact() {
           No denied access attempts. Authorization checks are all passing.
         </Text>
       ) : (
-        <ol className="divide-border divide-y">
+        <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
               <CompactChallengeRow bucket={bucket} />
