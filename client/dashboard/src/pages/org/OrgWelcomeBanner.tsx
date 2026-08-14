@@ -3,12 +3,11 @@ import {
   BrandMeshLayers,
 } from "@/components/brand-mesh";
 import { useOrganization } from "@/contexts/Auth";
-import { useSlugs } from "@/contexts/Sdk";
 import { useOnboardingCta } from "@/hooks/useOnboardingCta";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { Link } from "react-router";
 
 // Matches the page column OrgHome applies to everything below the banner.
@@ -30,7 +29,6 @@ type RouteCard = {
  */
 export function OrgWelcomeBanner(): JSX.Element | null {
   const organization = useOrganization();
-  const { orgSlug } = useSlugs();
   const orgRoutes = useOrgRoutes();
   const { visible } = useOrgWelcomeBanner();
   // Same gate as the header's "Finish setup" banner: the wizard is an
@@ -43,6 +41,10 @@ export function OrgWelcomeBanner(): JSX.Element | null {
     organization.projects.find((project) => project.slug === "default") ??
     organization.projects[0];
 
+  // Org home has no project slug of its own, so the project routes resolve
+  // against the project card 02 points at.
+  const projectRoutes = useRoutes({ projectSlug: startProject?.slug });
+
   const cards: RouteCard[] = [
     {
       index: "01",
@@ -50,7 +52,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
       body: "A read-only organization with two weeks of simulated agent traffic, spend, and blocked calls.",
       cta: "Enter demo org",
       meta: "Read-only · simulated data",
-      to: "/explore-demo",
+      to: projectRoutes.exploreDemo.href(),
     },
     {
       index: "02",
@@ -58,9 +60,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
       body: "Start getting your own data into the dashboard. Connect an MCP server, or set a policy and watch it block a call.",
       cta: "Start using Speakeasy",
       meta: "~5 minutes · your data",
-      to: startProject
-        ? `/${orgSlug}/projects/${startProject.slug}`
-        : `/${orgSlug}`,
+      to: startProject ? projectRoutes.home.href() : orgRoutes.home.href(),
       recommended: true,
     },
   ];

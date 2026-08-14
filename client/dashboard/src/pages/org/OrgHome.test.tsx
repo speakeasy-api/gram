@@ -81,8 +81,13 @@ vi.mock("@/routes", () => ({
       Link: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
     team: { goTo: vi.fn() },
-    // Used by the welcome banner's third route card.
+    // Used by the welcome banner's route cards.
+    home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
+  }),
+  useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
+    exploreDemo: { href: () => "/explore-demo" },
+    home: { href: () => `/acme/projects/${projectSlug}` },
   }),
 }));
 

@@ -9,15 +9,22 @@ const setupEligible = vi.hoisted(() => ({ current: true }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: projects.current }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => ({ orgSlug: "acme" }) }));
 vi.mock("@/hooks/useOnboardingCta", () => ({
   useOnboardingCta: () => ({ eligible: setupEligible.current }),
 }));
 vi.mock("@/hooks/useOrgWelcomeBanner", () => ({
   useOrgWelcomeBanner: () => ({ visible: true }),
 }));
+// Resolves the same paths the real hooks build for org "acme".
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ setup: { href: () => "/acme/setup" } }),
+  useOrgRoutes: () => ({
+    home: { href: () => "/acme" },
+    setup: { href: () => "/acme/setup" },
+  }),
+  useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
+    exploreDemo: { href: () => "/explore-demo" },
+    home: { href: () => `/acme/projects/${projectSlug}` },
+  }),
 }));
 vi.mock("react-router", () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
@@ -52,6 +59,13 @@ describe("OrgWelcomeBanner", () => {
 
     expect(screen.queryByText("Start setup wizard")).toBeNull();
     expect(screen.getByText("Enter demo org")).toBeTruthy();
+  });
+
+  it("falls back to org home when the org has no projects", () => {
+    projects.current = [];
+    render(<OrgWelcomeBanner />);
+
+    expect(hrefFor("Start using Speakeasy")).toBe("/acme");
   });
 
   it("prefers the last-visited project, then default", () => {
