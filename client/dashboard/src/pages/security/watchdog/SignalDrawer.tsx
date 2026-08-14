@@ -17,7 +17,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
 import {
@@ -243,11 +243,19 @@ export function SignalDrawer({
 
   const openSignalExclusion = () => {
     if (!signal) return;
-    // The sheet derives its ready-made rule options from the findings it is
-    // handed; the loaded evidence rows all share this signal's rule, so the
-    // "Any <rule> finding" option is on offer. Before evidence loads the
-    // sheet still opens, just without ready-made options.
-    setExclusionState({ mode: "create", results: evidence });
+    // The signal itself carries the rule, so the sheet offers — and defaults
+    // to — the "Any <rule> finding" option even before evidence rows load.
+    // Whatever evidence has arrived by now rides along for the custom branch's
+    // findings context — and, only where the rule has a lone evidence row, the
+    // exact-value option, which needs a single finding. Opening before the
+    // query resolves makes this a rule-only create, since the snapshot
+    // deliberately doesn't refill as rows land — that would rebuild the form
+    // under an operator who is already typing.
+    setExclusionState({
+      mode: "create",
+      results: evidence,
+      presetRuleId: signal.ruleId,
+    });
   };
 
   // Judge-backed signals get false-positive dismissal as the signal-level
@@ -256,19 +264,42 @@ export function SignalDrawer({
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
 
-  // The drawer stays mounted across signal switches and closes, so a
-  // collection that was in flight when either happened must not open the
-  // confirm dialog with the previous signal's findings. The ref tracks the
-  // currently displayed signal; a finished collection only lands if it still
-  // matches.
-  const activeSignalKey = useRef<string | null>(null);
-  useEffect(() => {
-    activeSignalKey.current = signal?.key ?? null;
-  }, [signal]);
+  // Signal and window both live in the URL, so back/forward can swap either
+  // while the drawer stays mounted, and a dismissal belongs to the pair it was
+  // started from: surfacing one after a swap would confirm the previous
+  // selection's findings under the new one's name, or leave its action
+  // spinning. Bumping the token makes an in-flight collection drop its result —
+  // and its spinner reset — rather than land on the new selection; the request
+  // itself still runs to completion. Keyed by timestamps rather than Date
+  // identity, and by signal key rather than the signal object, so neither an
+  // equal window nor a list refetch discards a live collection.
+  //
+  // Both resets run before paint: a passive effect would let the swap commit
+  // first, painting one frame of the previous selection's dialog or editor
+  // under the new signal's name.
+  const collectionToken = useRef(0);
+  const windowFrom = window.from?.getTime();
+  const windowTo = window.to?.getTime();
+  useLayoutEffect(() => {
+    collectionToken.current += 1;
+    setPendingDismiss(null);
+    setCollecting(false);
+  }, [signal?.key, windowFrom, windowTo]);
+
+  // Editor state follows the signal alone: an open editor would go on targeting
+  // the previous signal's rule (and keep the sheet's close affordance hidden),
+  // and the back-from-editor slide would replay for a signal whose editor was
+  // never opened. The window is deliberately absent — the rule and evidence the
+  // editor seeds from are unwindowed, so a date change must not discard a
+  // half-filled form.
+  useLayoutEffect(() => {
+    setExclusionState(null);
+    setReturningFromEditor(false);
+  }, [signal?.key]);
 
   const openSignalDismiss = async () => {
     if (!signal) return;
-    const requestKey = signal.key;
+    const token = collectionToken.current;
     setCollecting(true);
     try {
       const results = await collectFindingsForRules(
@@ -276,13 +307,16 @@ export function SignalDrawer({
         [signal.ruleId],
         window,
       );
-      if (activeSignalKey.current !== requestKey) return;
+      if (collectionToken.current !== token) return;
       setPendingDismiss(results);
     } catch {
-      if (activeSignalKey.current !== requestKey) return;
+      if (collectionToken.current !== token) return;
       toast.error("Failed to load this signal's findings.");
     } finally {
-      setCollecting(false);
+      // Same guard: the switch already cleared the flag for the new selection,
+      // so a late-settling request must not clear it out from under a
+      // collection the operator started there.
+      if (collectionToken.current === token) setCollecting(false);
     }
   };
 
