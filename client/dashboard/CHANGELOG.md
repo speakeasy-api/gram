@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.107.1
+
+### Patch Changes
+
+- d7dca3d: Add exact range-bounded activity totals and independent pagination to assistant sessions.
+- 5737ee7: Add three browser hardening headers to the dashboard HTML responses: `Cross-Origin-Resource-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin`, and `X-Permitted-Cross-Domain-Policies: none`. A penetration test reported all three as missing. Each one is set per location, because an `add_header` inside an nginx location discards every `add_header` inherited from the server block. Static assets under `/assets` and `/external` keep `Access-Control-Allow-Origin: *` and receive no cross-origin policy, so cross-origin image loads continue to work.
+- dda81c1: Land `/explore-demo` on the demo org's default project instead of org home, so new visitors see sample data without having to click into the project themselves.
+- 1b00702: Scope device agent fleet configuration to organization admins. Viewing it
+  (`agent.getConfiguration`) now requires `org:admin`, matching the existing
+  requirement on `agent.updateConfiguration`, and the dashboard hides the Device
+  Agent Configuration tab from non-admins. The Setup tab stays available to
+  organization readers.
+- 1fb8f18: Fix "Suggest with AI" exclusion suggestions being rejected as invalid regexes. The exclusion form now validates regex criteria with the same RE2 engine the platform matches with, so valid suggestions like `(?i)`-prefixed patterns save instead of failing with "Invalid regex pattern", server-side validation errors surface in the form, and a suggestion that fails validation is retried once with corrective feedback before falling back.
+
 ## 0.107.0
 
 ### Minor Changes
