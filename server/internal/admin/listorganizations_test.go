@@ -327,9 +327,7 @@ func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFix
 	require.NoError(t, err)
 }
 
-// endingSoonWindow mirrors the INTERVAL in the trial_state CASE. The straddling
-// fixtures below sit one hour either side of it, so widening or narrowing the
-// interval by an hour or more fails the test.
+// endingSoonWindow mirrors the INTERVAL in the trial_state CASE; the fixtures below straddle it by an hour to pin it.
 const endingSoonWindow = 7 * 24 * time.Hour
 
 type trialStateCase struct {
@@ -357,8 +355,7 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 		{orgID: "org_trial_demoted_past", want: "demoted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt}},
 		{orgID: "org_trial_converted_past", want: "converted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), convertedAt: &convertedAt}},
 
-		// MarkTrialConverted guards on converted_at alone, so the sweeper can
-		// demote a trial that later signs a contract. Paying beats demoted.
+		// MarkTrialConverted guards on converted_at alone, so a demoted trial can later convert. Paying beats demoted.
 		{orgID: "org_trial_converted_after_demotion", want: "converted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt, convertedAt: &convertedAt}},
 
 		{orgID: "org_trial_window_inside", want: "ending_soon", trial: &trialFixture{endsAt: now.Add(endingSoonWindow - time.Hour)}},
