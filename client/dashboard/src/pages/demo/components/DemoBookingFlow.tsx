@@ -130,7 +130,7 @@ export function DemoBookingFlow({
   const prefill = [email, companyName].filter(Boolean).join(" · ");
 
   return (
-    <div className="flex w-full flex-col items-center gap-6">
+    <div className="flex w-full flex-col items-center gap-4">
       {intro}
 
       <div className="w-full overflow-hidden border border-(--edge) bg-(--card)">
