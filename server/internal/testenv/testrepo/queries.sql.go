@@ -311,6 +311,25 @@ func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const forceSoftDeleteOrganizationUserRelationship = `-- name: ForceSoftDeleteOrganizationUserRelationship :exec
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+`
+
+type ForceSoftDeleteOrganizationUserRelationshipParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+// Test-only fixture: soft-deletes an org membership to exercise deleted-row
+// filtering in identity resolution.
+func (q *Queries) ForceSoftDeleteOrganizationUserRelationship(ctx context.Context, arg ForceSoftDeleteOrganizationUserRelationshipParams) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const forceSoftDeleteOrganizationUserRelationshipsFixture = `-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -321,6 +340,38 @@ WHERE organization_id = $1
 // generated from deleted_at, so a soft delete has to set the timestamp.
 func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationshipsFixture, organizationID)
+	return err
+}
+
+const forceSoftDeleteUser = `-- name: ForceSoftDeleteUser :exec
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Test-only fixture: soft-deletes a directory user to exercise deleted-row
+// filtering in identity resolution.
+func (q *Queries) ForceSoftDeleteUser(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUser, id)
+	return err
+}
+
+const forceSoftDeleteUserAccountsByEmail = `-- name: ForceSoftDeleteUserAccountsByEmail :exec
+UPDATE user_accounts
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND lower(email) = $2::text
+`
+
+type ForceSoftDeleteUserAccountsByEmailParams struct {
+	OrganizationID string
+	EmailLower     string
+}
+
+// Test-only fixture: soft-deletes an org's linked accounts by email to
+// exercise deleted-row filtering in identity resolution.
+func (q *Queries) ForceSoftDeleteUserAccountsByEmail(ctx context.Context, arg ForceSoftDeleteUserAccountsByEmailParams) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUserAccountsByEmail, arg.OrganizationID, arg.EmailLower)
 	return err
 }
 
