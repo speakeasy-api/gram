@@ -1058,7 +1058,7 @@ SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
     next_poll_after = CASE
       WHEN NOT $1::bool
         AND disabled_at IS NOT NULL
-        AND consecutive_failures > 0
+        AND (consecutive_failures > 0 OR auto_paused_at IS NOT NULL)
       THEN clock_timestamp()
       ELSE next_poll_after
     END,
@@ -1066,6 +1066,11 @@ SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
       WHEN NOT $1::bool AND disabled_at IS NOT NULL
       THEN 0
       ELSE consecutive_failures
+    END,
+    auto_paused_at = CASE
+      WHEN NOT $1::bool AND disabled_at IS NOT NULL
+      THEN NULL
+      ELSE auto_paused_at
     END,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $2
@@ -1081,11 +1086,14 @@ type SetSyncScheduleDisabledParams struct {
 
 // SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
 // sync schedule. Distinct from auto_paused_at: only the user flips this flag.
-// Transitioning a failing schedule from disabled to enabled makes it due
-// immediately — failure backoff can leave next_poll_after hours out — and
-// resets its failure streak so the fresh run starts at full cadence instead
-// of continuing the old backoff toward the auto-pause threshold. An
-// already-enabled or healthy schedule keeps its next_poll_after and streak.
+// Transitioning a schedule from disabled to enabled starts a fresh run: it
+// becomes due immediately when it was failing or auto-paused — failure
+// backoff can leave next_poll_after hours out — its failure streak resets so
+// polling resumes at full cadence instead of continuing the old backoff
+// toward the auto-pause threshold, and any automatic pause lifts, since
+// candidate selection would otherwise never re-enqueue the schedule the user
+// just asked to run. An already-enabled or healthy schedule keeps its
+// next_poll_after, streak, and pause state.
 func (q *Queries) SetSyncScheduleDisabled(ctx context.Context, arg SetSyncScheduleDisabledParams) (AiIntegrationSync, error) {
 	row := q.db.QueryRow(ctx, setSyncScheduleDisabled, arg.Disabled, arg.AiIntegrationConfigID, arg.Schedule)
 	var i AiIntegrationSync

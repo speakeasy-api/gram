@@ -392,6 +392,32 @@ func TestSetSyncScheduleDisabledReenableMakesFailingScheduleDue(t *testing.T) {
 	require.Equal(t, int32(0), reenabled.ConsecutiveFailures)
 }
 
+func TestSetSyncScheduleDisabledReenableLiftsAutoPause(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("anthropic compliance rejected the configured api key")
+	for range AutoPauseAfterRejectedPolls {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now(), cause, AutoPauseAfterRejectedPolls))
+	}
+	require.NotContains(t, listCandidateSchedules(t, ctx, store), ScheduleAnthropicCompliance)
+
+	setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, true)
+	reenabled := setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, false)
+
+	// Re-enabling lifts the automatic pause along with the streak: candidate
+	// selection skips auto-paused schedules, so a re-enabled schedule that
+	// kept auto_paused_at would silently never poll again despite reporting
+	// zero failures.
+	require.True(t, reenabled.AutoPausedAt.IsZero())
+	require.Equal(t, int32(0), reenabled.ConsecutiveFailures)
+	require.Contains(t, listCandidateSchedules(t, ctx, store), ScheduleAnthropicCompliance)
+}
+
 func TestSetSyncScheduleDisabledAlreadyEnabledKeepsFailureBackoff(t *testing.T) {
 	t.Parallel()
 
