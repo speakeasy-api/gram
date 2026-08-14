@@ -26,6 +26,11 @@ const activatePaygBillingMetadata = `-- name: ActivatePaygBillingMetadata :one
 UPDATE billing_metadata
 SET stripe_subscription_id = $1,
     stripe_billing_cycle_anchor = $2,
+    stripe_checkout_idempotency_key = NULL,
+    stripe_checkout_billing_cycle_anchor = NULL,
+    stripe_checkout_trial_end = NULL,
+    stripe_checkout_expires_at = NULL,
+    stripe_checkout_session_id = NULL,
     billing_cycle_anchor_day = $3,
     updated_at = clock_timestamp()
 WHERE organization_id = $4
@@ -130,6 +135,76 @@ type CreateStripeSubscriptionBillingMetadataFixtureParams struct {
 func (q *Queries) CreateStripeSubscriptionBillingMetadataFixture(ctx context.Context, arg CreateStripeSubscriptionBillingMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createStripeSubscriptionBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID, arg.StripeSubscriptionID)
 	return err
+}
+
+const finalizeStripeCheckoutIntent = `-- name: FinalizeStripeCheckoutIntent :one
+WITH locked AS (
+  SELECT
+      id
+    , stripe_checkout_session_id IS NULL AS attach_new_session
+  FROM billing_metadata
+  WHERE organization_id = $1::text
+    AND stripe_customer_id = $2::text
+  FOR UPDATE
+), finalized AS (
+  UPDATE billing_metadata AS metadata
+  SET
+      stripe_checkout_session_id = $3::text
+    , updated_at = CASE
+        WHEN locked.attach_new_session THEN clock_timestamp()
+        ELSE metadata.updated_at
+      END
+  FROM locked
+  WHERE metadata.id = locked.id
+    AND metadata.stripe_subscription_id IS NULL
+    AND metadata.stripe_checkout_idempotency_key = $4::text
+    AND metadata.stripe_checkout_billing_cycle_anchor = $5::timestamptz
+    AND metadata.stripe_checkout_trial_end IS NOT DISTINCT FROM $6::timestamptz
+    AND metadata.stripe_checkout_expires_at = $7::timestamptz
+    AND (
+      metadata.stripe_checkout_session_id IS NULL
+      OR metadata.stripe_checkout_session_id = $3::text
+    )
+  RETURNING
+      metadata.id AS billing_metadata_id
+    , locked.attach_new_session
+)
+SELECT
+    billing_metadata_id
+  , COALESCE(attach_new_session, FALSE)::boolean AS attached_new_session
+FROM finalized
+`
+
+type FinalizeStripeCheckoutIntentParams struct {
+	OrganizationID                   string
+	StripeCustomerID                 string
+	StripeCheckoutSessionID          string
+	StripeCheckoutIdempotencyKey     string
+	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
+	StripeCheckoutTrialEnd           pgtype.Timestamptz
+	StripeCheckoutExpiresAt          pgtype.Timestamptz
+}
+
+type FinalizeStripeCheckoutIntentRow struct {
+	BillingMetadataID  uuid.UUID
+	AttachedNewSession bool
+}
+
+// Attach the remote session only to the exact intent used to create it. A retry
+// may confirm the same session, but cannot replace it with another session ID.
+func (q *Queries) FinalizeStripeCheckoutIntent(ctx context.Context, arg FinalizeStripeCheckoutIntentParams) (FinalizeStripeCheckoutIntentRow, error) {
+	row := q.db.QueryRow(ctx, finalizeStripeCheckoutIntent,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+		arg.StripeCheckoutSessionID,
+		arg.StripeCheckoutIdempotencyKey,
+		arg.StripeCheckoutBillingCycleAnchor,
+		arg.StripeCheckoutTrialEnd,
+		arg.StripeCheckoutExpiresAt,
+	)
+	var i FinalizeStripeCheckoutIntentRow
+	err := row.Scan(&i.BillingMetadataID, &i.AttachedNewSession)
+	return i, err
 }
 
 const getBillingMetadata = `-- name: GetBillingMetadata :one
@@ -369,6 +444,134 @@ func (q *Queries) ListStripeSubscriptionOwners(ctx context.Context, stripeSubscr
 		return nil, err
 	}
 	return items, nil
+}
+
+const prepareStripeCheckoutIntent = `-- name: PrepareStripeCheckoutIntent :one
+WITH locked AS (
+  SELECT
+      id
+    , stripe_checkout_idempotency_key
+    , stripe_checkout_billing_cycle_anchor
+    , stripe_checkout_trial_end
+    , stripe_checkout_expires_at
+    , stripe_checkout_session_id
+    , (
+        stripe_checkout_idempotency_key IS NOT NULL
+        AND stripe_checkout_billing_cycle_anchor IS NOT NULL
+        AND stripe_checkout_expires_at > $1::timestamptz
+      ) AS reuse_existing_intent
+  FROM billing_metadata
+  WHERE organization_id = $2::text
+    AND stripe_customer_id = $3::text
+  FOR UPDATE
+), prepared AS (
+  UPDATE billing_metadata AS metadata
+  SET
+      stripe_checkout_idempotency_key = CASE
+        WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_idempotency_key
+        ELSE $4::text
+      END
+    , stripe_checkout_billing_cycle_anchor = CASE
+        WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_billing_cycle_anchor
+        ELSE $5::timestamptz
+      END
+    , stripe_checkout_trial_end = CASE
+        WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_trial_end
+        ELSE $6::timestamptz
+      END
+    , stripe_checkout_expires_at = CASE
+        WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_expires_at
+        ELSE $7::timestamptz
+      END
+    , stripe_checkout_session_id = CASE
+        WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_session_id
+        ELSE NULL
+      END
+    , updated_at = CASE
+        WHEN locked.reuse_existing_intent THEN metadata.updated_at
+        ELSE clock_timestamp()
+      END
+  FROM locked
+  WHERE metadata.id = locked.id
+    AND metadata.stripe_subscription_id IS NULL
+    -- An expired intent with a known remote session rotates only after the
+    -- caller has checked that exact session and explicitly authorizes replacing
+    -- it. A sessionless intent has no remote completion race to guard.
+    AND (
+      locked.reuse_existing_intent
+      OR locked.stripe_checkout_session_id IS NULL
+      OR locked.stripe_checkout_session_id = $8::text
+    )
+  RETURNING
+      metadata.id AS billing_metadata_id
+    , metadata.stripe_customer_id
+    , metadata.stripe_checkout_idempotency_key
+    , metadata.stripe_checkout_billing_cycle_anchor
+    , metadata.stripe_checkout_trial_end
+    , metadata.stripe_checkout_expires_at
+    , metadata.stripe_checkout_session_id
+    , locked.reuse_existing_intent
+)
+SELECT
+    billing_metadata_id
+  , stripe_customer_id
+  , stripe_checkout_idempotency_key
+  , stripe_checkout_billing_cycle_anchor
+  , stripe_checkout_trial_end
+  , stripe_checkout_expires_at
+  , stripe_checkout_session_id
+  , COALESCE(reuse_existing_intent, FALSE)::boolean AS reuse_existing_intent
+FROM prepared
+`
+
+type PrepareStripeCheckoutIntentParams struct {
+	PreparedAt                       pgtype.Timestamptz
+	OrganizationID                   string
+	StripeCustomerID                 string
+	StripeCheckoutIdempotencyKey     string
+	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
+	StripeCheckoutTrialEnd           pgtype.Timestamptz
+	StripeCheckoutExpiresAt          pgtype.Timestamptz
+	ReplaceExpiredSessionID          pgtype.Text
+}
+
+type PrepareStripeCheckoutIntentRow struct {
+	BillingMetadataID                uuid.UUID
+	StripeCustomerID                 pgtype.Text
+	StripeCheckoutIdempotencyKey     pgtype.Text
+	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
+	StripeCheckoutTrialEnd           pgtype.Timestamptz
+	StripeCheckoutExpiresAt          pgtype.Timestamptz
+	StripeCheckoutSessionID          pgtype.Text
+	ReuseExistingIntent              bool
+}
+
+// Call inside the Checkout transaction after the Stripe customer is stored.
+// The row lock makes concurrent callers reuse one live intent. Once it expires,
+// a caller may replace it only while no subscription has been activated.
+func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareStripeCheckoutIntentParams) (PrepareStripeCheckoutIntentRow, error) {
+	row := q.db.QueryRow(ctx, prepareStripeCheckoutIntent,
+		arg.PreparedAt,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+		arg.StripeCheckoutIdempotencyKey,
+		arg.StripeCheckoutBillingCycleAnchor,
+		arg.StripeCheckoutTrialEnd,
+		arg.StripeCheckoutExpiresAt,
+		arg.ReplaceExpiredSessionID,
+	)
+	var i PrepareStripeCheckoutIntentRow
+	err := row.Scan(
+		&i.BillingMetadataID,
+		&i.StripeCustomerID,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
+		&i.ReuseExistingIntent,
+	)
+	return i, err
 }
 
 const setStripeSubscriptionFixture = `-- name: SetStripeSubscriptionFixture :exec
