@@ -876,12 +876,12 @@ const pollFailureBackoffCeiling = 6 * time.Hour
 // retrying can plausibly fix. Every recorded failure doubles the delay until
 // the next poll, capped at 2^pollFailureMaxBackoffDoublings times the
 // schedule's base interval, so chronic failures decay to a slow cadence
-// instead of retrying at full speed indefinitely. userFacingErr must already be
+// instead of retrying at full speed indefinitely. shareableErr must already be
 // safe to show to organization members; this method persists Error() verbatim.
-func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, userFacingErr error, pauseAfter int32) error {
+func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, shareableErr error, pauseAfter int32) error {
 	var errStr string
-	if userFacingErr != nil {
-		errStr = userFacingErr.Error()
+	if shareableErr != nil {
+		errStr = shareableErr.Error()
 	}
 
 	// The streak before this failure decides the backoff; a lookup failure
@@ -922,8 +922,8 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 	return nil
 }
 
-func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, userFacingErr error) error {
-	return s.RecordSchedulePollFailure(ctx, configID, provider, t, userFacingErr, 0)
+func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, shareableErr error) error {
+	return s.RecordSchedulePollFailure(ctx, configID, provider, t, shareableErr, 0)
 }
 
 // epochTime is the never-synced watermark sentinel for time-kind schedules

@@ -161,8 +161,8 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			// never pause: the schedule keeps polling, at a cadence that
 			// backs off with the failure streak.
 			pauseAfter := conv.Ternary[int32](nonRetryable, aiintegrations.AutoPauseAfterRejectedPolls, 0)
-			userFacingErr := userFacingPollError(schedule, err)
-			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, userFacingErr, pauseAfter); recordErr != nil {
+			shareableErr := shareablePollError(schedule, err)
+			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, shareableErr, pauseAfter); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
 			}
 		}
@@ -242,10 +242,10 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 	return nil
 }
 
-// userFacingPollError turns an internal poll failure into the message persisted
+// shareablePollError turns an internal poll failure into the message persisted
 // for organization members. Its ShareableError cause remains available to
 // internal callers, but RecordSchedulePollFailure stores only Error().
-func userFacingPollError(schedule string, cause error) error {
+func shareablePollError(schedule string, cause error) error {
 	var decodeErr *aiintegrations.CodexCostLogDecodeError
 	if errors.As(cause, &decodeErr) {
 		return oops.E(

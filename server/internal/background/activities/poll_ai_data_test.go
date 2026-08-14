@@ -165,14 +165,14 @@ func TestCustomerPollErrorOmitsCodexPayload(t *testing.T) {
 		Cause:   decodeCause,
 	})
 
-	userFacingErr := userFacingPollError(aiintegrations.ScheduleCodexCompliance, internalErr)
+	shareableErr := shareablePollError(aiintegrations.ScheduleCodexCompliance, internalErr)
 
 	var shareable *oops.ShareableError
-	require.ErrorAs(t, userFacingErr, &shareable)
+	require.ErrorAs(t, shareableErr, &shareable)
 	require.Equal(t, oops.CodeUnexpected, shareable.Code)
-	require.Contains(t, userFacingErr.Error(), "eclf_bad")
-	require.Contains(t, userFacingErr.Error(), "cannot unmarshal string")
-	require.NotContains(t, userFacingErr.Error(), "user@example.com")
+	require.Contains(t, shareableErr.Error(), "eclf_bad")
+	require.Contains(t, shareableErr.Error(), "cannot unmarshal string")
+	require.NotContains(t, shareableErr.Error(), "user@example.com")
 
 	temporalErr := newPollFailureError(
 		uuid.MustParse("33333333-3333-3333-3333-333333333333"),

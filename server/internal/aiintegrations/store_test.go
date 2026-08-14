@@ -170,13 +170,13 @@ func TestRecordUsagePollFailureStoresOnlyCustomerMessage(t *testing.T) {
 	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
 	externalOrgID := "org-openai"
 	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, &watermark)
-	userFacingErr := oops.E(
+	shareableErr := oops.E(
 		oops.CodeUnexpected,
 		errors.New(`provider payload contains "user@example.com"`),
 		"sync codex cost data",
 	)
 
-	require.NoError(t, store.RecordUsagePollFailure(ctx, created.Config.ID, ProviderCodexCompliance, time.Now(), userFacingErr))
+	require.NoError(t, store.RecordUsagePollFailure(ctx, created.Config.ID, ProviderCodexCompliance, time.Now(), shareableErr))
 
 	cfg, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCodexCompliance)
 	require.NoError(t, err)
