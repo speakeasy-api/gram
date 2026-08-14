@@ -81,13 +81,17 @@ func (f *fakeStripeWebhookClient) CreateMeterEvent(context.Context, stripeclient
 	return errors.New("not implemented")
 }
 
+func (f *fakeStripeWebhookClient) GetMeterEventSummary(context.Context, stripeclient.GetMeterEventSummaryInput) (float64, error) {
+	return 0, errors.New("not implemented")
+}
+
 func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string) (*stripeclient.WebhookEvent, error) {
 	f.verifyCalls.Add(1)
 	return f.verify(payload, signature)
 }
 
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", MeterEventName: ""}
+	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: ""}
 }
 
 func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {

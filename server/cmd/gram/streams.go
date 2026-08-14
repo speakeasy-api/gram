@@ -153,6 +153,12 @@ func newStreamsCommand() *cli.Command {
 			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-id-tum",
+			Aliases: []string{"stripe.meter_id_tum"},
+			Usage:   "The Stripe TUM billing meter ID",
+			EnvVars: []string{"STRIPE_METER_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "stripe-meter-event-name",
 			Aliases: []string{"stripe.meter_event_name"},
 			Usage:   "The Stripe TUM meter event name",

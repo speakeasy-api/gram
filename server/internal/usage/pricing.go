@@ -1,0 +1,6 @@
+package usage
+
+// TUMUnitPriceUSD is the immutable PAYG list price for a token under
+// management: $0.35 per million tokens. Carry-forward allocations persist
+// this value so their signed correction uses the original service contract.
+const TUMUnitPriceUSD = "0.00000035"

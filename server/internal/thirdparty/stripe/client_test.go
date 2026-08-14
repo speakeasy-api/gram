@@ -26,27 +26,38 @@ func TestCatalogValidate(t *testing.T) {
 			name: "valid",
 			catalog: Catalog{
 				PriceIDTUM:     "price_test",
+				MeterIDTUM:     "mtr_test",
 				MeterEventName: "tum",
 			},
 		},
 		{
 			name:    "missing price",
-			catalog: Catalog{MeterEventName: "tum"},
+			catalog: Catalog{MeterIDTUM: "mtr_test", MeterEventName: "tum"},
 			wantErr: "missing TUM price id",
 		},
 		{
+			name:    "missing meter",
+			catalog: Catalog{PriceIDTUM: "price_test", MeterEventName: "tum"},
+			wantErr: "missing TUM meter id",
+		},
+		{
 			name:    "missing meter event name",
-			catalog: Catalog{PriceIDTUM: "price_test"},
+			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test"},
 			wantErr: "missing meter event name",
 		},
 		{
 			name:    "unset price",
-			catalog: Catalog{PriceIDTUM: "unset", MeterEventName: "tum"},
+			catalog: Catalog{PriceIDTUM: "unset", MeterIDTUM: "mtr_test", MeterEventName: "tum"},
 			wantErr: "missing TUM price id",
 		},
 		{
+			name:    "unset meter",
+			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "unset", MeterEventName: "tum"},
+			wantErr: "missing TUM meter id",
+		},
+		{
 			name:    "unset meter event name",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterEventName: "unset"},
+			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", MeterEventName: "unset"},
 			wantErr: "missing meter event name",
 		},
 	}
@@ -85,6 +96,8 @@ type fakeStripeAPI struct {
 	checkoutRetrieveParams *stripesdk.CheckoutSessionRetrieveParams
 	checkoutSession        *stripesdk.CheckoutSession
 	meterEventParams       *stripesdk.BillingMeterEventCreateParams
+	meterSummaryParams     *stripesdk.BillingMeterEventSummaryListParams
+	meterSummaries         []*stripesdk.BillingMeterEventSummary
 	calls                  int
 	err                    error
 }
@@ -111,6 +124,21 @@ func (f *fakeStripeAPI) createMeterEvent(_ context.Context, params *stripesdk.Bi
 	f.calls++
 	f.meterEventParams = params
 	return &stripesdk.BillingMeterEvent{}, f.err
+}
+
+func (f *fakeStripeAPI) listMeterEventSummaries(_ context.Context, params *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error] {
+	f.calls++
+	f.meterSummaryParams = params
+	return func(yield func(*stripesdk.BillingMeterEventSummary, error) bool) {
+		for _, summary := range f.meterSummaries {
+			if !yield(summary, nil) {
+				return
+			}
+		}
+		if f.err != nil {
+			yield(nil, f.err)
+		}
+	}
 }
 
 func TestCreateCustomerPropagatesIdempotencyKey(t *testing.T) {
@@ -150,6 +178,7 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 		api: api,
 		catalog: Catalog{
 			PriceIDTUM:     "price_tum",
+			MeterIDTUM:     "mtr_tum",
 			MeterEventName: "tum",
 		},
 	}
@@ -197,7 +226,7 @@ func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterEventName: "tum"}}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum"}}
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		CustomerID:         "",
@@ -287,12 +316,13 @@ func TestCreateMeterEventPropagatesIdempotencyKey(t *testing.T) {
 	api := &fakeStripeAPI{}
 	c := &client{
 		api:     api,
-		catalog: Catalog{MeterEventName: "tum"},
+		catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum"},
 	}
 	timestamp := time.Date(2026, time.August, 14, 10, 0, 0, 0, time.UTC)
 
 	err := c.CreateMeterEvent(t.Context(), CreateMeterEventInput{
 		CustomerID:     "cus_test",
+		EventName:      "tum_replay",
 		Value:          42,
 		Timestamp:      timestamp,
 		IdempotencyKey: "meter:<ORG_ID>:1",
@@ -300,7 +330,7 @@ func TestCreateMeterEventPropagatesIdempotencyKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "meter:<ORG_ID>:1", stripesdk.StringValue(api.meterEventParams.IdempotencyKey))
 	require.Equal(t, "meter:<ORG_ID>:1", stripesdk.StringValue(api.meterEventParams.Identifier))
-	require.Equal(t, "tum", stripesdk.StringValue(api.meterEventParams.EventName))
+	require.Equal(t, "tum_replay", stripesdk.StringValue(api.meterEventParams.EventName))
 	require.Equal(t, "cus_test", api.meterEventParams.Payload[meterCustomerPayloadKey])
 	require.Equal(t, "42", api.meterEventParams.Payload[meterValuePayloadKey])
 	require.Equal(t, timestamp.Unix(), stripesdk.Int64Value(api.meterEventParams.Timestamp))
@@ -317,18 +347,135 @@ func TestCreateMeterEventRejectsMissingIdempotencyKey(t *testing.T) {
 	require.Zero(t, api.calls)
 }
 
+func TestCreateMeterEventRejectsMissingEventName(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	err := c.CreateMeterEvent(t.Context(), CreateMeterEventInput{IdempotencyKey: "meter:<ORG_ID>:1"})
+	require.ErrorIs(t, err, errMissingMeterEventName)
+	require.Zero(t, api.calls)
+}
+
+func TestGetMeterEventSummaryAggregatesSDKSequence(t *testing.T) {
+	t.Parallel()
+	// stripe-go's All method owns HTTP pagination and exposes the resulting
+	// items as Seq2. This fake starts at that SDK boundary and verifies that
+	// the client aggregates every item in the sequence.
+
+	api := &fakeStripeAPI{meterSummaries: []*stripesdk.BillingMeterEventSummary{
+		{AggregatedValue: 10.5},
+		{AggregatedValue: -2},
+		{AggregatedValue: 4.25},
+	}}
+	c := &client{
+		api: api,
+		catalog: Catalog{
+			PriceIDTUM:     "",
+			MeterIDTUM:     "mtr_tum",
+			MeterEventName: "",
+		},
+	}
+	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+
+	total, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{
+		CustomerID: "cus_test",
+		Start:      start,
+		End:        end,
+	})
+	require.NoError(t, err)
+	require.InDelta(t, 12.75, total, 0.000001)
+	require.Equal(t, "mtr_tum", stripesdk.StringValue(api.meterSummaryParams.ID))
+	require.Equal(t, "cus_test", stripesdk.StringValue(api.meterSummaryParams.Customer))
+	require.Equal(t, start.Unix(), stripesdk.Int64Value(api.meterSummaryParams.StartTime))
+	require.Equal(t, end.Unix(), stripesdk.Int64Value(api.meterSummaryParams.EndTime))
+	require.Equal(t, int64(100), stripesdk.Int64Value(api.meterSummaryParams.Limit))
+}
+
+func TestGetMeterEventSummaryValidatesBounds(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		start   time.Time
+		end     time.Time
+		wantErr string
+	}{
+		{
+			name:    "start not minute aligned",
+			start:   start.Add(time.Second),
+			end:     start.Add(time.Hour),
+			wantErr: "minute-aligned",
+		},
+		{
+			name:    "end not minute aligned",
+			start:   start,
+			end:     start.Add(time.Hour + time.Second),
+			wantErr: "minute-aligned",
+		},
+		{
+			name:    "empty interval",
+			start:   start,
+			end:     start,
+			wantErr: "end must be after start",
+		},
+		{
+			name:    "reversed interval",
+			start:   start,
+			end:     start.Add(-time.Minute),
+			wantErr: "end must be after start",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := &fakeStripeAPI{}
+			c := &client{api: api}
+			_, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{
+				CustomerID: "cus_test",
+				Start:      tt.start,
+				End:        tt.end,
+			})
+			require.ErrorContains(t, err, tt.wantErr)
+			require.Zero(t, api.calls)
+		})
+	}
+}
+
+func TestGetMeterEventSummaryWrapsListError(t *testing.T) {
+	t.Parallel()
+
+	apiErr := errors.New("request failed")
+	api := &fakeStripeAPI{err: apiErr}
+	c := &client{api: api}
+	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{
+		CustomerID: "cus_test",
+		Start:      start,
+		End:        start.Add(time.Hour),
+	})
+	require.ErrorIs(t, err, apiErr)
+	require.ErrorContains(t, err, "list Stripe meter event summaries")
+}
+
 func TestWritesWrapStripeErrors(t *testing.T) {
 	t.Parallel()
 
 	apiErr := errors.New("request failed")
 	api := &fakeStripeAPI{err: apiErr}
-	c := &client{api: api, catalog: Catalog{MeterEventName: "tum"}}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum"}}
 
 	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{IdempotencyKey: "customer"})
 	require.ErrorIs(t, err, apiErr)
 	require.ErrorContains(t, err, "create Stripe customer")
 
-	err = c.CreateMeterEvent(t.Context(), CreateMeterEventInput{IdempotencyKey: "meter"})
+	err = c.CreateMeterEvent(t.Context(), CreateMeterEventInput{EventName: "tum", IdempotencyKey: "meter"})
 	require.ErrorIs(t, err, apiErr)
 	require.ErrorContains(t, err, "create Stripe meter event")
 

@@ -114,12 +114,16 @@ func (c *checkoutStripeClient) CreateMeterEvent(context.Context, stripeclient.Cr
 	return errors.New("not implemented")
 }
 
+func (c *checkoutStripeClient) GetMeterEventSummary(context.Context, stripeclient.GetMeterEventSummaryInput) (float64, error) {
+	return 0, errors.New("not implemented")
+}
+
 func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.WebhookEvent, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "price_tum", MeterEventName: "tum"}
+	return stripeclient.Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum"}
 }
 
 func (c *checkoutStripeClient) snapshot() (int, []stripeclient.CreateCustomerInput, []stripeclient.CreateCheckoutSessionInput) {
