@@ -248,3 +248,26 @@ func TestShareableError_AsGoa_AppCanceledWithLiveContextIsFault(t *testing.T) {
 	require.True(t, appCanceled.Temporary, "an unexpected error stays retryable")
 	require.Equal(t, string(CodeUnexpected), appCanceled.Name)
 }
+
+func TestDetailExpandsShareableErrorsAcrossJoinedBranches(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, Detail(nil))
+
+	plain := fmt.Errorf("outer: %w", errors.New("inner"))
+	require.Equal(t, "outer: inner", Detail(plain))
+
+	first := fmt.Errorf(
+		"poll: %w",
+		E(CodeUnexpected, fmt.Errorf("process page: %w", errors.New("connection refused")), "sync data"),
+	)
+	second := E(CodeUnexpected, errors.New("database unavailable"), "record schedule failure")
+	joined := errors.Join(first, second)
+
+	require.Equal(
+		t,
+		"poll: sync data: process page: connection refused\nrecord schedule failure: database unavailable",
+		Detail(joined),
+	)
+	require.Equal(t, "bare", Detail(E(CodeUnexpected, nil, "bare")))
+}

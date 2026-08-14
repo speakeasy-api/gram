@@ -173,7 +173,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 	switch schedule {
 	case aiintegrations.ScheduleCursor:
 		if cfg.Provider != aiintegrations.ProviderCursor {
-			return fmt.Errorf("cursor schedule cannot run for provider %s", cfg.Provider)
+			return oops.E(oops.CodeInvalid, nil, "cursor schedule cannot run for provider %s", cfg.Provider)
 		}
 		if err := p.cursorUsagePoller.SyncCursorUsage(ctx, cfg, endTime); err != nil {
 			return fmt.Errorf("fetch cursor usage window: %w", err)
@@ -183,7 +183,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		}
 	case aiintegrations.ScheduleAnthropicCompliance:
 		if cfg.Provider != aiintegrations.ProviderAnthropicCompliance {
-			return fmt.Errorf("anthropic compliance schedule cannot run for provider %s", cfg.Provider)
+			return oops.E(oops.CodeInvalid, nil, "anthropic compliance schedule cannot run for provider %s", cfg.Provider)
 		}
 		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg)
 		if err != nil {
@@ -208,7 +208,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		}
 	case aiintegrations.ScheduleCodexCompliance:
 		if cfg.Provider != aiintegrations.ProviderCodexCompliance {
-			return fmt.Errorf("codex compliance schedule cannot run for provider %s", cfg.Provider)
+			return oops.E(oops.CodeInvalid, nil, "codex compliance schedule cannot run for provider %s", cfg.Provider)
 		}
 		if err := p.codexCostImporter.SyncCodexCosts(ctx, cfg, endTime); err != nil {
 			return fmt.Errorf("sync codex cost data: %w", err)
@@ -218,7 +218,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		}
 	case aiintegrations.ScheduleChatGPTCompliance:
 		if cfg.Provider != aiintegrations.ProviderChatGPTCompliance {
-			return fmt.Errorf("chatgpt compliance schedule cannot run for provider %s", cfg.Provider)
+			return oops.E(oops.CodeInvalid, nil, "chatgpt compliance schedule cannot run for provider %s", cfg.Provider)
 		}
 		if err := p.chatgptConversationImporter.SyncChatGPTConversations(ctx, cfg, endTime); err != nil {
 			return fmt.Errorf("sync chatgpt conversation data: %w", err)
@@ -228,7 +228,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		}
 	case aiintegrations.ScheduleCodexCloudSessions:
 		if cfg.Provider != aiintegrations.ProviderChatGPTCompliance {
-			return fmt.Errorf("codex cloud sessions schedule cannot run for provider %s", cfg.Provider)
+			return oops.E(oops.CodeInvalid, nil, "codex cloud sessions schedule cannot run for provider %s", cfg.Provider)
 		}
 		if err := p.codexCloudImporter.SyncCodexCloudSessions(ctx, cfg, endTime); err != nil {
 			return fmt.Errorf("sync codex cloud session data: %w", err)
@@ -237,7 +237,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			return fmt.Errorf("record codex cloud sessions schedule success: %w", err)
 		}
 	default:
-		return fmt.Errorf("unsupported ai integration sync schedule: %s", schedule)
+		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration sync schedule: %s", schedule)
 	}
 	return nil
 }
@@ -246,15 +246,9 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 // for organization members. Its ShareableError cause remains available to
 // internal callers, but RecordSchedulePollFailure stores only Error().
 func shareablePollError(schedule string, cause error) error {
-	var decodeErr *aiintegrations.CodexCostLogDecodeError
-	if errors.As(cause, &decodeErr) {
-		return oops.E(
-			oops.CodeUnexpected,
-			cause,
-			"decode codex compliance cost log %s: %v",
-			decodeErr.LogID,
-			decodeErr.Cause,
-		)
+	var contentErr *aiintegrations.CodexCostContentError
+	if errors.As(cause, &contentErr) {
+		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
 	}
 
 	var cursorErr *cursorapi.HTTPError
@@ -297,6 +291,14 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeNotFound, cause, "codex cloud workspace not found or compliance api access not enabled")
 			}
 		}
+	}
+
+	// An interior oops boundary already chose a safe public message and code
+	// (e.g. a schedule/provider mismatch or the telemetry insert wrap), so
+	// persist that instead of falling back to the generic schedule message.
+	var shareable *oops.ShareableError
+	if errors.As(cause, &shareable) {
+		return shareable
 	}
 
 	message := "ai integration sync failed"
@@ -365,8 +367,13 @@ func newPollFailureError(configID uuid.UUID, provider string, attempt int32, non
 		}
 	}
 
+	diagnostic := oops.Detail(cause)
+	var contentErr *aiintegrations.CodexCostContentError
+	if errors.As(cause, &contentErr) && len(contentErr.Payload) > 0 {
+		diagnostic = fmt.Sprintf("%s payload=%q", diagnostic, contentErr.Payload)
+	}
 	message := fmt.Sprintf("poll ai integration usage: provider=%s config=%s attempt=%d/%d: %s",
-		provider, configID, attempt, PollUsageMaxAttempts, cause)
+		provider, configID, attempt, PollUsageMaxAttempts, diagnostic)
 	return temporal.NewApplicationErrorWithOptions(message, ErrTypeAIUsagePollFailed, temporal.ApplicationErrorOptions{
 		NonRetryable: nonRetryable,
 		Cause:        cause,

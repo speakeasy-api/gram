@@ -385,8 +385,11 @@ func TestSetSyncScheduleDisabledReenableMakesFailingScheduleDue(t *testing.T) {
 	reenabled := setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, false)
 
 	// Re-enabling a schedule with a failure streak pulls its backed-off next
-	// poll in so it is picked up on the next scheduler tick.
+	// poll in so it is picked up on the next scheduler tick, and resets the
+	// streak so the fresh run polls at full cadence instead of continuing the
+	// old backoff toward the auto-pause threshold.
 	require.LessOrEqual(t, reenabled.NextPollAfter, time.Now().Add(time.Second))
+	require.Equal(t, int32(0), reenabled.ConsecutiveFailures)
 }
 
 func TestSetSyncScheduleDisabledAlreadyEnabledKeepsFailureBackoff(t *testing.T) {
@@ -406,6 +409,7 @@ func TestSetSyncScheduleDisabledAlreadyEnabledKeepsFailureBackoff(t *testing.T) 
 	stillEnabled := setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, false)
 
 	require.Equal(t, backedOff.NextPollAfter, stillEnabled.NextPollAfter)
+	require.Equal(t, backedOff.ConsecutiveFailures, stillEnabled.ConsecutiveFailures)
 }
 
 func findSyncSchedule(t *testing.T, ctx context.Context, store *Store, configID uuid.UUID, schedule string) SyncSchedule {

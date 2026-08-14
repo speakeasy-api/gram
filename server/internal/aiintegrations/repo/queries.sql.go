@@ -1062,6 +1062,11 @@ SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
       THEN clock_timestamp()
       ELSE next_poll_after
     END,
+    consecutive_failures = CASE
+      WHEN NOT $1::bool AND disabled_at IS NOT NULL
+      THEN 0
+      ELSE consecutive_failures
+    END,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $2
   AND schedule = $3
@@ -1077,8 +1082,10 @@ type SetSyncScheduleDisabledParams struct {
 // SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
 // sync schedule. Distinct from auto_paused_at: only the user flips this flag.
 // Transitioning a failing schedule from disabled to enabled makes it due
-// immediately — failure backoff can leave next_poll_after hours out — while
-// an already-enabled or healthy schedule keeps its existing next_poll_after.
+// immediately — failure backoff can leave next_poll_after hours out — and
+// resets its failure streak so the fresh run starts at full cadence instead
+// of continuing the old backoff toward the auto-pause threshold. An
+// already-enabled or healthy schedule keeps its next_poll_after and streak.
 func (q *Queries) SetSyncScheduleDisabled(ctx context.Context, arg SetSyncScheduleDisabledParams) (AiIntegrationSync, error) {
 	row := q.db.QueryRow(ctx, setSyncScheduleDisabled, arg.Disabled, arg.AiIntegrationConfigID, arg.Schedule)
 	var i AiIntegrationSync

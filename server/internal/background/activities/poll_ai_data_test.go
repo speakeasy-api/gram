@@ -135,6 +135,87 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.ErrorIs(t, err, discoverErr)
 }
 
+func TestShareablePollErrorPreservesInteriorShareableBoundaries(t *testing.T) {
+	t.Parallel()
+
+	// A schedule/provider mismatch keeps its invalid-configuration code and
+	// message instead of the generic schedule fallback.
+	mismatch := oops.E(oops.CodeInvalid, nil, "cursor schedule cannot run for provider %s", aiintegrations.ProviderAnthropicCompliance)
+	err := shareablePollError(aiintegrations.ScheduleCursor, mismatch)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeInvalid, shareable.Code)
+	require.Contains(t, err.Error(), "cursor schedule cannot run for provider")
+
+	// The telemetry insert boundary's safe message is persisted; the raw
+	// ClickHouse cause behind it is not.
+	insertErr := fmt.Errorf("sync codex cost data: %w",
+		oops.E(oops.CodeUnexpected, errors.New("clickhouse: connection refused"), "insert codex cost telemetry logs"))
+	err = shareablePollError(aiintegrations.ScheduleCodexCompliance, insertErr)
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code)
+	require.Equal(t, "insert codex cost telemetry logs", err.Error())
+	require.NotContains(t, err.Error(), "clickhouse")
+}
+
+func TestNewPollFailureErrorKeepsStageContextAroundShareableStageErrors(t *testing.T) {
+	t.Parallel()
+
+	syncErr := &aiintegrations.SyncError{
+		Op: "sync codex costs",
+		Stages: []aiintegrations.SyncStageError{{
+			Stage: "import_cost_logs",
+			Err:   oops.E(oops.CodeUnexpected, errors.New("connection refused"), "insert codex cost telemetry logs"),
+		}},
+		Progress: aiintegrations.CodexCostSyncProgress{
+			WindowStart:       time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC),
+			LogPages:          2,
+			LogFiles:          3,
+			CostEvents:        40,
+			CostEventsWritten: 0,
+			CostEventsDeduped: 0,
+			WatermarkReached:  time.Date(2026, 7, 16, 6, 0, 0, 0, time.UTC),
+		},
+	}
+	cause := fmt.Errorf("sync codex cost data: %w", syncErr)
+
+	err := newPollFailureError(
+		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		aiintegrations.ProviderCodexCompliance,
+		5,
+		false,
+		cause,
+	)
+
+	// The stage label and progress summary survive, and the shareable stage
+	// error is expanded in place to include its hidden cause.
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Contains(t, appErr.Message(), "[import_cost_logs] insert codex cost telemetry logs: connection refused")
+	require.Contains(t, appErr.Message(), "(progress:")
+}
+
+func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf(
+		"sync codex cost data: %w",
+		oops.E(oops.CodeUnexpected, errors.New("download failed"), "import cost logs"),
+	)
+
+	err := newPollFailureError(
+		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		aiintegrations.ProviderCodexCompliance,
+		5,
+		false,
+		cause,
+	)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Contains(t, appErr.Message(), "sync codex cost data: import cost logs: download failed")
+}
+
 func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
 	t.Parallel()
 
@@ -154,37 +235,61 @@ func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
 	require.Nil(t, details.Progress)
 }
 
-func TestCustomerPollErrorOmitsCodexPayload(t *testing.T) {
+func TestCustomerPollErrorClassifiesCodexContentFailuresWithoutPayload(t *testing.T) {
 	t.Parallel()
 
-	decodeCause := errors.New("json: cannot unmarshal string into Go struct field codexCostPayload.hour of type int")
 	payload := []byte(`{"event_id":"event_1","payload":{"hour":"invalid","identity":{"email":"user@example.com"}}}`)
-	internalErr := fmt.Errorf("sync codex cost data: %w", &aiintegrations.CodexCostLogDecodeError{
-		LogID:   "eclf_bad",
-		Payload: payload,
-		Cause:   decodeCause,
-	})
+	testCases := []struct {
+		kind        aiintegrations.CodexCostContentErrorKind
+		want        string
+		withPayload bool
+	}{
+		{kind: aiintegrations.CodexCostContentSHA256Mismatch, want: "failed sha256 verification", withPayload: false},
+		{kind: aiintegrations.CodexCostContentInvalidJSON, want: "decode codex compliance cost log", withPayload: true},
+		{kind: aiintegrations.CodexCostContentMissingEventID, want: "missing event_id", withPayload: true},
+		{kind: aiintegrations.CodexCostContentInvalidTimestamp, want: "parse codex compliance cost timestamp", withPayload: true},
+	}
 
-	shareableErr := shareablePollError(aiintegrations.ScheduleCodexCompliance, internalErr)
+	for _, testCase := range testCases {
+		contentPayload := payload
+		if !testCase.withPayload {
+			contentPayload = nil
+		}
+		internalErr := fmt.Errorf("sync codex cost data: %w", &aiintegrations.CodexCostContentError{
+			Kind:    testCase.kind,
+			LogID:   "eclf_bad",
+			Payload: contentPayload,
+			Cause:   errors.New("private parser context"),
+		})
 
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, shareableErr, &shareable)
-	require.Equal(t, oops.CodeUnexpected, shareable.Code)
-	require.Contains(t, shareableErr.Error(), "eclf_bad")
-	require.Contains(t, shareableErr.Error(), "cannot unmarshal string")
-	require.NotContains(t, shareableErr.Error(), "user@example.com")
+		shareableErr := shareablePollError(aiintegrations.ScheduleCodexCompliance, internalErr)
 
-	temporalErr := newPollFailureError(
-		uuid.MustParse("33333333-3333-3333-3333-333333333333"),
-		aiintegrations.ProviderCodexCompliance,
-		5,
-		false,
-		internalErr,
-	)
-	var appErr *temporal.ApplicationError
-	require.ErrorAs(t, temporalErr, &appErr)
-	require.Contains(t, appErr.Message(), "user@example.com")
-	require.Contains(t, appErr.Message(), `\"hour\":\"invalid\"`)
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, shareableErr, &shareable, testCase.kind)
+		require.Equal(t, oops.CodeUnexpected, shareable.Code, testCase.kind)
+		require.Contains(t, shareableErr.Error(), "eclf_bad", testCase.kind)
+		require.Contains(t, shareableErr.Error(), testCase.want, testCase.kind)
+		require.NotContains(t, shareableErr.Error(), "user@example.com", testCase.kind)
+		require.NotContains(t, shareableErr.Error(), "private parser context", testCase.kind)
+
+		temporalErr := newPollFailureError(
+			uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+			aiintegrations.ProviderCodexCompliance,
+			5,
+			false,
+			internalErr,
+		)
+		var appErr *temporal.ApplicationError
+		require.ErrorAs(t, temporalErr, &appErr, testCase.kind)
+		if testCase.withPayload {
+			require.Contains(t, appErr.Message(), "user@example.com", testCase.kind)
+			require.Contains(t, appErr.Message(), `\"hour\":\"invalid\"`, testCase.kind)
+		} else {
+			require.NotContains(t, appErr.Message(), "user@example.com", testCase.kind)
+			require.NotContains(t, appErr.Message(), "payload=", testCase.kind)
+		}
+		require.Contains(t, appErr.Message(), "private parser context", testCase.kind)
+	}
 }
 
 func TestAIUsagePollFailureDetailsMarshalToJSON(t *testing.T) {

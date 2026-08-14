@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
@@ -73,25 +74,70 @@ type codexComplianceClient interface {
 	DownloadLog(ctx context.Context, logID string) ([]byte, error)
 }
 
-// CodexCostLogDecodeError carries the provider payload that failed to decode
-// for internal failure surfaces. Customer-facing error rendering must omit
-// Payload because compliance events can contain user-identifying data.
-type CodexCostLogDecodeError struct {
+// CodexCostContentErrorKind classifies failures caused by the contents of a
+// Codex COSTS log.
+type CodexCostContentErrorKind string
+
+const (
+	// CodexCostContentSHA256Mismatch means the downloaded file did not match
+	// the digest declared by the provider.
+	CodexCostContentSHA256Mismatch CodexCostContentErrorKind = "sha256_mismatch"
+
+	// CodexCostContentInvalidJSON means a JSONL record could not be decoded.
+	CodexCostContentInvalidJSON CodexCostContentErrorKind = "invalid_json"
+
+	// CodexCostContentMissingEventID means a COSTS record had no event_id.
+	CodexCostContentMissingEventID CodexCostContentErrorKind = "missing_event_id"
+
+	// CodexCostContentInvalidTimestamp means a COSTS record had an invalid
+	// timestamp.
+	CodexCostContentInvalidTimestamp CodexCostContentErrorKind = "invalid_timestamp"
+)
+
+// CodexCostContentError carries the provider payload that caused a content
+// failure for internal diagnostics. Organization-facing error rendering must
+// use Kind and LogID instead of Payload or Cause because compliance events can
+// contain user-identifying data.
+type CodexCostContentError struct {
+	// Kind classifies the content failure without inspecting its message.
+	Kind CodexCostContentErrorKind
+
 	// LogID identifies the compliance log file containing the payload.
 	LogID string
 
-	// Payload is the JSONL record that failed to decode.
+	// Payload is the downloaded file or JSONL record that caused the failure.
 	Payload []byte
 
-	// Cause is the JSON decoder error.
+	// Cause is the underlying parser error, when one exists.
 	Cause error
 }
 
-func (e *CodexCostLogDecodeError) Error() string {
-	return fmt.Sprintf("decode codex compliance cost log %s payload=%q: %v", e.LogID, e.Payload, e.Cause)
+func (e *CodexCostContentError) Error() string {
+	message := e.ShareableMessage()
+	if e.Cause != nil {
+		message = fmt.Sprintf("%s: %v", message, e.Cause)
+	}
+	return message
 }
 
-func (e *CodexCostLogDecodeError) Unwrap() error {
+// ShareableMessage returns file-specific content failure context without the
+// provider payload or parser cause.
+func (e *CodexCostContentError) ShareableMessage() string {
+	switch e.Kind {
+	case CodexCostContentSHA256Mismatch:
+		return fmt.Sprintf("codex compliance cost log %s failed sha256 verification", e.LogID)
+	case CodexCostContentInvalidJSON:
+		return fmt.Sprintf("decode codex compliance cost log %s", e.LogID)
+	case CodexCostContentMissingEventID:
+		return fmt.Sprintf("codex compliance cost event missing event_id in log %s", e.LogID)
+	case CodexCostContentInvalidTimestamp:
+		return fmt.Sprintf("parse codex compliance cost timestamp in log %s", e.LogID)
+	default:
+		return fmt.Sprintf("process codex compliance cost log %s", e.LogID)
+	}
+}
+
+func (e *CodexCostContentError) Unwrap() error {
 	return e.Cause
 }
 
@@ -298,7 +344,10 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 
 	written, dropped, err := src.processPage(ctx, logParams)
 	if err != nil {
-		return fmt.Errorf("insert codex cost telemetry logs: %w", err)
+		// An oops boundary so only this safe message can reach organization
+		// members; the raw ClickHouse cause stays behind it for internal
+		// surfaces that render the full chain via oops.Detail.
+		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
 	}
 	src.progress.CostEventsDeduped += dropped
 	src.progress.CostEventsWritten += written
@@ -328,7 +377,12 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 		sum := sha256.Sum256(body)
 		actual := hex.EncodeToString(sum[:])
 		if !strings.EqualFold(actual, file.FileSHA256) {
-			return nil, fmt.Errorf("codex compliance log sha256 mismatch for %s", file.ID)
+			return nil, &CodexCostContentError{
+				Kind:    CodexCostContentSHA256Mismatch,
+				LogID:   file.ID,
+				Payload: nil,
+				Cause:   nil,
+			}
 		}
 	}
 
@@ -341,7 +395,8 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 			return logParams, nil
 		}
 		if err != nil {
-			return nil, &CodexCostLogDecodeError{
+			return nil, &CodexCostContentError{
+				Kind:    CodexCostContentInvalidJSON,
 				LogID:   file.ID,
 				Payload: codexCostPayloadAt(body, decoder.InputOffset()),
 				Cause:   err,
@@ -350,7 +405,8 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 
 		var event codexCostEvent
 		if err := json.Unmarshal(payload, &event); err != nil {
-			return nil, &CodexCostLogDecodeError{
+			return nil, &CodexCostContentError{
+				Kind:    CodexCostContentInvalidJSON,
 				LogID:   file.ID,
 				Payload: payload,
 				Cause:   err,
@@ -360,7 +416,7 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 			continue
 		}
 
-		logParam, ok, err := buildCodexCostEventLogParam(cfg, file, event)
+		logParam, ok, err := buildCodexCostEventLogParam(cfg, file, payload, event)
 		if err != nil {
 			return nil, err
 		}
@@ -381,15 +437,25 @@ func codexCostPayloadAt(body []byte, offset int64) []byte {
 	return bytes.Clone(bytes.TrimSpace(payload))
 }
 
-func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexCostEvent) (telemetry.LogParams, bool, error) {
+func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, payload []byte, event codexCostEvent) (telemetry.LogParams, bool, error) {
 	eventID := strings.TrimSpace(event.EventID)
 	if eventID == "" {
-		return telemetry.LogParams{}, false, fmt.Errorf("codex compliance cost event missing event_id in log %s", file.ID)
+		return telemetry.LogParams{}, false, &CodexCostContentError{
+			Kind:    CodexCostContentMissingEventID,
+			LogID:   file.ID,
+			Payload: payload,
+			Cause:   nil,
+		}
 	}
 
 	timestamp, err := event.TimestampTime()
 	if err != nil {
-		return telemetry.LogParams{}, false, fmt.Errorf("parse codex compliance cost timestamp in log %s: %w", file.ID, err)
+		return telemetry.LogParams{}, false, &CodexCostContentError{
+			Kind:    CodexCostContentInvalidTimestamp,
+			LogID:   file.ID,
+			Payload: payload,
+			Cause:   err,
+		}
 	}
 	if timestamp.IsZero() {
 		timestamp = codexCostBucketTime(event.Payload)

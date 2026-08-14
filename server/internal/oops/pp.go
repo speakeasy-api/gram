@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -102,6 +103,63 @@ func (e *ShareableError) String() string {
 // Unwrap returns the underlying cause of the error, if any.
 func (e *ShareableError) Unwrap() error {
 	return e.cause
+}
+
+// Detail renders the complete error tree for internal diagnostics. Error on a
+// ShareableError intentionally returns only its public message, so Detail
+// replaces that truncated branch with its underlying cause. Multi-cause errors
+// (errors.Join and containers like SyncError) keep their own message; each
+// branch's text is expanded in place within it.
+func Detail(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var shareable *ShareableError
+	if !errors.As(err, &shareable) {
+		return err.Error()
+	}
+
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		message := err.Error()
+		for _, cause := range joined.Unwrap() {
+			if cause == nil {
+				continue
+			}
+			message = expandCauseInMessage(message, cause)
+		}
+		return message
+	}
+
+	cause := errors.Unwrap(err)
+	if cause == nil {
+		return err.Error()
+	}
+
+	causeText := cause.Error()
+	causeDetail := Detail(cause)
+	message := err.Error()
+	if index := strings.LastIndex(message, causeText); index >= 0 {
+		return message[:index] + causeDetail + message[index+len(causeText):]
+	}
+	return message + ": " + causeDetail
+}
+
+// expandCauseInMessage replaces one occurrence of cause's rendered text inside
+// message with its full Detail expansion. When the container's message does not
+// embed the branch text, the message is returned unchanged rather than guessing
+// where the branch belongs.
+func expandCauseInMessage(message string, cause error) string {
+	causeText := cause.Error()
+	causeDetail := Detail(cause)
+	if causeText == causeDetail {
+		return message
+	}
+	index := strings.LastIndex(message, causeText)
+	if index < 0 {
+		return message
+	}
+	return message[:index] + causeDetail + message[index+len(causeText):]
 }
 
 // MarshalJSON implements the json.Marshaler interface.
