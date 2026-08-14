@@ -74,29 +74,28 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   return (
     // Section runs the full width of the content area; the column class below
     // keeps its contents aligned with the rest of the page.
-    <section className="border-muted dark:border-border/50 w-full border-b">
-      <div className={cn(BRAND_MESH_SURFACE_CLASS, "w-full")}>
-        <BrandMeshLayers />
-        {/* Deep bottom padding leaves room for the cards to overlap the hero. */}
-        <div
-          className={cn(
-            COLUMN_CLASS,
-            "flex flex-col gap-4 pt-10 pb-10 md:pt-11 md:pb-28",
-          )}
-        >
-          <span className="text-eyebrow">Welcome to Speakeasy</span>
-          <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] md:text-[60px]">
-            Choose your
-            <br />
-            first move
-          </h2>
-        </div>
+    <section className={cn(BRAND_MESH_SURFACE_CLASS, "w-full")}>
+      {/* Mesh spans the whole banner; the gray band below paints over it. */}
+      <BrandMeshLayers />
+      {/* Deep bottom padding leaves room for the cards to overlap the hero. */}
+      <div
+        className={cn(
+          COLUMN_CLASS,
+          "flex flex-col gap-4 pt-10 pb-10 md:pt-11 md:pb-28",
+        )}
+      >
+        <span className="text-eyebrow">Welcome to Speakeasy</span>
+        <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] md:text-[60px]">
+          Choose your
+          <br />
+          first move
+        </h2>
       </div>
 
       {/* flow-root keeps the cards' negative margin from collapsing out
           through the band, which would drag the band up over the hero. */}
-      <div className="bg-muted/20 flow-root w-full">
-        <div className={cn(COLUMN_CLASS, "pb-6 md:pb-10")}>
+      <div className="bg-background/50 flow-root w-full border-border border-y">
+        <div className={cn(COLUMN_CLASS, "pb-6 md:pb-12")}>
           <div className="grid grid-cols-1 gap-4 md:-mt-20 md:grid-cols-3">
             {cards.map((card) => (
               <RouteCardLink key={card.index} card={card} />
@@ -117,12 +116,12 @@ function RouteCardLink({ card }: { card: RouteCard }): JSX.Element {
       {card.recommended && (
         <span
           aria-hidden="true"
-          className="bg-gradient-primary absolute -top-px -right-px -left-px h-[3px]"
+          className="bg-gradient-primary absolute -top-px -right-px -left-px h-1"
         />
       )}
 
       <span className="flex items-center gap-2.5">
-        <span className="text-muted-foreground font-mono text-[11px] tracking-[0.06em]">
+        <span className="text-muted-foreground font-mono text-xs tracking-wider">
           {card.index}
         </span>
         {card.recommended && (
