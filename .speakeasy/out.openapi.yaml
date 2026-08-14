@@ -55218,14 +55218,19 @@ components:
       properties:
         next_cursor:
           type: string
-          description: Cursor for the next page; empty when exhausted.
+          description: Cursor for the next page; empty when exhausted. Omitted in offset mode.
         organizations:
           type: array
           items:
             $ref: '#/components/schemas/AdminOrganization'
           description: The page of organizations.
+        total:
+          type: integer
+          description: Number of organizations matching the filters, before paging.
+          format: int64
       required:
         - organizations
+        - total
     AdminOpenRouterKey:
       type: object
       properties:
