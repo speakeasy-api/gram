@@ -209,8 +209,8 @@ export function OrganizationsList(): JSX.Element {
   };
 
   return (
-    <div className="space-y-6">
-      <section>
+    <div className="flex h-full flex-col">
+      <section className="flex min-h-0 flex-1 flex-col">
         <Toolbar />
 
         {/* A failed refetch keeps the previous rows, so the failure has to show
@@ -221,14 +221,16 @@ export function OrganizationsList(): JSX.Element {
           </div>
         )}
 
-        <div className="flex items-start gap-4" onKeyDown={handleKeyDown}>
-          <div className="min-w-0 flex-1">
-            <div className="rounded-lg border">
+        {/* Stretch, not items-start: the panel takes its height from the row so
+            it lines up with the table without naming a height of its own. */}
+        <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
               <TableActionBar table={table} hint={<PeekHint />} />
 
               <div
                 className={cn(
-                  "max-h-[60vh] overflow-auto",
+                  "min-h-0 flex-1 overflow-auto",
                   isPlaceholderData && "opacity-60",
                 )}
               >
@@ -286,9 +288,7 @@ export function OrganizationsList(): JSX.Element {
             <PeekPanel
               org={peeked.original}
               onClose={closePeek}
-              // Same 60vh as the scroll box beside it, so the two line up top
-              // and bottom and the actions sit on the table's last row.
-              className="h-[60vh] w-100 shrink-0"
+              className="w-100 shrink-0"
             />
           ) : null}
         </div>

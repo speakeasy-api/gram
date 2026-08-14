@@ -30,10 +30,15 @@ export function AdminLayout(): JSX.Element {
 
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="px-4 lg:px-6">
+        {/* The chain of min-h-0 is what lets a page ask for the height that is
+            left. One link without it makes every child below content-sized, so
+            a page that wants to fill has to guess a vh number instead. The
+            scroll sits on the innermost one, so a page taller than the shell
+            scrolls under the header rather than being cut off. */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="@container/main flex min-h-0 flex-1 flex-col gap-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <div className="flex min-h-0 flex-1 flex-col overflow-auto px-4 lg:px-6">
                 <Outlet />
               </div>
             </div>
