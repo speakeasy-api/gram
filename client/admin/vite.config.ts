@@ -54,7 +54,16 @@ export default defineConfig(({ command }) => {
     throw new Error("GRAM_ADMIN_BACKEND_URL must be set in development");
   }
 
+  // Origin of the customer-facing Gram app, which serves /rpc/auth.login. This
+  // app is on a different origin, so it has no runtime way to learn it and it
+  // has to be baked in. Empty is tolerated: impersonationUrl() returns
+  // undefined and callers drop the action rather than ship a dead link.
+  const appUrl = process.env["GRAM_APP_URL"] || "";
+
   return {
+    define: {
+      __GRAM_APP_URL__: JSON.stringify(appUrl),
+    },
     plugins: [
       // The generator reads src/routes and writes src/routeTree.gen.ts. It has
       // to run before the react plugin, because the react plugin transforms the

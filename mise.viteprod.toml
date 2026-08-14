@@ -5,6 +5,10 @@
 ## Both the Gram server and dashboard (client) are accessed on
 ## https://app.getgram.ai.
 GRAM_SERVER_URL = false
+## The admin dashboard is served from its own origin, so unlike the dashboard
+## it cannot fall back to window.location.origin. One image serves every
+## deployed environment, so this names production.
+GRAM_APP_URL = "https://app.getgram.ai"
 ## GRAM_API_URL is used primarily during local development. That may change in
 ## the future when we create separate builds per environment but until then we
 ## should unset it so it is not baked into bundles built with vite.
