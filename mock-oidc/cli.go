@@ -44,6 +44,11 @@ func NewApp() *cli.App {
 				Value:   "http://localhost:4000",
 				EnvVars: []string{"MOCK_OIDC_ISSUER"},
 			},
+			&cli.StringFlag{
+				Name:    "browser-base-url",
+				Usage:   "Base URL the end user's browser reaches this server on, used only for the discovery document's authorization_endpoint. Set this when the browser and the relying party reach this server on different origins (e.g. a dev stack on a remote box reached over a tunnel). Defaults to --issuer.",
+				EnvVars: []string{"MOCK_OIDC_BROWSER_BASE_URL"},
+			},
 			&cli.PathFlag{
 				Name:    "private-key",
 				Usage:   "Path to RSA private key (PEM). If absent, an ephemeral key is generated.",
@@ -129,7 +134,7 @@ func run(c *cli.Context) error {
 	}
 
 	handler := otelhttp.NewHandler(
-		NewServer(provider, logger).Handler(),
+		NewServer(provider, c.String("browser-base-url"), logger).Handler(),
 		"http",
 		otelhttp.WithServerName("mock-oidc"),
 	)

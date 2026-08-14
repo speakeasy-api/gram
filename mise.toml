@@ -134,6 +134,11 @@ GRAM_STREAMS_CONTROL_ADDRESS = ":{{env.GRAM_STREAMS_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+## Browsing this stack from a different machine than the one running it needs the
+## browser-facing URLs on a hostname that machine can reach, while the URLs this
+## box dials itself stay on localhost. `mise run zero:remap-hostname` writes both
+## halves to mise.local.toml and records the choice as GRAM_DEV_HOSTNAME; see
+## docs/remote-dev-access.md. Nothing here changes unless you run it.
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
@@ -329,6 +334,13 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## randomize the listen port and issuer out of sync with the admin client.
 MOCK_OIDC_ADDRESS = ":{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}"
 MOCK_OIDC_ISSUER = "{{env.GRAM_ADMIN_OIDC_EMULATOR_URL}}"
+## The issuer above is fetched by the admin server, and go-oidc requires it to
+## match the URL it fetched from, so it cannot move. MOCK_OIDC_BROWSER_BASE_URL
+## overrides only the discovery document's authorization_endpoint — the one URL
+## in it a browser visits — for the case where the browser reaches this emulator
+## on a different origin than the server does. Set by zero:remap-hostname;
+## defaults to the issuer. See docs/remote-dev-access.md.
+# MOCK_OIDC_BROWSER_BASE_URL = ""
 
 ########################
 ## Svix configuration ##

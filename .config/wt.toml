@@ -42,10 +42,12 @@ nuke = "mise run nuke --keep-shared"
 # listening — so it doubles as a "is this worktree's stack up?" indicator.
 # Ports are randomized per worktree by `zero:remap-ports`, not derived from the
 # branch, so `git:workinit` stores the assigned port as the per-branch
-# `siteport` var. The default covers the primary worktree, which keeps
-# mise.toml's port.
+# `siteport` var. `devhost` is stored alongside it: when remote access is set up
+# (`zero:remap-hostname`) it is the hostname other machines reach this box on, so
+# the URL is clickable from a laptop and not just locally. Both defaults cover
+# the primary worktree, which keeps mise.toml's port and hostname.
 [list]
-url = "https://localhost:{{ vars.siteport | default('5173') }}"
+url = "https://{{ vars.devhost | default('localhost') }}:{{ vars.siteport | default('5173') }}"
 
 # `wt status` — one line per worktree: is its stack up, and where. The built-in
 # table can't express this: liveness is only in `url_active` in the JSON, not

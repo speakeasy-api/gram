@@ -24,6 +24,11 @@ import (
 
 func newTestServer(t *testing.T) (*httptest.Server, *mockoidc.Config) {
 	t.Helper()
+	return newTestServerWithBrowserBase(t, "")
+}
+
+func newTestServerWithBrowserBase(t *testing.T, browserBaseURL string) (*httptest.Server, *mockoidc.Config) {
+	t.Helper()
 
 	cfg := &mockoidc.Config{
 		Provider: mockoidc.ProviderConfig{
@@ -68,7 +73,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *mockoidc.Config) {
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
-	ts.Config.Handler = mockoidc.NewServer(provider, logger).Handler()
+	ts.Config.Handler = mockoidc.NewServer(provider, browserBaseURL, logger).Handler()
 
 	t.Cleanup(ts.Close)
 	return ts, cfg
@@ -328,4 +333,73 @@ func decodeJWTPart(t *testing.T, part string) map[string]any {
 		t.Fatalf("unmarshal jwt: %v", err)
 	}
 	return m
+}
+
+// A browser base URL moves the authorization endpoint — the only URL in the
+// discovery document the end user's browser visits — without disturbing the
+// issuer or the endpoints the relying party dials itself. This matters when the
+// two reach the emulator on different origins, e.g. a dev stack on a remote box
+// browsed over a tunnel. The critical property is that oidc.NewProvider still
+// succeeds: it requires the discovered issuer to match the URL it fetched from,
+// so moving the issuer instead would break discovery outright.
+func TestBrowserBaseURLOnlyMovesAuthorizationEndpoint(t *testing.T) {
+	const browserBase = "https://devbox.example.ts.net:4000"
+
+	ts, _ := newTestServerWithBrowserBase(t, browserBase)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	provider, err := oidc.NewProvider(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("oidc.NewProvider: %v", err)
+	}
+
+	if got, want := provider.Endpoint().AuthURL, browserBase+"/authorize"; got != want {
+		t.Errorf("authorization_endpoint = %q, want %q", got, want)
+	}
+
+	// Everything the relying party dials stays on the origin it discovered.
+	if got, want := provider.Endpoint().TokenURL, ts.URL+"/token"; got != want {
+		t.Errorf("token_endpoint = %q, want %q", got, want)
+	}
+
+	var doc struct {
+		Issuer  string `json:"issuer"`
+		JWKSURI string `json:"jwks_uri"`
+	}
+	discoReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/.well-known/openid-configuration", nil)
+	resp, err := http.DefaultClient.Do(discoReq)
+	if err != nil {
+		t.Fatalf("fetch discovery: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode discovery: %v", err)
+	}
+
+	if doc.Issuer != ts.URL {
+		t.Errorf("issuer = %q, want %q", doc.Issuer, ts.URL)
+	}
+	if got, want := doc.JWKSURI, ts.URL+"/jwks.json"; got != want {
+		t.Errorf("jwks_uri = %q, want %q", got, want)
+	}
+}
+
+// The default keeps every endpoint on the issuer, so a single-machine dev stack
+// is unaffected by the option existing.
+func TestEmptyBrowserBaseURLDefaultsToIssuer(t *testing.T) {
+	ts, _ := newTestServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	provider, err := oidc.NewProvider(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("oidc.NewProvider: %v", err)
+	}
+
+	if got, want := provider.Endpoint().AuthURL, ts.URL+"/authorize"; got != want {
+		t.Errorf("authorization_endpoint = %q, want %q", got, want)
+	}
 }

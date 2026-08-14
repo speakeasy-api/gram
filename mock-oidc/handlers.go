@@ -17,11 +17,18 @@ import (
 
 type Server struct {
 	provider *Provider
-	logger   *slog.Logger
+	// Origin the END USER'S BROWSER reaches this server on, which is not always
+	// the origin the relying party dials. They differ when the browser and the
+	// relying party sit on different machines — a dev stack on a remote box
+	// reached over a tunnel, say, where the server resolves this emulator on
+	// localhost and the browser cannot. Empty means "same as the issuer", which
+	// is the ordinary single-machine case.
+	browserBaseURL string
+	logger         *slog.Logger
 }
 
-func NewServer(provider *Provider, logger *slog.Logger) *Server {
-	return &Server{provider: provider, logger: logger}
+func NewServer(provider *Provider, browserBaseURL string, logger *slog.Logger) *Server {
+	return &Server{provider: provider, browserBaseURL: browserBaseURL, logger: logger}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -68,9 +75,21 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) discovery(w http.ResponseWriter, _ *http.Request) {
 	iss := s.provider.Issuer()
+
+	// The authorization endpoint is the only URL in this document the browser
+	// ever visits; the relying party dials the rest itself. So it is the only
+	// one that takes the browser origin — keeping `issuer` on the dialed origin
+	// matters, because OIDC clients require the discovered issuer to match the
+	// URL they fetched the document from, and it is also the `iss` they verify
+	// on the id_token.
+	browserBase := s.browserBaseURL
+	if browserBase == "" {
+		browserBase = iss
+	}
+
 	doc := map[string]any{
 		"issuer":                                iss,
-		"authorization_endpoint":                iss + "/authorize",
+		"authorization_endpoint":                browserBase + "/authorize",
 		"token_endpoint":                        iss + "/token",
 		"userinfo_endpoint":                     iss + "/userinfo",
 		"jwks_uri":                              iss + "/jwks.json",

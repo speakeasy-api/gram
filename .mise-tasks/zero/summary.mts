@@ -154,34 +154,48 @@ async function pokeHTTPService(
   }
 }
 
+// Hostname the URLs in this summary should be *opened* on. With remote access
+// configured (`zero:remap-hostname`) that is a hostname reachable from other
+// machines, so the printed links work from a laptop and not just this box.
+// Health probes deliberately keep dialing localhost: under Tailscale's userspace
+// networking mode this box cannot reach its own tailnet name, so a probe sent
+// there would report every service as down.
+const displayHost = process.env["GRAM_DEV_HOSTNAME"] ?? "localhost";
+
 const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "8233";
 await pokeDockerService(
   "gram-temporal",
   "Temporal",
-  `http://localhost:${temporalWebPort}`,
+  `http://${displayHost}:${temporalWebPort}`,
 );
 
 const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
-await pokeDockerService("lgtm", "Grafana", `http://localhost:${grafanaPort}`);
+await pokeDockerService(
+  "lgtm",
+  "Grafana",
+  `http://${displayHost}:${grafanaPort}`,
+);
 
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
 await pokeDockerService(
   "clickhouse",
   "ClickHouse",
-  `http://localhost:${clickhouseHTTPPort}`,
+  `http://${displayHost}:${clickhouseHTTPPort}`,
 );
 
 const devIdpPort = process.env["GRAM_DEVIDP_PORT"] ?? "35291";
-const devIdpURL = `http://localhost:${devIdpPort}`;
-await pokeHTTPService("Mock IdP server", `${devIdpURL}/healthz`, devIdpURL);
+await pokeHTTPService(
+  "Mock IdP server",
+  `http://localhost:${devIdpPort}/healthz`,
+  `http://${displayHost}:${devIdpPort}`,
+);
 
 const devIdpDashboardPort =
   process.env["GRAM_DEVIDP_DASHBOARD_PORT"] ?? "35293";
-const devIdpDashboardURL = `http://localhost:${devIdpDashboardPort}`;
 await pokeHTTPService(
   "Mock IdP dashboard",
-  devIdpDashboardURL,
-  devIdpDashboardURL,
+  `http://localhost:${devIdpDashboardPort}`,
+  `http://${displayHost}:${devIdpDashboardPort}`,
 );
 
 const gramControlPort = process.env["GRAM_CONTROL_PORT"] ?? "8081";

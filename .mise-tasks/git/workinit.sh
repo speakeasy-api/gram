@@ -56,6 +56,17 @@ done
 
 echo ✅ Updated all port mappings for new worktree
 
+# Remote access (zero:remap-hostname) points the browser-facing URLs at a
+# hostname other machines can reach. Those URLs are port-dependent, so the remap
+# above just re-emitted them from mise.toml with GRAM_HOST's default -- clobbering
+# the overrides that were copied in from the main worktree. Re-apply them now, so
+# they land after the ports they reference. No marker means remote access was
+# never set up here; the task is a no-op and the worktree stays on localhost.
+dev_hostname=$(mise config get --file mise.local.toml env.GRAM_DEV_HOSTNAME 2>/dev/null || true)
+if [ -n "$dev_hostname" ]; then
+  mise run zero:remap-hostname
+fi
+
 # Ports are randomized, so `wt list`'s URL column can't derive them from the
 # branch name. Store the dashboard port as a per-branch var for it to read.
 # Best-effort: this is display metadata, and the script runs under `set -e` as a
@@ -64,4 +75,7 @@ echo ✅ Updated all port mappings for new worktree
 site_port=$(printf '%s\n' $remap | sed -n 's/^GRAM_SITE_PORT=//p')
 if [ -n "$site_port" ] && command -v wt &> /dev/null; then
   wt config state vars set "siteport=${site_port}" > /dev/null || true
+  # Pair the port with the host it's reachable on, so the URL column is
+  # clickable from a laptop and not just from this box.
+  wt config state vars set "devhost=${dev_hostname:-localhost}" > /dev/null || true
 fi

@@ -54,6 +54,16 @@ export default defineConfig(({ command }) => {
     throw new Error("GRAM_ADMIN_BACKEND_URL must be set in development");
   }
 
+  // Hostnames this dev server answers to, mirroring the Gram dashboard's
+  // config. Vite rejects any Host header not listed here, so serving the app to
+  // another machine — a laptop reaching a devbox over a tunnel, see
+  // zero:remap-hostname — needs that machine's hostname among them.
+  const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
+  for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {
+    const trimmed = hostname.trim();
+    if (trimmed) allowedHosts.add(trimmed);
+  }
+
   return {
     plugins: [
       // The generator reads src/routes and writes src/routeTree.gen.ts. It has
@@ -77,6 +87,10 @@ export default defineConfig(({ command }) => {
       // exactly.
       port: devPort,
       strictPort: true,
+      // Bind every interface, not just loopback, so the app is reachable from
+      // another machine on the network.
+      host: true,
+      allowedHosts: [...allowedHosts],
       https: key && cert ? { key, cert } : undefined,
       proxy: adminBackendUrl
         ? {
