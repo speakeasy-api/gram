@@ -82,13 +82,49 @@ type ExtendTrialParams struct {
 // on top of whatever the trial has left, and adding to now would silently
 // shorten a trial that still had three weeks to run.
 //
-// Only a running trial can be extended, and the three conditions that define
-// running are here rather than in the handler so the database enforces them.
-// Zero rows means the trial converted, was demoted, has already expired, or was
-// never created. Extending a demoted trial is deliberately not the same as
-// re-arming it: demotion also disabled the organization's model provider keys
-// and nothing in this repository can re-enable them, so clearing demoted_at
-// would advertise a running trial whose keys stay dead (AGE-3208).
+// make_interval(days => N) on a timestamptz is calendar-day arithmetic evaluated
+// in the session TimeZone, so it is 23 hours across a spring-forward rather than
+// 24. Calendar days are the right semantics for "another two weeks", and every
+// session here is UTC in any case: the database container defaults to Etc/UTC and
+// GRAM_DATABASE_URL sets no TimeZone. That is what makes the exact 24-hour
+// assertions in the tests sound, and a deployment that ever sets a non-UTC
+// session TimeZone has to revisit them.
+//
+// Only a running trial can be extended, and the conditions that define running
+// are here rather than in the handler so the database enforces them. Zero rows
+// means either that the trial cannot be extended or that the organization does
+// not exist at all; the two share a row count but not an operator action, so the
+// handler tells them apart with a follow-up read rather than merging them.
+//
+// The three conditions are not equally load-bearing today, and it is worth
+// saying which is which:
+//
+//   - converted_at IS NULL is load-bearing. A mid-trial conversion leaves ends_at
+//     in the future, so nothing else would reject it.
+//   - ends_at > clock_timestamp() is load-bearing. It is the ordinary case.
+//   - demoted_at IS NULL is forward-looking. MarkTrialDemoted only demotes an
+//     already-expired trial and nothing moves ends_at forward afterwards, so in
+//     every state the application can currently reach it is subsumed by the
+//     ends_at condition. It is kept as defence against a future re-arm path.
+//
+// Extending a demoted trial is deliberately not the same as re-arming it:
+// demotion also disabled the organization's model provider keys and nothing in
+// this repository can re-enable them, so clearing demoted_at would advertise a
+// running trial whose keys stay dead (AGE-3208).
+//
+// Two things this query deliberately does not check:
+//
+//   - tier. The error message and the API description both say enterprise, and
+//     enterprise is the only tier the application writes, so the claim holds
+//     today. schema.sql anticipates further tiers, and the first one that arrives
+//     must revisit this query and that wording together, because this statement
+//     would otherwise extend it while reporting an enterprise trial.
+//   - organization_metadata.disabled_at. A disabled organization can still be
+//     extended, on purpose. Disabled and trial state are independent axes: an
+//     operator who disables an organization while investigating and re-enables it
+//     afterwards should not have silently lost the ability to extend in between,
+//     and a trial that keeps expiring during the investigation punishes the
+//     investigation.
 func (q *Queries) ExtendTrial(ctx context.Context, arg ExtendTrialParams) (int64, error) {
 	result, err := q.db.Exec(ctx, extendTrial, arg.ExtendByDays, arg.OrganizationID)
 	if err != nil {

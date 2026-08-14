@@ -426,9 +426,18 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminListOrganizations")
 	})
 
-	// Declared last on purpose. Goa names response body types after their
-	// position in this block, so inserting a method in the middle renames every
-	// generated type below it and buries the real change in positional churn.
+	// Appended rather than inserted mid-block, and that is a diff-size choice
+	// and nothing more. Generated type names come from the method name, so
+	// position cannot rename anything; appending only keeps goa from reordering
+	// the declarations below it. Measured on this change, appending cost 19
+	// deleted lines under server/gen where the disable and enable slice's
+	// mid-block insert churned 3777 lines of types.go.
+	//
+	// The one positional effect that is real is the one disableOrganization
+	// above documents: the OpenAPI emitter deduplicates structurally identical
+	// request bodies and names the shared schema after whichever method it met
+	// first. This payload's {id, days} shape is unique, so it needs no
+	// openapi:typename.
 	Method("extendTrial", func() {
 		Description("Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.")
 

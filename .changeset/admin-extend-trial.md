@@ -16,6 +16,9 @@ Only a running trial can be extended. A trial that has already converted to a
 contract, one that has been demoted, and one whose date has passed but that the
 expiry sweeper has not reached yet are all rejected with an error that leaves the
 date where it was, rather than quietly re-arming a trial that has already ended.
+An organization id that matches nothing is reported as not found, the same answer
+the disable and enable actions already give, so one mistyped id does not send an
+operator off to inspect a trial that was never the problem.
 Extending a trial changes the end date and nothing else: the organization's
 account type, its whitelist flag and the record of when the trial began all stay
 as they were.

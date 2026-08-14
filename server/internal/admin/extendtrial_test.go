@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -158,6 +160,10 @@ func TestExtendTrial_OnlyARunningTrialCanBeExtended(t *testing.T) {
 	}
 }
 
+// TestExtendTrial_OrganizationWithNoTrialRow is one half of the pair that pins
+// the two causes of a zero-row update apart. This organization exists, so the
+// answer is a conflict; TestExtendTrial_UnknownAndMalformedOrganizationIDs
+// covers the other half, where it does not and the answer is not-found.
 func TestExtendTrial_OrganizationWithNoTrialRow(t *testing.T) {
 	t.Parallel()
 
@@ -174,12 +180,20 @@ func TestExtendTrial_OrganizationWithNoTrialRow(t *testing.T) {
 	require.Error(t, err, "a rejected extension must not create a trial row")
 }
 
+// TestExtendTrial_UnknownAndMalformedOrganizationIDs is the other half of that
+// pair. Every id here names an organization that does not exist, so every one
+// is not-found rather than conflict: an operator who pastes one bad id must get
+// the same answer from extend that disable and enable already give them, or the
+// second story sends them to inspect a trial when the fault is their clipboard.
 func TestExtendTrial_UnknownAndMalformedOrganizationIDs(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
 
-	// A running trial that must survive every rejected call below.
+	// A running trial that must survive every rejected call below. Its slug is
+	// one of the ids tried, which pins that the lookup resolves ids only: a
+	// slug is not a way in here, and matching one must not turn the answer into
+	// a conflict about that organization's perfectly healthy trial.
 	seededEndsAt := time.Now().UTC().Add(10 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_bystander", name: "Bystander", slug: "ext-bystander", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_bystander", endsAt: seededEndsAt})
@@ -187,10 +201,10 @@ func TestExtendTrial_UnknownAndMalformedOrganizationIDs(t *testing.T) {
 
 	// The empty id is rejected as a 400 at the HTTP boundary by MinLength(1),
 	// which a direct service call does not run; the service-level contract for
-	// an id that matches nothing is the same conflict as any other.
+	// it is the same not-found as any other id that matches no organization.
 	for _, id := range []string{"org_ext_does_not_exist", "", "ext-bystander", "not a valid id"} {
 		_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: id, Days: 3})
-		requireOopsCode(t, err, oops.CodeConflict)
+		requireOopsCode(t, err, oops.CodeNotFound)
 	}
 
 	after := readTrial(t, ctx, conn, "org_ext_bystander")
@@ -220,6 +234,19 @@ func TestExtendTrial_DayCountBounds(t *testing.T) {
 
 		{name: "one past the maximum", days: constants.MaxTrialExtensionDays + 1, wantErr: true},
 		{name: "far past the maximum", days: 100000, wantErr: true},
+
+		// These two pin that the bounds check runs on the wide payload.Days and
+		// that the int32 narrowing stays below it. Only a non-HTTP caller can
+		// reach the service with a day count this large, which is the caller the
+		// handler's own check exists for.
+		//
+		// The second is the one that matters. 1<<32 + 1 narrows to exactly 1, a
+		// value inside the bounds, so a handler that narrowed before checking
+		// would accept it and quietly extend by a day. The first narrows to
+		// MinInt32 and is rejected either way; it is here so the pair reads as
+		// the boundary it is.
+		{name: "int32 overflow to a negative", days: math.MaxInt32 + 1, wantErr: true},
+		{name: "int32 overflow to a valid day count", days: math.MaxUint32 + 2, wantErr: true},
 	}
 
 	for _, tc := range cases {
@@ -314,6 +341,55 @@ func TestExtendTrial_TouchesOnlyTheTargetRow(t *testing.T) {
 	neighbourAfter := readTrial(t, ctx, conn, "org_ext_neighbour")
 	require.Equal(t, neighbourBefore.EndsAt.Time, neighbourAfter.EndsAt.Time, "extending must not spill onto other trials")
 	require.Equal(t, neighbourBefore.UpdatedAt.Time, neighbourAfter.UpdatedAt.Time)
+}
+
+// TestExtendTrialRequestBody_DesignBoundsAreEnforced pins the other copy of the
+// bounds. Every other test here calls svc.ExtendTrial directly, which skips the
+// generated request decoder, so for the only caller production actually has —
+// an HTTP request — none of them touch the validation that runs first. Deleting
+// Minimum, Maximum and MinLength(1) from the design would leave the rest of this
+// file green.
+//
+// It needs no database, because the generated validator is a pure function.
+func TestExtendTrialRequestBody_DesignBoundsAreEnforced(t *testing.T) {
+	t.Parallel()
+
+	id := "org_ext_validate"
+	minDays := constants.MinTrialExtensionDays
+	maxDays := constants.MaxTrialExtensionDays
+
+	cases := []struct {
+		name    string
+		id      *string
+		days    *int
+		wantErr bool
+	}{
+		// Every field is a pointer in the generated body, so the table has to
+		// distinguish "absent" from "present and invalid".
+		{name: "at the minimum", id: &id, days: &minDays},
+		{name: "at the maximum", id: &id, days: &maxDays},
+
+		{name: "below the minimum", id: &id, days: new(minDays - 1), wantErr: true},
+		{name: "above the maximum", id: &id, days: new(maxDays + 1), wantErr: true},
+		{name: "negative", id: &id, days: new(-1), wantErr: true},
+
+		{name: "empty id", id: new(""), days: &minDays, wantErr: true},
+		{name: "missing id", id: nil, days: &minDays, wantErr: true},
+		{name: "missing days", id: &id, days: nil, wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := srv.ValidateExtendTrialRequestBody(&srv.ExtendTrialRequestBody{ID: tc.id, Days: tc.days})
+			if tc.wantErr {
+				require.Error(t, err, "the request decoder must reject this before the handler runs")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestExtendTrial_ExtensionsAccumulate(t *testing.T) {
