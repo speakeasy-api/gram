@@ -758,6 +758,20 @@ describe("organizations list peek", () => {
         screen.queryByRole("complementary", { name: "Organization peek" }),
       ).toBeNull();
     });
+    // The narrow column set is keyed on the same id, so an id left behind
+    // narrows the table with no panel beside it to explain why.
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual([
+      "Name",
+      "Slug",
+      "Type",
+      "Members",
+      "WorkOS",
+      "Disabled",
+      "Trial ends",
+      "Created",
+    ]);
   });
 });
 

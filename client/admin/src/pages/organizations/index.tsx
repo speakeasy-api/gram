@@ -50,11 +50,6 @@ const ARROW_STEP: Record<string, number | undefined> = {
   ArrowUp: -1,
 };
 
-// Radix renders a menu and a select in a portal, but a portal still bubbles
-// through the React tree. Both own the arrow keys for roving focus and Escape
-// for dismissal, and a text field owns them too.
-const KEYS_NOT_OURS = '[role="menu"],[role="listbox"],input,textarea';
-
 function emptyStateMessage(isLoading: boolean, isError: boolean): string {
   if (isLoading) return "Loading...";
   if (isError) return "Unable to load organizations";
@@ -198,8 +193,11 @@ export function OrganizationsList(): JSX.Element {
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    // Radix renders the Columns menu in a portal, but a portal still bubbles
+    // through the React tree, and the menu owns the arrow keys for its roving
+    // focus and Escape for its own dismissal. It claims both by preventing the
+    // default, which is the general form of "this key is already spoken for".
     if (!peeked || event.defaultPrevented) return;
-    if ((event.target as HTMLElement).closest(KEYS_NOT_OURS)) return;
 
     if (event.key === "Escape") {
       event.preventDefault();
