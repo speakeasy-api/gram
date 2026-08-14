@@ -8,6 +8,7 @@ import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { cn, fmtDateShort } from "@/lib/utils";
 
+import { OrganizationActions } from "./OrganizationActions";
 import { PeekTrigger } from "./PeekTrigger";
 
 const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
@@ -26,6 +27,21 @@ export const ORG_COLUMNS = column.columns([
     // Hiding the control would put peek back out of reach of the keyboard.
     enableHiding: false,
     cell: ({ row }) => <PeekTrigger org={row.original} />,
+  }),
+  // Beside peek rather than trailing the row, for the reason above: the row
+  // menu is the control an operator reaches for while peek is open, and it is
+  // the five hidden columns' width away from where it was if it sits last.
+  //
+  // Deliberately in neither PEEK_HIDDEN_COLUMNS nor PEEK_COLUMN_OVERRIDES: an
+  // open peek is no reason to take the other rows' actions away, and hiding a
+  // control the Columns menu cannot bring back would strand it.
+  column.display({
+    id: "actions",
+    header: "Actions",
+    // Hiding the menu would put disable, re-enable and extend out of reach for
+    // the whole list, and the peek panel's copy of them covers one record.
+    enableHiding: false,
+    cell: ({ row }) => <OrganizationActions org={row.original} layout="menu" />,
   }),
   column.accessor("name", {
     header: "Name",

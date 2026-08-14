@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ORG_COLUMNS } from "./columns";
+import { AnnounceProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
 import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
 import { useOpenOrganization } from "./rowActions";
@@ -377,93 +378,101 @@ export function OrganizationsList(): JSX.Element {
           {announcement.count % 2 === 1 ? ZERO_WIDTH_SPACE : ""}
         </div>
 
-        <PeekProvider value={peekControls}>
-          {/* Stretch, so the panel takes its height from the row. */}
-          <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
-                <TableActionBar
-                  table={table}
-                  onColumnToggled={handleColumnToggled}
-                />
+        {/* Both providers wrap the panel as well as the table: the row menu and
+            the panel footer are the same actions, and they report through the
+            one region above. */}
+        <AnnounceProvider value={announce}>
+          <PeekProvider value={peekControls}>
+            {/* Stretch, so the panel takes its height from the row. */}
+            <div
+              className="flex min-h-0 flex-1 gap-4"
+              onKeyDown={handleKeyDown}
+            >
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
+                  <TableActionBar
+                    table={table}
+                    onColumnToggled={handleColumnToggled}
+                  />
 
-                <div
-                  ref={scrollBox}
-                  // Named, because this is where the keyboard lands when the
-                  // peeked record leaves the list with the panel holding the
-                  // focus. An unnamed div would put the operator somewhere
-                  // their screen reader cannot describe.
-                  role="region"
-                  aria-label="Organizations table"
-                  // Programmatic only: -1 takes the box out of the tab order
-                  // and still lets that rescue focus it. The focus ring stays,
-                  // because nothing else on screen moves when focus arrives
-                  // here and the ring is the only sign that it did.
-                  tabIndex={-1}
-                  className={cn(
-                    "min-h-0 flex-1 overflow-auto",
-                    isPlaceholderData && "opacity-60",
-                  )}
-                >
-                  <Table>
-                    <Table.Header table={table} />
-                    <Table.Body>
-                      {rows.length === 0 ? (
-                        <Table.NoResultsMessage>
-                          <span className="text-muted-foreground text-sm">
-                            {emptyStateMessage(isLoading, isError)}
-                          </span>
-                        </Table.NoResultsMessage>
-                      ) : (
-                        rows.map((row) => {
-                          const isPeeked = row.id === peekedId;
-                          return (
-                            <Table.Row
-                              key={row.id}
-                              row={row}
-                              ref={isPeeked ? peekedRow : undefined}
-                              className={cn(isPeeked && "bg-muted")}
-                              onClick={openOrganization}
-                            />
-                          );
-                        })
-                      )}
-                    </Table.Body>
-                  </Table>
+                  <div
+                    ref={scrollBox}
+                    // Named, because this is where the keyboard lands when the
+                    // peeked record leaves the list with the panel holding the
+                    // focus. An unnamed div would put the operator somewhere
+                    // their screen reader cannot describe.
+                    role="region"
+                    aria-label="Organizations table"
+                    // Programmatic only: -1 takes the box out of the tab order
+                    // and still lets that rescue focus it. The focus ring stays,
+                    // because nothing else on screen moves when focus arrives
+                    // here and the ring is the only sign that it did.
+                    tabIndex={-1}
+                    className={cn(
+                      "min-h-0 flex-1 overflow-auto",
+                      isPlaceholderData && "opacity-60",
+                    )}
+                  >
+                    <Table>
+                      <Table.Header table={table} />
+                      <Table.Body>
+                        {rows.length === 0 ? (
+                          <Table.NoResultsMessage>
+                            <span className="text-muted-foreground text-sm">
+                              {emptyStateMessage(isLoading, isError)}
+                            </span>
+                          </Table.NoResultsMessage>
+                        ) : (
+                          rows.map((row) => {
+                            const isPeeked = row.id === peekedId;
+                            return (
+                              <Table.Row
+                                key={row.id}
+                                row={row}
+                                ref={isPeeked ? peekedRow : undefined}
+                                className={cn(isPeeked && "bg-muted")}
+                                onClick={openOrganization}
+                              />
+                            );
+                          })
+                        )}
+                      </Table.Body>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Inside the table's column, so it does not run under the panel. */}
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={isPlaceholderData || pager.stack.length === 0}
+                    onClick={goPrev}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={isPlaceholderData || !data?.next_cursor}
+                    onClick={goNext}
+                  >
+                    Next
+                  </Button>
                 </div>
               </div>
 
-              {/* Inside the table's column, so it does not run under the panel. */}
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={isPlaceholderData || pager.stack.length === 0}
-                  onClick={goPrev}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={isPlaceholderData || !data?.next_cursor}
-                  onClick={goNext}
-                >
-                  Next
-                </Button>
-              </div>
+              {peeked ? (
+                <PeekPanel
+                  ref={peekPanel}
+                  org={peeked.original}
+                  onClose={closePeek}
+                  className="w-100 shrink-0"
+                />
+              ) : null}
             </div>
-
-            {peeked ? (
-              <PeekPanel
-                ref={peekPanel}
-                org={peeked.original}
-                onClose={closePeek}
-                className="w-100 shrink-0"
-              />
-            ) : null}
-          </div>
-        </PeekProvider>
+          </PeekProvider>
+        </AnnounceProvider>
       </section>
     </div>
   );
