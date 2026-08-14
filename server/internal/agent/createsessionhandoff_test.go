@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,17 @@ func TestCreateSessionHandoff_MintsAndServesOnce(t *testing.T) {
 	require.NotContains(t, string(rec.Metadata), "quokka", "audit metadata must never carry handoff content")
 	require.NotContains(t, string(rec.Metadata), token, "audit metadata must never carry the capability token")
 
+	// Capture the blob pointer while the link is still live: the claim blanks
+	// it, so after the read there is nothing left to look the object up by.
+	minted, err := testrepo.New(ti.conn).GetSessionHandoffLinkFixture(ctx, token)
+	require.NoError(t, err)
+	require.NotEmpty(t, minted.BlobUrl, "mint must record where the document went")
+	blobURL, err := url.Parse(minted.BlobUrl)
+	require.NoError(t, err)
+	stored, err := ti.blobs.Exists(ctx, blobURL)
+	require.NoError(t, err)
+	require.True(t, stored, "mint must write the document to object storage")
+
 	// First read serves the document with single-use cache posture.
 	first := serveHandoff(t, ti, token)
 	require.Equal(t, http.StatusOK, first.Code)
@@ -94,6 +106,9 @@ func TestCreateSessionHandoff_MintsAndServesOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, burned.BlobUrl, "consumed handoff must not retain the blob pointer")
 	require.True(t, burned.ConsumedAt.Valid, "consumed handoff must record when it was burned")
+	gone, err := ti.blobs.Exists(ctx, blobURL)
+	require.NoError(t, err)
+	require.False(t, gone, "burning a handoff must delete the document from object storage")
 }
 
 // The fleet-shared org install key must not be able to upload content and

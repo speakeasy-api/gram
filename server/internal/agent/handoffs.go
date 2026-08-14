@@ -177,10 +177,17 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		DeviceHostname:   strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
 	}
 	if err := s.audit.LogChatSessionHandoffExport(ctx, dbtx, event); err != nil {
+		// The deferred rollback discards the row, so the blob would outlive
+		// every reference to it.
+		cleanupBlob()
 		return nil, oops.E(oops.CodeUnexpected, err, "record handoff export").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
+		// Deliberately no cleanup here: an errored commit may still have
+		// landed server-side, and deleting the blob under a row that did
+		// commit would leave a live link serving nothing. An orphaned blob is
+		// the better failure, and bucket lifecycle collects it.
 		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
 	}
 
