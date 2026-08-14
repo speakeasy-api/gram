@@ -1953,6 +1953,15 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.AccountType != nil {
 			values.Add("account_type", *p.AccountType)
 		}
+		for _, value := range p.AccountTypes {
+			values.Add("account_types", value)
+		}
+		for _, value := range p.TrialStates {
+			values.Add("trial_states", value)
+		}
+		for _, value := range p.DisabledStates {
+			values.Add("disabled_states", value)
+		}
 		if p.IncludeDisabled != nil {
 			values.Add("include_disabled", fmt.Sprintf("%v", *p.IncludeDisabled))
 		}

@@ -1672,6 +1672,9 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		var (
 			q                 *string
 			accountType       *string
+			accountTypes      []string
+			trialStates       []string
+			disabledStates    []string
 			includeDisabled   *bool
 			cursor            *string
 			limit             *int
@@ -1690,6 +1693,9 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if accountTypeRaw != "" {
 			accountType = &accountTypeRaw
 		}
+		accountTypes = qp["account_types"]
+		trialStates = qp["trial_states"]
+		disabledStates = qp["disabled_states"]
 		{
 			includeDisabledRaw := qp.Get("include_disabled")
 			if includeDisabledRaw != "" {
@@ -1741,7 +1747,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListOrganizationsPayload(q, accountType, includeDisabled, cursor, limit, sort, direction, page, adminSessionToken)
+		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStates, includeDisabled, cursor, limit, sort, direction, page, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

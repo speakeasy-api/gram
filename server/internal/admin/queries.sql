@@ -95,11 +95,18 @@ WITH filtered AS (
             OR om.id = sqlc.narg('q')::text
             OR om.workos_id = sqlc.narg('q')::text
         )
-        AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
-        AND (sqlc.arg('include_disabled')::boolean OR om.disabled_at IS NULL)
+        -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
+        -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
+        -- would drop every row instead of keeping every row.
+        AND (coalesce(cardinality(sqlc.arg('account_types')::text[]), 0) = 0 OR om.gram_account_type = ANY(sqlc.arg('account_types')::text[]))
+        -- No empty arm: the handler resolves an absent filter to {active}.
+        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY(sqlc.arg('disabled_states')::text[])
         AND (sqlc.narg('after_id')::text IS NULL OR om.id > sqlc.narg('after_id')::text)
 )
 SELECT * FROM filtered
+-- trial_state is computed in the CTE's select list, so it cannot be named in the
+-- CTE's own WHERE. Filtering out here keeps the ladder to one copy per query.
+WHERE coalesce(cardinality(sqlc.arg('trial_states')::text[]), 0) = 0 OR trial_state = ANY(sqlc.arg('trial_states')::text[])
 -- The sort key stays a bound parameter, never an interpolated column name, so no
 -- caller input reaches the parser. NULLS LAST is what keeps empty dates at the
 -- bottom under DESC, where Postgres would otherwise put them first; on the ASC
@@ -132,21 +139,36 @@ OFFSET sqlc.arg('page_offset')::bigint;
 -- row to carry a count at all. Keeping it out also leaves the page query free to
 -- terminate early on its index scan.
 --
--- The filter arms must stay identical to AdminListOrganizations. The trials join
--- is absent on purpose rather than by omission: organization_id is that table's
--- primary key, so the left join there cannot change how many rows match.
-SELECT count(*)::bigint
-FROM organization_metadata om
-WHERE
-    (
-        sqlc.narg('q')::text IS NULL
-        OR om.name ILIKE '%' || sqlc.narg('q')::text || '%'
-        OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%'
-        OR om.id = sqlc.narg('q')::text
-        OR om.workos_id = sqlc.narg('q')::text
-    )
-    AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
-    AND (sqlc.arg('include_disabled')::boolean OR om.disabled_at IS NULL);
+-- The filter arms must stay identical to AdminListOrganizations, trial_states
+-- included. That arm reads a column only the trials join can produce, so this
+-- query carries the join and the same CASE ladder. The join stays count-safe
+-- because organization_id is that table's primary key and cannot fan one
+-- organization out into several counted rows.
+WITH filtered AS (
+    SELECT
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    WHERE
+        (
+            sqlc.narg('q')::text IS NULL
+            OR om.name ILIKE '%' || sqlc.narg('q')::text || '%'
+            OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%'
+            OR om.id = sqlc.narg('q')::text
+            OR om.workos_id = sqlc.narg('q')::text
+        )
+        AND (coalesce(cardinality(sqlc.arg('account_types')::text[]), 0) = 0 OR om.gram_account_type = ANY(sqlc.arg('account_types')::text[]))
+        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY(sqlc.arg('disabled_states')::text[])
+)
+SELECT count(*)::bigint FROM filtered
+WHERE coalesce(cardinality(sqlc.arg('trial_states')::text[]), 0) = 0 OR trial_state = ANY(sqlc.arg('trial_states')::text[]);
 
 -- name: AdminUpdateOrganization :exec
 -- Admin-only mutation. Both fields are optional — caller passes NULL to skip

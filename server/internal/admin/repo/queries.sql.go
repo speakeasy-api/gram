@@ -13,24 +13,38 @@ import (
 )
 
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
-SELECT count(*)::bigint
-FROM organization_metadata om
-WHERE
-    (
-        $1::text IS NULL
-        OR om.name ILIKE '%' || $1::text || '%'
-        OR om.slug ILIKE '%' || $1::text || '%'
-        OR om.id = $1::text
-        OR om.workos_id = $1::text
-    )
-    AND ($2::text IS NULL OR om.gram_account_type = $2::text)
-    AND ($3::boolean OR om.disabled_at IS NULL)
+WITH filtered AS (
+    SELECT
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    WHERE
+        (
+            $2::text IS NULL
+            OR om.name ILIKE '%' || $2::text || '%'
+            OR om.slug ILIKE '%' || $2::text || '%'
+            OR om.id = $2::text
+            OR om.workos_id = $2::text
+        )
+        AND (coalesce(cardinality($3::text[]), 0) = 0 OR om.gram_account_type = ANY($3::text[]))
+        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
+)
+SELECT count(*)::bigint FROM filtered
+WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 `
 
 type AdminCountOrganizationsParams struct {
-	Q               pgtype.Text
-	AccountType     pgtype.Text
-	IncludeDisabled bool
+	TrialStates    []string
+	Q              pgtype.Text
+	AccountTypes   []string
+	DisabledStates []string
 }
 
 // The count cannot ride on the page query. That query carries the cursor
@@ -39,11 +53,18 @@ type AdminCountOrganizationsParams struct {
 // row to carry a count at all. Keeping it out also leaves the page query free to
 // terminate early on its index scan.
 //
-// The filter arms must stay identical to AdminListOrganizations. The trials join
-// is absent on purpose rather than by omission: organization_id is that table's
-// primary key, so the left join there cannot change how many rows match.
+// The filter arms must stay identical to AdminListOrganizations, trial_states
+// included. That arm reads a column only the trials join can produce, so this
+// query carries the join and the same CASE ladder. The join stays count-safe
+// because organization_id is that table's primary key and cannot fan one
+// organization out into several counted rows.
 func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrganizationsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, adminCountOrganizations, arg.Q, arg.AccountType, arg.IncludeDisabled)
+	row := q.db.QueryRow(ctx, adminCountOrganizations,
+		arg.TrialStates,
+		arg.Q,
+		arg.AccountTypes,
+		arg.DisabledStates,
+	)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -332,47 +353,53 @@ WITH filtered AS (
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
         -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
         (
-            $5::text IS NULL
-            OR om.name ILIKE '%' || $5::text || '%'
-            OR om.slug ILIKE '%' || $5::text || '%'
-            OR om.id = $5::text
-            OR om.workos_id = $5::text
+            $6::text IS NULL
+            OR om.name ILIKE '%' || $6::text || '%'
+            OR om.slug ILIKE '%' || $6::text || '%'
+            OR om.id = $6::text
+            OR om.workos_id = $6::text
         )
-        AND ($6::text IS NULL OR om.gram_account_type = $6::text)
-        AND ($7::boolean OR om.disabled_at IS NULL)
-        AND ($8::text IS NULL OR om.id > $8::text)
+        -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
+        -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
+        -- would drop every row instead of keeping every row.
+        AND (coalesce(cardinality($7::text[]), 0) = 0 OR om.gram_account_type = ANY($7::text[]))
+        -- No empty arm: the handler resolves an absent filter to {active}.
+        AND (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
+        AND ($9::text IS NULL OR om.id > $9::text)
 )
 SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 ORDER BY
-    CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
-    CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
-    CASE WHEN $1::text = 'slug' AND $2::text = 'asc' THEN slug END ASC NULLS LAST,
-    CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
-    CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
-    CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
-    CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
-    CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
-    CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
-    CASE WHEN $1::text = 'created_at' AND $2::text = 'desc' THEN created_at END DESC NULLS LAST,
-    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'asc' THEN disabled_at END ASC NULLS LAST,
-    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'desc' THEN disabled_at END DESC NULLS LAST,
-    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
-    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN $2::text = 'name' AND $3::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN $2::text = 'slug' AND $3::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN $2::text = 'slug' AND $3::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN $2::text = 'account_type' AND $3::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN $2::text = 'account_type' AND $3::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $2::text = 'member_count' AND $3::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN $2::text = 'member_count' AND $3::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN $2::text = 'created_at' AND $3::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN $2::text = 'created_at' AND $3::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
-LIMIT $4::int
-OFFSET $3::bigint
+LIMIT $5::int
+OFFSET $4::bigint
 `
 
 type AdminListOrganizationsParams struct {
-	SortBy          string
-	SortDir         string
-	PageOffset      int64
-	PageLimit       int32
-	Q               pgtype.Text
-	AccountType     pgtype.Text
-	IncludeDisabled bool
-	AfterID         pgtype.Text
+	TrialStates    []string
+	SortBy         string
+	SortDir        string
+	PageOffset     int64
+	PageLimit      int32
+	Q              pgtype.Text
+	AccountTypes   []string
+	DisabledStates []string
+	AfterID        pgtype.Text
 }
 
 type AdminListOrganizationsRow struct {
@@ -395,6 +422,8 @@ type AdminListOrganizationsRow struct {
 // Two paging modes share this query. A caller that supplies no sort key gets the
 // cursor walk it always had: the sort ladder collapses to all-NULL and the
 // tiebreaker alone orders the rows. A caller that supplies one gets offset paging.
+// trial_state is computed in the CTE's select list, so it cannot be named in the
+// CTE's own WHERE. Filtering out here keeps the ladder to one copy per query.
 // The sort key stays a bound parameter, never an interpolated column name, so no
 // caller input reaches the parser. NULLS LAST is what keeps empty dates at the
 // bottom under DESC, where Postgres would otherwise put them first; on the ASC
@@ -402,13 +431,14 @@ type AdminListOrganizationsRow struct {
 // column read alike.
 func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizations,
+		arg.TrialStates,
 		arg.SortBy,
 		arg.SortDir,
 		arg.PageOffset,
 		arg.PageLimit,
 		arg.Q,
-		arg.AccountType,
-		arg.IncludeDisabled,
+		arg.AccountTypes,
+		arg.DisabledStates,
 		arg.AfterID,
 	)
 	if err != nil {

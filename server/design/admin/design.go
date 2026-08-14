@@ -339,8 +339,11 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 
 			Attribute("q", String, "Search term applied to name and slug (case-insensitive substring).")
-			Attribute("account_type", String, "Filter by gram_account_type (e.g. free, pro, enterprise).")
-			Attribute("include_disabled", Boolean, "Include organizations with disabled_at set. Defaults to false.")
+			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
+			Attribute("account_types", ArrayOf(String), "Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.")
+			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
+			Attribute("disabled_states", ArrayOf(String), "Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.")
+			Attribute("include_disabled", Boolean, "Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.")
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.")
@@ -355,6 +358,9 @@ var _ = Service("admin", func() {
 
 			Param("q")
 			Param("account_type")
+			Param("account_types")
+			Param("trial_states")
+			Param("disabled_states")
 			Param("include_disabled")
 			Param("cursor")
 			Param("limit")
