@@ -7,9 +7,12 @@ import {
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
+  flagResult: vi.fn(),
+  hasScope: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", async (importOriginal) => {
@@ -19,6 +22,27 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
     useSession: mocks.useSession,
   };
 });
+
+// The embedded self-serve CTA brings its own gates; stub what it reads so the
+// card's own states stay the subject of these tests.
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => mocks.hasScope() as boolean }),
+}));
+
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: vi.fn() }),
+}));
+
+vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
+  useCreateStripeCheckoutMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
 
 import { TrialStatusCard } from "./trial-status-card";
 
@@ -36,6 +60,9 @@ describe("TrialStatusCard", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
     mocks.useSession.mockReturnValue({ trial: activeTrial });
+    // Off by default so the existing states are asserted without the CTA.
+    mocks.flagResult.mockReturnValue({ status: "disabled" });
+    mocks.hasScope.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -214,6 +241,44 @@ describe("TrialStatusCard", () => {
         "group-data-[collapsible=icon]:hidden",
       ),
     ).toBe(true);
+  });
+
+  it("offers self-serve checkout beside the sales link during the trial", () => {
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+
+    render(<TrialStatusCard />);
+
+    expect(
+      screen.getByRole("button", { name: /start pay as you go/i }),
+    ).toBeTruthy();
+    // Sales stays available; checkout is an addition, not a replacement.
+    expect(screen.getByRole("link", { name: "Talk to sales" })).toBeTruthy();
+  });
+
+  it("keeps only the sales link for a member", () => {
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.hasScope.mockReturnValue(false);
+
+    render(<TrialStatusCard />);
+
+    expect(
+      screen.queryByRole("button", { name: /start pay as you go/i }),
+    ).toBeNull();
+    expect(screen.getByRole("link", { name: "Talk to sales" })).toBeTruthy();
+  });
+
+  it("keeps only the sales link once the trial has ended", () => {
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
+
+    render(<TrialStatusCard />);
+
+    expect(
+      screen.queryByRole("button", { name: /start pay as you go/i }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
   });
 
   it("sends the Sales conversation to the in-app upgrade gate", () => {

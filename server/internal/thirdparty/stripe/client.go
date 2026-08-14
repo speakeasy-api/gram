@@ -54,6 +54,7 @@ func IsConfigured(value string) bool {
 // Client is the Stripe surface used by PAYG billing.
 type Client interface {
 	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
+	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
 	CreateMeterEvent(context.Context, CreateMeterEventInput) error
 	VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error)
 	Catalog() Catalog
@@ -69,6 +70,36 @@ type CreateCustomerInput struct {
 // Customer is the Stripe customer data needed by billing callers.
 type Customer struct {
 	ID string
+}
+
+// CreateCheckoutSessionInput describes the hosted Checkout session for a PAYG subscription.
+type CreateCheckoutSessionInput struct {
+	// CustomerID identifies the Stripe customer that owns the subscription.
+	CustomerID string
+
+	// OrganizationID is Gram's stable organization identifier.
+	OrganizationID string
+
+	// OrganizationSlug is the organization slug included in Stripe metadata.
+	OrganizationSlug string
+
+	// SuccessURL is the browser destination after successful Checkout.
+	SuccessURL string
+
+	// CancelURL is the browser destination when Checkout is canceled.
+	CancelURL string
+
+	// TrialEnd preserves an active in-product trial on the Stripe subscription.
+	TrialEnd *time.Time
+
+	// IdempotencyKey identifies one Checkout creation request.
+	IdempotencyKey string
+}
+
+// CheckoutSession is the Stripe Checkout data needed by billing callers.
+type CheckoutSession struct {
+	// URL is Stripe's hosted Checkout page.
+	URL string
 }
 
 // CreateMeterEventInput reports a TUM delta for one Stripe customer.
@@ -99,6 +130,7 @@ type WebhookEvent struct {
 
 type stripeAPI interface {
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
+	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
 }
 
@@ -112,6 +144,14 @@ func (s *sdkAPI) createCustomer(ctx context.Context, params *stripesdk.CustomerC
 		return nil, fmt.Errorf("stripe SDK create customer: %w", err)
 	}
 	return customer, nil
+}
+
+func (s *sdkAPI) createCheckoutSession(ctx context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
+	session, err := s.client.V1CheckoutSessions.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create Checkout session: %w", err)
+	}
+	return session, nil
 }
 
 func (s *sdkAPI) createMeterEvent(ctx context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
@@ -167,6 +207,45 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 		return nil, fmt.Errorf("create Stripe customer: %w", err)
 	}
 	return &Customer{ID: customer.ID}, nil
+}
+
+func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
+	if input.IdempotencyKey == "" {
+		return nil, errMissingIdempotencyKey
+	}
+
+	params := new(stripesdk.CheckoutSessionCreateParams)
+	params.CancelURL = stripesdk.String(input.CancelURL)
+	params.ClientReferenceID = stripesdk.String(input.OrganizationID)
+	params.Customer = stripesdk.String(input.CustomerID)
+	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
+		{
+			Price:    stripesdk.String(c.catalog.PriceIDTUM),
+			Quantity: nil,
+		},
+	}
+	params.Metadata = map[string]string{
+		organizationIDMetadataKey:   input.OrganizationID,
+		organizationSlugMetadataKey: input.OrganizationSlug,
+	}
+	params.Mode = stripesdk.String(stripesdk.CheckoutSessionModeSubscription)
+	params.PaymentMethodCollection = stripesdk.String(stripesdk.CheckoutSessionPaymentMethodCollectionAlways)
+	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
+	params.SubscriptionData.Metadata = map[string]string{
+		organizationIDMetadataKey:   input.OrganizationID,
+		organizationSlugMetadataKey: input.OrganizationSlug,
+	}
+	params.SuccessURL = stripesdk.String(input.SuccessURL)
+	if input.TrialEnd != nil {
+		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())
+	}
+	params.SetIdempotencyKey(input.IdempotencyKey)
+
+	session, err := c.api.createCheckoutSession(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
+	}
+	return &CheckoutSession{URL: session.URL}, nil
 }
 
 func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInput) error {
@@ -265,6 +344,11 @@ func NewStubClient(logger *slog.Logger) Client {
 func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) (*Customer, error) {
 	s.logger.DebugContext(ctx, "stub Stripe customer creation skipped")
 	return &Customer{ID: "cus_local_stub"}, nil
+}
+
+func (s *stubClient) CreateCheckoutSession(ctx context.Context, _ CreateCheckoutSessionInput) (*CheckoutSession, error) {
+	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
+	return &CheckoutSession{URL: "http://localhost:3000/billing"}, nil
 }
 
 func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {

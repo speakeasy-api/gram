@@ -4,6 +4,7 @@
 
 import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
+import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
@@ -21,6 +22,10 @@ import {
   CreateCustomerSessionRequest,
   CreateCustomerSessionSecurity,
 } from "../models/operations/createcustomersession.js";
+import {
+  CreateStripeCheckoutRequest,
+  CreateStripeCheckoutSecurity,
+} from "../models/operations/createstripecheckout.js";
 import {
   CreateTopUpCheckoutRequest,
   CreateTopUpCheckoutSecurity,
@@ -71,6 +76,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCustomerSession(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createStripeCheckout usage
+   *
+   * @remarks
+   * Create a Stripe Checkout link for starting PAYG billing
+   */
+  async createStripeCheckout(
+    request?: CreateStripeCheckoutRequest | undefined,
+    security?: CreateStripeCheckoutSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<string> {
+    return unwrapAsync(usageCreateStripeCheckout(
       this,
       request,
       security,

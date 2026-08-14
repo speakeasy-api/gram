@@ -1,3 +1,4 @@
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
@@ -146,6 +147,9 @@ export function TrialStatusCard(): React.ReactNode {
             />
           </div>
         </div>
+        {/* Self-serve upgrade for admins still in the trial; sales stays the
+            fallback for everyone else and for expired trials. */}
+        <StartPaygCheckoutCTA size="sm" />
         <Link
           to={SALES_PATH}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

@@ -37,6 +37,11 @@ func CreateCheckoutUsagePath() string {
 	return "/rpc/usage.createCheckout"
 }
 
+// CreateStripeCheckoutUsagePath returns the URL path to the usage service createStripeCheckout HTTP endpoint.
+func CreateStripeCheckoutUsagePath() string {
+	return "/rpc/usage.createStripeCheckout"
+}
+
 // CreateTopUpCheckoutUsagePath returns the URL path to the usage service createTopUpCheckout HTTP endpoint.
 func CreateTopUpCheckoutUsagePath() string {
 	return "/rpc/usage.createTopUpCheckout"

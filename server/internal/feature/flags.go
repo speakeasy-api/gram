@@ -89,6 +89,11 @@ const (
 	// when the fold flag is on. Same targeting; removed with the fold flag.
 	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
 
+	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
+	// Targeted by PostHog organization group (org slug) and removed once PAYG
+	// billing is generally available.
+	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload

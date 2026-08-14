@@ -227,6 +227,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
 	})
 
+	Method("createStripeCheckout", func() {
+		Description("Create a Stripe Checkout link for starting PAYG billing")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createStripeCheckout")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createStripeCheckout")
+		Meta("openapi:extension:x-speakeasy-name-override", "createStripeCheckout")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripeCheckout"}`)
+	})
+
 	Method("createTopUpCheckout", func() {
 		Description("Create a checkout link for a one-time credit top-up purchase")
 

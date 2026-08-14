@@ -80,16 +80,23 @@ func TestSDKPinsExpectedAPIVersion(t *testing.T) {
 }
 
 type fakeStripeAPI struct {
-	customerParams   *stripesdk.CustomerCreateParams
-	meterEventParams *stripesdk.BillingMeterEventCreateParams
-	calls            int
-	err              error
+	customerParams        *stripesdk.CustomerCreateParams
+	checkoutSessionParams *stripesdk.CheckoutSessionCreateParams
+	meterEventParams      *stripesdk.BillingMeterEventCreateParams
+	calls                 int
+	err                   error
 }
 
 func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error) {
 	f.calls++
 	f.customerParams = params
 	return &stripesdk.Customer{ID: "cus_test"}, f.err
+}
+
+func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
+	f.calls++
+	f.checkoutSessionParams = params
+	return &stripesdk.CheckoutSession{URL: "https://checkout.stripe.test/session"}, f.err
 }
 
 func (f *fakeStripeAPI) createMeterEvent(_ context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
@@ -123,6 +130,72 @@ func TestCreateCustomerRejectsMissingIdempotencyKey(t *testing.T) {
 	c := &client{api: api}
 
 	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{})
+	require.ErrorIs(t, err, errMissingIdempotencyKey)
+	require.Zero(t, api.calls)
+}
+
+func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{
+		api: api,
+		catalog: Catalog{
+			PriceIDTUM:     "price_tum",
+			MeterEventName: "tum",
+		},
+	}
+	trialEnd := time.Date(2026, time.August, 20, 10, 0, 0, 0, time.UTC)
+
+	session, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID:       "cus_test",
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		SuccessURL:       "https://app.example.test/the-customer/billing",
+		CancelURL:        "https://app.example.test/the-customer/billing",
+		TrialEnd:         &trialEnd,
+		IdempotencyKey:   "checkout:<ORG_ID>:request",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://checkout.stripe.test/session", session.URL)
+
+	params := api.checkoutSessionParams
+	require.Equal(t, "checkout:<ORG_ID>:request", stripesdk.StringValue(params.IdempotencyKey))
+	require.Equal(t, "cus_test", stripesdk.StringValue(params.Customer))
+	require.Equal(t, "<ORG_ID>", stripesdk.StringValue(params.ClientReferenceID))
+	require.Equal(t, "subscription", stripesdk.StringValue(params.Mode))
+	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
+	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.SuccessURL))
+	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.CancelURL))
+	require.Len(t, params.LineItems, 1)
+	require.Equal(t, "price_tum", stripesdk.StringValue(params.LineItems[0].Price))
+	require.Nil(t, params.LineItems[0].Quantity)
+	require.Equal(t, "<ORG_ID>", params.Metadata[organizationIDMetadataKey])
+	require.Equal(t, "the-customer", params.Metadata[organizationSlugMetadataKey])
+	require.NotNil(t, params.SubscriptionData)
+	require.Equal(t, trialEnd.Unix(), stripesdk.Int64Value(params.SubscriptionData.TrialEnd))
+	require.Equal(t, "<ORG_ID>", params.SubscriptionData.Metadata[organizationIDMetadataKey])
+	require.Equal(t, "the-customer", params.SubscriptionData.Metadata[organizationSlugMetadataKey])
+}
+
+func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterEventName: "tum"}}
+
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{IdempotencyKey: "checkout"})
+	require.NoError(t, err)
+	require.Nil(t, api.checkoutSessionParams.SubscriptionData.TrialEnd)
+}
+
+func TestCreateCheckoutSessionRejectsMissingIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{})
 	require.ErrorIs(t, err, errMissingIdempotencyKey)
 	require.Zero(t, api.calls)
 }
@@ -177,6 +250,10 @@ func TestWritesWrapStripeErrors(t *testing.T) {
 	err = c.CreateMeterEvent(t.Context(), CreateMeterEventInput{IdempotencyKey: "meter"})
 	require.ErrorIs(t, err, apiErr)
 	require.ErrorContains(t, err, "create Stripe meter event")
+
+	_, err = c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{IdempotencyKey: "checkout"})
+	require.ErrorIs(t, err, apiErr)
+	require.ErrorContains(t, err, "create Stripe Checkout session")
 }
 
 func TestVerifyWebhook(t *testing.T) {
