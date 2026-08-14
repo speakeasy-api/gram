@@ -1144,6 +1144,186 @@ PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): give the trial 
 
 ---
 
+## Task 6d: The trial callout takes the warning tone
+
+Walker's feedback on the running build, 2026-08-14: the callout draws in the same
+grey as everything else.
+
+The design gives it a **warning** tone, not a neutral one:
+
+```css
+border: 1px solid var(--tone-warning-border); /* hsl(28 100% 74%) */
+background: var(--tone-warning-bg); /* hsl(29 100% 95%) */
+color: var(--tone-warning-fg); /* hsl(21 64% 43%) */
+```
+
+The build has `border-border bg-muted/30`. The one state the design's notes say
+"the admin must not miss" is currently invisible.
+
+**Those colours already exist**, in `lib/badgeTone.ts`, with one deliberate
+deviation that must survive this task: the light foreground is darkened to
+`hsl(21 70% 37%)` because the design's own `hsl(21 64% 43%)` measures 4.34:1 and
+fails WCAG AA. The callout's text is 13px, which is not WCAG large text either,
+so **use the darkened value, not the raw design token.** Read the file's header
+comment before touching it.
+
+**Files:**
+
+- Create: `client/admin/src/lib/tone.ts`, `tone.test.ts`
+- Modify: `client/admin/src/lib/badgeTone.ts`, `badgeTone.test.ts`
+- Modify: `client/admin/src/pages/organization/TrialCallout.tsx`, `TrialCallout.test.tsx`
+
+**Interfaces:**
+
+- Produces: `tone`, a map of the four tone triplets with no badge-only classes
+
+- [ ] **Step 1: Extract the triplet**
+
+Walker chose extraction over inlining on 2026-08-14, because the design models
+these as `--tone-*` tokens shared by the badge and the callout, and a second copy
+of the palette can drift.
+
+Move the colour classes out of `badgeTone` into `tone`, keeping **exactly** the
+strings that are there today, including the darkened warning foreground. `tone`
+carries border, background and text for both schemes. It does **not** carry
+`uppercase`: that is a badge decision, and on the callout it would shout a whole
+sentence.
+
+`badgeTone` then composes: `warning: \`${tone.warning} uppercase\``. Every current
+`badgeTone` consumer must keep byte-identical output. This is a refactor with no
+visual change outside the callout.
+
+- [ ] **Step 2: Move the contrast test with it**
+
+`badgeTone.test.ts` measures contrast ratios by parsing those strings. The
+measurement belongs with the colours, so move it to `tone.test.ts` and keep
+`badgeTone.test.ts` asserting the composition: that each tone still contains its
+triplet and still adds `uppercase`.
+
+Do not weaken the ratio the test demands. If a value fails, the value is wrong,
+not the test.
+
+- [ ] **Step 3: Apply it to the callout**
+
+```tsx
+<div
+  role="status"
+  className={cn(
+    tone.warning,
+    "flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3",
+  )}
+>
+```
+
+Keep `justify-between`, `flex-wrap` and the `role="status"`. This task changes
+colour only. Do not take the design's 13px, its 10px/12px padding, or its icon:
+those are separate from the feedback and are not asked for.
+
+- [ ] **Step 4: Test it**
+
+happy-dom performs no layout, so a colour is invisible to a behavioural
+assertion. Assert the className, which is the house pattern (`Trial.test.tsx`,
+`index.test.tsx`). Assert the callout carries `tone.warning` and that it no
+longer carries `bg-muted/30`, so reverting the class is a kill.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add client/admin/src
+PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): draw the trial callout in the warning tone"
+```
+
+---
+
+## Task 6e: Extend trial picks a date, not a day count
+
+Walker's feedback on the running build, 2026-08-14: the extend dialog should let
+the operator pick the day the trial ends on.
+
+**Read this before designing the conversion.** The server adds the days to the
+trial's **current end date**, not to today
+(`server/internal/trials/queries.sql:115`, `ends_at = ends_at + make_interval(...)`,
+pinned by `extendtrial_test.go:30`). So a date converts to a day count with no
+server change, and this task stays client-only:
+
+```
+days = pickedDate - org.trial_ends_at        // whole days
+```
+
+**The anchor is always present.** `trials.ends_at` is `NOT NULL`
+(`server/database/schema.sql:90`), and `running`/`ending_soon` only arise from an
+existing trial row, so `trial_ends_at` is set wherever extend is offered. It is
+still typed optional on the client: if it is missing, keep the current day-count
+input rather than guessing an anchor.
+
+**Use a native `<input type="date">`.** Do **not** add `react-day-picker` or a
+shadcn `<Calendar>`. Adding any dependency to `client/admin` re-resolves the root
+lockfile and breaks the `@gram-ai/functions` workspace link. The native control
+gives a real calendar popup, keyboard and screen-reader support, and `min`/`max`
+for free.
+
+**This reaches past the record page.** `OrganizationActions` is also rendered by
+the organizations row menu and the peek panel, which pass no `actions` prop. The
+extend dialog they open is the same one. Their tests must still pass untouched;
+if one needs editing, say so in the report and explain why.
+
+**Files:**
+
+- Modify: `client/admin/src/pages/organizations/OrganizationActions.tsx`, `OrganizationActions.test.tsx`
+
+- [ ] **Step 1: Bound the input instead of validating after the fact**
+
+The existing bounds map exactly onto the input's own attributes, so an
+out-of-range date becomes unpickable rather than a rejection the operator reads
+after pressing Save:
+
+```
+min = trial_ends_at + MIN_TRIAL_EXTENSION_DAYS days   // 1
+max = trial_ends_at + MAX_TRIAL_EXTENSION_DAYS days   // 365
+```
+
+Default the field to `trial_ends_at + DEFAULT_EXTENSION_DAYS` (14), which is what
+the day-count field defaults to today.
+
+- [ ] **Step 2: Keep the guard, do not trust the attributes**
+
+`min`/`max` are not enforced for a typed value in every browser, and the field can
+be cleared. Keep the existing bounds check and its `announce` path, converting
+first and then applying the same `MIN`/`MAX` test to the resulting day count. The
+existing comment explaining why the live region alternates a zero-width space
+still applies and must stay.
+
+Compute whole days in UTC. A local-midnight subtraction across a daylight-saving
+boundary yields 13.958 days and floors to the wrong answer.
+
+- [ ] **Step 3: Say what will happen**
+
+The operator picks a date but the request sends a count, so the dialog should
+confirm the date it will set. Keep the label plain: the field is the end date,
+not an extension length.
+
+- [ ] **Step 4: Test it**
+
+- picking a date sends the day count that reaches it, for at least two dates;
+- a date one day past `max` is refused and announced;
+- a cleared field is refused, not sent as `NaN`;
+- the row menu's and peek panel's extend still open and submit.
+
+The mutation to design against: change the conversion to anchor on **today**
+instead of on `trial_ends_at`. That is the exact bug the server's own comment
+warns about, and a test that only checks "some number was sent" will not catch
+it. Pick a `trial_ends_at` that is not today, or the two anchors agree and the
+test passes vacuously.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add client/admin/src
+PATH="/Users/walker/.local/bin:$PATH" git commit -m "feat(admin): extend a trial to a chosen end date"
+```
+
+---
+
 ## Task 7: Mutation sweep and gates
 
 The plan's test list is a floor, not coverage. This task is where the tests get attacked.
