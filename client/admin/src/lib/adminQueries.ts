@@ -106,6 +106,30 @@ export function organizationMembersQuery(
   });
 }
 
+// Every cache a write to an organization can stale, listed once. Cancelling and
+// invalidating read the same list, so a key added here reaches both: a key added
+// to one of them alone is the stale row this file exists to prevent.
+const ORGANIZATION_CACHES: readonly QueryKey[] = [
+  organizationsListQuery().queryKey,
+  // The whole detail key rather than one organization's, and that is the point
+  // rather than laziness. `writeOrganizationToCache` writes the record under its
+  // id and under its slug, the row links by slug wherever there is one, and the
+  // slug is not known at the moment a write goes out: it arrives with the
+  // response the write has not made yet. Naming the id alone would leave the
+  // entry the operator actually opened free to answer late and put the record
+  // back.
+  //
+  // Touching another organization's detail entry costs that page a refetch and
+  // nothing else, and only one detail query is ever in flight from here.
+  [ORGANIZATION_KEY],
+  // Measured: an invalidation cannot refire a stats fetch that is already
+  // running. React Query joins the open request instead of starting a second
+  // one, and its pre-write answer clears the invalidated flag as it lands. So
+  // the cancel has to come first, and `invalidateOrganizationStats` covers the
+  // write paths that end without one.
+  organizationsStatsQuery.queryKey,
+];
+
 // Called before a write goes out, because a read already in flight outlives it.
 // React Query commits whatever a request answers whenever it lands, so a list
 // fetch that started before the write returns the row in its old state
@@ -120,23 +144,9 @@ export function organizationMembersQuery(
 // Cancelling rather than awaiting, because the answer is already stale: it was
 // asked before the write the operator just made.
 export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
-  return Promise.all([
-    qc.cancelQueries({ queryKey: organizationsListQuery().queryKey }),
-    // The whole detail key rather than one organization's, and that is the
-    // point rather than laziness. `writeOrganizationToCache` writes the record
-    // under its id and under its slug, the row links by slug wherever there is
-    // one, and the slug is not known here: it arrives with the response the
-    // write has not made yet. Cancelling the id alone would leave the entry the
-    // operator actually opened free to answer late and put the record back.
-    //
-    // Cancelling another organization's detail fetch costs that page a refetch
-    // and nothing else, and only one detail query is ever in flight from here.
-    qc.cancelQueries({ queryKey: [ORGANIZATION_KEY] }),
-    // Measured: the invalidation below cannot refire a fetch that is already
-    // running. React Query joins the open request instead of starting a second
-    // one, and its pre-write answer clears the invalidated flag as it lands.
-    qc.cancelQueries({ queryKey: organizationsStatsQuery.queryKey }),
-  ]).then(() => undefined);
+  return Promise.all(
+    ORGANIZATION_CACHES.map((queryKey) => qc.cancelQueries({ queryKey })),
+  ).then(() => undefined);
 }
 
 // Every admin write answers with the organization in its new state, so the
@@ -202,13 +212,12 @@ export function invalidateOrganizationStats(qc: QueryClient): void {
 }
 
 // For a write that answers with ids rather than records, so there is nothing to
-// put in the cache. Both keys and the whole of each: the operator can act on
+// put in the cache. Every key and the whole of each: the operator can act on
 // rows from any page under any filter.
 export function invalidateOrganizations(qc: QueryClient): Promise<void> {
-  return Promise.all([
-    qc.invalidateQueries({ queryKey: organizationsListQuery().queryKey }),
-    qc.invalidateQueries({ queryKey: [ORGANIZATION_KEY] }),
-  ]).then(() => undefined);
+  return Promise.all(
+    ORGANIZATION_CACHES.map((queryKey) => qc.invalidateQueries({ queryKey })),
+  ).then(() => undefined);
 }
 
 export function projectQuery(
