@@ -195,7 +195,7 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		existingFilters = append(existingFilters, filter)
 	}
 	var err error
-	sessionBuilder, err = applySessionFilters(sessionBuilder, existingFilters)
+	sessionBuilder, err = applySessionFilters(sessionBuilder, existingFilters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
 		return "", nil, err
 	}
@@ -264,6 +264,7 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		outer = outer.OrderBy(measureAliasPrefix + arg.SortBy + " DESC")
 	}
 
+	outer = withCanonicalFoldSettings(outer, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := outer.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building skill version metrics query: %w", err)
