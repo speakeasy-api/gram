@@ -57,9 +57,7 @@ if (assistantRuntimeProvider === "local") {
     ),
   );
 } else if (assistantRuntimeProvider) {
-  console.log(
-    `⚪︎ Assistant runtime provider: ${assistantRuntimeProvider}`,
-  );
+  console.log(`⚪︎ Assistant runtime provider: ${assistantRuntimeProvider}`);
 } else {
   console.log(
     "⚪︎ Assistant runtime provider is not configured (run `mise run zero:assistants`)",
