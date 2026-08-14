@@ -181,6 +181,25 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: false,
 		},
+		// The server's own flag names and environment variables, so a deployment
+		// already running gram-server needs no new secrets. The encryption key
+		// is the application-wide one, not admin-encryption-key.
+		&cli.StringFlag{
+			Name:     "encryption-key",
+			Usage:    "Key for App level AES encryption/decryption",
+			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:    "openrouter-provisioning-key",
+			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
+			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "openrouter-dev-key",
+			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
+			EnvVars: []string{"OPENROUTER_DEV_KEY"},
+		},
 	}
 
 	return &cli.Command{
@@ -291,8 +310,9 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
+			adminTrialKeyReviver := newAdminTrialKeyReviver(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

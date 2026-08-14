@@ -9,3 +9,10 @@ const MinTrialExtensionDays = 1
 // runs longer than that is a contract rather than a trial, and the bound also
 // keeps the ends_at arithmetic far away from what timestamptz can hold.
 const MaxTrialExtensionDays = 365
+
+// MinTrialRearmDays and MaxTrialRearmDays bound the runway a re-arm grants.
+// Aliases, so a divergence from the extension bounds has to be a deliberate edit.
+const (
+	MinTrialRearmDays = MinTrialExtensionDays
+	MaxTrialRearmDays = MaxTrialExtensionDays
+)
