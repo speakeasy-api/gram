@@ -27,10 +27,10 @@ type OpenRouterKeyRefresher struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
+func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) error {
 	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.TemporalEnv, OpenRouterKeyRefreshParams{
 		OrgID:   orgID,
-		Limit:   nil,
+		Limit:   limit,
 		KeyType: string(keyType),
 	})
 	return err

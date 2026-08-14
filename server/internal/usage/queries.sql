@@ -42,6 +42,55 @@ WITH inserted AS (
 )
 SELECT EXISTS (SELECT 1 FROM inserted) AS inserted;
 
+-- name: StripeWebhookReceiptExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM stripe_webhook_receipts
+    WHERE stripe_event_id = @stripe_event_id
+) AS received;
+
+-- name: AcquireStripeSubscriptionActivationLock :exec
+-- Serializes distinct Stripe events that refer to the same subscription.
+SELECT pg_advisory_xact_lock(hashtextextended(@stripe_subscription_id, 0));
+
+-- name: GetPaygActivationState :one
+SELECT
+    billing_metadata.id AS billing_metadata_id
+  , billing_metadata.stripe_customer_id
+  , billing_metadata.stripe_subscription_id
+  , billing_metadata.billing_cycle_anchor_day
+  , organization_metadata.name AS organization_name
+  , organization_metadata.slug AS organization_slug
+  , organization_metadata.gram_account_type
+  , organization_metadata.whitelisted
+FROM billing_metadata
+JOIN organization_metadata
+  ON organization_metadata.id = billing_metadata.organization_id
+WHERE billing_metadata.organization_id = @organization_id
+FOR UPDATE OF billing_metadata, organization_metadata;
+
+-- name: GetStripeSubscriptionOwner :one
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_subscription_id = @stripe_subscription_id;
+
+-- name: ActivatePaygBillingMetadata :one
+UPDATE billing_metadata
+SET stripe_subscription_id = @stripe_subscription_id,
+    billing_cycle_anchor_day = @billing_cycle_anchor_day,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND stripe_customer_id = @stripe_customer_id
+  AND (stripe_subscription_id IS NULL OR stripe_subscription_id = @stripe_subscription_id)
+RETURNING *;
+
+-- name: ActivatePaygOrganization :exec
+UPDATE organization_metadata
+SET gram_account_type = 'payg',
+    whitelisted = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id;
+
 -- name: CreateStripeBillingMetadataFixture :exec
 -- Test-only fixture for webhook tests that need a Stripe customer association.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
@@ -51,6 +100,12 @@ VALUES (@organization_id, @stripe_customer_id);
 -- Test-only fixture for checkout tests that need an existing Stripe subscription.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id, stripe_subscription_id)
 VALUES (@organization_id, @stripe_customer_id, @stripe_subscription_id);
+
+-- name: SetStripeSubscriptionFixture :exec
+-- Test-only fixture for ownership-conflict webhook tests.
+UPDATE billing_metadata
+SET stripe_subscription_id = @stripe_subscription_id
+WHERE organization_id = @organization_id;
 
 -- name: CountStripeWebhookReceiptsFixture :one
 -- Test-only fixture assertion for durable webhook completion receipts.

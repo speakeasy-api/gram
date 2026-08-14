@@ -34,6 +34,23 @@ INSERT INTO organization_features (
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
 DO NOTHING;
 
+-- name: EnableFeatureIfNeverConfigured :execrows
+-- PAYG activation grants purchased capabilities to legacy organizations while
+-- preserving a soft-deleted row as an explicit administrator choice.
+INSERT INTO organization_features (
+    organization_id,
+    feature_name
+)
+SELECT @organization_id, @feature_name
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM organization_features
+    WHERE organization_id = @organization_id
+      AND feature_name = @feature_name
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
+DO NOTHING;
+
 -- name: DeleteFeature :one
 UPDATE organization_features
 SET deleted_at = clock_timestamp(),

@@ -27,11 +27,11 @@ const (
 
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
 
-	ActionOrganizationEnterpriseTrialDemoted Action = "organization:enterprise_trial_demoted"
-
-	ActionOrganizationEnterpriseTrialRearmed Action = "organization:enterprise_trial_rearmed"
-
+	ActionOrganizationEnterpriseTrialDemoted  Action = "organization:enterprise_trial_demoted"
+	ActionOrganizationEnterpriseTrialRearmed  Action = "organization:enterprise_trial_rearmed"
 	ActionOrganizationEnterpriseTrialExtended Action = "organization:enterprise_trial_extended"
+
+	ActionOrganizationPaygActivated Action = "organization:payg_activated"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -532,4 +532,57 @@ func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+type OrganizationPaygActivationSnapshot struct {
+	AccountType string `json:"account_type"`
+	Whitelisted bool   `json:"whitelisted"`
+}
+
+type LogOrganizationPaygActivatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
+	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+func (l *Logger) LogOrganizationPaygActivated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationPaygActivatedEvent) error {
+	beforeSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationPaygActivated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationPaygActivated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationPaygActivated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
 }
