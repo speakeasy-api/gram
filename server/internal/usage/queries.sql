@@ -58,6 +58,7 @@ SELECT
     billing_metadata.id AS billing_metadata_id
   , billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_billing_cycle_anchor
   , billing_metadata.billing_cycle_anchor_day
   , organization_metadata.name AS organization_name
   , organization_metadata.slug AS organization_slug
@@ -78,6 +79,7 @@ ORDER BY organization_id;
 -- name: ActivatePaygBillingMetadata :one
 UPDATE billing_metadata
 SET stripe_subscription_id = @stripe_subscription_id,
+    stripe_billing_cycle_anchor = @stripe_billing_cycle_anchor,
     billing_cycle_anchor_day = @billing_cycle_anchor_day,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id

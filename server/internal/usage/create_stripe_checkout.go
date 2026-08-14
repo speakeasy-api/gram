@@ -90,14 +90,16 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 
 	billingURL := s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String()
+	billingCycleAnchor := nextStripeBillingCycleAnchor(time.Now(), trialEnd)
 	checkout, err := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
-		CustomerID:       customerID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		OrganizationSlug: authCtx.OrganizationSlug,
-		SuccessURL:       billingURL,
-		CancelURL:        billingURL,
-		TrialEnd:         trialEnd,
-		IdempotencyKey:   fmt.Sprintf("checkout-session:%s", authCtx.ActiveOrganizationID),
+		CustomerID:         customerID,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		OrganizationSlug:   authCtx.OrganizationSlug,
+		SuccessURL:         billingURL,
+		CancelURL:          billingURL,
+		TrialEnd:           trialEnd,
+		BillingCycleAnchor: billingCycleAnchor,
+		IdempotencyKey:     fmt.Sprintf("checkout-session:%s", authCtx.ActiveOrganizationID),
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create Stripe Checkout session").LogError(ctx, s.logger)
@@ -138,4 +140,17 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 
 	return checkout.URL, nil
+}
+
+func nextStripeBillingCycleAnchor(now time.Time, trialEnd *time.Time) time.Time {
+	start := now.UTC()
+	if trialEnd != nil {
+		start = trialEnd.UTC()
+	}
+
+	midnight := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	if trialEnd != nil && start.Equal(midnight) {
+		return midnight
+	}
+	return midnight.AddDate(0, 0, 1)
 }

@@ -25,24 +25,27 @@ func (q *Queries) AcquireStripeSubscriptionActivationLock(ctx context.Context, s
 const activatePaygBillingMetadata = `-- name: ActivatePaygBillingMetadata :one
 UPDATE billing_metadata
 SET stripe_subscription_id = $1,
-    billing_cycle_anchor_day = $2,
+    stripe_billing_cycle_anchor = $2,
+    billing_cycle_anchor_day = $3,
     updated_at = clock_timestamp()
-WHERE organization_id = $3
-  AND stripe_customer_id = $4
+WHERE organization_id = $4
+  AND stripe_customer_id = $5
   AND (stripe_subscription_id IS NULL OR stripe_subscription_id = $1)
 RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type ActivatePaygBillingMetadataParams struct {
-	StripeSubscriptionID  pgtype.Text
-	BillingCycleAnchorDay int32
-	OrganizationID        string
-	StripeCustomerID      pgtype.Text
+	StripeSubscriptionID     pgtype.Text
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	BillingCycleAnchorDay    int32
+	OrganizationID           string
+	StripeCustomerID         pgtype.Text
 }
 
 func (q *Queries) ActivatePaygBillingMetadata(ctx context.Context, arg ActivatePaygBillingMetadataParams) (BillingMetadatum, error) {
 	row := q.db.QueryRow(ctx, activatePaygBillingMetadata,
 		arg.StripeSubscriptionID,
+		arg.StripeBillingCycleAnchor,
 		arg.BillingCycleAnchorDay,
 		arg.OrganizationID,
 		arg.StripeCustomerID,
@@ -205,6 +208,7 @@ SELECT
     billing_metadata.id AS billing_metadata_id
   , billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_billing_cycle_anchor
   , billing_metadata.billing_cycle_anchor_day
   , organization_metadata.name AS organization_name
   , organization_metadata.slug AS organization_slug
@@ -218,14 +222,15 @@ FOR UPDATE OF billing_metadata, organization_metadata
 `
 
 type GetPaygActivationStateRow struct {
-	BillingMetadataID     uuid.UUID
-	StripeCustomerID      pgtype.Text
-	StripeSubscriptionID  pgtype.Text
-	BillingCycleAnchorDay int32
-	OrganizationName      string
-	OrganizationSlug      string
-	GramAccountType       string
-	Whitelisted           bool
+	BillingMetadataID        uuid.UUID
+	StripeCustomerID         pgtype.Text
+	StripeSubscriptionID     pgtype.Text
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	BillingCycleAnchorDay    int32
+	OrganizationName         string
+	OrganizationSlug         string
+	GramAccountType          string
+	Whitelisted              bool
 }
 
 func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID string) (GetPaygActivationStateRow, error) {
@@ -235,6 +240,7 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 		&i.BillingMetadataID,
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
 		&i.BillingCycleAnchorDay,
 		&i.OrganizationName,
 		&i.OrganizationSlug,

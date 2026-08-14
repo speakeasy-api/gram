@@ -241,6 +241,8 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	anchorDay := conv.SafeInt32(checkout.BillingCycleAnchor.UTC().Day())
 	alreadyActivated := state.StripeSubscriptionID.Valid &&
 		state.StripeSubscriptionID.String == event.SubscriptionID &&
+		state.StripeBillingCycleAnchor.Valid &&
+		state.StripeBillingCycleAnchor.Time.Equal(checkout.BillingCycleAnchor) &&
 		state.BillingCycleAnchorDay == anchorDay &&
 		state.GramAccountType == "payg" && state.Whitelisted
 	if alreadyActivated {
@@ -248,10 +250,11 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	}
 
 	if _, err := q.ActivatePaygBillingMetadata(ctx, repo.ActivatePaygBillingMetadataParams{
-		StripeSubscriptionID:  pgtype.Text{String: event.SubscriptionID, Valid: true},
-		BillingCycleAnchorDay: anchorDay,
-		OrganizationID:        organizationID,
-		StripeCustomerID:      pgtype.Text{String: event.CustomerID, Valid: true},
+		StripeSubscriptionID:     pgtype.Text{String: event.SubscriptionID, Valid: true},
+		StripeBillingCycleAnchor: pgtype.Timestamptz{Time: checkout.BillingCycleAnchor.UTC(), Valid: true},
+		BillingCycleAnchorDay:    anchorDay,
+		OrganizationID:           organizationID,
+		StripeCustomerID:         pgtype.Text{String: event.CustomerID, Valid: true},
 	}); err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("store PAYG Stripe subscription: %w", err)
 	}
