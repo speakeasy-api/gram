@@ -55381,6 +55381,36 @@ components:
         - display_name
         - created_at
         - updated_at
+    AdminOrganizationStats:
+      type: object
+      properties:
+        created_last_7_days:
+          type: integer
+          description: Organizations created in the last 7 days, whatever their current status.
+          format: int64
+        disabled:
+          type: integer
+          description: Organizations with disabled_at set.
+          format: int64
+        disabled_last_7_days:
+          type: integer
+          description: Organizations disabled in the last 7 days.
+          format: int64
+        total:
+          type: integer
+          description: Every organization on the platform, disabled ones included.
+          format: int64
+        trials_ending_soon:
+          type: integer
+          description: Organizations whose trial_state is ending_soon.
+          format: int64
+      description: Platform-wide organization counts surfaced above the admin organizations list.
+      required:
+        - total
+        - created_last_7_days
+        - trials_ending_soon
+        - disabled
+        - disabled_last_7_days
     AdminProject:
       type: object
       properties:

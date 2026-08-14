@@ -489,3 +489,18 @@ func BuildRearmTrialPayload(adminRearmTrialBody string, adminRearmTrialAdminSess
 
 	return v, nil
 }
+
+// BuildGetOrganizationStatsPayload builds the payload for the admin
+// getOrganizationStats endpoint from CLI flags.
+func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken string) (*admin.GetOrganizationStatsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationStatsAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationStatsAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationStatsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

@@ -58,6 +58,11 @@ type Service interface {
 	// trial a fresh run of the given length counted from now. Only a demoted trial
 	// can be re-armed; one that has converted or is already running is rejected.
 	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
+	// Returns platform-wide organization counts for the strip above the
+	// organizations list. Every figure counts the whole platform: none of them
+	// narrows to the caller's list filters, so the strip does not move when an
+	// operator filters.
+	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -80,7 +85,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial"}
+var MethodNames = [15]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -153,6 +158,21 @@ type AdminOrganizationMember struct {
 	LastLogin *string
 	CreatedAt string
 	UpdatedAt string
+}
+
+// AdminOrganizationStats is the result type of the admin service
+// getOrganizationStats method.
+type AdminOrganizationStats struct {
+	// Every organization on the platform, disabled ones included.
+	Total int64
+	// Organizations created in the last 7 days, whatever their current status.
+	CreatedLast7Days int64
+	// Organizations whose trial_state is ending_soon.
+	TrialsEndingSoon int64
+	// Organizations with disabled_at set.
+	Disabled int64
+	// Organizations disabled in the last 7 days.
+	DisabledLast7Days int64
 }
 
 // Project summary surfaced to admin operators.
@@ -263,6 +283,12 @@ type GetOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID or slug.
 	IDOrSlug string
+}
+
+// GetOrganizationStatsPayload is the payload type of the admin service
+// getOrganizationStats method.
+type GetOrganizationStatsPayload struct {
+	AdminSessionToken *string
 }
 
 // GetProjectPayload is the payload type of the admin service getProject method.

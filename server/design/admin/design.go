@@ -136,6 +136,17 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
+var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
+	Description("Platform-wide organization counts surfaced above the admin organizations list.")
+	Required("total", "created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
+
+	Attribute("total", Int64, "Every organization on the platform, disabled ones included.")
+	Attribute("created_last_7_days", Int64, "Organizations created in the last 7 days, whatever their current status.")
+	Attribute("trials_ending_soon", Int64, "Organizations whose trial_state is ending_soon.")
+	Attribute("disabled", Int64, "Organizations with disabled_at set.")
+	Attribute("disabled_last_7_days", Int64, "Organizations disabled in the last 7 days.")
+})
+
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
 	Security(security.AdminAuth)
@@ -529,5 +540,23 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminRearmTrial")
+	})
+
+	Method("getOrganizationStats", func() {
+		Description("Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+		})
+
+		Result(AdminOrganizationStats)
+
+		HTTP(func() {
+			GET("/admin/organizations.stats")
+
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminGetOrganizationStats")
 	})
 })

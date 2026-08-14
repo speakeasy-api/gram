@@ -30,6 +30,7 @@ type Endpoints struct {
 	ExtendTrial              goa.Endpoint
 	CreateOrganization       goa.Endpoint
 	RearmTrial               goa.Endpoint
+	GetOrganizationStats     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -51,6 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ExtendTrial:              NewExtendTrialEndpoint(s, a.APIKeyAuth),
 		CreateOrganization:       NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
 		RearmTrial:               NewRearmTrialEndpoint(s, a.APIKeyAuth),
+		GetOrganizationStats:     NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -70,6 +72,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ExtendTrial = m(e.ExtendTrial)
 	e.CreateOrganization = m(e.CreateOrganization)
 	e.RearmTrial = m(e.RearmTrial)
+	e.GetOrganizationStats = m(e.GetOrganizationStats)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -349,5 +352,28 @@ func NewRearmTrialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.RearmTrial(ctx, p)
+	}
+}
+
+// NewGetOrganizationStatsEndpoint returns an endpoint function that calls the
+// method "getOrganizationStats" of service "admin".
+func NewGetOrganizationStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationStatsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationStats(ctx, p)
 	}
 }

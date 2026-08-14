@@ -76,3 +76,8 @@ func CreateOrganizationAdminPath() string {
 func RearmTrialAdminPath() string {
 	return "/admin/trial.rearm"
 }
+
+// GetOrganizationStatsAdminPath returns the URL path to the admin service getOrganizationStats HTTP endpoint.
+func GetOrganizationStatsAdminPath() string {
+	return "/admin/organizations.stats"
+}
