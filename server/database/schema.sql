@@ -6425,8 +6425,11 @@ WHERE connection_id IS NOT NULL
     'read_only_cohort'
   );
 
+-- Lifecycle facts are current-connection evidence, so their idempotency grain
+-- includes connection_generation. A reauthorized connection must record its own
+-- registration, readiness, and distribution milestones.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_attempt_target_key
-ON platform_mcp_onboarding_milestones (organization_id, milestone, project_id, mcp_key, attempt_id) NULLS NOT DISTINCT
+ON platform_mcp_onboarding_milestones (organization_id, milestone, project_id, mcp_key, attempt_id, connection_generation) NULLS NOT DISTINCT
 WHERE attempt_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_first_value_key
