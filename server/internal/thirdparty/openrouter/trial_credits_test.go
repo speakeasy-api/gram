@@ -168,6 +168,7 @@ func insertTrial(t *testing.T, conn *pgxpool.Pool, orgID string, endsAt time.Tim
 
 	require.NoError(t, trialsRepo.New(conn).InsertTrialFixture(t.Context(), trialsRepo.InsertTrialFixtureParams{
 		OrganizationID: orgID,
+		Tier:           "enterprise",
 		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-24 * time.Hour)),
 		EndsAt:         conv.ToPGTimestamptz(endsAt),
 		ConvertedAt:    conv.PtrToPGTimestamptz(convertedAt),

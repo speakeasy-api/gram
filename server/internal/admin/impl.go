@@ -24,6 +24,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -37,7 +38,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -54,6 +58,25 @@ type Service struct {
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSOrganizationCreator
+
+	openRouter TrialKeyReviver
+
+	audit *audit.Logger
+}
+
+// TrialKeyReviver is the one method of openrouter.Provisioner a re-arm needs.
+type TrialKeyReviver interface {
+	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+}
+
+// ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
+var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+
+// TrialKeysUnavailable lets the admin server boot without OpenRouter.
+type TrialKeysUnavailable struct{}
+
+func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrKeyRevivalUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -68,6 +91,7 @@ func NewService(
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
 	workosClient orgprovision.WorkOSOrganizationCreator,
+	openRouter TrialKeyReviver,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -89,6 +113,8 @@ func NewService(
 		verifier:       NewVerifier(logger, sessionStore, oidcClient),
 		allowedOrigins: allowedOrigins,
 		workos:         workosClient,
+		openRouter:     openRouter,
+		audit:          audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -424,8 +450,14 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	accountTypes, disabledStates := listOrganizationsFilters(payload)
 
+	// Trimmed once for both queries. A pasted id commonly arrives with the
+	// newline that ended the line it was copied from, and no arm matches through
+	// it; the id arms because they compare exactly, the name and slug arms
+	// because the whitespace lands inside the pattern.
+	searchTerm := conv.PtrToPGTextTrimmed(payload.Q)
+
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
-		Q:              conv.PtrToPGText(payload.Q),
+		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
@@ -443,7 +475,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// a count, and in cursor mode the page query has already discarded everything
 	// before the cursor.
 	total, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{
-		Q:              conv.PtrToPGText(payload.Q),
+		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
@@ -761,6 +793,190 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	}
 
 	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+}
+
+// RearmTrial puts a demoted enterprise trial back on.
+//
+// The keys come back up before the restore commits, deliberately not mirroring
+// the demotion's ordering: a partial failure must leave the organization
+// demoted with live keys, never a running trial with dead ones.
+func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload) (*gen.AdminOrganization, error) {
+	// Defence in depth against a non-HTTP caller: the design's bounds are
+	// generated into the request decoder alone. Keep this on the wide
+	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
+	if payload.Days < constants.MinTrialRearmDays || payload.Days > constants.MaxTrialRearmDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialRearmDays, constants.MaxTrialRearmDays)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	trials := trialsRepo.New(tx)
+
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
+		OrganizationID: payload.ID,
+		RearmForDays:   int32(payload.Days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, s.rejectRearm(ctx, logger, payload.ID)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+	}
+
+	uncapped, err := s.reviveTrialKeys(ctx, logger, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
+		OrganizationID: payload.ID,
+		AccountType:    rearmed.Tier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
+	}
+
+	actor, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
+		OrganizationID: payload.ID,
+		Actor:          actor,
+		// The customer reads this feed, so the entry carries the team label
+		// rather than the operator's email. adminActor says why.
+		ActorDisplayName: conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		ActorSlug:        nil,
+		OrganizationName: organization.Name,
+		OrganizationSlug: organization.Slug,
+		AccountType:      rearmed.Tier,
+		TrialEndsAt:      rearmed.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
+	}
+
+	s.recapRevivedKeys(ctx, logger, payload.ID, uncapped)
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "re-armed enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
+}
+
+// rejectRearm turns a zero-row re-arm into the error the operator should act
+// on: a pasted wrong id must report a missing organization, not a trial state.
+func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	switch {
+	case errors.Is(lookupErr, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case lookupErr != nil:
+		// Falling through would report a trial state we never managed to read.
+		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unrearmed trial").LogError(ctx, logger)
+	}
+
+	// Which of the three reasons applies is not the operator's business.
+	return oops.E(oops.CodeConflict, nil, "organization has no demoted enterprise trial to re-arm")
+}
+
+// reviveTrialKeys brings every platform key the organization holds back up, and
+// returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
+//
+// Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
+// DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
+//
+// It runs on the pool, not the caller's transaction, so a revived key survives
+// a later rollback. That is the safe direction.
+func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string) ([]openrouter.KeyType, error) {
+	keys := orrepo.New(s.db)
+
+	var uncapped []openrouter.KeyType
+
+	for _, keyType := range openrouter.AllKeyTypes {
+		row, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: organizationID,
+			KeyType:        string(keyType),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
+		}
+
+		if !row.Disabled {
+			continue
+		}
+
+		// The ceiling recorded on the row, not the policy default: a trial key
+		// is minted well below that default.
+		//
+		// A zero becomes a nil limit, which RefreshAPIKeyLimit resolves on the
+		// pool: pre-commit that reads free. recapRevivedKeys fixes those after.
+		if row.MonthlyCredits == 0 {
+			uncapped = append(uncapped, keyType)
+		}
+		limit := conv.PtrEmpty(int(row.MonthlyCredits))
+		_, err = s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+		switch {
+		case errors.Is(err, ErrKeyRevivalUnavailable):
+			// CodeInvalid and not CodeGatewayError: the admin app trusts a
+			// response body only below 500, and this names a deployment setting
+			// to fix rather than a call to retry.
+			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
+		case err != nil:
+			// OpenRouter refusing: the operator's action is to retry, not to
+			// read a stack trace.
+			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+		}
+	}
+
+	return uncapped, nil
+}
+
+// recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
+// could only revive at the free-tier one. It must run after the commit, because
+// RefreshAPIKeyLimit resolves a nil limit from the pool.
+//
+// A failure is logged and swallowed: the re-arm is already durable, so an error
+// here would report an armed trial as unarmed.
+func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) {
+	for _, keyType := range keyTypes {
+		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, nil); err != nil {
+			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
+				attr.SlogError(err),
+				attr.SlogOpenRouterKeyType(string(keyType)),
+			)
+		}
+	}
+}
+
+// adminActor identifies the operator behind an admin-app write. An admin session
+// carries an OIDC subject rather than a Gram user id, and a call without one
+// records the system actor the demotion sweeper uses.
+//
+// The returned email is for the structured log only, never the entry's display
+// name: these entries surface in the customer's own feed, and auditapi's
+// read-side mask cannot recognise an OIDC subject as staff.
+func adminActor(ctx context.Context) (actor urn.Principal, operatorEmail *string) {
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.OIDCSubject == "" {
+		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), nil
+	}
+
+	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.OIDCSubject), conv.PtrEmpty(authCtx.Email)
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.

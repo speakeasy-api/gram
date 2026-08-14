@@ -326,7 +326,9 @@ func TestListOrganizations_FullPageWithFilterEndsTheWalk(t *testing.T) {
 }
 
 type trialFixture struct {
-	orgID       string
+	orgID string
+	// tier defaults to enterprise, the only tier the application writes today.
+	tier        string
 	endsAt      time.Time
 	convertedAt *time.Time
 	demotedAt   *time.Time
@@ -335,8 +337,13 @@ type trialFixture struct {
 func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFixture) {
 	t.Helper()
 
+	if f.tier == "" {
+		f.tier = "enterprise"
+	}
+
 	err := trialsRepo.New(conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
 		OrganizationID: f.orgID,
+		Tier:           f.tier,
 		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-30 * 24 * time.Hour)),
 		EndsAt:         conv.ToPGTimestamptz(f.endsAt),
 		ConvertedAt:    conv.PtrToPGTimestamptz(f.convertedAt),
@@ -433,7 +440,7 @@ type searchByIDCase struct {
 }
 
 // requireSearchMatches asserts the exact set of organizations a payload returns, ignoring order.
-func requireSearchMatches(t *testing.T, ctx context.Context, svc *Service, payload *gen.ListOrganizationsPayload, wantIDs []string, label string) {
+func requireSearchMatches(t *testing.T, ctx context.Context, svc *Service, payload *gen.ListOrganizationsPayload, wantIDs []string, label string) *gen.AdminListOrganizationsResult {
 	t.Helper()
 
 	res, err := svc.ListOrganizations(ctx, payload)
@@ -444,6 +451,22 @@ func requireSearchMatches(t *testing.T, ctx context.Context, svc *Service, paylo
 		got[i] = o.ID
 	}
 	require.ElementsMatch(t, wantIDs, got, "organizations matched by %s", label)
+
+	return res
+}
+
+// requireSearchMatchesWithTotal adds the pager total to requireSearchMatches.
+// The count query carries its own copy of the filter arms, so a page that agrees
+// with the fixtures while the total disagrees is a real failure this catches and
+// the rows alone cannot. Only for payloads with no cursor: the count query has no
+// cursor predicate, so its total counts past one deliberately.
+func requireSearchMatchesWithTotal(t *testing.T, ctx context.Context, svc *Service, payload *gen.ListOrganizationsPayload, wantIDs []string, label string) {
+	t.Helper()
+
+	require.Nil(t, payload.Cursor, "total assertion is meaningless with a cursor, for %s", label)
+
+	res := requireSearchMatches(t, ctx, svc, payload, wantIDs, label)
+	require.Equal(t, int64(len(wantIDs)), res.Total, "total matched by %s", label)
 }
 
 func TestListOrganizations_SearchByID(t *testing.T) {
@@ -479,12 +502,12 @@ func TestListOrganizations_SearchByID(t *testing.T) {
 	}
 }
 
-func TestListOrganizations_SearchByIDIsCaseSensitive(t *testing.T) {
+func TestListOrganizations_SearchByIDIgnoresCase(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
 
-	// Both id spaces are opaque and case significant, and a real WorkOS id embeds an uppercase ULID.
+	// A real WorkOS id embeds an uppercase ULID, and a log pipeline hands the operator a lowercased copy of it.
 	const (
 		mixedID       = "org_search_id_MixedCase"
 		mixedWorkosID = "org_workos_placeholder_MixedCase"
@@ -493,59 +516,64 @@ func TestListOrganizations_SearchByIDIsCaseSensitive(t *testing.T) {
 	workosID := mixedWorkosID
 	seedOrg(t, ctx, conn, orgFixture{id: mixedID, name: "Mixed Case Holdings", slug: "mixed-case-holdings", workosID: &workosID, whitelisted: true})
 
+	// Lowering only the column matches the folded form and misses the other two;
+	// lowering only the term matches nothing but the folded form either.
 	cases := []searchByIDCase{
 		{name: "organization id at its own casing", q: mixedID, wantIDs: []string{mixedID}},
-		{name: "organization id case folded", q: strings.ToLower(mixedID), wantIDs: nil},
+		{name: "organization id case folded", q: strings.ToLower(mixedID), wantIDs: []string{mixedID}},
+		{name: "organization id upper cased", q: strings.ToUpper(mixedID), wantIDs: []string{mixedID}},
 		{name: "workos id at its own casing", q: mixedWorkosID, wantIDs: []string{mixedID}},
-		{name: "workos id case folded", q: strings.ToLower(mixedWorkosID), wantIDs: nil},
+		{name: "workos id case folded", q: strings.ToLower(mixedWorkosID), wantIDs: []string{mixedID}},
+		{name: "workos id upper cased", q: strings.ToUpper(mixedWorkosID), wantIDs: []string{mixedID}},
 
-		// The contrast that makes the two case-folded rows above meaningful: name and slug still ignore casing.
+		// Case folding is all the id arms gained: they still compare whole and exactly.
+		{name: "an id differing by more than its casing", q: "org_search_id_MixedCases", wantIDs: nil},
+		{name: "fragment of an organization id, case folded", q: "search_id_mixedcase", wantIDs: nil},
+		{name: "fragment of a workos id, case folded", q: "placeholder_mixedcase", wantIDs: nil},
+
 		{name: "name case folded", q: "mixed case holdings", wantIDs: []string{mixedID}},
 		{name: "slug upper cased", q: "MIXED-CASE-HOLDINGS", wantIDs: []string{mixedID}},
 	}
 
 	for _, c := range cases {
-		requireSearchMatches(t, ctx, svc, &gen.ListOrganizationsPayload{Q: conv.PtrEmpty(c.q)}, c.wantIDs, c.name)
+		requireSearchMatchesWithTotal(t, ctx, svc, &gen.ListOrganizationsPayload{Q: conv.PtrEmpty(c.q)}, c.wantIDs, c.name)
 	}
 }
 
 type searchFilterCase struct {
-	name            string
-	q               string
-	includeDisabled bool
-	accountType     string
-	cursor          string
-	wantIDs         []string
+	name        string
+	q           string
+	accountType string
+	trialStates []string
+	cursor      string
+	wantIDs     []string
 }
 
-// An id match is one arm of the q group, not an escape from the group: it still meets every other filter.
+// An id match escapes the disabled filter and no other: it is still one arm of
+// the q group as far as every remaining filter is concerned. TestListOrganizations_SearchByIDFindsADisabledOrganization
+// covers the one filter it does escape.
 func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
 
 	const (
-		disabledID = "org_search_id_disabled"
-		proID      = "org_search_id_pro"
-		cursorID   = "org_search_id_cursor"
-
-		disabledWorkosID = "org_workos_placeholder_disabled"
+		proID    = "org_search_id_pro"
+		cursorID = "org_search_id_cursor"
+		trialID  = "org_search_id_trial"
 	)
 
-	disabledAt := time.Now().UTC().Add(-24 * time.Hour)
-	workosID := disabledWorkosID
-	seedOrg(t, ctx, conn, orgFixture{id: disabledID, name: "Disabled Holdings", slug: "disabled-holdings", workosID: &workosID, whitelisted: true, disabledAt: &disabledAt})
 	seedOrg(t, ctx, conn, orgFixture{id: proID, name: "Pro Holdings", slug: "pro-holdings", accountType: "pro", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: cursorID, name: "Cursor Holdings", slug: "cursor-holdings", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: trialID, name: "Trial Holdings", slug: "trial-holdings", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: trialID, endsAt: time.Now().UTC().Add(30 * 24 * time.Hour)})
 
 	cases := []searchFilterCase{
-		{name: "disabled organization by id, disabled excluded", q: disabledID, wantIDs: nil},
-		{name: "disabled organization by id, disabled included", q: disabledID, includeDisabled: true, wantIDs: []string{disabledID}},
-		{name: "disabled organization by workos id, disabled excluded", q: disabledWorkosID, wantIDs: nil},
-		{name: "disabled organization by workos id, disabled included", q: disabledWorkosID, includeDisabled: true, wantIDs: []string{disabledID}},
-
 		{name: "pro organization by id, filtered to free", q: proID, accountType: "free", wantIDs: nil},
 		{name: "pro organization by id, filtered to pro", q: proID, accountType: "pro", wantIDs: []string{proID}},
+
+		{name: "running trial by id, filtered to expired", q: trialID, trialStates: []string{"expired"}, wantIDs: nil},
+		{name: "running trial by id, filtered to running", q: trialID, trialStates: []string{"running"}, wantIDs: []string{trialID}},
 
 		{name: "organization by id, at or before the cursor", q: cursorID, cursor: cursorID, wantIDs: nil},
 		{name: "organization by id, after the cursor", q: cursorID, cursor: "org_search_id_a", wantIDs: []string{cursorID}},
@@ -553,12 +581,158 @@ func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 
 	for _, c := range cases {
 		payload := &gen.ListOrganizationsPayload{
+			Q:           conv.PtrEmpty(c.q),
+			AccountType: conv.PtrEmpty(c.accountType),
+			TrialStates: c.trialStates,
+			Cursor:      conv.PtrEmpty(c.cursor),
+		}
+
+		// The count query has no cursor predicate, so only the cursor-free cases
+		// can hold it to a total. The rest must, or the account type and trial
+		// state arms are checked in the page query alone.
+		if c.cursor != "" {
+			requireSearchMatches(t, ctx, svc, payload, c.wantIDs, c.name)
+			continue
+		}
+
+		requireSearchMatchesWithTotal(t, ctx, svc, payload, c.wantIDs, c.name)
+	}
+}
+
+type searchDisabledCase struct {
+	name            string
+	q               string
+	includeDisabled bool
+	disabledStates  []string
+	wantIDs         []string
+}
+
+// Pasting the id of a suspended organization is a leading reason to paste an id
+// at all, so an exact id match reaches one whatever the disabled filter says.
+// Only the id arms escape it; the name and slug arms do not.
+func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// Both ids are mixed case: the bypass carries its own copy of the id arms, so
+	// it needs its own proof that each folds case rather than borrowing the one
+	// TestListOrganizations_SearchByIDIgnoresCase gives an active organization.
+	const (
+		disabledID = "org_search_id_Disabled"
+		activeID   = "org_search_id_active"
+
+		disabledWorkosID = "org_workos_placeholder_Disabled"
+	)
+
+	disabledAt := time.Now().UTC().Add(-24 * time.Hour)
+	workosID := disabledWorkosID
+	seedOrg(t, ctx, conn, orgFixture{id: disabledID, name: "Disabled Holdings", slug: "disabled-holdings", workosID: &workosID, whitelisted: true, disabledAt: &disabledAt})
+	seedOrg(t, ctx, conn, orgFixture{id: activeID, name: "Active Holdings", slug: "active-holdings", whitelisted: true})
+
+	cases := []searchDisabledCase{
+		{name: "disabled organization by id, disabled excluded", q: disabledID, wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, disabled included", q: disabledID, includeDisabled: true, wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, disabled_states active", q: disabledID, disabledStates: []string{"active"}, wantIDs: []string{disabledID}},
+		{name: "disabled organization by lowercased id, disabled excluded", q: strings.ToLower(disabledID), wantIDs: []string{disabledID}},
+		{name: "disabled organization by workos id, disabled excluded", q: disabledWorkosID, wantIDs: []string{disabledID}},
+		{name: "disabled organization by lowercased workos id, disabled excluded", q: strings.ToLower(disabledWorkosID), wantIDs: []string{disabledID}},
+
+		// The bypass is the two id arms, not the whole q group.
+		{name: "disabled organization by name, disabled excluded", q: "Disabled Holdings", wantIDs: nil},
+		{name: "disabled organization by slug, disabled excluded", q: "disabled-holdings", wantIDs: nil},
+		{name: "disabled organization by name, disabled included", q: "Disabled Holdings", includeDisabled: true, wantIDs: []string{disabledID}},
+
+		// Symmetric: the id arms escape the filter rather than widening it to disabled rows.
+		{name: "active organization by id, disabled_states disabled", q: activeID, disabledStates: []string{"disabled"}, wantIDs: []string{activeID}},
+		{name: "active organization by name, disabled_states disabled", q: "Active Holdings", disabledStates: []string{"disabled"}, wantIDs: nil},
+	}
+
+	for _, c := range cases {
+		payload := &gen.ListOrganizationsPayload{
 			Q:               conv.PtrEmpty(c.q),
 			IncludeDisabled: conv.PtrEmpty(c.includeDisabled),
-			AccountType:     conv.PtrEmpty(c.accountType),
-			Cursor:          conv.PtrEmpty(c.cursor),
+			DisabledStates:  c.disabledStates,
 		}
-		requireSearchMatches(t, ctx, svc, payload, c.wantIDs, c.name)
+		requireSearchMatchesWithTotal(t, ctx, svc, payload, c.wantIDs, c.name)
+	}
+}
+
+// Every id in both id spaces contains underscores, and _ is a single-character
+// LIKE wildcard, so an unescaped pasted id draws incidental matches out of the
+// name and slug arms.
+func TestListOrganizations_SearchEscapesLikeMetacharacters(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const (
+		pastedID     = "org_01_alpha"
+		incidentalID = "org_escape_incidental"
+		percentID    = "org_escape_percent"
+		nameDecoyID  = "org_escape_name_decoy"
+		slugDecoyID  = "org_escape_slug_decoy"
+		backslashID  = "org_escape_backslash"
+	)
+
+	seedOrg(t, ctx, conn, orgFixture{id: pastedID, name: "Alpha Systems", slug: "alpha-systems", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: incidentalID, name: "Acme org 01 alpha", slug: "acme-org-01-alpha", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: percentID, name: "Percent% Holdings", slug: "under_score-co", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: nameDecoyID, name: "PercentX Holdings", slug: "name-decoy-co", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: slugDecoyID, name: "Slug Decoy", slug: "underXscore-co", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: backslashID, name: `Back\slash_Co`, slug: "back-slash-co", whitelisted: true})
+
+	cases := []searchByIDCase{
+		// The motivating case: unescaped, this id also matches the other organization's name and slug.
+		{name: "a pasted id draws no incidental match", q: pastedID, wantIDs: []string{pastedID}},
+
+		// One decoy per arm, so escaping the name arm alone or the slug arm alone still fails.
+		{name: "percent in the name arm is literal", q: "Percent% Holdings", wantIDs: []string{percentID}},
+		{name: "underscore in the slug arm is literal", q: "under_score-co", wantIDs: []string{percentID}},
+
+		// Backslash is the escape character itself, so it has to be escaped before the two wildcards.
+		{name: "backslash in the term is literal", q: `Back\slash_Co`, wantIDs: []string{backslashID}},
+
+		{name: "a substring still matches", q: "Holdings", wantIDs: []string{percentID, nameDecoyID}},
+	}
+
+	for _, c := range cases {
+		requireSearchMatchesWithTotal(t, ctx, svc, &gen.ListOrganizationsPayload{Q: conv.PtrEmpty(c.q)}, c.wantIDs, c.name)
+	}
+}
+
+// A pasted id commonly arrives with the newline that ended the line it was
+// copied from. The dashboard trims before it asks, but a direct API caller does not.
+func TestListOrganizations_SearchTermIsTrimmed(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const (
+		trimID = "org_search_trim_alpha"
+		// Matches none of the terms below, so only a request carrying no term at
+		// all returns it alongside the first. Without it the whitespace-only case
+		// cannot tell a dropped term from a term that still happened to match.
+		bystanderID = "org_search_trim_bravo"
+	)
+
+	workosID := "org_workos_placeholder_trim"
+	seedOrg(t, ctx, conn, orgFixture{id: trimID, name: "Trim Holdings", slug: "trim-holdings", workosID: &workosID, whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: bystanderID, name: "Bystander Systems", slug: "bystander-systems", whitelisted: true})
+
+	cases := []searchByIDCase{
+		{name: "leading space", q: " " + trimID, wantIDs: []string{trimID}},
+		{name: "trailing newline", q: trimID + "\n", wantIDs: []string{trimID}},
+		{name: "trailing space", q: trimID + " ", wantIDs: []string{trimID}},
+		{name: "surrounded by mixed whitespace", q: "\t " + trimID + " \r\n", wantIDs: []string{trimID}},
+		{name: "workos id with a trailing newline", q: workosID + "\n", wantIDs: []string{trimID}},
+		{name: "name with a trailing newline", q: "Trim Holdings\n", wantIDs: []string{trimID}},
+		// Whitespace alone is no search term at all rather than a term nothing holds.
+		{name: "whitespace only", q: " \n\t ", wantIDs: []string{trimID, bystanderID}},
+	}
+
+	for _, c := range cases {
+		requireSearchMatchesWithTotal(t, ctx, svc, &gen.ListOrganizationsPayload{Q: conv.PtrEmpty(c.q)}, c.wantIDs, c.name)
 	}
 }
 
