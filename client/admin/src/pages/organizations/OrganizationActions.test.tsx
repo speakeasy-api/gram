@@ -363,6 +363,41 @@ describe("the actions prop", () => {
   });
 });
 
+describe("the button styling prop", () => {
+  it("leaves every other surface's buttons stock", async () => {
+    // The trial callout asks for a toned control because it is a toned panel.
+    // The row menu, the peek panel footer and the record header draw on the
+    // page's own background, where that treatment would be a button with no
+    // fill and a border belonging to a warning nothing on screen gives.
+    await renderFooter();
+
+    for (const button of screen.getAllByRole("button")) {
+      const classes = button.className.split(" ");
+      expect(classes).toContain("bg-background");
+      expect(classes).not.toContain("bg-transparent");
+      expect(button.className).not.toMatch(/border-\[hsl/);
+    }
+  });
+
+  it("draws the classes the caller asks for", async () => {
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions
+          org={ORG}
+          layout="buttons"
+          buttonClassName="bg-transparent"
+        />
+      </WriteReportProvider>,
+    );
+
+    // Both of them: a bar styles the bar, not whichever action happens to be
+    // first.
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.className.split(" ")).toContain("bg-transparent");
+    }
+  });
+});
+
 describe("the extend trial dialog", () => {
   it("starts on the trial length the rest of the system assumes", async () => {
     await renderMenu();

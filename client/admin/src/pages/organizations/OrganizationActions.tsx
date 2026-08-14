@@ -103,6 +103,7 @@ export function OrganizationActions({
   org,
   layout,
   actions = "all",
+  buttonClassName,
 }: {
   org: AdminOrganization;
   layout: "menu" | "buttons";
@@ -110,6 +111,10 @@ export function OrganizationActions({
   // bars at once: lifecycle in the header, the trial's own resolution in the
   // callout beside the deadline it acts on. `all` is every other surface.
   actions?: "all" | "lifecycle" | "trial";
+  // For a surface that is not the page's own background. A stock outline
+  // button brings the page's border and fill with it, which inside a toned
+  // panel reads as a control belonging to something else.
+  buttonClassName?: string;
 }): JSX.Element {
   const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
@@ -262,6 +267,7 @@ export function OrganizationActions({
               size="xs"
               aria-label={`Re-enable ${org.name}`}
               aria-busy={busy}
+              className={buttonClassName}
               onClick={runEnable}
             >
               Re-enable
@@ -272,6 +278,7 @@ export function OrganizationActions({
               size="xs"
               aria-label={`Disable ${org.name}`}
               aria-busy={busy}
+              className={buttonClassName}
               onClick={(event) => openDialog("disable", event.currentTarget)}
             >
               Disable
@@ -283,6 +290,7 @@ export function OrganizationActions({
             size="xs"
             aria-label={`Extend trial for ${org.name}`}
             aria-busy={busy}
+            className={buttonClassName}
             onClick={(event) => openDialog("extend", event.currentTarget)}
           >
             Extend trial

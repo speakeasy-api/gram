@@ -2,6 +2,7 @@ import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TRIAL_STATES } from "@/lib/gramAdminApi";
+import { tone } from "@/lib/tone";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { fmtDateShort } from "@/lib/utils";
 import { anOrganization } from "@/test/fixtures";
@@ -116,6 +117,54 @@ describe("TrialCallout", () => {
     const callout = screen.getByRole("status").className.split(" ");
     expect(callout).toContain("justify-between");
     expect(callout).toContain("flex-wrap");
+  });
+
+  it("draws in the warning tone rather than the page's own grey", async () => {
+    await renderWithApp(
+      <TrialCallout
+        org={anOrganization({
+          trial_state: "running",
+          trial_ends_at: TRIAL_ENDS_AT,
+        })}
+      />,
+    );
+
+    // happy-dom lays nothing out and computes no colour, so the class is the
+    // only account of the tone available here. Every class of the tone, not the
+    // string: `cn` may drop one against the layout classes beside it.
+    const classes = screen.getByRole("status").className.split(" ");
+    expect(classes).toEqual(expect.arrayContaining(tone.warning.split(" ")));
+    // The state the design's notes say the admin must not miss. In the muted
+    // grey it read as one more panel.
+    expect(classes).not.toContain("bg-muted/30");
+  });
+
+  it("draws its action as a control of the same tone, not the page's own", async () => {
+    await renderWithApp(
+      <TrialCallout
+        org={anOrganization({
+          trial_state: "running",
+          trial_ends_at: TRIAL_ENDS_AT,
+        })}
+      />,
+    );
+
+    const classes = screen.getByRole("button").className.split(" ");
+    // The tone's border, taken from the tone itself rather than written out a
+    // second time.
+    expect(classes).toEqual(
+      expect.arrayContaining(
+        tone.warning.split(" ").filter((c) => c.includes("border-[")),
+      ),
+    );
+    // Unfilled, so the callout shows through. A stock outline button brings
+    // the page's own background and shadow into the middle of the panel.
+    expect(classes).toContain("bg-transparent");
+    expect(classes).toContain("shadow-none");
+    expect(classes).not.toContain("bg-background");
+    // The tone's own background is not a button fill either: `cn` has to drop
+    // it, or the control reads as a second panel.
+    expect(classes).not.toContain("bg-[hsl(29_100%_95%)]");
   });
 
   it("offers no extension for a disabled organization, whatever its trial says", async () => {

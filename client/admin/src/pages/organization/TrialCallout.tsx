@@ -1,8 +1,9 @@
 import type { JSX } from "react";
 
 import type { AdminOrganization, TrialState } from "@/lib/gramAdminApi";
+import { tone } from "@/lib/tone";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
-import { fmtDateShort } from "@/lib/utils";
+import { cn, fmtDateShort } from "@/lib/utils";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 
 // Only while the trial is live. This is not a general-purpose banner slot: an
@@ -24,7 +25,10 @@ export function TrialCallout({
   return (
     <div
       role="status"
-      className="border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3"
+      className={cn(
+        tone.warning,
+        "flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3",
+      )}
     >
       <p className="text-sm">
         {org.trial_ends_at ? (
@@ -41,7 +45,20 @@ export function TrialCallout({
           a visible gap where the button is not. The rule about when extend is
           offered lives inside these controls, so the callout does not decide it
           a second time. */}
-      <OrganizationActions org={org} layout="buttons" actions="trial" />
+      <OrganizationActions
+        org={org}
+        layout="buttons"
+        actions="trial"
+        // The tone again rather than colours of its own, which would be the
+        // palette copied out a second time: `cn` keeps its border and drops
+        // its fill, so the control outlines in the tone and shows the callout
+        // through. The hover wash is ours; the drawing gives no hover state.
+        buttonClassName={cn(
+          tone.warning,
+          "bg-transparent text-inherit shadow-none hover:bg-black/5 hover:text-inherit",
+          "dark:bg-transparent dark:text-inherit dark:hover:bg-white/10",
+        )}
+      />
     </div>
   );
 }
