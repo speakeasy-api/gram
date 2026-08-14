@@ -1,4 +1,4 @@
-import { MoreHorizontalIcon } from "lucide-react";
+import { CalendarIcon, MoreHorizontalIcon } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -27,11 +28,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   errorMessage,
   MAX_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
+import { calendarDate, dayISO, dayOf, trialEndDay } from "@/lib/trialDates";
+import { fmtDateShort } from "@/lib/utils";
 
 import {
   canExtendTrial,
@@ -41,10 +49,24 @@ import {
 } from "./rowActions";
 
 // The trial length the rest of the system assumes, so the operator extending a
-// trial by the usual amount types nothing.
+// trial by the usual amount picks nothing.
 const DEFAULT_EXTENSION_DAYS = 14;
 
 const BOUNDS_HINT = `Enter a whole number of days between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}.`;
+
+// The days the server would accept, as the calendar's own range. `undefined`
+// where the record carries no end date to add days to.
+function extensionRange(
+  org: AdminOrganization,
+): { anchor: number; earliest: number; latest: number } | undefined {
+  const anchor = trialEndDay(org.trial_ends_at);
+  if (anchor === undefined) return undefined;
+  return {
+    anchor,
+    earliest: anchor + MIN_TRIAL_EXTENSION_DAYS,
+    latest: anchor + MAX_TRIAL_EXTENSION_DAYS,
+  };
+}
 
 /**
  * How these controls report a write.
@@ -446,14 +468,33 @@ function ExtendTrial({
   onSubmit: (days: number) => void;
 }): JSX.Element {
   const { announce } = useContext(WriteReportContext);
+  // The record's own end date is what the server adds days to, so it is what
+  // the operator picks from. Without one there is no anchor to pick against and
+  // the day count stays: an anchor guessed from today would extend the trial
+  // from a date the server is not holding.
+  const range = extensionRange(org);
   const [days, setDays] = useState(String(DEFAULT_EXTENSION_DAYS));
+  const [endsOn, setEndsOn] = useState<Date | undefined>(
+    () => range && calendarDate(range.anchor + DEFAULT_EXTENSION_DAYS),
+  );
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [rejected, setRejected] = useState(false);
   const fieldID = useId();
   const messageID = useId();
 
+  const hint = range
+    ? `Pick a date between ${fmtDateShort(dayISO(range.earliest))} and ${fmtDateShort(dayISO(range.latest))}.`
+    : BOUNDS_HINT;
+
+  // What the picked date is worth as the request the server takes. NaN where
+  // nothing is picked, so the guard below refuses it rather than sending it.
+  const picked = endsOn && range ? dayOf(endsOn) - range.anchor : Number.NaN;
+
   const submit = (event: FormEvent): void => {
     event.preventDefault();
-    const parsed = Number(days);
+    // A disabled day is not an enforced value: the calendar can still be left
+    // holding nothing, and the day count has no calendar at all.
+    const parsed = range ? picked : Number(days);
     // The server's own bounds, refused here so a request that cannot succeed
     // never leaves the browser. A whole number, because the interval the
     // server adds is a count of days.
@@ -468,7 +509,7 @@ function ExtendTrial({
       // repeated leaves the DOM untouched and a `role="alert"` announces only
       // what is inserted or changed. The live region alternates a zero-width
       // space, so it speaks every time.
-      announce(`Could not extend the trial for ${org.name}: ${BOUNDS_HINT}`);
+      announce(`Could not extend the trial for ${org.name}: ${hint}`);
       return;
     }
     setRejected(false);
@@ -493,39 +534,94 @@ function ExtendTrial({
             {/* Radix points the dialog's description at this, so the bounds
                 are announced with the title rather than only after a refusal. */}
             <DialogDescription>
-              The days are added to the date the trial ends on now, not to
-              today. {BOUNDS_HINT}
+              {range
+                ? `The trial ends on ${fmtDateShort(org.trial_ends_at)} now. ${hint}`
+                : `The days are added to the date the trial ends on now, not to today. ${hint}`}
             </DialogDescription>
           </DialogHeader>
 
           <div className="my-4 flex items-center gap-2">
             <label htmlFor={fieldID} className="text-sm">
-              Days
+              {range ? "Ends on" : "Days"}
             </label>
-            <Input
-              id={fieldID}
-              type="number"
-              min={MIN_TRIAL_EXTENSION_DAYS}
-              max={MAX_TRIAL_EXTENSION_DAYS}
-              step={1}
-              value={days}
-              disabled={pending}
-              aria-invalid={rejected}
-              // Pointed at whichever message is under the field. Without it a
-              // user who tabs back to the input is told it is invalid and not
-              // what would make it valid: the bounds are in the dialog
-              // description and in the alert, and neither is the field's.
-              aria-describedby={rejected || failure ? messageID : undefined}
-              onChange={(event) => setDays(event.target.value)}
-              className="w-24"
-            />
+            {range ? (
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id={fieldID}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    aria-invalid={rejected}
+                    aria-describedby={
+                      rejected || failure ? messageID : undefined
+                    }
+                  >
+                    <CalendarIcon />
+                    {endsOn
+                      ? fmtDateShort(dayISO(dayOf(endsOn)))
+                      : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-0">
+                  {/* Bounded rather than validated afterwards, so a day the
+                      server would refuse cannot be pressed at all. The months
+                      are bounded too, or the operator can page through years
+                      of days that are all dead. */}
+                  <Calendar
+                    mode="single"
+                    autoFocus
+                    selected={endsOn}
+                    defaultMonth={endsOn}
+                    startMonth={calendarDate(range.earliest)}
+                    endMonth={calendarDate(range.latest)}
+                    disabled={{
+                      before: calendarDate(range.earliest),
+                      after: calendarDate(range.latest),
+                    }}
+                    onSelect={(date) => {
+                      setEndsOn(date);
+                      setCalendarOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <Input
+                id={fieldID}
+                type="number"
+                min={MIN_TRIAL_EXTENSION_DAYS}
+                max={MAX_TRIAL_EXTENSION_DAYS}
+                step={1}
+                value={days}
+                disabled={pending}
+                aria-invalid={rejected}
+                // Pointed at whichever message is under the field. Without it a
+                // user who tabs back to the input is told it is invalid and not
+                // what would make it valid: the bounds are in the dialog
+                // description and in the alert, and neither is the field's.
+                aria-describedby={rejected || failure ? messageID : undefined}
+                onChange={(event) => setDays(event.target.value)}
+                className="w-24"
+              />
+            )}
           </div>
+
+          {/* The operator picks a date and the request sends a count, so the
+              dialog says the date that count reaches. */}
+          {range && endsOn && (
+            <p className="text-muted-foreground text-sm">
+              The trial will end on {fmtDateShort(dayISO(dayOf(endsOn)))},{" "}
+              {dayCount(picked)} later than it does now.
+            </p>
+          )}
 
           {/* One at a time. The bounds refusal is the newer of the two and it
               is about the value now in the field, so a stale server failure
               underneath it would give the operator two reasons and no way to
               tell which one the next press answers. */}
-          {rejected && <Failure id={messageID}>{BOUNDS_HINT}</Failure>}
+          {rejected && <Failure id={messageID}>{hint}</Failure>}
           {!rejected && failure && (
             <Failure id={messageID}>{errorMessage(failure)}</Failure>
           )}
