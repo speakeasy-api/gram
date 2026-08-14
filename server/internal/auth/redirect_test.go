@@ -57,11 +57,6 @@ func TestSafeRedirectPath(t *testing.T) {
 		{name: "same-origin absolute URL, mixed case host", input: "https://APP.example.com/dashboard", want: "/dashboard"},
 		{name: "same-origin absolute URL spelling the default port", input: "https://app.example.com:443/dashboard", want: "/dashboard"},
 
-		// An encoded slash is not a path separator to a browser, and the escaped
-		// form is what goes back out in the Location header, so "/%2F%2Fevil.com"
-		// stays a same-origin path rather than becoming "///evil.com".
-		{name: "encoded slashes stay a path", input: "/%2F%2Fattacker.example.net", want: "/%2F%2Fattacker.example.net"},
-
 		// AIS-428: a backslash after the leading slash is read by browsers as a
 		// second slash, turning the value into a protocol-relative reference.
 		{name: "backslash authority", input: `/\attacker.example.net`, want: ""},
@@ -87,7 +82,9 @@ func TestSafeRedirectPath(t *testing.T) {
 		{name: "control character", input: "/\tdashboard", want: ""},
 
 		// Percent-encoded separators stay encoded, so they cannot re-form an
-		// authority once the browser reads the Location header.
+		// authority once the browser reads the Location header. The guard reads
+		// EscapedPath and the escaped form is what goes back out, so this stays a
+		// same-origin path rather than becoming "///attacker.example.net".
 		{name: "encoded double slash", input: "/%2F%2Fattacker.example.net", want: "/%2F%2Fattacker.example.net"},
 	}
 
