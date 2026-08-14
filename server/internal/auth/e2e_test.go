@@ -1338,7 +1338,7 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 		role, err := accessRepo.New(inst.conn).GetGlobalRoleBySlug(ctx, roleSlug)
 		require.NoError(t, err)
 		roleURN := "role:global:" + role.ID.String()
-		grants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), inst.conn, expectedGramOrgID, roleSlug, roleURN)
+		grants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), inst.conn, expectedGramOrgID, roleURN)
 		require.NoError(t, err)
 		require.Len(t, grants, len(authz.SystemRoleGrants[roleSlug]))
 	}

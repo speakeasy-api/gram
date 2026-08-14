@@ -66,18 +66,16 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 	}
 
 	for _, role := range roleRows {
-		rp, err := newRolePrincipals(role.RoleSlug, role.PrincipalUrn)
+		principal, err := parseRolePrincipalURN(role.PrincipalUrn)
 		if err != nil {
 			return nil, err
 		}
-		for _, principal := range rp.MatchPrincipals {
-			key := principal.String()
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			principals = append(principals, principal)
+		key := principal.String()
+		if _, ok := seen[key]; ok {
+			continue
 		}
+		seen[key] = struct{}{}
+		principals = append(principals, principal)
 	}
 
 	return principals, nil
@@ -139,13 +137,20 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 	return nil
 }
 
-func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
-	rp, err := newRolePrincipals(roleSlug, rolePrincipalURN)
+func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, rolePrincipalURN string) error {
+	principal, err := parseRolePrincipalURN(rolePrincipalURN)
 	if err != nil {
 		return err
 	}
 
-	return rp.deleteAllGrants(ctx, q, orgID)
+	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principal,
+	}); err != nil {
+		return fmt.Errorf("delete grants for %s: %w", principal.Label(), err)
+	}
+
+	return nil
 }
 
 // PatchPrincipalGrants applies exact grant additions and removals for one
@@ -163,7 +168,7 @@ func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, pri
 		return err
 	}
 	q := repo.New(dbtx)
-	if err := deletePrincipalGrants(ctx, q, orgID, []urn.Principal{principal}, removeRows); err != nil {
+	if err := deletePrincipalGrants(ctx, q, orgID, principal, removeRows); err != nil {
 		return err
 	}
 
@@ -182,73 +187,39 @@ func AllUsersPrincipal() urn.Principal {
 	return urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID)
 }
 
-// rolePrincipals owns the canonical write principal and all principals that
-// may still match existing role grants. The WritePrincipal/MatchPrincipals
-// split exists only for the AGE-1954 role-principal migration: new writes use
-// WritePrincipal while reads/deletes still include legacy role:<slug> rows.
-type rolePrincipals struct {
-	Slug            string
-	WritePrincipal  urn.Principal
-	MatchPrincipals []urn.Principal
-}
-
-func loadRolePrincipals(ctx context.Context, dbtx repo.DBTX, orgID, roleSlug, rolePrincipalURN string) (rolePrincipals, error) {
-	if rolePrincipalURN != "" {
-		return newRolePrincipals(roleSlug, rolePrincipalURN)
-	}
-
-	role, err := repo.New(dbtx).GetActiveOrganizationRoleBySlug(ctx, repo.GetActiveOrganizationRoleBySlugParams{
-		OrganizationID: orgID,
-		WorkosSlug:     roleSlug,
-	})
-	if err != nil {
-		return rolePrincipals{}, fmt.Errorf("resolve role principal for %q: %w", roleSlug, err)
-	}
-
-	return newRolePrincipals(roleSlug, role.RoleUrn)
-}
-
-func newRolePrincipals(roleSlug, rolePrincipalURN string) (rolePrincipals, error) {
-	// TODO(AGE-1954): drop legacy role:<slug> principals after the role-principal backfill is complete.
-	writePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	matchPrincipals := make([]urn.Principal, 0, 2)
-
-	if rolePrincipalURN != "" {
-		principal, err := urn.ParsePrincipal(rolePrincipalURN)
-		if err != nil {
-			return rolePrincipals{}, fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
-		}
-		writePrincipal = principal
-		matchPrincipals = append(matchPrincipals, principal)
-	}
-
-	legacyPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	if rolePrincipalURN == "" || legacyPrincipal.String() != rolePrincipalURN {
-		matchPrincipals = append(matchPrincipals, legacyPrincipal)
-	}
-
-	return rolePrincipals{
-		Slug:            roleSlug,
-		WritePrincipal:  writePrincipal,
-		MatchPrincipals: matchPrincipals,
-	}, nil
-}
-
-func (rp rolePrincipals) deleteAllGrants(ctx context.Context, q *repo.Queries, orgID string) error {
-	for _, principal := range rp.MatchPrincipals {
-		if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+func loadRolePrincipal(ctx context.Context, dbtx repo.DBTX, orgID, roleSlug, rolePrincipalURN string) (urn.Principal, error) {
+	if rolePrincipalURN == "" {
+		role, err := repo.New(dbtx).GetActiveOrganizationRoleBySlug(ctx, repo.GetActiveOrganizationRoleBySlugParams{
 			OrganizationID: orgID,
-			PrincipalUrn:   principal,
-		}); err != nil {
-			return fmt.Errorf("delete grants for role %q: %w", rp.Slug, err)
+			WorkosSlug:     roleSlug,
+		})
+		if err != nil {
+			return urn.Principal{}, fmt.Errorf("resolve role principal for %q: %w", roleSlug, err)
 		}
+		rolePrincipalURN = role.RoleUrn
 	}
 
-	return nil
+	return parseRolePrincipalURN(rolePrincipalURN)
 }
 
-func (rp rolePrincipals) upsertGrants(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
-	return upsertPrincipalGrants(ctx, q, orgID, rp.WritePrincipal, rows)
+func parseRolePrincipalURN(rolePrincipalURN string) (urn.Principal, error) {
+	principal, err := urn.ParsePrincipal(rolePrincipalURN)
+	if err != nil {
+		return urn.Principal{}, fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+	}
+	if principal.Type != urn.PrincipalTypeRole {
+		return urn.Principal{}, fmt.Errorf("invalid role principal %q", rolePrincipalURN)
+	}
+
+	roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
+	if !ok || (roleKind != "organization" && roleKind != "global") {
+		return urn.Principal{}, fmt.Errorf("invalid role principal %q", rolePrincipalURN)
+	}
+	if _, err := uuid.Parse(rawRoleID); err != nil {
+		return urn.Principal{}, fmt.Errorf("invalid role principal %q: %w", rolePrincipalURN, err)
+	}
+
+	return principal, nil
 }
 
 func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
@@ -266,36 +237,30 @@ func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 	return nil
 }
 
-func (rp rolePrincipals) insertGrantsIfAbsent(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
+func insertRoleGrantsIfAbsent(ctx context.Context, q *repo.Queries, orgID string, roleSlug string, principal urn.Principal, rows []roleGrantRow) error {
 	for _, row := range rows {
 		if _, err := q.InsertPrincipalGrantIfAbsent(ctx, repo.InsertPrincipalGrantIfAbsentParams{
 			OrganizationID: orgID,
-			PrincipalUrn:   rp.WritePrincipal,
+			PrincipalUrn:   principal,
 			Scope:          string(row.Scope),
 			Selectors:      row.SelectorRaw,
 		}); err != nil {
-			return fmt.Errorf("insert grant %q for role %q: %w", row.Scope, rp.Slug, err)
+			return fmt.Errorf("insert grant %q for role %q: %w", row.Scope, roleSlug, err)
 		}
 	}
 
 	return nil
 }
 
-func (rp rolePrincipals) deleteGrants(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
-	return deletePrincipalGrants(ctx, q, orgID, rp.MatchPrincipals, rows)
-}
-
-func deletePrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principals []urn.Principal, rows []roleGrantRow) error {
-	for _, principal := range principals {
-		for _, row := range rows {
-			if _, err := q.DeletePrincipalGrantByIdentity(ctx, repo.DeletePrincipalGrantByIdentityParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principal,
-				Scope:          string(row.Scope),
-				Selectors:      row.SelectorRaw,
-			}); err != nil {
-				return fmt.Errorf("delete grant %q for %s: %w", row.Scope, principal.Label(), err)
-			}
+func deletePrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
+	for _, row := range rows {
+		if _, err := q.DeletePrincipalGrantByIdentity(ctx, repo.DeletePrincipalGrantByIdentityParams{
+			OrganizationID: orgID,
+			PrincipalUrn:   principal,
+			Scope:          string(row.Scope),
+			Selectors:      row.SelectorRaw,
+		}); err != nil {
+			return fmt.Errorf("delete grant %q for %s: %w", row.Scope, principal.Label(), err)
 		}
 	}
 

@@ -67109,7 +67109,7 @@ components:
                     format: uuid
                 principal_urn:
                     type: string
-                    description: Principal URN (e.g. role:engineering, user:id, or *).
+                    description: Principal URN (e.g. role:organization:<uuid>, user:id, or *).
             required:
                 - id
                 - principal_urn

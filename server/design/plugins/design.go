@@ -478,7 +478,7 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 		Description("Unique assignment identifier.")
 		Format(FormatUUID)
 	})
-	Attribute("principal_urn", String, "Principal URN (e.g. role:engineering, user:id, or *).")
+	Attribute("principal_urn", String, "Principal URN (e.g. role:organization:<uuid>, user:id, or *).")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
