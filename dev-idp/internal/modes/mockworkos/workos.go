@@ -7,6 +7,8 @@
 //	GET  /user_management/users/{id}
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
 //	GET  /organizations/{id}
+//	POST /organizations                                                      ({name, external_id})
+//	PUT  /organizations/{id}                                                 ({name?, external_id?})
 //	GET  /user_management/organization_memberships                           (?user_id, ?organization_id, ?after, ?limit)
 //	POST /user_management/organization_memberships                          ({user_id, organization_id, role_slug})
 //	PUT  /user_management/organization_memberships/{id}                      ({role_slug})
@@ -37,6 +39,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +74,8 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
+	mux.HandleFunc("POST /organizations", h.handleWorkosCreateOrganization)
+	mux.HandleFunc("PUT /organizations/{id}", h.handleWorkosUpdateOrganization)
 
 	mux.HandleFunc("GET /user_management/organization_memberships", h.handleWorkosListMemberships)
 	mux.HandleFunc("POST /user_management/organization_memberships", h.handleWorkosCreateMembership)
@@ -492,6 +497,90 @@ func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Req
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load organization")
 		return
 	}
+	writeJSON(w, http.StatusOK, workosOrganizationView(org))
+}
+
+// handleWorkosCreateOrganization creates an organization with no members. It is
+// the endpoint behind Gram's admin create-organization flow, which mints the
+// organization first and only then decides what its Gram id is, so external_id
+// normally arrives later through PUT rather than here.
+func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var body struct {
+		Name       string `json:"name"`
+		ExternalID string `json:"external_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" {
+		writeWorkosError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	id := uuid.New()
+	org, err := repo.New(h.db).CreateOrganization(ctx, repo.CreateOrganizationParams{
+		ID:   id,
+		Name: body.Name,
+		// Suffixed with the id because slug is unique here and organization
+		// names are not: two organizations may legitimately share a name.
+		Slug:        orgSlug(body.Name) + "-" + id.String()[:8],
+		AccountType: sql.NullString{String: "", Valid: false},
+		WorkosID:    sql.NullString{String: workosOrgIDFor(id), Valid: true},
+		ExternalID:  nullableString(body.ExternalID),
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "workos create organization", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to create organization")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, workosOrganizationView(org))
+}
+
+// handleWorkosUpdateOrganization applies a partial update. The WorkOS SDK omits
+// empty fields from the request body, so an absent field means "leave alone"
+// rather than "set to empty": Gram's external_id back-fill sends external_id
+// and no name, and must not blank the name it just set.
+func (h *Handler) handleWorkosUpdateOrganization(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	id, err := h.resolveOrgID(ctx, r.PathValue("id"))
+	if err != nil {
+		writeWorkosError(w, http.StatusNotFound, "organization not found")
+		return
+	}
+
+	var body struct {
+		Name       string `json:"name"`
+		ExternalID string `json:"external_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	org, err := repo.New(h.db).UpdateOrganization(ctx, repo.UpdateOrganizationParams{
+		ID:          id,
+		Name:        nullableString(body.Name),
+		Slug:        sql.NullString{String: "", Valid: false},
+		AccountType: sql.NullString{String: "", Valid: false},
+		WorkosID:    sql.NullString{String: "", Valid: false},
+		ExternalID:  nullableString(body.ExternalID),
+		Ts:          time.Now(),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		writeWorkosError(w, http.StatusNotFound, "organization not found")
+		return
+	}
+	if err != nil {
+		h.logger.ErrorContext(ctx, "workos update organization", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to update organization")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, workosOrganizationView(org))
 }
 
@@ -1268,7 +1357,7 @@ func workosOrganizationView(o repo.Organization) workosOrganization {
 		StripeCustomerID:                 "",
 		CreatedAt:                        o.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:                        o.UpdatedAt.UTC().Format(time.RFC3339),
-		ExternalID:                       "",
+		ExternalID:                       o.ExternalID.String,
 	}
 }
 
@@ -1435,7 +1524,37 @@ func ptrToNullString(p *string) sql.NullString {
 	return sql.NullString{String: *p, Valid: true}
 }
 
+// nullableString maps an absent JSON field to SQL NULL. The WorkOS SDK omits
+// empty fields from a request body, so the two are the same thing on the wire:
+// a partial update sends only what it means to change.
+func nullableString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{String: "", Valid: false}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
 const workosUserIDPrefix = "user_devidp_"
+
+const workosOrgIDPrefix = "org_devidp_"
+
+// workosOrgIDFor formats an internal UUID as a WorkOS-style organization ID.
+// Real WorkOS returns IDs like "org_01J5C09..."; we use "org_devidp_<hex>".
+func workosOrgIDFor(id uuid.UUID) string {
+	return workosOrgIDPrefix + strings.ReplaceAll(id.String(), "-", "")
+}
+
+var orgSlugRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// orgSlug is a URL-safe form of an organization name. It only has to be stable
+// and readable: nothing here resolves an organization by slug.
+func orgSlug(name string) string {
+	slug := strings.Trim(orgSlugRe.ReplaceAllString(strings.ToLower(name), "-"), "-")
+	if slug == "" {
+		return "org"
+	}
+	return slug
+}
 
 // workosUserID formats an internal UUID as a WorkOS-style user ID.
 // Real WorkOS returns IDs like "user_01J5C09..."; we use "user_devidp_<hex>".
