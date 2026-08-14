@@ -248,3 +248,62 @@ func TestShareableError_AsGoa_AppCanceledWithLiveContextIsFault(t *testing.T) {
 	require.True(t, appCanceled.Temporary, "an unexpected error stays retryable")
 	require.Equal(t, string(CodeUnexpected), appCanceled.Name)
 }
+
+func TestDetailAppendsHiddenCausesAcrossJoinedBranches(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, Detail(nil))
+
+	// A chain with no ShareableError renders exactly as Error() does.
+	plain := fmt.Errorf("outer: %w", errors.New("inner"))
+	require.Equal(t, "outer: inner", Detail(plain))
+
+	// A ShareableError with no cause has nothing hidden.
+	require.Equal(t, "bare", Detail(E(CodeUnexpected, nil, "bare")))
+
+	first := fmt.Errorf(
+		"poll: %w",
+		E(CodeUnexpected, fmt.Errorf("process page: %w", errors.New("connection refused")), "sync data"),
+	)
+	second := E(CodeUnexpected, errors.New("database unavailable"), "record schedule failure")
+	joined := errors.Join(first, second)
+
+	require.Equal(
+		t,
+		"poll: sync data\nrecord schedule failure"+
+			" [hidden: sync data: process page: connection refused; record schedule failure: database unavailable]",
+		Detail(joined),
+	)
+}
+
+func TestDetailKeepsDuplicateBranchTextsDistinct(t *testing.T) {
+	t.Parallel()
+
+	// Sibling branches with identical public text must each keep their own
+	// hidden cause; positional text substitution used to garble this case.
+	joined := errors.Join(
+		E(CodeUnexpected, errors.New("timeout"), "insert rows"),
+		E(CodeUnexpected, errors.New("connection refused"), "insert rows"),
+	)
+
+	require.Equal(
+		t,
+		"insert rows\ninsert rows [hidden: insert rows: timeout; insert rows: connection refused]",
+		Detail(joined),
+	)
+}
+
+func TestDetailRecursesIntoNestedShareableCauses(t *testing.T) {
+	t.Parallel()
+
+	inner := E(CodeUnexpected, errors.New("connection refused"), "insert rows")
+	outer := E(CodeUnexpected, fmt.Errorf("process page: %w", inner), "sync data")
+
+	// Each boundary contributes its own entry, so the innermost cause is not
+	// lost behind the outer boundary's truncated rendering of it.
+	require.Equal(
+		t,
+		"sync data [hidden: sync data: process page: insert rows; insert rows: connection refused]",
+		Detail(outer),
+	)
+}

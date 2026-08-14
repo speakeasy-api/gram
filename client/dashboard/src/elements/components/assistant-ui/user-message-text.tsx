@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import { memo, type FC } from "react";
 
 import type { TextMessagePartComponent } from "@assistant-ui/react";
@@ -10,6 +10,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/elements/components/ui/collapsible";
+import { ReferenceText } from "@/elements/components/assistant-ui/reference-token";
+import { REFERENCE_TOKEN_CLASSES } from "@/elements/lib/reference-token-classes";
+import { skillTokensIn } from "@/elements/lib/tool-mentions";
 import { cn } from "@/lib/utils";
 
 import {
@@ -27,7 +30,7 @@ const ContextDisclosure: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => {
       <CollapsibleTrigger
         className={cn(
           "aui-user-context-trigger group/trigger flex items-center gap-1.5 py-0.5",
-          "text-primary-foreground/70 hover:text-primary-foreground text-xs transition-colors",
+          "text-xs text-muted-foreground transition-colors hover:text-foreground",
         )}
       >
         <ChevronDownIcon
@@ -43,7 +46,7 @@ const ContextDisclosure: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => {
             shrink-to-fit message bubble — contribute 0 to its intrinsic width,
             then fill the bubble's resolved width and wrap. Keeps the bubble the
             same width open or closed. */}
-        <div className="aui-user-context-body border-primary-foreground/30 text-primary-foreground/70 mt-1.5 w-0 min-w-full space-y-2 border-l-2 pl-3 text-xs whitespace-pre-line">
+        <div className="aui-user-context-body mt-1.5 w-0 min-w-full space-y-2 border-l-2 border-border pl-3 text-xs whitespace-pre-line text-muted-foreground">
           {blocks.map((block, i) => (
             <p key={i}>{block.body}</p>
           ))}
@@ -52,20 +55,6 @@ const ContextDisclosure: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => {
     </Collapsible>
   );
 };
-
-const SkillContextPills: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => (
-  <div className="aui-user-skill-context mb-2 flex flex-wrap gap-1">
-    {blocks.map((block, index) => (
-      <span
-        key={`${block.skillName}-${index}`}
-        className="border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground/80 inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-xs"
-      >
-        <AtSign className="size-3 shrink-0" />
-        <span className="truncate">{block.skillName}</span>
-      </span>
-    ))}
-  </div>
-);
 
 /**
  * Drop-in replacement for the default user text part. Folds leading
@@ -76,20 +65,44 @@ const SkillContextPills: FC<{ blocks: ContextBlock[] }> = ({ blocks }) => (
 const UserMessageTextImpl: TextMessagePartComponent = ({ text }) => {
   const { blocks, rest } = splitContextBlocks(text);
   if (blocks.length === 0) {
-    return <p className="aui-user-message-text whitespace-pre-line">{text}</p>;
+    return (
+      <p className="aui-user-message-text whitespace-pre-line">
+        <ReferenceText text={text} />
+      </p>
+    );
   }
-  const skillBlocks = blocks.filter((block) => block.skillName);
+  // A skill named by a `/skill` token in the text needs no pill: that would
+  // read as the same skill attached twice. One that isn't named — a turn
+  // persisted before the composer wrote tokens, or sent by another client —
+  // would otherwise leave no trace at all, so it gets a label of its own.
+  const attachedSkills = blocks.flatMap((block) =>
+    block.skillName ? [block.skillName] : [],
+  );
+  const named = new Set(
+    skillTokensIn(rest, attachedSkills).map((name) => name.toLowerCase()),
+  );
+  const unnamedSkills = attachedSkills.filter(
+    (name) => !named.has(name.toLowerCase()),
+  );
   const disclosureBlocks = blocks.filter((block) => !block.skillName);
   return (
     <div className="aui-user-message-text-with-context">
-      {skillBlocks.length > 0 ? (
-        <SkillContextPills blocks={skillBlocks} />
-      ) : null}
+      {unnamedSkills.length > 0 && (
+        <div className="aui-user-message-skills mb-1.5 flex flex-wrap gap-1">
+          {unnamedSkills.map((name) => (
+            <span key={name} className={REFERENCE_TOKEN_CLASSES.surface.skill}>
+              /{name}
+            </span>
+          ))}
+        </div>
+      )}
       {disclosureBlocks.length > 0 ? (
         <ContextDisclosure blocks={disclosureBlocks} />
       ) : null}
       {rest.trim() !== "" && (
-        <p className="aui-user-message-text whitespace-pre-line">{rest}</p>
+        <p className="aui-user-message-text whitespace-pre-line">
+          <ReferenceText text={rest} />
+        </p>
       )}
     </div>
   );

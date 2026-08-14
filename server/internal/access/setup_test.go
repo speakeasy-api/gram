@@ -114,7 +114,9 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
-	emailService := email.NewService(logger, emailSender)
+	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
+		"access_request": "access-request-test-id",
+	}), true)
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
 	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL)
@@ -194,6 +196,17 @@ func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizatio
 	require.NoError(t, err)
 
 	return row.ID.String()
+}
+
+func seededRolePrincipal(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, roleSlug string) urn.Principal {
+	t.Helper()
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     roleSlug,
+	})
+	require.NoError(t, err)
+	return urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+row.ID.String())
 }
 
 func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, role workos.Role) string {

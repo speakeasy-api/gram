@@ -321,7 +321,11 @@ func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetrics
 		case attributeDimArray:
 			sb = sb.Where(arrayDimFilter(dim.column, f.Values))
 		case attributeDimScalar, attributeDimProject:
-			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
+			if f.Dimension == "email" {
+				sb = sb.Where(squirrel.Eq{"lower(" + dim.column + ")": normalizedEmailDimensionValues(f.Values)})
+			} else {
+				sb = sb.Where(squirrel.Eq{dim.column: f.Values})
+			}
 		default:
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}

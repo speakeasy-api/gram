@@ -410,6 +410,111 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
 }
 
+const assistantSessionSummaryMetricsBatch = 1000
+
+func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.GetAssistantSessionSummaryPayload) (*gen.AssistantSessionSummary, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeProjectRead,
+		ResourceKind: "",
+		ResourceID:   authCtx.ProjectID.String(),
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
+	}
+
+	assistantID, err := uuid.Parse(payload.AssistantID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
+	}
+	from, err := time.Parse(time.RFC3339, payload.From)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid from timestamp").LogError(ctx, s.logger)
+	}
+	to, err := time.Parse(time.RFC3339, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid to timestamp").LogError(ctx, s.logger)
+	}
+	if from.After(to) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "from must be at or before to")
+	}
+
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	projection, err := s.repo.GetAssistantSessionSummaryProjection(ctx, repo.GetAssistantSessionSummaryProjectionParams{
+		AssistantID:    assistantID,
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+		FromTime:       pgtype.Timestamptz{Time: from, InfinityModifier: pgtype.Finite, Valid: true},
+		ToTime:         pgtype.Timestamptz{Time: to, InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "summarize assistant sessions").LogError(ctx, s.logger)
+	}
+	if !projection.AssistantExists {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	metrics := telemetryrepo.ChatMetricsSummary{
+		TotalTokens: 0,
+		TotalCost:   0,
+	}
+	if s.telemetryService != nil {
+		afterCorrelationID := ""
+		for {
+			chats, err := s.repo.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
+				AssistantID:        assistantID,
+				ProjectID:          *authCtx.ProjectID,
+				AfterCorrelationID: afterCorrelationID,
+				ExternalUserID:     externalUserID,
+				UserID:             userID,
+				PageLimit:          assistantSessionSummaryMetricsBatch,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "list assistant sessions for usage summary").LogError(ctx, s.logger)
+			}
+			if len(chats) == 0 {
+				break
+			}
+
+			batch := make([]string, len(chats))
+			for i, chat := range chats {
+				batch[i] = chat.ChatID.String()
+			}
+			batchMetrics, err := s.telemetryService.GetChatMetricsSummaryByIDs(ctx, telemetryrepo.GetChatMetricsSummaryByIDsParams{
+				ProjectID: authCtx.ProjectID.String(),
+				ChatIDs:   batch,
+				From:      from,
+				To:        to,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "summarize assistant session usage").LogError(ctx, s.logger)
+			}
+			metrics.TotalTokens += batchMetrics.TotalTokens
+			metrics.TotalCost += batchMetrics.TotalCost
+
+			lastChat := chats[len(chats)-1]
+			afterCorrelationID = lastChat.CorrelationID
+			if len(chats) < assistantSessionSummaryMetricsBatch {
+				break
+			}
+		}
+	}
+
+	return &gen.AssistantSessionSummary{
+		Sessions:    projection.Sessions,
+		Messages:    projection.Messages,
+		TotalTokens: metrics.TotalTokens,
+		TotalCost:   metrics.TotalCost,
+	}, nil
+}
+
 const (
 	workUnitsTrendDefaultWindow = 30 * 24 * time.Hour
 	workUnitsTrendMaxWindow     = 92 * 24 * time.Hour

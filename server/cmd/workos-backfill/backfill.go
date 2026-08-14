@@ -303,7 +303,7 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 		// slug, so mirror the event handler's principal exactly — a slug-based
 		// URN matches nothing and leaves the grants behind.
 		rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+localRole.ID.String())
-		if err := authz.DeleteRoleGrants(ctx, repo, organizationID, localRole.WorkosSlug, rolePrincipal.String()); err != nil {
+		if err := authz.DeleteRoleGrants(ctx, repo, organizationID, rolePrincipal.String()); err != nil {
 			return fmt.Errorf("delete grants for organization role %q: %w", localRole.WorkosSlug, err)
 		}
 		logger.DebugContext(ctx, "soft-deleted WorkOS organization role missing from snapshot", attr.SlogAccessRoleSlug(localRole.WorkosSlug))

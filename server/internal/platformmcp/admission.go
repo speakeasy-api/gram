@@ -57,7 +57,7 @@ func (c *AdmissionChecker) Evaluate(ctx context.Context, organizationID, organiz
 		return AdmissionDisabled, nil
 	}
 
-	rollout, err := feature.EvaluateFlag(ctx, c.rollout, feature.FlagPlatformMCPRollout, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
+	rollout, err := feature.EvaluateFlag(ctx, c.rollout, feature.FlagPlatformMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
 	if err != nil {
 		return AdmissionIndeterminate, fmt.Errorf("evaluate platform mcp rollout: %w", err)
 	}

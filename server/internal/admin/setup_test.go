@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -34,7 +35,8 @@ func TestMain(m *testing.M) {
 // newTestAdminService builds the minimum Service needed to exercise read-only
 // handlers like ListOrganizations. Auth, sessions, and OIDC fields are left nil
 // because the test invokes the handler directly without going through the HTTP
-// transport layer.
+// transport layer. The WorkOS field is left nil too: a handler that needs it
+// gets a service from newTestAdminServiceWithWorkOS instead.
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
@@ -48,6 +50,17 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 		logger: logger,
 		db:     conn,
 	}
+
+	return ctx, svc, conn
+}
+
+// newTestAdminServiceWithWorkOS is newTestAdminService with an identity provider
+// attached, for the handlers that write to one.
+func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSOrganizationCreator) (context.Context, *Service, *pgxpool.Pool) {
+	t.Helper()
+
+	ctx, svc, conn := newTestAdminService(t)
+	svc.workos = workos
 
 	return ctx, svc, conn
 }
