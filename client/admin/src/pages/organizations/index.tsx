@@ -40,6 +40,16 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   created_at: false,
 };
 
+// Every column peek overrides while it is open, and the value it forces. The
+// table's visibility and the Columns menu's guard both read this one map, so
+// they cannot disagree about the set: a guard naming only the hidden half
+// answers only half the writes the menu cannot satisfy, and the other half land
+// and take effect later, when the peek closes.
+const PEEK_COLUMN_OVERRIDES: ColumnVisibilityState = {
+  ...PEEK_HIDDEN_COLUMNS,
+  name: true,
+};
+
 // Appended to every other announcement so an unchanged sentence still changes
 // the text node. Zero-width, so nothing is spoken and nothing takes up space.
 const ZERO_WIDTH_SPACE = "\u200b";
@@ -159,7 +169,7 @@ export function OrganizationsList(): JSX.Element {
   const effectiveVisibility = useMemo(
     () =>
       peekedId
-        ? { ...columnVisibility, ...PEEK_HIDDEN_COLUMNS, name: true }
+        ? { ...columnVisibility, ...PEEK_COLUMN_OVERRIDES }
         : columnVisibility,
     [peekedId, columnVisibility],
   );
@@ -252,20 +262,32 @@ export function OrganizationsList(): JSX.Element {
     [peekedId, togglePeek],
   );
 
-  // Peek narrows the table, so a column it hides is one this menu can write
-  // and nothing on screen answers: the checkbox snaps back with no column, no
-  // refusal and no reason. Checking a column is an unambiguous request to see
-  // it, so the panel gives way rather than the request. The column arrives in
-  // the commit the panel leaves in, which is the whole explanation, and
-  // reopening peek is one click.
+  // Peek overrides these columns, so a write the menu makes to one of them is a
+  // write nothing on screen answers: the checkbox snaps back with no column, no
+  // refusal and no reason. Toggling a column is an unambiguous request about
+  // that column, so the panel gives way rather than the request. The column
+  // arrives in the commit the panel leaves in, which is the whole explanation,
+  // and reopening peek is one click.
+  //
+  // Both directions, because peek forces some columns off and Name on. The
+  // operator unchecking Name is asking to hide it, and refusing that one is the
+  // worse half: the write lands under the override and detonates later, when
+  // the peek closes and the column the row is anchored on disappears at a
+  // moment the operator has no reason to connect to the click.
   //
   // The keyboard is left where it is. The operator is in the Columns menu, and
   // Radix puts them back on its trigger as it closes.
   const handleColumnToggled = useCallback(
     (columnId: string, label: string): void => {
-      if (!peekedId || !(columnId in PEEK_HIDDEN_COLUMNS)) return;
+      if (!peekedId || !Object.hasOwn(PEEK_COLUMN_OVERRIDES, columnId)) return;
       setPeek(undefined);
-      announce(`Peek closed to show the ${label} column.`);
+      // Which way the operator was asking. Peek forcing the column visible
+      // means the request was to hide it, and one wording for both is false
+      // half the time.
+      const wasForcedVisible = PEEK_COLUMN_OVERRIDES[columnId] === true;
+      announce(
+        `Peek closed to ${wasForcedVisible ? "hide" : "show"} the ${label} column.`,
+      );
     },
     [peekedId, announce],
   );
@@ -321,6 +343,10 @@ export function OrganizationsList(): JSX.Element {
     // Focus stays put for anyone arrowing from the panel. That is the panel's
     // own navigation, and pulling the keyboard out to a row control would take
     // the operator off the record they are reading.
+    //
+    // Reading only: the arrow allow-list already turned every other trigger
+    // away, and the panel is not one, so a non-null fromTrigger here is the
+    // peeked row's. Named for the reader rather than to change the set.
     if (fromPeekedTrigger) setPeekTookTheKeyboard(true);
   };
 

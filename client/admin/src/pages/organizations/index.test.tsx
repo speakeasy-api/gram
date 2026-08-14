@@ -231,6 +231,19 @@ function isPeeked(link: HTMLElement): boolean {
   return rowFor(link).classList.contains("bg-muted");
 }
 
+// Sequential navigation order, which is what Tab and Shift+Tab walk. Document
+// order over the nodes the spec puts in that sequence, so a tabindex="-1" node
+// is left out: focusable, and deliberately not a stop.
+const TAB_STOPS = "a[href], button, input, select, textarea, [tabindex]";
+
+function tabStopBefore(target: HTMLElement): HTMLElement | null {
+  const stops = [...document.querySelectorAll<HTMLElement>(TAB_STOPS)].filter(
+    (el) => el.tabIndex >= 0 && !el.hasAttribute("disabled"),
+  );
+  const at = stops.indexOf(target);
+  return at > 0 ? (stops[at - 1] ?? null) : null;
+}
+
 function urlFor(search: Record<string, unknown>): string {
   // The router JSON-encodes a non-string value, so a bookmarked URL is built
   // the same way here rather than hand-written.
@@ -1119,6 +1132,49 @@ describe("organizations list peek", () => {
     expect(isPeeked(first)).toBe(true);
   });
 
+  it("marks the arrow key that moved the peek as answered", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    const panel = peekPanel();
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(panel, event);
+
+    // The mirror of every case that asserts the key was left alone. Moving the
+    // peek and letting the key travel on scrolls the list out from under the
+    // record it just moved to, which is the same eaten-scroll complaint from
+    // the other side.
+    expect(
+      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+    ).toBeTruthy();
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("puts the panel in the tab order so the arrow keys stay reachable", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    const panel = peekPanel();
+    const close = within(panel).getByRole("button", { name: "Close peek" });
+
+    // Shift+Tab off Close has to land here. Sequential navigation skips a
+    // tabindex="-1" node, so with the panel out of the order the focus it takes
+    // on mount was the only focus it ever got: one Tab to Close and the record
+    // navigation below was gone for the rest of the panel's life.
+    expect(tabStopBefore(close)).toBe(panel);
+
+    panel.focus();
+    fireEvent.keyDown(panel, { key: "ArrowDown" });
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+    ).toBeTruthy();
+  });
+
   it("ignores the arrow keys pressed on the pager", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
@@ -1263,13 +1319,22 @@ describe("organizations list peek", () => {
     const trigger = await peekOn(FIRST_ORG.name);
     trigger.focus();
 
-    // The exemption has to be this narrow, or closing from the control that
+    // The allow-list has to keep this arm, or closing from the control that
     // opened the panel stops working.
-    fireEvent.keyDown(trigger, { key: "Escape" });
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(trigger, event);
 
     expect(
       screen.queryByRole("complementary", { name: "Organization peek" }),
     ).toBeNull();
+    // Both arms of the allow-list answer the key the same way. Marking one and
+    // not the other leaves the unmarked close travelling on to whatever else
+    // dismisses on Escape.
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it("announces a move onto an organization that shares the peeked one's name", async () => {
@@ -1405,22 +1470,86 @@ describe("organizations list peek", () => {
 
   it("leaves the keyboard on the Columns control when a column closes the peek", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const trigger = await peekOn(FIRST_ORG.name);
+    await peekOn(FIRST_ORG.name);
     const columns = screen.getByRole("button", { name: "Columns" });
+    const table = screen.getByRole("region", { name: "Organizations table" });
 
     openOn(columns);
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Members" }));
+
+    // Every node focus passes through, not just where it ends up. Radix pulls
+    // the keyboard back to this trigger as the menu closes, which happens after
+    // the page has had its turn, so the end state is the same whatever the page
+    // did in between and asserting only that state asserts Radix.
+    const visited: Node[] = [];
+    const record = (event: FocusEvent): void => {
+      if (event.target instanceof Node) visited.push(event.target);
+    };
+    document.addEventListener("focusin", record);
+    try {
+      fireEvent.click(
+        screen.getByRole("menuitemcheckbox", { name: "Members" }),
+      );
+      await waitFor(() => {
+        expect(
+          screen.getByRole("columnheader", { name: "Members" }),
+        ).toBeTruthy();
+      });
+    } finally {
+      document.removeEventListener("focusin", record);
+    }
+
+    // An operator's own close puts the keyboard back on the peek control, and
+    // the rescue that catches a peeked record leaving the list puts it on the
+    // table. Either one here drags them out of the menu they are working in,
+    // even for the moment before Radix takes the keyboard back: a screen reader
+    // announces wherever it landed. So the rule is the whole region, not the
+    // two nodes that happen to be reachable from this handler today.
+    expect(visited.filter((node) => table.contains(node))).toEqual([]);
+    expect(document.activeElement).toBe(columns);
+  });
+
+  it("closes the peek to show the Trial column the peek was hiding", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    expect(screen.queryByRole("columnheader", { name: "Trial" })).toBeNull();
+
+    // A second column out of the set, because one member travelling this path
+    // does not show the set travels it. Peek hides five and the menu can write
+    // all five.
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Trial" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("columnheader", { name: "Members" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("columnheader", { name: "Trial" })).toBeTruthy();
     });
-    // An operator's own close puts the keyboard back on the peek control.
-    // Doing that here would drag them out of the menu they are working in and
-    // onto a row they were not looking at.
-    expect(document.activeElement).not.toBe(trigger);
-    expect(document.activeElement).toBe(columns);
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    expect(announcement()).toBe("Peek closed to show the Trial column.");
+  });
+
+  it("closes the peek to hide the column the peek was forcing visible", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Name" }));
+
+    // The override runs both ways, and this is the other way. Peek is the only
+    // reason Name is on screen, so unchecking it is a request peek is in the
+    // way of just as much as a request to show one it hides. Left unanswered,
+    // the write lands under the override and the column goes when the peek
+    // closes, at a moment the operator cannot connect to this click.
+    await waitFor(() => {
+      expect(screen.queryByRole("columnheader", { name: "Name" })).toBeNull();
+    });
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    // "show" here would be a false sentence, and one wording cannot serve both
+    // directions.
+    expect(announcement()).toBe("Peek closed to hide the Name column.");
   });
 
   it("keeps the peek open for a column the peek was not hiding", async () => {
@@ -1463,6 +1592,22 @@ describe("organizations list peek", () => {
       expect(
         screen.queryByRole("columnheader", { name: "Members" }),
       ).toBeNull();
+    });
+    expect(announcement()).toBe("");
+  });
+
+  it("says nothing about the peek when a column peek never touches is toggled with none open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Slug" }));
+
+    // Neither condition holds: no panel, and a column no panel would override.
+    // The test above it varies only one of the two, so between them a handler
+    // that announced on both being false would have nothing to fail.
+    await waitFor(() => {
+      expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
     });
     expect(announcement()).toBe("");
   });

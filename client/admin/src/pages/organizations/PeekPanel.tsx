@@ -107,9 +107,18 @@ export function PeekPanel({
     <aside
       ref={root}
       id={PEEK_PANEL_ID}
-      tabIndex={-1}
+      // In the tab order, not just focusable. This node is the one place in the
+      // subtree where the arrow keys walk the peek from record to record, and
+      // at -1 the mount was the only way focus ever reached it: Tab moves to
+      // Close, and Shift+Tab back skips a tabindex="-1" node, so record
+      // navigation was gone for the rest of the panel's life.
+      //
+      // The ring comes with it. Nothing else on screen moves when focus lands
+      // here, so an invisible ring on the one node with its own keys is the
+      // worst of both.
+      tabIndex={0}
       aria-label="Organization peek"
-      className={cn("flex flex-col rounded-lg border outline-none", className)}
+      className={cn("flex flex-col rounded-lg border", className)}
     >
       <div className="flex items-start justify-between gap-2 p-4 pb-3">
         <div className="min-w-0">
