@@ -34,11 +34,23 @@ import (
 const ErrTypeDNSNotFound = "CustomDomainDNSNotFound"
 
 func newDNSNotFoundError(cause error, missingHost string) error {
-	return temporal.NewNonRetryableApplicationError(
+	return temporal.NewApplicationErrorWithOptions(
 		fmt.Sprintf("DNS record not found for %s", missingHost),
 		ErrTypeDNSNotFound,
-		cause,
+		temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
+			Cause:        cause,
+		},
 	)
+}
+
+// IsDNSNotFound reports whether err originated from a missing DNS record
+// required for custom domain verification, including after Temporal has
+// wrapped it as it crossed the activity boundary.
+func IsDNSNotFound(err error) bool {
+	var appErr *temporal.ApplicationError
+	return errors.As(err, &appErr) && appErr.Type() == ErrTypeDNSNotFound
 }
 
 type VerifyCustomDomain struct {

@@ -134,6 +134,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	if errors.Is(err, oops.ErrPermanent) {
 		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
 			Cause:        err,
 		})
 	}
@@ -206,6 +207,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
 			Cause:        err,
 		})
 	}

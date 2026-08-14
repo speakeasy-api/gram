@@ -24,10 +24,14 @@ const ErrTypeGenerationBumped = "ChatResolutionGenerationBumped"
 var ErrGenerationBumped = errors.New("chat generation bumped during analysis")
 
 func newGenerationBumpedError(pinned, current int32) error {
-	return temporal.NewNonRetryableApplicationError(
+	return temporal.NewApplicationErrorWithOptions(
 		fmt.Sprintf("chat generation bumped during analysis: pinned=%d current=%d", pinned, current),
 		ErrTypeGenerationBumped,
-		ErrGenerationBumped,
+		temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
+			Cause:        ErrGenerationBumped,
+		},
 	)
 }
 
@@ -50,10 +54,14 @@ func IsGenerationBumped(err error) bool {
 const ErrTypeInsufficientCredits = "ChatResolutionInsufficientCredits"
 
 func newInsufficientCreditsError(cause error) error {
-	return temporal.NewNonRetryableApplicationError(
+	return temporal.NewApplicationErrorWithOptions(
 		"insufficient openrouter credits",
 		ErrTypeInsufficientCredits,
-		cause,
+		temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
+			Cause:        cause,
+		},
 	)
 }
 
@@ -75,10 +83,14 @@ func IsInsufficientCredits(err error) bool {
 const ErrTypeInferenceDisabled = "ChatResolutionInferenceDisabled"
 
 func newInferenceDisabledError(cause error) error {
-	return temporal.NewNonRetryableApplicationError(
+	return temporal.NewApplicationErrorWithOptions(
 		"organization inference is disabled",
 		ErrTypeInferenceDisabled,
-		cause,
+		temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
+			Cause:        cause,
+		},
 	)
 }
 

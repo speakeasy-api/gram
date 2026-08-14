@@ -146,6 +146,9 @@ func AIUsagePollerWorkflow(ctx workflow.Context, input string) error {
 
 	var a *Activities
 	if err := workflow.ExecuteActivity(ctx, a.PollAIData, input).Get(ctx, nil); err != nil {
+		if activities.IsNonRetryableAIUsagePollFailure(err) {
+			return asBenignWorkflowError(err)
+		}
 		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 

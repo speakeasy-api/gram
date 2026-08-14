@@ -328,9 +328,30 @@ func newPollFailureError(configID uuid.UUID, provider string, attempt int32, non
 
 	message := fmt.Sprintf("poll ai integration usage: provider=%s config=%s attempt=%d/%d: %s",
 		provider, configID, attempt, PollUsageMaxAttempts, cause)
+	category := temporal.ApplicationErrorCategoryUnspecified
+	if nonRetryable {
+		// Provider rejections (bad API key, unknown org) are customer-side
+		// configuration gaps. Marking them benign keeps Temporal's
+		// workflow_failed / activity_execution_failed counters and error
+		// spans out of failure alerts while the dashboard still records the
+		// failure and may auto-pause the schedule.
+		category = temporal.ApplicationErrorCategoryBenign
+	}
 	return temporal.NewApplicationErrorWithOptions(message, ErrTypeAIUsagePollFailed, temporal.ApplicationErrorOptions{
 		NonRetryable: nonRetryable,
+		Category:     category,
 		Cause:        cause,
 		Details:      []any{details},
 	})
+}
+
+// IsNonRetryableAIUsagePollFailure reports whether err is a provider-rejected
+// usage poll (bad API key, unknown org), including after Temporal has wrapped
+// it as it crossed the activity boundary.
+func IsNonRetryableAIUsagePollFailure(err error) bool {
+	var appErr *temporal.ApplicationError
+	if !errors.As(err, &appErr) {
+		return false
+	}
+	return appErr.Type() == ErrTypeAIUsagePollFailed && appErr.NonRetryable()
 }

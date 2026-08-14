@@ -2,6 +2,7 @@ package interceptors
 
 import (
 	"context"
+	"errors"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.temporal.io/sdk/activity"
@@ -70,30 +71,48 @@ func (a *activityLogExecution) ExecuteActivity(ctx context.Context, in *intercep
 	return result, err
 }
 
-// logWorkflowResult downgrades benign Temporal sentinels (ContinueAsNew,
-// Canceled) to Info so they stay out of failure alerts and log noise.
+// logWorkflowResult downgrades Temporal control-flow and expected customer-side
+// errors to Info so they stay out of failure alerts and log noise.
 func logWorkflowResult(logger sdklog.Logger, err error) {
 	switch {
 	case err == nil:
 		logger.Info("workflow finished")
 	case workflow.IsContinueAsNewError(err):
 		logger.Info("workflow continuing as new")
-	case temporal.IsCanceledError(err):
+	case temporal.IsCanceledError(err) || errors.Is(err, context.Canceled):
 		logger.Info("workflow canceled")
+	case temporal.IsTimeoutError(err) || errors.Is(err, context.DeadlineExceeded):
+		logger.Info("workflow timed out")
+	case temporal.IsTerminatedError(err):
+		logger.Info("workflow terminated")
+	case isBenignApplicationError(err):
+		logger.Info("workflow finished with expected error", "error", err.Error())
 	default:
 		logger.Error("workflow failed", "error", err.Error())
 	}
 }
 
-// logActivityResult downgrades the Canceled sentinel (worker shutdown,
-// workflow timeout, caller cancel) to Info so it stays out of failure alerts.
+// logActivityResult downgrades Temporal control-flow and expected customer-side
+// errors to Info so they stay out of failure alerts.
 func logActivityResult(logger sdklog.Logger, err error) {
 	switch {
 	case err == nil:
 		logger.Info("activity finished")
-	case temporal.IsCanceledError(err):
+	case temporal.IsCanceledError(err) || errors.Is(err, context.Canceled):
 		logger.Info("activity canceled")
+	case temporal.IsTimeoutError(err) || errors.Is(err, context.DeadlineExceeded):
+		logger.Info("activity timed out")
+	case isBenignApplicationError(err):
+		logger.Info("activity finished with expected error", "error", err.Error())
 	default:
 		logger.Error("activity failed", "error", err.Error())
 	}
+}
+
+// isBenignApplicationError reports whether err is (or wraps) an ApplicationError
+// marked CategoryBenign. The SDK's own check type-asserts and misses wrappers;
+// errors.As is used so ActivityError/fmt.Errorf still match for logging.
+func isBenignApplicationError(err error) bool {
+	var appErr *temporal.ApplicationError
+	return errors.As(err, &appErr) && appErr.Category() == temporal.ApplicationErrorCategoryBenign
 }

@@ -115,6 +115,8 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, ErrTypeAIUsagePollFailed, appErr.Type())
 	require.False(t, appErr.NonRetryable())
+	require.Equal(t, temporal.ApplicationErrorCategoryUnspecified, appErr.Category())
+	require.False(t, IsNonRetryableAIUsagePollFailure(err))
 	require.Contains(t, appErr.Message(), "provider=anthropic_compliance")
 	require.Contains(t, appErr.Message(), fmt.Sprintf("attempt=5/%d", PollUsageMaxAttempts))
 
@@ -143,6 +145,8 @@ func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
 	require.True(t, appErr.NonRetryable())
+	require.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
+	require.True(t, IsNonRetryableAIUsagePollFailure(err))
 
 	var details aiUsagePollFailureDetails
 	require.NoError(t, appErr.Details(&details))
