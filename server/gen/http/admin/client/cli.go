@@ -123,7 +123,15 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 	{
 		err = json.Unmarshal([]byte(adminUpdateOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
+		}
+		if body.AccountType != nil {
+			if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "enterprise") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"free", "pro", "enterprise"}))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var adminSessionToken *string
@@ -136,6 +144,59 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 		ID:          body.ID,
 		AccountType: body.AccountType,
 		Whitelisted: body.Whitelisted,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildBulkUpdateAccountTypePayload builds the payload for the admin
+// bulkUpdateAccountType endpoint from CLI flags.
+func BuildBulkUpdateAccountTypePayload(adminBulkUpdateAccountTypeBody string, adminBulkUpdateAccountTypeAdminSessionToken string) (*admin.BulkUpdateAccountTypePayload, error) {
+	var err error
+	var body BulkUpdateAccountTypeRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBulkUpdateAccountTypeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"pro\",\n      \"ids\": [\n         \"aa\",\n         \"aa\"\n      ]\n   }'")
+		}
+		if body.Ids == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("ids", "body"))
+		}
+		if len(body.Ids) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1, true))
+		}
+		if len(body.Ids) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1000, false))
+		}
+		for _, e := range body.Ids {
+			if utf8.RuneCountInString(e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids[*]", e, utf8.RuneCountInString(e), 1, true))
+			}
+		}
+		if !(body.AccountType == "free" || body.AccountType == "pro" || body.AccountType == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", body.AccountType, []any{"free", "pro", "enterprise"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBulkUpdateAccountTypeAdminSessionToken != "" {
+			adminSessionToken = &adminBulkUpdateAccountTypeAdminSessionToken
+		}
+	}
+	v := &admin.BulkUpdateAccountTypePayload{
+		AccountType: body.AccountType,
+	}
+	if body.Ids != nil {
+		v.Ids = make([]string, len(body.Ids))
+		for i, val := range body.Ids {
+			v.Ids[i] = val
+		}
+	} else {
+		v.Ids = []string{}
 	}
 	v.AdminSessionToken = adminSessionToken
 

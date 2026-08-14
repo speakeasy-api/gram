@@ -28,6 +28,10 @@ type Service interface {
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Sets one account type on many organizations in a single statement. An ID
+	// that matches no organization is reported back rather than failing the batch,
+	// so a stale ID costs the operator that row and not the whole call.
+	BulkUpdateAccountType(context.Context, *BulkUpdateAccountTypePayload) (res *AdminBulkUpdateAccountTypeResult, err error)
 	// Disables an organization, recording the moment of the action in disabled_at.
 	// Idempotent: disabling an already-disabled organization keeps the original
 	// timestamp.
@@ -85,7 +89,18 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats"}
+var MethodNames = [16]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats"}
+
+// AdminBulkUpdateAccountTypeResult is the result type of the admin service
+// bulkUpdateAccountType method.
+type AdminBulkUpdateAccountTypeResult struct {
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
+	UpdatedIds []string
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string
+}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -217,6 +232,16 @@ type AdminProjectDetail struct {
 	AssistantCount int
 	CreatedAt      string
 	UpdatedAt      string
+}
+
+// BulkUpdateAccountTypePayload is the payload type of the admin service
+// bulkUpdateAccountType method.
+type BulkUpdateAccountTypePayload struct {
+	AdminSessionToken *string
+	// Organization IDs to update.
+	Ids []string
+	// New gram_account_type for every listed organization.
+	AccountType string
 }
 
 // CallbackPayload is the payload type of the admin service callback method.
@@ -401,7 +426,7 @@ type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type (e.g. free, pro, enterprise).
+	// New gram_account_type.
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
