@@ -137,7 +137,25 @@ func reportRawUserEmailLiterals(pass *analysis.Pass, expr ast.Expr, reported map
 	ast.Inspect(expr, func(n ast.Node) bool {
 		switch e := n.(type) {
 		case *ast.CallExpr:
+			// Matching the funnel by name prefix is deliberate: the remaining
+			// canonical-fold flips keep adding canonical* helpers, and a
+			// type-pinned function list would need updating for each one. The
+			// trade-off is that any function named canonical* is trusted to
+			// fold — do not name a helper canonical* unless it routes through
+			// the identity_map.
 			if calleeName(e) != "" && strings.HasPrefix(strings.ToLower(calleeName(e)), "canonical") {
+				return false
+			}
+		case *ast.CompositeLit:
+			// squirrel map values are filter DATA, not column expressions: a
+			// value that happens to equal "user_email" (e.g. querying for a
+			// dimension by that name) is not a violation. Scan keys only.
+			if isSquirrelMapType(pass.TypesInfo.TypeOf(e)) {
+				for _, elt := range e.Elts {
+					if kv, ok := elt.(*ast.KeyValueExpr); ok {
+						reportRawUserEmailLiterals(pass, kv.Key, reported)
+					}
+				}
 				return false
 			}
 		case *ast.BasicLit:

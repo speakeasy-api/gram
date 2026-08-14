@@ -27,6 +27,8 @@ func allowed() {
 	sb := squirrel.Select("x")
 	sb = sb.Where("(user_id = '' AND " + canonicalEmailExpr("'org'", "telemetry_logs.user_email") + " = ?)")
 	sb = sb.Where(squirrel.Eq{"user_id": "u"})
+	// Map VALUES are filter data, not column expressions.
+	sb = sb.Where(squirrel.Eq{"dimension": "user_email"})
 	sb = sb.GroupBy("hook_hostname")
 	_ = squirrel.Expr("joinGet('identity_map', 'canonical_user_id', 'org', lower(user_email))")
 	_ = sb
