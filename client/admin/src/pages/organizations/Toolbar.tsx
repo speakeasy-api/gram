@@ -144,7 +144,14 @@ export function TableActionBar<T extends RowData>({
 }): JSX.Element {
   // Read off the table rather than walked a second time here, so the menu
   // cannot disagree with the table about how many columns are left.
-  const visibleCount = table.getVisibleLeafColumns().length;
+  //
+  // Only the hideable ones count. A column that opts out of hiding is visible
+  // whatever the operator does, so counting it holds this total off the floor
+  // and the guard below never fires: the operator can then hide every column
+  // that carries data and be left with a table of controls and no records.
+  const visibleCount = table
+    .getVisibleLeafColumns()
+    .filter((column) => column.getCanHide()).length;
 
   return (
     <div className="flex items-center gap-3 border-b px-3 py-2">

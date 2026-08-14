@@ -966,15 +966,18 @@ describe("organizations list peek", () => {
 // it a two column table rather than by clicking seven items shut through a
 // menu that closes each time.
 describe("TableActionBar", () => {
-  // Sliced, so the array carries the element type useTable asks for. Past the
-  // peek column, which opts out of hiding: the cases below are about the two
-  // rules the bar itself applies.
+  // Sliced, so the array carries the element type useTable asks for. Two data
+  // columns for the cases about the bar's own two rules, and the peek column
+  // beside one of them for the case where an unhideable column is in the count.
   const MENU_COLUMNS = ORG_COLUMNS.slice(1, 3);
+  const WITH_PEEK_COLUMN = ORG_COLUMNS.slice(0, 2);
 
   // Destructured off the tuple rather than off the slice, which widens each
   // element back to a bare column definition.
-  const [, FIRST, SECOND] = ORG_COLUMNS;
-  if (!FIRST || !SECOND) throw new Error("ORG_COLUMNS needs three columns");
+  const [PEEK, FIRST, SECOND, THIRD] = ORG_COLUMNS;
+  if (!PEEK || !FIRST || !SECOND || !THIRD) {
+    throw new Error("ORG_COLUMNS needs four columns");
+  }
 
   // An accessor column takes its id from its key unless it names one, and that
   // id is what the visibility state is keyed by.
@@ -1089,11 +1092,30 @@ describe("TableActionBar", () => {
     expect(itemFor(FIRST.header).getAttribute("aria-checked")).toBe("false");
   });
 
+  it("stops the operator hiding the last column that carries data", () => {
+    // Peek and Name, both visible. Peek opts out of hiding, so it is on screen
+    // whatever the operator does and it is not the column that keeps the table
+    // readable. Counting it would leave Name free to go, and the table behind
+    // this menu would be a strip of controls above rows holding no record.
+    const onVisibilityChange = openColumnsMenu({}, WITH_PEEK_COLUMN);
+
+    const item = itemFor(FIRST.header);
+    fireEvent.click(item);
+
+    expect(onVisibilityChange).not.toHaveBeenCalled();
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    // The peek column is locked too, by its own opt-out rather than by this
+    // rule, so the operator cannot reach the same state from the other side.
+    expect(itemFor(PEEK.header).getAttribute("aria-disabled")).toBe("true");
+  });
+
   it("locks a column that opts out of hiding", () => {
-    // Both are visible, so the last-column rule is not what holds this one.
+    // Three visible, two of them hideable, so the last-data-column rule is not
+    // what holds this one and hiding the next one along is still allowed.
     const onVisibilityChange = openColumnsMenu({}, [
       { ...FIRST, enableHiding: false },
       SECOND,
+      THIRD,
     ]);
 
     const item = itemFor(FIRST.header);
