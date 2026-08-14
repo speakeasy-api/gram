@@ -10,11 +10,14 @@ import type {
   ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
 
+// The slug is never the id. A fixture that spells them the same lets a lookup
+// by slug pass every assertion written for a lookup by id, and the two are
+// separate cache entries with separate consequences.
 function org(id: string): AdminOrganization {
   return {
     id,
     name: id,
-    slug: id,
+    slug: `slug-for-${id}`,
     account_type: "free",
     whitelisted: false,
     member_count: 1,
@@ -72,8 +75,6 @@ describe("organizationQuery", () => {
 // nothing refetches behind it, so an entry this function misses is a surface
 // still showing the state the operator just changed.
 describe("writeOrganizationToCache", () => {
-  // The slug is not the id. The two are separate cache entries, and a record
-  // whose slug reads like its id would let one assertion pass for both.
   const LIVE: AdminOrganization = { ...org("org-a"), slug: "placeholder-a" };
   const DISABLED: AdminOrganization = {
     ...LIVE,
@@ -115,6 +116,23 @@ describe("writeOrganizationToCache", () => {
     // The rest of the page is the page, not just its rows. A cursor dropped
     // here strands the operator on whichever page they had reached.
     expect(after?.next_cursor).toBe("cursor_page_two");
+  });
+
+  // The row is found by id, and by nothing else. A cached page is as old as the
+  // fetch behind it, so it can hold a record whose slug has since been changed
+  // from another surface; a writer matching on the slug would miss that row and
+  // leave the state the operator just changed on the page.
+  it("finds the row whose slug has moved on since the page was fetched", () => {
+    const qc = new QueryClient();
+    const page = organizationsListQuery({ q: "x" });
+    qc.setQueryData(page.queryKey, {
+      organizations: [{ ...LIVE, slug: "placeholder-a-as-it-was" }],
+    });
+
+    writeOrganizationToCache(qc, DISABLED);
+
+    const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);
+    expect(after?.organizations[0]).toEqual(DISABLED);
   });
 
   it("leaves a page that never held the record exactly as it was", () => {

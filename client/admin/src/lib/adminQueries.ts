@@ -98,6 +98,12 @@ export function organizationMembersQuery(
 // be the alternative, and the list is cursor-paged and filtered: refetching it
 // can move the row out from under the operator who just acted on it.
 //
+// One consequence, accepted rather than overlooked: the default list request
+// omits include_disabled, so a row that has just been disabled keeps its place
+// on a page whose filter no longer describes it, until something else fetches
+// that page. The alternative is dropping the row from under the operator the
+// moment they act on it, which is worse.
+//
 // It lives beside the keys rather than at a call site for the reason at the top
 // of this file: a key spelled out by hand is how a write updates the server and
 // leaves the table showing the old row.
@@ -110,9 +116,12 @@ export function writeOrganizationToCache(
   if (org.slug) qc.setQueryData(organizationQuery(org.slug).queryKey, org);
 
   // Every filter and every page, because the operator can act on a row from any
-  // of them and the rest stay in the cache behind it. The record is replaced
-  // where it appears and the page is left alone where it does not, so a list
-  // that never held it keeps its identity and does not re-render.
+  // of them and the rest stay in the cache behind it.
+  //
+  // The early return saves the rebuild on a page the record is not on. It is
+  // an allocation, not a correctness property: React Query hands back the old
+  // reference for a deeply equal result either way, so a page that never held
+  // the record keeps its identity with or without this.
   qc.setQueriesData<ListOrganizationsResult>(
     { queryKey: organizationsListQuery().queryKey },
     (previous) => {

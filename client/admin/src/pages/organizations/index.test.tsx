@@ -116,6 +116,21 @@ const ORGS: AdminOrganization[] = [
     created_at: "2026-06-08T00:00:00Z",
     updated_at: "2026-06-09T00:00:00Z",
   },
+  // Live, and mid-trial. Extend trial is offered on this row and on no other:
+  // the first row's trial is running too, but the organization is disabled and
+  // a disabled organization is not offered more of a trial nobody can use.
+  {
+    id: "org_placeholder_four",
+    name: "Placeholder Four",
+    slug: "placeholder-four",
+    account_type: "enterprise",
+    whitelisted: false,
+    trial_state: "ending_soon",
+    trial_ends_at: "2026-05-06T00:00:00Z",
+    member_count: 5,
+    created_at: "2026-04-02T00:00:00Z",
+    updated_at: "2026-04-07T00:00:00Z",
+  },
 ];
 
 // A page the cursor leads to. Nothing it holds appears on the first page, so a
@@ -131,8 +146,10 @@ const NEXT_PAGE_ORG: AdminOrganization = {
   updated_at: "2026-07-11T00:00:00Z",
 };
 
-const [FIRST_ORG, SECOND_ORG] = ORGS;
-if (!FIRST_ORG || !SECOND_ORG) throw new Error("ORGS needs two rows");
+const [FIRST_ORG, SECOND_ORG, TRIALLING_ORG] = ORGS;
+if (!FIRST_ORG || !SECOND_ORG || !TRIALLING_ORG) {
+  throw new Error("ORGS needs three rows");
+}
 
 // The first row is disabled and its trial is running; the second is live and
 // never trialled. Between them every action has a row that offers it and a row
@@ -786,9 +803,16 @@ describe("organizations list peek", () => {
     );
     expect(isPeeked(first)).toBe(false);
 
+    // On to the last row, and then nowhere: paging replaces the row nodes the
+    // anchor depends on, so the walk stops rather than following the pager.
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
     expect(
-      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+      within(peekPanel()).getByRole("heading", { name: TRIALLING_ORG.name }),
+    ).toBeTruthy();
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
+    expect(
+      within(peekPanel()).getByRole("heading", { name: TRIALLING_ORG.name }),
     ).toBeTruthy();
   });
 
@@ -1878,6 +1902,104 @@ describe("organizations list write actions", () => {
     });
   });
 
+  it("shows a re-enable that failed, and not only to a screen reader", async () => {
+    mocks.enableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is not disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(FIRST_ORG.name);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+
+    // Re-enable is the one action with no dialog, so without this the whole
+    // account of the failure on the page is a sentence inside sr-only: the row
+    // does not change, and the banner above it covers the list query alone. A
+    // sighted operator presses Re-enable, sees nothing happen, and is told
+    // nothing about why.
+    const failure = `Could not re-enable ${FIRST_ORG.name}: organization is not disabled`;
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain(failure);
+    expect(banner.className).not.toContain("sr-only");
+    expect(announcement()).toBe(failure);
+
+    // Dismissible, because it is the operator's page and this is not a modal.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss the failure" }),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("takes the failure down when the next write succeeds", async () => {
+    mocks.enableOrganization.mockRejectedValueOnce(
+      new GramAdminError(404, null, "gram admin 404 Not Found"),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(FIRST_ORG.name);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+
+    await openRowMenu(FIRST_ORG.name);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+
+    // The operator has just been told the current state of this record, so a
+    // banner about the attempt before it is describing a page that has moved
+    // on.
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+
+  it("keeps the live region reachable while a dialog is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(LIVE.name);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+
+    // An open Radix modal hides the rest of the page with aria-hidden, and the
+    // one exemption that package makes is for elements carrying aria-live by
+    // name. Everything else goes, which is what this asserts against: the
+    // table is gone from the tree and the region is not.
+    expect(liveRegion()).toBeTruthy();
+    expect(screen.queryByRole("link", { name: LIVE.name })).toBeNull();
+  });
+
+  it("speaks the same refusal twice when the operator presses through it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await openRowMenu(TRIALLING_ORG.name);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Extend trial" }));
+    await screen.findByRole("dialog");
+
+    const days = screen.getByLabelText("Days");
+    fireEvent.change(days, { target: { value: "0" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+    const first = liveRegion().textContent;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+
+    // Word for word the same sentence, and the region still changed: the
+    // zero-width space alternates, so the second refusal reaches the
+    // accessibility tree as a change rather than as silence. Nothing on screen
+    // moves on that press, which is the whole reason this path announces.
+    expect(announcement()).toContain("between 1 and 365");
+    expect(liveRegion().textContent).not.toBe(first);
+    expect(mocks.extendTrial).not.toHaveBeenCalled();
+  });
+
   it("will not let the Columns menu take the row menu away", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await screen.findByRole("link", { name: FIRST_ORG.name });
@@ -1919,10 +2041,12 @@ describe("organizations list write actions", () => {
 
   it("extends the trial from the panel and repaints the panel with the answer", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await peekOn(FIRST_ORG.name);
+    await peekOn(TRIALLING_ORG.name);
 
     fireEvent.click(
-      within(peekPanel()).getByRole("button", { name: "Extend trial" }),
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${TRIALLING_ORG.name}`,
+      }),
     );
     await screen.findByRole("dialog");
     await act(async () => {
@@ -1934,14 +2058,16 @@ describe("organizations list write actions", () => {
     });
     // The default day count, sent without the operator typing anything.
     expect(mocks.extendTrial).toHaveBeenCalledWith({
-      id: FIRST_ORG.id,
+      id: TRIALLING_ORG.id,
       days: 14,
     });
     // The panel is drawn from the row it is peeking at, so it repaints from the
     // same cache write the row does. Reading the old date here is the operator
     // being shown the trial they just extended, unextended.
     expect(peekPanel().textContent).toContain(shortDate(EXTENDED_TRIAL_END));
-    expect(announcement()).toBe(`${FIRST_ORG.name} trial extended by 14 days.`);
+    expect(announcement()).toBe(
+      `${TRIALLING_ORG.name} trial extended by 14 days.`,
+    );
   });
 
   it("re-enables from the panel without a dialog in the way", async () => {
@@ -1950,54 +2076,102 @@ describe("organizations list write actions", () => {
     const panel = within(peekPanel());
 
     await act(async () => {
-      fireEvent.click(panel.getByRole("button", { name: "Re-enable" }));
+      fireEvent.click(
+        panel.getByRole("button", { name: `Re-enable ${FIRST_ORG.name}` }),
+      );
     });
 
     expect(mocks.enableOrganization).toHaveBeenCalledWith({
       id: FIRST_ORG.id,
     });
+    // Named for the record it acts on, and it is the record that changed
+    // rather than the panel: the panel's own name is a constant, and it swaps
+    // records under itself on the arrow keys.
     expect(
-      within(peekPanel()).getByRole("button", { name: "Disable" }),
+      within(peekPanel()).getByRole("button", {
+        name: `Disable ${FIRST_ORG.name}`,
+      }),
     ).toBeTruthy();
     // The panel stays. Nothing about the record left the list, and closing it
     // would take the operator off the row they are working.
     expect(peekPanel()).toBeTruthy();
   });
 
+  it("gives the keyboard back to the panel control the dialog opened from", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(TRIALLING_ORG.name);
+    const extend = within(peekPanel()).getByRole("button", {
+      name: `Extend trial for ${TRIALLING_ORG.name}`,
+    });
+
+    fireEvent.click(extend);
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // The same node, through the write: the record changed underneath it and
+    // React kept the element. Radix would have focused a DialogTrigger that
+    // does not exist here and left the keyboard on the document body, at the
+    // top of the page, with the panel still open beside it.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(extend);
+    });
+  });
+
   it("leaves the arrow keys to the day count typed inside the peek", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
-    await peekOn(FIRST_ORG.name);
+    const peeked = await screen.findByRole("link", {
+      name: TRIALLING_ORG.name,
+    });
+    await peekOn(TRIALLING_ORG.name);
 
     fireEvent.click(
-      within(peekPanel()).getByRole("button", { name: "Extend trial" }),
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${TRIALLING_ORG.name}`,
+      }),
     );
     await screen.findByRole("dialog");
 
+    // A spinner, which is the premise of everything below: the arrow keys have
+    // something to do inside this field only because it steps its own value,
+    // and the bounds are on the control as well as in the check behind it.
+    // happy-dom does not step a number input on ArrowUp or ArrowDown, so the
+    // attributes are assertable here and the stepping is not.
+    const days = screen.getByLabelText("Days");
+    expect(days.getAttribute("type")).toBe("number");
+    expect(days.getAttribute("min")).toBe("1");
+    expect(days.getAttribute("max")).toBe("365");
+    expect(days.getAttribute("step")).toBe("1");
+
     // The dialog is drawn in a portal and rendered inside the panel's subtree,
     // so its keys reach the list's handler through React even though the node
-    // is outside the panel. A number input steps its value on the arrow keys,
-    // and an operator holding ArrowUp to reach 30 days is not asking the list
-    // to walk the peek down the page underneath them.
+    // is outside the panel. An operator holding ArrowUp to reach 30 days is not
+    // asking the list to walk the peek down the page underneath them.
     const event = new KeyboardEvent("keydown", {
       key: "ArrowDown",
       bubbles: true,
       cancelable: true,
     });
-    screen.getByLabelText("Days").dispatchEvent(event);
+    days.dispatchEvent(event);
 
     // Read off the row rather than through a role query: an open modal takes
     // the table out of the accessibility tree.
-    expect(isPeeked(first)).toBe(true);
+    expect(isPeeked(peeked)).toBe(true);
     expect(event.defaultPrevented).toBe(false);
   });
 
   it("closes the dialog on Escape and leaves the peek open behind it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await peekOn(FIRST_ORG.name);
+    await peekOn(TRIALLING_ORG.name);
 
     fireEvent.click(
-      within(peekPanel()).getByRole("button", { name: "Extend trial" }),
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${TRIALLING_ORG.name}`,
+      }),
     );
     await screen.findByRole("dialog");
 

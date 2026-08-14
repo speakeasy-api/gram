@@ -17,7 +17,21 @@ import {
 } from "@/lib/gramAdminApi";
 import { renderWithApp } from "@/test/harness";
 
-import { AnnounceProvider, OrganizationActions } from "./OrganizationActions";
+import {
+  OrganizationActions,
+  WriteReportProvider,
+} from "./OrganizationActions";
+
+// One note for whoever writes the next test here. A synchronous read straight
+// after `await act(...)` misses TanStack Query's pending state: its notify
+// manager schedules on a macrotask, so `expect(button.textContent).toBe(
+// "Disabling...")` on the line after the click reads the state from before the
+// mutation started and passes for the wrong reason. Every assertion about a
+// write in flight below goes through `findBy*` or `waitFor` for that reason.
+//
+// The same applies to focus after a dialog closes: Radix's FocusScope restores
+// it from a `setTimeout(..., 0)`, so it has not moved yet when the close
+// returns.
 
 const mocks = vi.hoisted(() => ({
   disableOrganization:
@@ -69,12 +83,14 @@ const EXTENDABLE: (TrialState | undefined)[] = ["running", "ending_soon"];
 const DEFAULT_DAYS = "14";
 
 const announce = vi.fn<(text: string) => void>();
+const showFailure = vi.fn<(text: string | null) => void>();
+const REPORTER = { announce, showFailure };
 
 async function renderMenu(org: AdminOrganization = ORG): Promise<HTMLElement> {
   await renderWithApp(
-    <AnnounceProvider value={announce}>
+    <WriteReportProvider value={REPORTER}>
       <OrganizationActions org={org} layout="menu" />
-    </AnnounceProvider>,
+    </WriteReportProvider>,
   );
   const trigger = screen.getByRole("button", {
     name: `Actions for ${org.name}`,
@@ -90,9 +106,9 @@ async function renderMenu(org: AdminOrganization = ORG): Promise<HTMLElement> {
 
 async function renderFooter(org: AdminOrganization = ORG): Promise<void> {
   await renderWithApp(
-    <AnnounceProvider value={announce}>
+    <WriteReportProvider value={REPORTER}>
       <OrganizationActions org={org} layout="footer" />
-    </AnnounceProvider>,
+    </WriteReportProvider>,
   );
 }
 
@@ -104,6 +120,19 @@ function menuItems(): string[] {
 
 function dialog(): HTMLElement {
   return screen.getByRole("dialog");
+}
+
+// The node, not the role. Radix takes the portal out of the accessibility tree
+// while it works out whether a dismiss is allowed, so `queryByRole("dialog")`
+// answers null for a dialog that is still on the page and refusing to close.
+function dialogNode(): HTMLElement | null {
+  return document.querySelector("[data-slot='dialog-content']");
+}
+
+function overlay(): HTMLElement {
+  const node = document.querySelector("[data-slot='dialog-overlay']");
+  if (!(node instanceof HTMLElement)) throw new Error("no dialog overlay");
+  return node;
 }
 
 function dayInput(): HTMLInputElement {
@@ -140,6 +169,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 beforeEach(() => {
   announce.mockReset();
+  showFailure.mockReset();
   mocks.disableOrganization.mockReset();
   mocks.disableOrganization.mockResolvedValue({
     ...ORG,
@@ -169,7 +199,9 @@ describe("the row menu", () => {
   it("offers Re-enable, and not Disable, for a disabled organization", async () => {
     await renderMenu(DISABLED_ORG);
 
-    expect(menuItems()).toEqual(["Re-enable", "Extend trial"]);
+    // Re-enable alone. The record is on a running trial, and the walk below
+    // says why the trial is not extendable while the organization is off.
+    expect(menuItems()).toEqual(["Re-enable"]);
   });
 
   it.each([...TRIAL_STATES, undefined])(
@@ -185,6 +217,19 @@ describe("the row menu", () => {
       expect(menuItems().includes("Extend trial")).toBe(
         EXTENDABLE.includes(state),
       );
+    },
+  );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "keeps Extend trial off a disabled organization on the %s trial",
+    async (state) => {
+      await renderMenu({ ...DISABLED_ORG, trial_state: state });
+
+      // The server would take this request: nothing in the extend handler
+      // reads disabled_at, and the trial goes on running while every member is
+      // locked out. Offering it anyway is offering to buy more of a trial
+      // nobody can use.
+      expect(menuItems().includes("Extend trial")).toBe(false);
     },
   );
 
@@ -239,6 +284,9 @@ describe("the row menu", () => {
     expect(mocks.enableOrganization).toHaveBeenCalledWith({ id: ORG.id });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(announce).toHaveBeenCalledWith(`${ORG.name} is enabled.`);
+    // A write that succeeded clears the banner an earlier one left behind:
+    // the operator has just been told the current state of this record.
+    expect(showFailure).toHaveBeenCalledWith(null);
   });
 });
 
@@ -296,6 +344,88 @@ describe("the extend trial dialog", () => {
       }
     },
   );
+
+  it("says so again when the same value is refused twice", async () => {
+    await renderMenu();
+    await openExtendDialog();
+
+    await submitDays("0");
+    await submitDays("0");
+
+    // Nothing on screen moves on the second press: the state is already
+    // rejected and the text is a constant, so the alert is not re-inserted and
+    // a role="alert" announces only what is inserted or changed. The live
+    // region is what carries the second refusal, which is why this path
+    // announces rather than relying on the node.
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenNthCalledWith(
+      2,
+      `Could not extend the trial for ${ORG.name}: Enter a whole number of days between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}.`,
+    );
+    expect(mocks.extendTrial).not.toHaveBeenCalled();
+  });
+
+  it("points the day count at the message under it", async () => {
+    await renderMenu();
+    await openExtendDialog();
+
+    await submitDays("0");
+
+    // aria-invalid says the value is wrong. Only this says what would make it
+    // right, to a user who has moved back to the field and cannot see the line
+    // beneath it.
+    const alert = await screen.findByRole("alert");
+    expect(alert.id).toBeTruthy();
+    expect(dayInput().getAttribute("aria-describedby")).toBe(alert.id);
+  });
+
+  it("stops calling a corrected value out of bounds", async () => {
+    const held = deferred<AdminOrganization>();
+    await renderMenu();
+    await openExtendDialog();
+    await submitDays("0");
+    expect(await screen.findByRole("alert")).toBeTruthy();
+
+    mocks.extendTrial.mockReturnValue(held.promise);
+    await submitDays("30");
+
+    // While the corrected request is still in flight, which is the only moment
+    // it is visible: success unmounts the dialog. The field would otherwise
+    // sit there marked invalid, under a bounds message, while its own request
+    // runs.
+    await screen.findByRole("button", { name: "Extending..." });
+    expect(dayInput().getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(async () => {
+      held.resolve({ ...ORG, trial_ends_at: "2026-05-20T00:00:00Z" });
+    });
+  });
+
+  it("shows the bounds alone when a refusal follows a server failure", async () => {
+    mocks.extendTrial.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization has no running trial" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderMenu();
+    await openExtendDialog();
+    await submitDays("30");
+    expect(await screen.findByRole("alert")).toBeTruthy();
+
+    await submitDays("0");
+
+    // One alert, not two. The failed request and the refused value are both
+    // true, and showing both gives the operator two reasons with nothing
+    // saying which one the next press answers.
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.textContent).toContain(
+      `between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}`,
+    );
+  });
 
   it("keeps the dialog open and names the conflict the server answered", async () => {
     mocks.extendTrial.mockRejectedValue(
@@ -408,6 +538,60 @@ describe("a rejected write", () => {
     );
   });
 
+  it("opens the next confirmation without the last one's failure", async () => {
+    mocks.disableOrganization.mockRejectedValue(
+      new GramAdminError(404, null, "gram admin 404 Not Found"),
+    );
+    const trigger = await renderMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+    fireEvent.pointerDown(trigger, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+
+    // The same rule the extend dialog follows. The failure belonged to the
+    // attempt the operator abandoned, and reporting it here reports a request
+    // this confirmation has not made.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("gives a re-enable failure the sentence the server sent", async () => {
+    mocks.enableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is not disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderMenu(DISABLED_ORG);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+
+    // A 4xx body carries a sentence the operator can act on, and the status
+    // line does not. The 5xx case below is the other half of that rule, and
+    // only the two together tell the message apart from the status line.
+    const text = `Could not re-enable ${ORG.name}: organization is not disabled`;
+    expect(announce).toHaveBeenCalledWith(text);
+    // Shown as well as spoken. This is the one write with no dialog, so
+    // without the banner the whole account of the failure is inside sr-only.
+    expect(showFailure).toHaveBeenCalledWith(text);
+  });
+
   it("reports a re-enable that failed, which has no dialog to report in", async () => {
     mocks.enableOrganization.mockRejectedValue(
       new GramAdminError(
@@ -430,6 +614,206 @@ describe("a rejected write", () => {
   });
 });
 
+// Radix hard-codes its close behaviour: onCloseAutoFocus cancels FocusScope's
+// restore of the previously focused element and focuses the DialogTrigger
+// instead. These dialogs have no trigger, so without a restore of their own
+// every one of these paths ends with the keyboard on document.body, at the top
+// of the page, after an action the operator took on one row of a long table.
+describe("the keyboard when a dialog closes", () => {
+  it("goes back to the row menu trigger when the write succeeds", async () => {
+    const trigger = await renderMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  // The four ways out that are not the write itself. Each is its own Radix
+  // path, and each one used to end on the body.
+  it.each([
+    [
+      "Escape",
+      (): void => {
+        fireEvent.keyDown(document, { key: "Escape" });
+      },
+    ],
+    [
+      "Cancel",
+      (): void => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      },
+    ],
+    [
+      "the backdrop",
+      (): void => {
+        fireEvent.pointerDown(overlay(), {
+          button: 0,
+          ctrlKey: false,
+          pointerType: "mouse",
+        });
+        fireEvent.click(overlay(), { button: 0, ctrlKey: false });
+      },
+    ],
+    [
+      "the X",
+      (): void => {
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      },
+    ],
+  ] as [string, () => void][])(
+    "goes back to the row menu trigger when %s closes the dialog",
+    async (_path, close) => {
+      const trigger = await renderMenu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+      await screen.findByRole("dialog");
+
+      await act(async () => {
+        close();
+      });
+
+      await waitFor(() => {
+        expect(dialogNode()).toBeNull();
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(trigger);
+      });
+      expect(mocks.disableOrganization).not.toHaveBeenCalled();
+    },
+  );
+
+  it("goes back to the peek footer control the dialog opened from", async () => {
+    await renderFooter();
+    const button = screen.getByRole("button", { name: `Disable ${ORG.name}` });
+    fireEvent.click(button);
+    await screen.findByRole("dialog");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(button);
+    });
+  });
+});
+
+describe("a write in flight", () => {
+  // Cancel carries `disabled` while the write runs, so Escape and the overlay
+  // are the only ways in and the guard on onOpenChange is the only thing
+  // holding them off.
+  it("cannot be dismissed out of the disable confirmation", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.disableOrganization.mockReturnValue(held.promise);
+    await renderMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    });
+    await screen.findByRole("button", { name: "Disabling..." });
+
+    await act(async () => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+
+    // The answer decides what the row says next. A dialog dismissed mid-write
+    // leaves the operator with no account of how their action ended.
+    expect(dialogNode()).not.toBeNull();
+
+    await act(async () => {
+      held.resolve({ ...ORG, disabled_at: "2026-08-01T00:00:00Z" });
+    });
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+  });
+
+  it("cannot be dismissed out of the extend dialog", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.extendTrial.mockReturnValue(held.promise);
+    await renderMenu();
+    await openExtendDialog();
+    await submitDays("30");
+    await screen.findByRole("button", { name: "Extending..." });
+
+    await act(async () => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+
+    expect(dialogNode()).not.toBeNull();
+
+    await act(async () => {
+      held.resolve({ ...ORG, trial_ends_at: "2026-05-20T00:00:00Z" });
+    });
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+  });
+
+  it("marks the row menu trigger busy rather than disabling it", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.disableOrganization.mockReturnValue(held.promise);
+    const trigger = await renderMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    });
+
+    // Read off the node: an open modal takes the rest of the page out of the
+    // accessibility tree, so the trigger cannot be found by role from here.
+    await waitFor(() => {
+      expect(trigger.getAttribute("aria-busy")).toBe("true");
+    });
+    expect(trigger.hasAttribute("disabled")).toBe(false);
+
+    await act(async () => {
+      held.resolve({ ...ORG, disabled_at: "2026-08-01T00:00:00Z" });
+    });
+    await waitFor(() => {
+      expect(trigger.getAttribute("aria-busy")).toBe("false");
+    });
+  });
+
+  it("marks both peek footer controls busy rather than disabling them", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.extendTrial.mockReturnValue(held.promise);
+    await renderFooter();
+    const disable = screen.getByRole("button", { name: `Disable ${ORG.name}` });
+    const extend = screen.getByRole("button", {
+      name: `Extend trial for ${ORG.name}`,
+    });
+
+    fireEvent.click(extend);
+    await screen.findByRole("dialog");
+    await submitDays("30");
+
+    // Both, not just the one that started it. A control that goes dead under
+    // the operator's hand is the thing this design exists to avoid, and the
+    // write is the record's, not the button's.
+    await waitFor(() => {
+      expect(extend.getAttribute("aria-busy")).toBe("true");
+    });
+    expect(disable.getAttribute("aria-busy")).toBe("true");
+    expect(extend.hasAttribute("disabled")).toBe(false);
+    expect(disable.hasAttribute("disabled")).toBe(false);
+
+    await act(async () => {
+      held.resolve({ ...ORG, trial_ends_at: "2026-05-20T00:00:00Z" });
+    });
+    await waitFor(() => {
+      expect(extend.getAttribute("aria-busy")).toBe("false");
+    });
+  });
+});
+
 describe("the peek panel footer", () => {
   it("offers the same three actions as buttons rather than a menu", async () => {
     await renderFooter();
@@ -437,28 +821,42 @@ describe("the peek panel footer", () => {
     expect(
       screen.queryByRole("button", { name: `Actions for ${ORG.name}` }),
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "Disable" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Extend trial" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Re-enable" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: `Disable ${ORG.name}` }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: `Extend trial for ${ORG.name}` }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: `Re-enable ${ORG.name}` }),
+    ).toBeNull();
   });
 
   it("shows Re-enable for a disabled organization", async () => {
     await renderFooter(DISABLED_ORG);
 
-    expect(screen.getByRole("button", { name: "Re-enable" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: `Re-enable ${ORG.name}` }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: `Disable ${ORG.name}` }),
+    ).toBeNull();
   });
 
   it("hides Extend trial for a trial the server would refuse", async () => {
     await renderFooter({ ...ORG, trial_state: "converted" });
 
-    expect(screen.queryByRole("button", { name: "Extend trial" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: `Extend trial for ${ORG.name}` }),
+    ).toBeNull();
   });
 
   it("confirms before it disables, the same as the row menu does", async () => {
     await renderFooter();
 
-    fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: `Disable ${ORG.name}` }),
+    );
 
     await screen.findByRole("dialog");
     expect(mocks.disableOrganization).not.toHaveBeenCalled();
@@ -468,7 +866,9 @@ describe("the peek panel footer", () => {
     const held = deferred<AdminOrganization>();
     mocks.enableOrganization.mockReturnValue(held.promise);
     await renderFooter(DISABLED_ORG);
-    const button = screen.getByRole("button", { name: "Re-enable" });
+    const button = screen.getByRole("button", {
+      name: `Re-enable ${ORG.name}`,
+    });
 
     fireEvent.click(button);
 

@@ -6,6 +6,8 @@ import {
   errorMessage,
   extendTrial,
   logout,
+  MAX_TRIAL_EXTENSION_DAYS,
+  MIN_TRIAL_EXTENSION_DAYS,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -88,6 +90,7 @@ describe("the organization write endpoints", () => {
   function requestOf(fetch: ReturnType<typeof vi.fn>): {
     path: unknown;
     method: unknown;
+    contentType: string | null;
     body: unknown;
   } {
     const call = fetch.mock.calls.at(-1);
@@ -98,12 +101,30 @@ describe("the organization write endpoints", () => {
     return {
       path: call?.[0],
       method: init?.method,
+      // Read through Headers, because gramAdminRequest normalises whatever it
+      // was handed and adds an Accept of its own. Asserted at all because a
+      // POST that drops it is answered with a 415, and a 415 is not observable
+      // from the client suite: nothing else here would change.
+      contentType: new Headers(init?.headers).get("Content-Type"),
       body: typeof body === "string" ? (JSON.parse(body) as unknown) : body,
     };
   }
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  // The two ends of the range the server takes, written out rather than
+  // derived. Every other bounds test in this repository reads these constants
+  // for its expectation, so moving one moves the whole suite with it and the
+  // browser starts refusing day counts the server would have taken.
+  //
+  // They must equal MinTrialExtensionDays and MaxTrialExtensionDays in
+  // server/internal/constants/trials.go. Nothing ties the two files together
+  // and nothing can: the admin API is stripped from both generated SDKs.
+  it("mirrors the server's day-count bounds exactly", () => {
+    expect(MIN_TRIAL_EXTENSION_DAYS).toBe(1);
+    expect(MAX_TRIAL_EXTENSION_DAYS).toBe(365);
   });
 
   it("posts the id to the disable path", async () => {
@@ -114,6 +135,7 @@ describe("the organization write endpoints", () => {
     expect(requestOf(fetch)).toEqual({
       path: "/admin/organization.disable",
       method: "POST",
+      contentType: "application/json",
       body: { id: ORG.id },
     });
   });
@@ -126,6 +148,7 @@ describe("the organization write endpoints", () => {
     expect(requestOf(fetch)).toEqual({
       path: "/admin/organization.enable",
       method: "POST",
+      contentType: "application/json",
       body: { id: ORG.id },
     });
   });
@@ -138,6 +161,7 @@ describe("the organization write endpoints", () => {
     expect(requestOf(fetch)).toEqual({
       path: "/admin/trial.extend",
       method: "POST",
+      contentType: "application/json",
       body: { id: ORG.id, days: 30 },
     });
   });
