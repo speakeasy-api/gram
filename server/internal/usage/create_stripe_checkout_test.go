@@ -125,13 +125,14 @@ func TestCheckoutStripeClientRejectsIdempotencyKeyReuseWithDifferentInput(t *tes
 
 	client := newCheckoutStripeClient()
 	input := stripeclient.CreateCheckoutSessionInput{
-		CustomerID:       "cus_first",
-		OrganizationID:   "<ORG_ID>",
-		OrganizationSlug: "billing-test",
-		SuccessURL:       "https://app.example.test/billing-test/billing",
-		CancelURL:        "https://app.example.test/billing-test/billing",
-		TrialEnd:         nil,
-		IdempotencyKey:   "checkout-session:<ORG_ID>",
+		CustomerID:         "cus_first",
+		OrganizationID:     "<ORG_ID>",
+		OrganizationSlug:   "billing-test",
+		SuccessURL:         "https://app.example.test/billing-test/billing",
+		CancelURL:          "https://app.example.test/billing-test/billing",
+		TrialEnd:           nil,
+		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout-session:<ORG_ID>",
 	}
 
 	_, err := client.CreateCheckoutSession(t.Context(), input)
@@ -139,6 +140,53 @@ func TestCheckoutStripeClientRejectsIdempotencyKeyReuseWithDifferentInput(t *tes
 	input.CustomerID = "cus_second"
 	_, err = client.CreateCheckoutSession(t.Context(), input)
 	require.ErrorContains(t, err, "reused with different checkout input")
+}
+
+func TestNextStripeBillingCycleAnchor(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 14, 13, 45, 0, 0, time.FixedZone("test", 2*60*60))
+	trialAtMidnight := time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC)
+	trialDuringDay := time.Date(2026, time.August, 21, 9, 30, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		now      time.Time
+		trialEnd *time.Time
+		want     time.Time
+	}{
+		{
+			name:     "immediate checkout uses next UTC midnight",
+			now:      now,
+			trialEnd: nil,
+			want:     time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "immediate checkout at midnight still gets a free day stub",
+			now:      time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC),
+			trialEnd: nil,
+			want:     time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "midnight trial end is already aligned",
+			now:      now,
+			trialEnd: &trialAtMidnight,
+			want:     trialAtMidnight,
+		},
+		{
+			name:     "daytime trial end gets a free stub to midnight",
+			now:      now,
+			trialEnd: &trialDuringDay,
+			want:     time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, nextStripeBillingCycleAnchor(tt.now, tt.trialEnd))
+		})
+	}
 }
 
 type stripeCheckoutTestInstance struct {

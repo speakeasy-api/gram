@@ -30,6 +30,8 @@ var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
+var errMissingBillingCycleAnchor = errors.New("billing cycle anchor is required")
+
 // Catalog contains the Stripe object identifiers used by PAYG billing.
 type Catalog struct {
 	PriceIDTUM     string
@@ -93,6 +95,9 @@ type CreateCheckoutSessionInput struct {
 
 	// TrialEnd preserves an active in-product trial on the Stripe subscription.
 	TrialEnd *time.Time
+
+	// BillingCycleAnchor starts the first full paid period at an exact UTC boundary.
+	BillingCycleAnchor time.Time
 
 	// IdempotencyKey identifies one Checkout creation request.
 	IdempotencyKey string
@@ -238,6 +243,9 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	if input.IdempotencyKey == "" {
 		return nil, errMissingIdempotencyKey
 	}
+	if input.BillingCycleAnchor.IsZero() {
+		return nil, errMissingBillingCycleAnchor
+	}
 
 	params := new(stripesdk.CheckoutSessionCreateParams)
 	params.CancelURL = stripesdk.String(input.CancelURL)
@@ -256,10 +264,12 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params.Mode = stripesdk.String(stripesdk.CheckoutSessionModeSubscription)
 	params.PaymentMethodCollection = stripesdk.String(stripesdk.CheckoutSessionPaymentMethodCollectionAlways)
 	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
+	params.SubscriptionData.BillingCycleAnchor = new(input.BillingCycleAnchor.Unix())
 	params.SubscriptionData.Metadata = map[string]string{
 		organizationIDMetadataKey:   input.OrganizationID,
 		organizationSlugMetadataKey: input.OrganizationSlug,
 	}
+	params.SubscriptionData.ProrationBehavior = stripesdk.String("none")
 	params.SuccessURL = stripesdk.String(input.SuccessURL)
 	if input.TrialEnd != nil {
 		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())

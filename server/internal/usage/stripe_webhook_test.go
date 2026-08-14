@@ -493,6 +493,8 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "customer_placeholder", metadata.StripeCustomerID.String)
 	require.Equal(t, "subscription_activation", metadata.StripeSubscriptionID.String)
+	require.True(t, metadata.StripeBillingCycleAnchor.Valid)
+	require.True(t, service.stripeClient.(*fakeStripeWebhookClient).checkout.BillingCycleAnchor.Equal(metadata.StripeBillingCycleAnchor.Time))
 	require.EqualValues(t, 23, metadata.BillingCycleAnchorDay)
 	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
