@@ -188,6 +188,18 @@ function peekPanel(): HTMLElement {
   return screen.getByRole("complementary", { name: "Organization peek" });
 }
 
+function liveRegion(): HTMLElement {
+  return screen.getByRole("status");
+}
+
+// The region carries a zero-width space on every other announcement, so that a
+// sentence repeated word for word still changes the text node. Stripped here:
+// these assertions are about what is announced, not about the marker that
+// makes an unchanged sentence announceable.
+function announcement(): string {
+  return (liveRegion().textContent ?? "").replaceAll("\u200b", "");
+}
+
 function isPeeked(link: HTMLElement): boolean {
   return rowFor(link).classList.contains("bg-muted");
 }
@@ -613,9 +625,7 @@ describe("organizations list peek", () => {
     ).toBeTruthy();
     // Nothing else speaks when the panel already holds the focus and the
     // record under it changes.
-    expect(screen.getByRole("status").textContent).toBe(
-      `Peeking at ${SECOND_ORG.name}.`,
-    );
+    expect(announcement()).toBe(`Peeking at ${SECOND_ORG.name}.`);
     expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
       true,
     );
@@ -799,7 +809,7 @@ describe("organizations list peek", () => {
     expect(
       screen.queryByRole("complementary", { name: "Organization peek" }),
     ).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("Peek closed.");
+    expect(announcement()).toBe("Peek closed.");
   });
 
   it("activating another row's control moves the peek to that row", async () => {
@@ -813,9 +823,7 @@ describe("organizations list peek", () => {
     expect(
       within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
     ).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toBe(
-      `Peeking at ${SECOND_ORG.name}.`,
-    );
+    expect(announcement()).toBe(`Peeking at ${SECOND_ORG.name}.`);
   });
 
   it("the control reports whether its own panel is open", async () => {
@@ -848,13 +856,48 @@ describe("organizations list peek", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("announces a move onto an organization that shares the peeked one's name", async () => {
+    // Names are not unique. Two records, one name, so both announcements are
+    // the same sentence word for word.
+    const TWIN: AdminOrganization = {
+      ...SECOND_ORG,
+      id: "org_placeholder_twin",
+      slug: "placeholder-twin",
+      name: FIRST_ORG.name,
+    };
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: [FIRST_ORG, TWIN],
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const [first, twin] = await screen.findAllByRole("button", {
+      name: `Peek at ${FIRST_ORG.name}`,
+    });
+    if (!first || !twin) throw new Error("both rows need a control");
+
+    fireEvent.click(first);
+    const spoken = liveRegion().textContent;
+
+    fireEvent.click(twin);
+
+    // The panel moved to the other record.
+    expect(twin.getAttribute("aria-expanded")).toBe("true");
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+    expect(announcement()).toBe(`Peeking at ${FIRST_ORG.name}.`);
+
+    // A live region speaks when its text changes. Set the same string twice
+    // and the DOM never moves, so the operator hears nothing at all while the
+    // panel in front of them swaps records.
+    expect(liveRegion().textContent).not.toBe(spoken);
+  });
+
   it("keeps an empty status region on the page before anything is peeked", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await screen.findByRole("link", { name: FIRST_ORG.name });
 
     // A live region injected together with its text is not reliably announced,
     // so the region has to be on the page before it has anything to say.
-    expect(screen.getByRole("status").textContent).toBe("");
+    expect(announcement()).toBe("");
   });
 
   it("alt-clicking a row opens the organization rather than peeking at it", async () => {
@@ -931,7 +974,7 @@ describe("organizations list peek", () => {
       true,
     );
     // Worded apart from an operator's own close, which says nothing about why.
-    expect(screen.getByRole("status").textContent).toBe(
+    expect(announcement()).toBe(
       `Peek closed. ${FIRST_ORG.name} is no longer in the list.`,
     );
   });

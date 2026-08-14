@@ -43,6 +43,10 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   created_at: false,
 };
 
+// Appended to every other announcement so an unchanged sentence still changes
+// the text node. Zero-width, so nothing is spoken and nothing takes up space.
+const ZERO_WIDTH_SPACE = "\u200b";
+
 const ARROW_STEP: Record<string, number | undefined> = {
   ArrowDown: 1,
   ArrowUp: -1,
@@ -80,10 +84,19 @@ export function OrganizationsList(): JSX.Element {
   // Mounted for the life of the page. A live region that arrives in the same
   // commit as its text is not reliably announced: the element has to be in the
   // accessibility tree first.
-  const [announcement, setAnnouncement] = useState("");
+  //
+  // The count rides along because a region is announced when its text changes.
+  // Organization names are not unique, so the same sentence can be set twice
+  // running; React bails on an equal string, the DOM text never moves, and the
+  // operator hears nothing while the panel visibly swaps records.
+  const [announcement, setAnnouncement] = useState({ text: "", count: 0 });
 
   // Raised while rendering, read by the effect that rescues the keyboard.
   const [peekedRecordLeft, setPeekedRecordLeft] = useState(false);
+
+  const announce = useCallback((text: string): void => {
+    setAnnouncement((previous) => ({ text, count: previous.count + 1 }));
+  }, []);
 
   // One object is the source of both the request and the signature below. Two
   // hand-written lists drift: a slice that adds a filter to the request would
@@ -169,7 +182,7 @@ export function OrganizationsList(): JSX.Element {
   // During render, not in an effect: an effect paints a dropped record first.
   if (peek && !peeked) {
     setPeek(undefined);
-    setAnnouncement(`Peek closed. ${peek.name} is no longer in the list.`);
+    announce(`Peek closed. ${peek.name} is no longer in the list.`);
     setPeekedRecordLeft(true);
   }
 
@@ -193,14 +206,17 @@ export function OrganizationsList(): JSX.Element {
       PEEK_TRIGGER_SELECTOR,
     );
     setPeek(undefined);
-    setAnnouncement("Peek closed.");
+    announce("Peek closed.");
     trigger?.focus();
-  }, []);
+  }, [announce]);
 
-  const openPeek = useCallback((org: AdminOrganization): void => {
-    setPeek({ id: org.id, name: org.name });
-    setAnnouncement(`Peeking at ${org.name}.`);
-  }, []);
+  const openPeek = useCallback(
+    (org: AdminOrganization): void => {
+      setPeek({ id: org.id, name: org.name });
+      announce(`Peeking at ${org.name}.`);
+    },
+    [announce],
+  );
 
   const togglePeek = useCallback(
     (org: AdminOrganization): void => {
@@ -251,9 +267,17 @@ export function OrganizationsList(): JSX.Element {
         )}
 
         {/* The only thing that speaks when the arrow keys swap the record under
-            a panel that already holds the focus. */}
-        <div role="status" className="sr-only">
-          {announcement}
+            a panel that already holds the focus.
+
+            `aria-live` is written out as well as implied by the role: a few
+            screen readers only honour the attribute. The zero-width space
+            alternates with the count so that a sentence set twice running
+            still reaches the accessibility tree as a change. It is not
+            announced, and it is not rendered anywhere a sighted operator
+            reads. */}
+        <div role="status" aria-live="polite" className="sr-only">
+          {announcement.text}
+          {announcement.count % 2 === 1 ? ZERO_WIDTH_SPACE : ""}
         </div>
 
         {/* Stretch, so the panel takes its height from the row. */}
