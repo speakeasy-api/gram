@@ -76,6 +76,7 @@ export function OrganizationsList(): JSX.Element {
   const [peek, setPeek] = useState<{ id: string; name: string }>();
   const peekedId = peek?.id;
   const peekedRow = useRef<HTMLTableRowElement>(null);
+  const peekPanel = useRef<HTMLElement>(null);
   const scrollBox = useRef<HTMLDivElement>(null);
 
   // Mounted for the life of the page. A live region that arrives in the same
@@ -254,17 +255,23 @@ export function OrganizationsList(): JSX.Element {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!peeked || event.defaultPrevented) return;
 
-    // Every row's peek control sits under this handler. An arrow key pressed
-    // on one of them is a reflex to scroll, and answering it moves the panel
-    // to a row the operator is not on, eats the scroll, and leaves them
-    // standing on a control that still reports itself closed. Escape there
-    // would drag the keyboard back to the peeked row. The peeked row's own
-    // control is exempt: that one is the panel's control.
+    // Two controls answer here, and everything else under this handler keeps
+    // its own keys: the pager, another row's peek control, a button in the
+    // panel body. An arrow key on one of those is a reflex to scroll, and
+    // answering it moves the panel to a record the operator is not on and eats
+    // the scroll on the way. Escape on one of them would drag the keyboard
+    // back to the peeked row.
+    //
+    // The panel container, not its contents: a control in the panel body is
+    // the case above, so admitting the whole subtree would fix nothing.
     const fromTrigger =
       event.target instanceof HTMLElement
         ? event.target.closest(PEEK_TRIGGER_SELECTOR)
         : null;
-    if (fromTrigger && !peekedRow.current?.contains(fromTrigger)) return;
+    const fromPeekedTrigger =
+      fromTrigger !== null && peekedRow.current?.contains(fromTrigger) === true;
+    const fromPanel = event.target === peekPanel.current;
+    if (!fromPeekedTrigger && !fromPanel) return;
 
     if (event.key === "Escape") {
       event.preventDefault();
@@ -280,14 +287,14 @@ export function OrganizationsList(): JSX.Element {
     event.preventDefault();
     openPeek(next.original);
     // Only where the operator was already on a control. The peek moves out
-    // from under this one, and the exemption above is written in terms of the
+    // from under this one, and the allow-list above is written in terms of the
     // peeked row, so leaving the keyboard behind would strand it on a control
     // that answers neither the arrow keys nor Escape.
     //
-    // Focus stays put for anyone arrowing from inside the panel. That is the
-    // panel's own navigation, and pulling the keyboard out to a row control
-    // would take the operator off the record they are reading.
-    if (fromTrigger) setPeekTookTheKeyboard(true);
+    // Focus stays put for anyone arrowing from the panel. That is the panel's
+    // own navigation, and pulling the keyboard out to a row control would take
+    // the operator off the record they are reading.
+    if (fromPeekedTrigger) setPeekTookTheKeyboard(true);
   };
 
   return (
@@ -393,6 +400,7 @@ export function OrganizationsList(): JSX.Element {
 
             {peeked ? (
               <PeekPanel
+                ref={peekPanel}
                 org={peeked.original}
                 onClose={closePeek}
                 className="w-100 shrink-0"

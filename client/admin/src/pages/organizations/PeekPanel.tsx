@@ -1,5 +1,12 @@
 import { CheckIcon, CopyIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type JSX,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
@@ -79,16 +86,22 @@ export function PeekPanel({
   org,
   onClose,
   className,
+  ref,
 }: {
   org: AdminOrganization;
   onClose: () => void;
   className?: string;
+  // The caller's, where it has one. The list handles keys above both the table
+  // and this panel, and it has to tell the panel apart from the controls the
+  // panel contains.
+  ref?: RefObject<HTMLElement | null>;
 }): JSX.Element {
-  const root = useRef<HTMLElement>(null);
+  const own = useRef<HTMLElement>(null);
+  const root = ref ?? own;
 
   useEffect(() => {
     root.current?.focus();
-  }, []);
+  }, [root]);
 
   return (
     <aside

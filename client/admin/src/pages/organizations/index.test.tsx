@@ -1101,6 +1101,97 @@ describe("organizations list peek", () => {
     expect(document.activeElement).toBe(other);
   });
 
+  it("leaves a key alone once something nearer has answered it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    await peekOn(FIRST_ORG.name);
+
+    // React listens at the root, so a native listener on the panel stands in
+    // for anything inside it that answers the key first. Moving the peek on
+    // top of that answer would act on a key already spoken for.
+    const panel = peekPanel();
+    panel.addEventListener("keydown", (event) => event.preventDefault());
+    fireEvent.keyDown(panel, { key: "ArrowDown" });
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    expect(isPeeked(first)).toBe(true);
+  });
+
+  it("ignores the arrow keys pressed on the pager", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    await peekOn(FIRST_ORG.name);
+
+    const next = screen.getByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    next.focus();
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    next.dispatchEvent(event);
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    expect(isPeeked(first)).toBe(true);
+    // The pager sits under the same handler as the panel. Answering it here
+    // also eats the scroll the operator pressed the key for.
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("ignores Escape pressed on the pager", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    const next = screen.getByRole("button", { name: "Next" });
+    next.focus();
+    fireEvent.keyDown(next, { key: "Escape" });
+
+    // Closing from here would pull the keyboard off the pager and onto the
+    // peeked row, which is a place the operator did not ask to go.
+    expect(peekPanel()).toBeTruthy();
+    expect(document.activeElement).toBe(next);
+  });
+
+  it("ignores the arrow keys pressed on a control inside the panel", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    await peekOn(FIRST_ORG.name);
+
+    // Inside the panel, and not the panel. The panel's own record navigation
+    // belongs to the container that holds the focus; a button in the body has
+    // its own keys, and the operator pressing this one wants to scroll.
+    const copy = within(peekPanel()).getByRole("button", {
+      name: "Copy Org id",
+    });
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    copy.dispatchEvent(event);
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    expect(isPeeked(first)).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("still closes on Escape pressed on the peeked row's own control", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const trigger = await peekOn(FIRST_ORG.name);
