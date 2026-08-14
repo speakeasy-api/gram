@@ -31,7 +31,10 @@ type orgFixture struct {
 	createdAt         *time.Time
 }
 
-func seedOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f orgFixture) {
+// The database handle is an interface rather than a pool so a seeder can share
+// one transaction with the query it is seeding for, which is what lets a
+// boundary fixture meet the same now() the predicate reads.
+func seedOrg(t *testing.T, ctx context.Context, conn testrepo.DBTX, f orgFixture) {
 	t.Helper()
 
 	if f.accountType == "" {
@@ -334,7 +337,7 @@ type trialFixture struct {
 	demotedAt   *time.Time
 }
 
-func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFixture) {
+func seedTrial(t *testing.T, ctx context.Context, conn trialsRepo.DBTX, f trialFixture) {
 	t.Helper()
 
 	if f.tier == "" {

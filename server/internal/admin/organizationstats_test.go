@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // statsFixture is one organization and, optionally, the trial hanging off it.
@@ -183,46 +186,81 @@ func TestGetOrganizationStats_IgnoresFilters(t *testing.T) {
 	}, after)
 }
 
-// TestGetOrganizationStats_Boundaries pins which side of each 7-day edge counts.
+// TestGetOrganizationStats_Boundaries pins which side of every edge in the query
+// counts, by seeding each fixture exactly on an edge.
 //
-// The two windows exclude their boundary: an organization created or disabled
-// exactly seven days ago is out. now() has already moved on by the time the
-// count runs, so a row seeded at exactly seven days is the only exact case a
-// test can state without racing the clock.
+// The whole test runs inside one transaction, and that is the mechanism rather
+// than tidiness. now() is the transaction timestamp, so a fixture offset from a
+// value read inside the transaction meets that same value again in the count.
+// Reading now() on a separate statement is not enough: the count then opens a
+// later transaction, its now() is strictly later, and every exact fixture drifts
+// off its edge before the comparison happens, leaving both sides of each
+// operator agreeing on the answer.
 //
-// The trial edge is inclusive, inherited from the ladder's `<=`: a trial ending
-// exactly seven days out is ending_soon.
+// The cost is that this addresses the repository rather than the handler, which
+// holds a pool and cannot be pointed at a transaction. Only the handler's field
+// mapping goes uncovered here, and the three tests above pin that.
 func TestGetOrganizationStats_Boundaries(t *testing.T) {
 	t.Parallel()
 
-	ctx, svc, conn := newTestAdminService(t)
+	ctx, _, conn := newTestAdminService(t)
 
-	now := time.Now().UTC()
-	const window = 7 * 24 * time.Hour
+	tx := testenv.BeginTx(t, ctx, conn)
 
-	seedStatsCorpus(t, ctx, conn, []statsFixture{
-		{id: "org_bound_created_inside", created: -(window - time.Hour)},
-		{id: "org_bound_created_exact", created: -window},
-		{id: "org_bound_created_outside", created: -(window + time.Hour)},
+	// Postgres computes the edges, so the fixtures cannot disagree with the
+	// predicates over what seven days of INTERVAL arithmetic comes to.
+	clock, err := testrepo.New(tx).GetTransactionClockFixture(ctx)
+	require.NoError(t, err)
+	txNow, windowEdge, trialEdge := clock.TransactionNow.Time, clock.SevenDaysAgo.Time, clock.InSevenDays.Time
 
-		{id: "org_bound_disabled_inside", created: -60 * 24 * time.Hour, disabled: -(window - time.Hour)},
-		{id: "org_bound_disabled_exact", created: -60 * 24 * time.Hour, disabled: -window},
-		{id: "org_bound_disabled_outside", created: -60 * 24 * time.Hour, disabled: -(window + time.Hour)},
+	// Old enough that no fixture lands in the created window by accident.
+	old := windowEdge.Add(-30 * 24 * time.Hour)
 
-		{id: "org_bound_trial_exact", created: -60 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(window)}},
-		{id: "org_bound_trial_outside", created: -60 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(window + time.Hour)}},
-	})
+	seedBoundaryOrg := func(id string, createdAt time.Time, disabledAt *time.Time) {
+		seedOrg(t, ctx, tx, orgFixture{
+			id:          id,
+			name:        "Org " + id,
+			slug:        id,
+			whitelisted: true,
+			disabledAt:  disabledAt,
+			createdAt:   &createdAt,
+		})
+	}
+	at := func(ts time.Time) *time.Time { return &ts }
 
-	res, err := svc.GetOrganizationStats(ctx, &gen.GetOrganizationStatsPayload{})
+	// created_at > now() - INTERVAL '7 days': exactly seven days old is out.
+	seedBoundaryOrg("org_bound_created_inside", windowEdge.Add(time.Hour), nil)
+	seedBoundaryOrg("org_bound_created_exact", windowEdge, nil)
+	seedBoundaryOrg("org_bound_created_outside", windowEdge.Add(-time.Hour), nil)
+
+	// disabled_at > now() - INTERVAL '7 days': the same edge, the other column.
+	seedBoundaryOrg("org_bound_disabled_inside", old, at(windowEdge.Add(time.Hour)))
+	seedBoundaryOrg("org_bound_disabled_exact", old, at(windowEdge))
+	seedBoundaryOrg("org_bound_disabled_outside", old, at(windowEdge.Add(-time.Hour)))
+
+	// The ladder's two date arms. ends_at <= now() + INTERVAL '7 days' takes the
+	// exact row, and ends_at <= now() claims a trial ending on the instant for
+	// expired before ending_soon can have it.
+	for _, trial := range []trialFixture{
+		{orgID: "org_bound_trial_exact", endsAt: trialEdge},
+		{orgID: "org_bound_trial_outside", endsAt: trialEdge.Add(time.Hour)},
+		{orgID: "org_bound_trial_expiry_exact", endsAt: txNow},
+		{orgID: "org_bound_trial_expiry_inside", endsAt: txNow.Add(time.Hour)},
+	} {
+		seedBoundaryOrg(trial.orgID, old, nil)
+		seedTrial(t, ctx, tx, trial)
+	}
+
+	row, err := repo.New(tx).AdminGetOrganizationStats(ctx)
 	require.NoError(t, err)
 
-	require.Equal(t, &gen.AdminOrganizationStats{
-		Total:             8,
+	require.Equal(t, repo.AdminGetOrganizationStatsRow{
+		Total:             10,
 		CreatedLast7Days:  1,
-		TrialsEndingSoon:  1,
+		TrialsEndingSoon:  2,
 		Disabled:          3,
 		DisabledLast7Days: 1,
-	}, res)
+	}, row)
 }
 
 // TestGetOrganizationStats_EmptyPlatform pins zeros rather than an error: the

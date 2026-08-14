@@ -441,3 +441,18 @@ UPDATE user_accounts
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND lower(email) = @email_lower::text;
+
+-- name: GetTransactionClockFixture :one
+-- Test-only. Returns the transaction timestamp and the two edges a 7-day
+-- INTERVAL predicate compares against, so a boundary fixture can be seeded
+-- exactly on an edge.
+--
+-- Postgres computes the offsets rather than the test, because INTERVAL day
+-- arithmetic on timestamptz runs in the session time zone and need not come to
+-- 168 hours. It must be read inside the transaction that also runs the query
+-- under test: now() is the transaction timestamp, so reading it on its own
+-- connection puts the fixture on an edge that has already moved.
+SELECT
+    now()::timestamptz AS transaction_now,
+    (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
+    (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;
