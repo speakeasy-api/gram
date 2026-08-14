@@ -62,6 +62,18 @@
     "origin": "SaFoLab-WISC/InjecGuard NotInject dataset",
     "review": "mechanical-import; benign trigger-vocabulary rows"
   },
+  "trajectory_independent_fp.jsonl": {
+    "gate": "fp",
+    "license": "Internal synthetic",
+    "origin": "model-authored from threat-model taxonomy benign twins",
+    "review": "pending curation; benign twins for independent trajectory matrix"
+  },
+  "trajectory_independent_recall.jsonl": {
+    "gate": "recall",
+    "license": "Internal synthetic",
+    "origin": "model-authored from threat-model taxonomy",
+    "review": "pending curation; threat-model matrix across carrier, technique, and goal facets"
+  },
   "trajectory_twins.jsonl": {
     "gate": "recall",
     "license": "Internal synthetic",
