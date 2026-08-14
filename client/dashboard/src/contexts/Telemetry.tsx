@@ -314,6 +314,27 @@ export function useRegisterToolsetTelemetry({
   }, [toolsetSlug, telemetry]);
 }
 
+/**
+ * Registers the active organization as PostHog's "organization" group.
+ *
+ * `useRegisterProjectForTelemetry` already does this, but only from
+ * `ProjectProvider`, which a walled-off organization never reaches —
+ * `AuthProvider` returns the lockout page first. Registering from the auth
+ * layer as well means organization-targeted flags resolve on exactly the
+ * surfaces that have no project. Both callers pass the same group type and key,
+ * so whichever runs first wins and the other is a no-op.
+ */
+export function useRegisterOrganizationForTelemetry(
+  organizationSlug: string,
+): void {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!organizationSlug) return;
+    telemetry.group("organization", organizationSlug, {});
+  }, [organizationSlug, telemetry]);
+}
+
 export function useRegisterProjectForTelemetry({
   projectId,
   projectSlug,
