@@ -236,13 +236,14 @@ func fetchableMediaType(mediaType string) bool {
 	return strings.HasSuffix(mediaType, "+json") || strings.HasSuffix(mediaType, "+xml")
 }
 
-// skippedElements never contribute readable text.
+// skippedElements never contribute readable text. svg is absent because it
+// is handled as foreign content in extractText, with its own depth tracking
+// and breakout.
 var skippedElements = map[string]bool{
 	"script":   true,
 	"style":    true,
 	"noscript": true,
 	"template": true,
-	"svg":      true,
 	"iframe":   true,
 	"object":   true,
 }
@@ -252,18 +253,27 @@ var skippedElements = map[string]bool{
 var blockElements = map[string]bool{
 	"p": true, "div": true, "section": true, "article": true, "header": true,
 	"footer": true, "li": true, "ul": true, "ol": true, "table": true,
-	"tr": true, "br": true, "hr": true, "blockquote": true, "pre": true,
+	"tr": true, "td": true, "th": true, "caption": true, "br": true,
+	"hr": true, "blockquote": true, "pre": true,
 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 }
 
 // extractText reduces an HTML document to its readable text using a
 // streaming tokenizer, so a malformed page degrades to partial text instead
 // of an error.
+//
+// svg is tracked apart from the other skipped elements because it is foreign
+// content with browser breakout semantics: a block-level HTML start tag pops
+// an unclosed svg. Without that, one unclosed icon in a page header swallows
+// every character after it. The remaining skipped elements stay strict on
+// purpose — an unclosed template really does capture the rest of the document
+// in a browser, and script/style are raw text to the tokenizer anyway.
 func extractText(document string) string {
 	tokenizer := html.NewTokenizer(strings.NewReader(document))
 
 	var out strings.Builder
 	skipDepth := 0
+	svgDepth := 0
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
@@ -271,22 +281,29 @@ func extractText(document string) string {
 			return out.String()
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, _ := tokenizer.TagName()
-			if skippedElements[string(name)] && tokenType == html.StartTagToken {
+			if string(name) == "svg" && tokenType == html.StartTagToken {
+				svgDepth++
+			} else if skippedElements[string(name)] && tokenType == html.StartTagToken {
 				skipDepth++
 			}
 			if blockElements[string(name)] {
+				svgDepth = 0
 				out.WriteString("\n")
 			}
 		case html.EndTagToken:
 			name, _ := tokenizer.TagName()
-			if skippedElements[string(name)] && skipDepth > 0 {
+			if string(name) == "svg" {
+				if svgDepth > 0 {
+					svgDepth--
+				}
+			} else if skippedElements[string(name)] && skipDepth > 0 {
 				skipDepth--
 			}
 			if blockElements[string(name)] {
 				out.WriteString("\n")
 			}
 		case html.TextToken:
-			if skipDepth == 0 {
+			if skipDepth == 0 && svgDepth == 0 {
 				out.Write(tokenizer.Text())
 				out.WriteString(" ")
 			}
