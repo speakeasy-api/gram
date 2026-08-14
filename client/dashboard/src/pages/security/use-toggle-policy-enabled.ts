@@ -4,17 +4,26 @@ import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskList
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { invalidateAllRiskPoliciesGet } from "@gram/client/react-query/riskPoliciesGet.js";
 import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
-import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
+import {
+  useRiskPoliciesUpdateMutation,
+  type RiskPoliciesUpdateMutationVariables,
+} from "@gram/client/react-query/riskPoliciesUpdate.js";
 
-export function togglePolicyEnabledVariables(id: string, enabled: boolean) {
+export function togglePolicyEnabledVariables(
+  id: string,
+  name: string,
+  enabled: boolean,
+): RiskPoliciesUpdateMutationVariables {
   return {
     request: {
-      updateRiskPolicyRequestBody: { id, enabled },
+      updateRiskPolicyRequestBody: { id, name, enabled },
     },
   };
 }
 
-export function useTogglePolicyEnabled() {
+export function useTogglePolicyEnabled(): ReturnType<
+  typeof useRiskPoliciesUpdateMutation
+> {
   const queryClient = useQueryClient();
   return useRiskPoliciesUpdateMutation({
     onSuccess: (policy) => {

@@ -623,7 +623,11 @@ function PolicyCenterContent() {
 
   const handleToggleEnabled = (row: PolicyRow) => {
     toggleEnabledMutation.mutate(
-      togglePolicyEnabledVariables(row.policy.id, !row.policy.enabled),
+      togglePolicyEnabledVariables(
+        row.policy.id,
+        row.policy.name,
+        !row.policy.enabled,
+      ),
     );
   };
 
@@ -688,7 +692,11 @@ function PolicyCenterContent() {
   const confirmDisableInstead = () => {
     if (!policyToDelete) return;
     toggleEnabledMutation.mutate(
-      togglePolicyEnabledVariables(policyToDelete.policy.id, false),
+      togglePolicyEnabledVariables(
+        policyToDelete.policy.id,
+        policyToDelete.policy.name,
+        false,
+      ),
       {
         onSuccess: () => setPolicyToDelete(null),
       },
@@ -788,12 +796,14 @@ function PolicyCenterContent() {
             disabled={toggleEnabledMutation.isPending}
             onCheckedChange={(checked) =>
               toggleEnabledMutation.mutate(
-                togglePolicyEnabledVariables(row.policy.id, checked),
+                togglePolicyEnabledVariables(
+                  row.policy.id,
+                  row.policy.name,
+                  checked,
+                ),
               )
             }
-            aria-label={
-              row.policy.enabled ? "Disable policy" : "Enable policy"
-            }
+            aria-label={row.policy.enabled ? "Disable policy" : "Enable policy"}
           />
         </div>
       ),
@@ -1029,8 +1039,7 @@ function PolicyCenterContent() {
             </Text>
             {policyToDelete?.policy.enabled ? (
               <Text variant="body">
-                To stop scanning without losing this policy, disable it
-                instead.
+                To stop scanning without losing this policy, disable it instead.
               </Text>
             ) : null}
             {policyDeleteImpactText && (

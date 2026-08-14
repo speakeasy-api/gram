@@ -589,12 +589,14 @@ function PolicyHeader({
                 disabled={saving || toggleEnabledMutation.isPending}
                 onCheckedChange={(checked) =>
                   toggleEnabledMutation.mutate(
-                    togglePolicyEnabledVariables(policy.id, checked),
+                    togglePolicyEnabledVariables(
+                      policy.id,
+                      policy.name,
+                      checked,
+                    ),
                   )
                 }
-                aria-label={
-                  policy.enabled ? "Disable policy" : "Enable policy"
-                }
+                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
               />
             </>
           ) : null}

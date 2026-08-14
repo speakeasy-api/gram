@@ -356,7 +356,11 @@ describe("StandardPolicyEditor policy pause", () => {
     fireEvent.click(toggle);
     expect(mocks.mutateUpdate).toHaveBeenCalledWith({
       request: {
-        updateRiskPolicyRequestBody: { id: "policy-1", enabled: true },
+        updateRiskPolicyRequestBody: {
+          id: "policy-1",
+          name: "Original name",
+          enabled: true,
+        },
       },
     });
   });
