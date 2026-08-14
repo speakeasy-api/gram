@@ -5,9 +5,10 @@
 An organization in the admin app is now a record rather than a page. The
 sidebar drops the global nav while an operator is inside one and shows the
 record instead: a row back to all organizations, the organization's name with
-its account type and trial state under it, and Overview, Projects and Members
-with a count beside each. The breadcrumb above reads Organizations, then the
-organization by name, then the view.
+its account type and trial state under it, and Overview, Projects and Members,
+with a count beside Projects and Members. An organization with one project
+carries no count and its Projects item opens that project. The breadcrumb above
+reads Organizations, then the organization by name, then the view.
 
 Each of those views has its own address, so a link to one organization's
 members opens on its members, a refresh stays where it was, and the back button
