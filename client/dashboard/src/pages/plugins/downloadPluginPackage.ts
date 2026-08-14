@@ -20,6 +20,30 @@ function getHeader(
   return key ? headers[key]?.[0] : undefined;
 }
 
+export async function downloadResponse(
+  response: Response,
+  fallbackFilename: string,
+): Promise<void> {
+  if (!response.ok)
+    throw new Error(`download failed with status ${response.status}`);
+  await downloadBlob(
+    await response.blob(),
+    response.headers
+      .get("Content-Disposition")
+      ?.match(/filename="(.+?)"/)?.[1] ?? fallbackFilename,
+  );
+}
+
+async function downloadBlob(blob: Blob, filename: string): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  // Allow the browser to start consuming the object URL before releasing it.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export async function downloadPluginPackage(
   client: Gram,
   pluginId: string,
@@ -29,17 +53,13 @@ export async function downloadPluginPackage(
     pluginId,
     platform,
   });
-  const blob = await new Response(result).blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download =
+  await downloadBlob(
+    await new Response(result).blob(),
     // Non-greedy so a header with additional quoted params (e.g.
     // `filename="x.zip"; creation-date="..."`) doesn't overcapture.
     getHeader(headers, "Content-Disposition")?.match(/filename="(.+?)"/)?.[1] ??
-    "plugin.zip";
-  a.click();
-  URL.revokeObjectURL(url);
+      "plugin.zip",
+  );
 }
 
 export function usePluginPackageDownload(

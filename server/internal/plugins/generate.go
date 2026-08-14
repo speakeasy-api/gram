@@ -2091,11 +2091,8 @@ func loadPlatformMCPSkills() (map[string][]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read Platform MCP skill %q: %w", entry.Name(), err)
 		}
-		if !bytes.Contains(content, []byte("\nname: "+entry.Name()+"\n")) {
-			return nil, fmt.Errorf("platform MCP skill %q frontmatter name must match its directory", entry.Name())
-		}
-		if !bytes.Contains(content, []byte("\ndescription:")) {
-			return nil, fmt.Errorf("platform MCP skill %q must declare a description", entry.Name())
+		if err := domainskills.ValidateSkillManifest(string(content), entry.Name()); err != nil {
+			return nil, fmt.Errorf("validate Platform MCP skill %q: %w", entry.Name(), err)
 		}
 		skills[entry.Name()] = content
 	}

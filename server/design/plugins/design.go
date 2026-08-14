@@ -390,10 +390,10 @@ var _ = Service("plugins", func() {
 
 	Method("getPlatformMCPPackageStatus", func() {
 		Description("Get the organization-scoped Platform MCP package and canonical default-project marketplace status.")
+		Security(security.Session)
 
 		Payload(func() {
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(PlatformMCPPackageStatusResult)
@@ -401,7 +401,6 @@ var _ = Service("plugins", func() {
 		HTTP(func() {
 			GET("/rpc/plugins.getPlatformMCPPackageStatus")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

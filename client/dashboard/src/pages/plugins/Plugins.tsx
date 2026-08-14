@@ -50,6 +50,7 @@ import {
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import { PluginInstallButton } from "./PluginInstallButton";
+import { downloadResponse } from "./downloadPluginPackage";
 import {
   matchesPluginFilters,
   PLUGINS_FILTERS,
@@ -101,16 +102,7 @@ export default function Plugins(): JSX.Element {
         toast.error("Failed to download observability plugin");
         return;
       }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? `observability-${platform}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadResponse(resp, `observability-${platform}.zip`);
     } catch (err) {
       toast.error("Failed to download observability plugin");
       console.error("observability plugin download failed", err);
@@ -663,7 +655,7 @@ function PlatformMCPPluginCard(): JSX.Element {
   const [installOpen, setInstallOpen] = useState(false);
   const [isInstallMenuOpen, setIsInstallMenuOpen] = useState(false);
   const [downloadingPackage, setDownloadingPackage] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | null
+    "claude" | "cursor" | "codex" | "opencode" | "agent-plugin" | null
   >(null);
   const status = usePlatformMCPPackageStatus(undefined, undefined, {
     refetchInterval: 5_000,
@@ -673,7 +665,7 @@ function PlatformMCPPluginCard(): JSX.Element {
     packageStatus?.available === true && packageStatus.directDownloadAvailable;
 
   const downloadPackage = async (
-    platform: "claude" | "cursor" | "codex" | "opencode",
+    platform: "claude" | "cursor" | "codex" | "opencode" | "agent-plugin",
   ) => {
     setIsInstallMenuOpen(false);
     setDownloadingPackage(platform);
@@ -683,17 +675,10 @@ function PlatformMCPPluginCard(): JSX.Element {
         {},
       );
       if (!response.ok) throw new Error("download failed");
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download =
-        response.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ??
-        `speakeasy-aicp-platform-mcp-${platform}.zip`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadResponse(
+        response,
+        `speakeasy-aicp-platform-mcp-${platform}.zip`,
+      );
     } catch (error) {
       toast.error("Could not download the Platform MCP package");
       console.error("Platform MCP plugin download failed", error);
@@ -703,6 +688,10 @@ function PlatformMCPPluginCard(): JSX.Element {
   };
 
   const statusLabel = (() => {
+    if (status.isLoading) return "Checking package availability…";
+    if (packageStatus?.admission === "indeterminate") {
+      return "Package availability temporarily unknown";
+    }
     if (!packageStatus?.available) return "Not available for this organization";
     if (
       packageStatus.marketplaceConnected &&
@@ -795,6 +784,12 @@ function PlatformMCPPluginCard(): JSX.Element {
               onClick={() => void downloadPackage("opencode")}
             >
               Download as zip — OpenCode
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!directDownloadReady || downloadingPackage !== null}
+              onClick={() => void downloadPackage("agent-plugin")}
+            >
+              Download as zip — Agent Plugins
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

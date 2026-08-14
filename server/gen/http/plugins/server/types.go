@@ -7330,10 +7330,9 @@ func NewDownloadCodexInstallScriptPayload(sessionToken *string, projectSlugInput
 
 // NewGetPlatformMCPPackageStatusPayload builds a plugins service
 // getPlatformMCPPackageStatus endpoint payload.
-func NewGetPlatformMCPPackageStatusPayload(sessionToken *string, projectSlugInput *string) *plugins.GetPlatformMCPPackageStatusPayload {
+func NewGetPlatformMCPPackageStatusPayload(sessionToken *string) *plugins.GetPlatformMCPPackageStatusPayload {
 	v := &plugins.GetPlatformMCPPackageStatusPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

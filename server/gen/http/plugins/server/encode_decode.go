@@ -2908,30 +2908,18 @@ func DecodeGetPlatformMCPPackageStatusRequest(mux goahttp.Muxer, decoder func(*h
 	return func(r *http.Request) (*plugins.GetPlatformMCPPackageStatusPayload, error) {
 		var payload *plugins.GetPlatformMCPPackageStatusPayload
 		var (
-			sessionToken     *string
-			projectSlugInput *string
+			sessionToken *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewGetPlatformMCPPackageStatusPayload(sessionToken, projectSlugInput)
+		payload = NewGetPlatformMCPPackageStatusPayload(sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 

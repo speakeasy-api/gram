@@ -146,7 +146,8 @@ export function PlatformMCPOnboardingContent({
     {
       throwOnError: false,
       staleTime: 10_000,
-      refetchInterval: 5_000,
+      enabled: !sheetOnly || setupOpen,
+      refetchInterval: setupOpen || !sheetOnly ? 5_000 : false,
       refetchIntervalInBackground: false,
     },
   );

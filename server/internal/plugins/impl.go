@@ -1477,7 +1477,7 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 // --- Publish & Distribution ---
 
 func (s *Service) GetPlatformMCPPackageStatus(ctx context.Context, _ *gen.GetPlatformMCPPackageStatusPayload) (*gen.PlatformMCPPackageStatusResult, error) {
-	ac, err := s.authContext(ctx)
+	ac, err := s.organizationAuthContext(ctx)
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
@@ -3401,9 +3401,17 @@ func (s *Service) isDefaultProject(ctx context.Context, projectID uuid.UUID) boo
 	return isDefault
 }
 
-func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+func (s *Service) organizationAuthContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || ac.ProjectID == nil {
+	if !ok || ac == nil || ac.ActiveOrganizationID == "" {
+		return nil, errors.New("missing organization auth context")
+	}
+	return ac, nil
+}
+
+func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.organizationAuthContext(ctx)
+	if err != nil || ac.ProjectID == nil {
 		return nil, errors.New("missing auth context")
 	}
 	return ac, nil

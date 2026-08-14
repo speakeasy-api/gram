@@ -124,7 +124,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			return nil, err
 		}
 		return []platformmcp.RegistryCatalogSource{
-			{Client: config.Registry, Descriptors: browserDescriptors, BestEffort: true},
+			{Client: config.Registry, Descriptors: browserDescriptors},
 			{Client: fixtureRegistry, Descriptors: []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()}},
 		}, nil
 	})

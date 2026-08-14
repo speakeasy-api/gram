@@ -196,9 +196,9 @@ func restoreLocalPluginRepositories(
 			if err != nil {
 				return fmt.Errorf("get plugin connection for project %s: %w", candidate.ProjectID, err)
 			}
-			if _, err := localPublisher.MainBranchFiles(ctx, connection.RepoOwner, connection.RepoName); err == nil {
+			if files, err := localPublisher.MainBranchFiles(ctx, connection.RepoOwner, connection.RepoName); err == nil && len(files) > 0 {
 				continue
-			} else if !errors.Is(err, ghclient.ErrRepoNotFound) {
+			} else if err != nil && !errors.Is(err, ghclient.ErrRepoNotFound) {
 				return fmt.Errorf("read local plugin repository for project %s: %w", candidate.ProjectID, err)
 			}
 

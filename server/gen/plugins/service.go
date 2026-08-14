@@ -220,8 +220,7 @@ type GetMarketplaceSettingsPayload struct {
 // GetPlatformMCPPackageStatusPayload is the payload type of the plugins
 // service getPlatformMCPPackageStatus method.
 type GetPlatformMCPPackageStatusPayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
+	SessionToken *string
 }
 
 // GetPluginPayload is the payload type of the plugins service getPlugin method.

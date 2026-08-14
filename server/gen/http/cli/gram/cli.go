@@ -1724,9 +1724,8 @@ func ParseEndpoint(
 		pluginsDownloadCodexInstallScriptSessionTokenFlag     = pluginsDownloadCodexInstallScriptFlags.String("session-token", "", "")
 		pluginsDownloadCodexInstallScriptProjectSlugInputFlag = pluginsDownloadCodexInstallScriptFlags.String("project-slug-input", "", "")
 
-		pluginsGetPlatformMCPPackageStatusFlags                = flag.NewFlagSet("get-platform-mcp-package-status", flag.ExitOnError)
-		pluginsGetPlatformMCPPackageStatusSessionTokenFlag     = pluginsGetPlatformMCPPackageStatusFlags.String("session-token", "", "")
-		pluginsGetPlatformMCPPackageStatusProjectSlugInputFlag = pluginsGetPlatformMCPPackageStatusFlags.String("project-slug-input", "", "")
+		pluginsGetPlatformMCPPackageStatusFlags            = flag.NewFlagSet("get-platform-mcp-package-status", flag.ExitOnError)
+		pluginsGetPlatformMCPPackageStatusSessionTokenFlag = pluginsGetPlatformMCPPackageStatusFlags.String("session-token", "", "")
 
 		pluginsRepairPlatformMCPPackageFlags                = flag.NewFlagSet("repair-platform-mcp-package", flag.ExitOnError)
 		pluginsRepairPlatformMCPPackageSessionTokenFlag     = pluginsRepairPlatformMCPPackageFlags.String("session-token", "", "")
@@ -7343,7 +7342,7 @@ func ParseEndpoint(
 				data, err = pluginsc.BuildDownloadCodexInstallScriptPayload(*pluginsDownloadCodexInstallScriptSessionTokenFlag, *pluginsDownloadCodexInstallScriptProjectSlugInputFlag)
 			case "get-platform-mcp-package-status":
 				endpoint = c.GetPlatformMCPPackageStatus()
-				data, err = pluginsc.BuildGetPlatformMCPPackageStatusPayload(*pluginsGetPlatformMCPPackageStatusSessionTokenFlag, *pluginsGetPlatformMCPPackageStatusProjectSlugInputFlag)
+				data, err = pluginsc.BuildGetPlatformMCPPackageStatusPayload(*pluginsGetPlatformMCPPackageStatusSessionTokenFlag)
 			case "repair-platform-mcp-package":
 				endpoint = c.RepairPlatformMCPPackage()
 				data, err = pluginsc.BuildRepairPlatformMCPPackagePayload(*pluginsRepairPlatformMCPPackageSessionTokenFlag, *pluginsRepairPlatformMCPPackageProjectSlugInputFlag)
@@ -15354,7 +15353,6 @@ func pluginsGetPlatformMCPPackageStatusUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-platform-mcp-package-status", os.Args[0])
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -15363,11 +15361,10 @@ func pluginsGetPlatformMCPPackageStatusUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-platform-mcp-package-status --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-platform-mcp-package-status --session-token \"abc123\"")
 }
 
 func pluginsRepairPlatformMCPPackageUsage() {

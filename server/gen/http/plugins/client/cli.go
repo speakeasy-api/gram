@@ -515,22 +515,15 @@ func BuildDownloadCodexInstallScriptPayload(pluginsDownloadCodexInstallScriptSes
 
 // BuildGetPlatformMCPPackageStatusPayload builds the payload for the plugins
 // getPlatformMCPPackageStatus endpoint from CLI flags.
-func BuildGetPlatformMCPPackageStatusPayload(pluginsGetPlatformMCPPackageStatusSessionToken string, pluginsGetPlatformMCPPackageStatusProjectSlugInput string) (*plugins.GetPlatformMCPPackageStatusPayload, error) {
+func BuildGetPlatformMCPPackageStatusPayload(pluginsGetPlatformMCPPackageStatusSessionToken string) (*plugins.GetPlatformMCPPackageStatusPayload, error) {
 	var sessionToken *string
 	{
 		if pluginsGetPlatformMCPPackageStatusSessionToken != "" {
 			sessionToken = &pluginsGetPlatformMCPPackageStatusSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if pluginsGetPlatformMCPPackageStatusProjectSlugInput != "" {
-			projectSlugInput = &pluginsGetPlatformMCPPackageStatusProjectSlugInput
-		}
-	}
 	v := &plugins.GetPlatformMCPPackageStatusPayload{}
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

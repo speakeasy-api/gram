@@ -115,12 +115,7 @@ export function usePlatformMCPPackageStatusSuspense(
 
 export function setPlatformMCPPackageStatusData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: PlatformMCPPackageStatusQueryData,
 ): PlatformMCPPackageStatusQueryData | undefined {
   const key = queryKeyPlatformMCPPackageStatus(...queryKeyBase);
@@ -131,10 +126,7 @@ export function setPlatformMCPPackageStatusData(
 export function invalidatePlatformMCPPackageStatus(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramSession?: string | undefined;
-      gramProject?: string | undefined;
-    }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

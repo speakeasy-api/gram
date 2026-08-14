@@ -11,8 +11,9 @@ import {
 import { useRepairPlatformMCPPackageMutation } from "@gram/client/react-query/repairPlatformMCPPackage.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Download, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { downloadResponse } from "../plugins/downloadPluginPackage";
 
 type PlatformMCPInstallClient = {
   id: ClientFamily;
@@ -299,6 +300,7 @@ export function PlatformMCPInstallWalkthrough({
     initialMethod ?? "marketplace",
   );
   const [isDownloading, setIsDownloading] = useState(false);
+  const explicitMethodRef = useRef(false);
   const status = usePlatformMCPPackageStatus(undefined, undefined, {
     refetchInterval: 5_000,
   });
@@ -314,7 +316,14 @@ export function PlatformMCPInstallWalkthrough({
     },
   });
 
-  useEffect(() => setClient(initialClient), [initialClient]);
+  useEffect(() => {
+    setClient(initialClient);
+    explicitMethodRef.current = false;
+  }, [initialClient]);
+
+  useEffect(() => {
+    explicitMethodRef.current = false;
+  }, [initialMethod]);
 
   const packageStatus = status.data;
   const supportsMarketplace = client !== "opencode";
@@ -326,7 +335,7 @@ export function PlatformMCPInstallWalkthrough({
     !!packageStatus.repoUrl;
 
   useEffect(() => {
-    if (status.isLoading) return;
+    if (status.isLoading || explicitMethodRef.current) return;
 
     if (initialMethod === "manual") {
       setMethod("manual");
@@ -441,16 +450,7 @@ export function PlatformMCPInstallWalkthrough({
         {},
       );
       if (!response.ok) throw new Error("download failed");
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download =
-        response.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? packageFilename(client);
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadResponse(response, packageFilename(client));
     } catch {
       toast.error("Could not download the Platform MCP package");
     } finally {
@@ -498,7 +498,7 @@ export function PlatformMCPInstallWalkthrough({
 
       {supportsMarketplace &&
         packageStatus?.repairAllowed &&
-        packageStatus.freshness !== "current" && (
+        !marketplaceReady && (
           <Alert>
             <div>
               <AlertTitle>Prepare the canonical marketplace</AlertTitle>
@@ -537,7 +537,10 @@ export function PlatformMCPInstallWalkthrough({
               size="sm"
               variant={method === "marketplace" ? "primary" : "secondary"}
               disabled={!marketplaceReady}
-              onClick={() => setMethod("marketplace")}
+              onClick={() => {
+                explicitMethodRef.current = true;
+                setMethod("marketplace");
+              }}
             >
               GitHub installation (preferred)
             </Button>
@@ -545,7 +548,10 @@ export function PlatformMCPInstallWalkthrough({
               size="sm"
               variant={method === "download" ? "primary" : "secondary"}
               disabled={!packageStatus?.directDownloadAvailable}
-              onClick={() => setMethod("download")}
+              onClick={() => {
+                explicitMethodRef.current = true;
+                setMethod("download");
+              }}
             >
               Direct{" "}
               {
@@ -557,7 +563,10 @@ export function PlatformMCPInstallWalkthrough({
             <Button
               size="sm"
               variant={method === "manual" ? "primary" : "secondary"}
-              onClick={() => setMethod("manual")}
+              onClick={() => {
+                explicitMethodRef.current = true;
+                setMethod("manual");
+              }}
             >
               Manual recovery
             </Button>

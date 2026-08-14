@@ -3156,10 +3156,6 @@ func EncodeGetPlatformMCPPackageStatusRequest(encoder func(*http.Request) goahtt
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }

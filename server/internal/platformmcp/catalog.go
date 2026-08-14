@@ -80,19 +80,15 @@ type Catalog interface {
 type RegistryCatalogSource struct {
 	// Client is constructed by server composition. The local fixture uses a
 	// development-CA-aware client; normal browser-catalogue registries share the
-	// standard client. It is never chosen from Platform MCP input.
+	// standard client. It is never chosen from Platform MCP input. Every source is
+	// strict: search fails closed rather than presenting a partial reviewed catalog.
 	Client      *externalmcp.RegistryClient
 	Descriptors []CatalogDescriptor
-	// BestEffort is reserved for optional sources in local composition. Normal
-	// production catalogue sources remain strict so an upstream failure is not
-	// silently presented as a complete result set.
-	BestEffort bool
 }
 
 type registryCatalogDescriptor struct {
 	CatalogDescriptor
-	client     *externalmcp.RegistryClient
-	bestEffort bool
+	client *externalmcp.RegistryClient
 }
 
 type RegistryCatalog struct {
@@ -202,7 +198,7 @@ func NewRegistryCatalogSources(sources []RegistryCatalogSource) *RegistryCatalog
 			if _, exists := byKey[descriptor.ProviderKey]; exists {
 				continue
 			}
-			byKey[descriptor.ProviderKey] = registryCatalogDescriptor{CatalogDescriptor: descriptor, client: source.Client, bestEffort: source.BestEffort}
+			byKey[descriptor.ProviderKey] = registryCatalogDescriptor{CatalogDescriptor: descriptor, client: source.Client}
 		}
 	}
 	return &RegistryCatalog{descriptors: byKey}
@@ -214,29 +210,17 @@ func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCa
 	}
 
 	candidates := make([]CatalogCandidate, 0, len(c.descriptors))
-	var firstBestEffortErr error
-	successfulSources := 0
 	for _, source := range c.descriptors {
 		result, err := source.client.ListServers(ctx, source.Registry, externalmcp.ListServersParams{Search: &query})
 		if err != nil {
-			if !source.bestEffort {
-				return nil, fmt.Errorf("list platform mcp catalog: %w", err)
-			}
-			if firstBestEffortErr == nil {
-				firstBestEffortErr = err
-			}
-			continue
+			return nil, fmt.Errorf("list platform mcp catalog: %w", err)
 		}
-		successfulSources++
 		for _, entry := range result.Servers {
 			if !descriptorAllowsEntry(source.CatalogDescriptor, entry) {
 				continue
 			}
 			candidates = append(candidates, catalogCandidateFromEntry(source.CatalogDescriptor, entry))
 		}
-	}
-	if successfulSources == 0 && firstBestEffortErr != nil {
-		return nil, fmt.Errorf("list platform mcp catalog: %w", firstBestEffortErr)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {

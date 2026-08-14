@@ -50,7 +50,6 @@ export function buildPlatformMCPPackageStatusQuery(
   return {
     queryKey: queryKeyPlatformMCPPackageStatus({
       gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function platformMCPPackageStatusQueryFn(
       ctx,
@@ -77,10 +76,7 @@ export function buildPlatformMCPPackageStatusQuery(
 }
 
 export function queryKeyPlatformMCPPackageStatus(
-  parameters: {
-    gramSession?: string | undefined;
-    gramProject?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "plugins", "getPlatformMCPPackageStatus", parameters];
 }

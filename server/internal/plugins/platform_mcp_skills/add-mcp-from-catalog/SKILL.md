@@ -23,11 +23,15 @@ Use this workflow only through the authenticated Speakeasy AI Control Plane (AIC
 3. Call `inspect_mcp_candidate` for the selected candidate. Explain the bounded change and collect only the non-secret configuration fields declared by that result.
 4. Call `register_platform_mcp_for_project` with the exact selected project, reviewed candidate, and declared non-secret configuration. Do not distribute it yet.
 5. Call `get_platform_mcp_onboarding_status` to check authenticated readiness.
-6. If the result requires secure dashboard setup or upstream authorization, present the exact server-returned setup or authorization URL. The user completes OAuth or secret entry outside the agent. Never request the resulting code, token, or secret in chat.
-7. If readiness reports `upstream_identity_provider_not_configured`, explain that AICP can attach the one identity provider discovered from the persisted reviewed MCP source. Ask for explicit confirmation in the conversation. Only after confirmation, call `attach_platform_mcp_identity_provider`, present its exact Inspect authorization URL, and wait for the user to use Connect or Authorize.
-8. After the user completes any secure handoff, call `get_platform_mcp_onboarding_status` with a forced fresh check. Do not rely on stale or inferred readiness.
-9. When readiness is current and ready, summarize the target and ask the user to confirm adding it to the selected project's existing Default plugin.
-10. After confirmation, call `add_platform_mcp_to_default_plugin`. Never create a replacement plugin or distribute to a different project.
-11. Recheck onboarding status and report the evidence returned by the server. If a bounded repair action is returned, explain it without inventing provider- or client-specific instructions.
+6. Route secure setup from the exact readiness evidence:
+   - For `upstream_identity_provider_not_configured`, explain that AICP can attach the one identity provider discovered from the persisted reviewed MCP source. Ask for explicit confirmation, then call `attach_platform_mcp_identity_provider`, present its exact Inspect authorization URL, and wait for the user to use Connect or Authorize.
+   - For `upstream_authorization_required`, call `attach_platform_mcp_identity_provider` again to retrieve the current server-issued Inspect authorization URL. Present that exact clickable URL and wait for the user to use Connect or Authorize.
+   - For `multiple_upstream_identity_providers`, present the exact secure dashboard setup URL returned by the Platform MCP and ask the user to select one provider there. Do not choose one in chat.
+   - For any other secure dashboard setup result, present only its exact server-returned setup URL.
+     The user completes OAuth or secret entry outside the agent. Never request the resulting code, token, or secret in chat.
+7. After the user completes any secure handoff, call `get_platform_mcp_onboarding_status` with a forced fresh check. Do not rely on stale or inferred readiness.
+8. When readiness is current and ready, summarize the target and ask the user to confirm adding it to the selected project's existing Default plugin.
+9. After confirmation, call `add_platform_mcp_to_default_plugin`. Never create a replacement plugin or distribute to a different project.
+10. Recheck onboarding status and report the evidence returned by the server. If a bounded repair action is returned, explain it without inventing provider- or client-specific instructions.
 
 OAuth consent and approved secret entry are the only expected out-of-agent stops. Project and catalog selection, identity-provider attachment confirmation, and final distribution confirmation stay in the conversation.

@@ -2658,9 +2658,28 @@ func TestPluginsService_PlatformMCPPackageStatusAndDownloadBeforeConnection(t *t
 		for _, content := range contents {
 			require.NotContains(t, content, authCtx.ActiveOrganizationID, platform)
 			require.NotContains(t, content, "GRAM_API_KEY", platform)
-			require.NotContains(t, content, skillFeedbackHooksKey, platform)
+			require.NotContains(t, content, "hooks_api_key", platform)
+			require.NotContains(t, content, "gram_local_", platform)
 		}
 	}
+}
+
+func TestPluginsService_PlatformMCPPackageStatusDoesNotRequireProjectContext(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationCtx := *authCtx
+	organizationCtx.ProjectID = nil
+	ctx = contextvalues.SetAuthContext(ctx, &organizationCtx)
+
+	status, err := ti.service.GetPlatformMCPPackageStatus(ctx, &gen.GetPlatformMCPPackageStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "enabled", status.Admission)
+	require.True(t, status.Available)
+	require.NotNil(t, status.CanonicalProjectSlug)
 }
 
 func TestPluginsService_PlatformMCPPackageDisabledFailsClosed(t *testing.T) {
