@@ -1,12 +1,13 @@
 import { CheckIcon, CopyIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 
+import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { cn } from "@/lib/utils";
+import { cn, fmtDateShort } from "@/lib/utils";
 
 const COPY_CONFIRM_MS = 1500;
 
@@ -15,13 +16,6 @@ const COPY_CONFIRM_MS = 1500;
 export const PEEK_PANEL_ID = "organization-peek-panel";
 
 function noop(): void {}
-
-function fmtDateShort(iso?: string): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString();
-}
 
 function Field({
   label,
@@ -127,8 +121,8 @@ export function PeekPanel({
               {org.account_type}
             </Badge>
           </Field>
-          <Field label="Trial ends">
-            {fmtDateShort(org.free_trial_ends_at)}
+          <Field label="Trial">
+            <Trial org={org} />
           </Field>
           <Field label="Members">{org.member_count}</Field>
           <Field label="Created">{fmtDateShort(org.created_at)}</Field>

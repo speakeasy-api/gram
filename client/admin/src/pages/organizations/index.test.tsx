@@ -71,6 +71,11 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 // Two rows, and every optional field set on one of them. One row forecloses
 // every ordering and keying fault by construction, and an unset optional field
 // renders the same dash whichever field the cell reads.
+//
+// Both rows carry the stale `free_trial_*` pair, and neither carries a date
+// there that the Trial cell should ever show. The second row is the one that
+// matters: it never trialled, and the stale pair still dates it, which is the
+// whole reason this column was rewritten.
 const ORGS: AdminOrganization[] = [
   {
     id: "org_placeholder_one",
@@ -81,7 +86,9 @@ const ORGS: AdminOrganization[] = [
     whitelisted: true,
     disabled_at: "2026-03-04T00:00:00Z",
     free_trial_started_at: "2026-02-01T00:00:00Z",
-    free_trial_ends_at: "2026-05-06T00:00:00Z",
+    free_trial_ends_at: "2026-11-12T00:00:00Z",
+    trial_state: "running",
+    trial_ends_at: "2026-05-06T00:00:00Z",
     member_count: 3,
     created_at: "2026-01-02T00:00:00Z",
     updated_at: "2026-01-07T00:00:00Z",
@@ -92,6 +99,9 @@ const ORGS: AdminOrganization[] = [
     slug: "placeholder-two",
     account_type: "free",
     whitelisted: false,
+    free_trial_started_at: "2026-06-08T00:00:00Z",
+    free_trial_ends_at: "2026-06-22T00:00:00Z",
+    trial_state: "none",
     member_count: 7,
     created_at: "2026-06-08T00:00:00Z",
     updated_at: "2026-06-09T00:00:00Z",
@@ -116,9 +126,11 @@ if (!FIRST_ORG || !SECOND_ORG) throw new Error("ORGS needs two rows");
 
 // The columns render a date through toLocaleDateString, so the expected text
 // has to come out of the same formatter. Reading the field off the fixture is
-// what the assertion is for: the format is not.
+// what the assertion is for: the format is not. UTC, because that is the zone
+// the API states these dates in and the zone the table renders them in; see
+// `utils.test.ts`.
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 function lastListParams(): ListOrganizationsParams {
@@ -169,6 +181,21 @@ function rowFor(link: HTMLElement): HTMLTableRowElement {
   const row = link.closest("tr");
   if (!row) throw new Error("the name link is not inside a row");
   return row;
+}
+
+// Taken by the header above it, not by counting cells. A column added beside
+// this one otherwise leaves the assertion reading its neighbour and still
+// passing or failing for reasons that have nothing to do with what it names.
+function cellUnder(row: HTMLElement, header: string): HTMLElement {
+  const at = screen
+    .getAllByRole("columnheader")
+    .map((column) => column.textContent)
+    .indexOf(header);
+  if (at < 0) throw new Error(`no ${header} column on the page`);
+
+  const cell = within(row).getAllByRole("cell").at(at);
+  if (!cell) throw new Error(`the row has no cell under ${header}`);
+  return cell;
 }
 
 // Found by the accessible name a screen reader announces, so the test reaches
@@ -474,8 +501,11 @@ describe("organizations list", () => {
   it("renders every cell of a row out of the record that produced it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    const { workos_id: workosID, disabled_at: disabledAt } = FIRST_ORG;
-    const trialEndsAt = FIRST_ORG.free_trial_ends_at;
+    const {
+      workos_id: workosID,
+      disabled_at: disabledAt,
+      trial_ends_at: trialEndsAt,
+    } = FIRST_ORG;
     if (!workosID || !disabledAt || !trialEndsAt) {
       throw new Error("the row under test needs its optional fields set");
     }
@@ -495,7 +525,7 @@ describe("organizations list", () => {
       "Members",
       "WorkOS",
       "Disabled",
-      "Trial ends",
+      "Trial",
       "Created",
     ]);
     expect(
@@ -513,9 +543,50 @@ describe("organizations list", () => {
       // column's own constant would move this expectation along with it.
       `${workosID.substring(0, 12)}...`,
       shortDate(disabledAt),
-      shortDate(trialEndsAt),
+      // The state leads and the end date follows it, and the date says what it
+      // is: the header reads `Trial` and no longer does. The stale pair on this
+      // record carries a different date, so a cell back on the old field fails
+      // here on the date alone.
+      `Running ends ${shortDate(trialEndsAt)}`,
       shortDate(FIRST_ORG.created_at),
     ]);
+  });
+
+  it("reads a dash in the trial cell of an organization that never trialled", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    // The row is dated by `free_trial_ends_at` all the same, which is the
+    // defaulted column this cell was moved off.
+    expect(SECOND_ORG.free_trial_ends_at).toBeTruthy();
+
+    const link = await screen.findByRole("link", { name: SECOND_ORG.name });
+    const trialCell = cellUnder(rowFor(link), "Trial");
+
+    // The dash is what an operator reads; the words behind it are what a
+    // screen reader is given in place of a hyphen it announces as nothing.
+    expect(trialCell.textContent).toBe("-No trial");
+    expect(trialCell.querySelector('[data-slot="badge"]')).toBeNull();
+  });
+
+  it("lets the operator hide the trial column like any other", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    expect(screen.getByRole("columnheader", { name: "Trial" })).toBeTruthy();
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    const item = screen.getByRole("menuitemcheckbox", { name: "Trial" });
+    // Nothing about this column justifies pinning it on screen. An operator
+    // working a list of a hundred organizations gets to put away the columns
+    // they are not reading, and the bar locks a column only to keep the table
+    // from emptying out.
+    expect(item.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(item);
+
+    // The open menu hides the rest of the page from the accessibility tree, so
+    // wait for a column that stays before reading the one that went.
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("columnheader", { name: "Trial" })).toBeNull();
   });
 
   it("opens the organization when the operator clicks the row body", async () => {
@@ -606,6 +677,23 @@ describe("organizations list peek", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual(["Peek", "Name", "Slug", "Type"]);
+  });
+
+  it("takes the trial column down with the rest while it is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    expect(screen.getByRole("columnheader", { name: "Trial" })).toBeTruthy();
+
+    await peekOn(FIRST_ORG.name);
+
+    // Its own test, because the set peek hides is keyed by column id in a
+    // plain string record. Renaming the column leaves a stale key that is
+    // neither a type error nor a failure anywhere else: the column simply
+    // stops hiding, and the panel opens into a table too wide to read.
+    expect(screen.queryByRole("columnheader", { name: "Trial" })).toBeNull();
+
+    fireEvent.keyDown(peekPanel(), { key: "Escape" });
+
+    expect(screen.getByRole("columnheader", { name: "Trial" })).toBeTruthy();
   });
 
   it("highlights the row it is peeking at and no other", async () => {
@@ -723,7 +811,7 @@ describe("organizations list peek", () => {
       "Members",
       "WorkOS",
       "Disabled",
-      "Trial ends",
+      "Trial",
       "Created",
     ]);
   });
@@ -815,7 +903,7 @@ describe("organizations list peek", () => {
       "Members",
       "WorkOS",
       "Disabled",
-      "Trial ends",
+      "Trial",
       "Created",
     ]);
   });
