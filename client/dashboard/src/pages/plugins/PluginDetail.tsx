@@ -2,6 +2,7 @@ import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
@@ -144,6 +145,7 @@ export default function PluginDetail(): JSX.Element | null {
   }, [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
+  useRecentLabelOverride(location.pathname, plugin.name);
   // Polled so the publish-freshness badges/banner pick up the Temporal
   // generator-rollout schedule's auto-sync without a manual refresh.
   const { data: publishStatus } = usePublishStatus(undefined, undefined, {
