@@ -1192,6 +1192,72 @@ describe("organizations list peek", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it("closes on Escape pressed on a control inside the panel", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekOn(FIRST_ORG.name);
+
+    // Escape is scoped wider than the arrow keys, and this is the case that
+    // separates them. It has no reflex of its own for the panel to steal, and
+    // it dismisses whichever surface holds the focus, so the button answers it
+    // rather than swallowing it and leaving the operator with a dead key.
+    const copy = within(peekPanel()).getByRole("button", {
+      name: "Copy Org id",
+    });
+    copy.focus();
+    fireEvent.keyDown(copy, { key: "Escape" });
+
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    // The button unmounts with the panel, so closing from inside it has to hand
+    // the keyboard somewhere or it lands on the body.
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("marks the Escape that closed the panel as answered", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    // Escape travels on past this handler, and a layer above it dismisses on
+    // the same key. Closing quietly spends one keypress on two surfaces, which
+    // is the mirror of the case above and the reason that guard can be trusted.
+    const copy = within(peekPanel()).getByRole("button", {
+      name: "Copy Org id",
+    });
+    // Dispatched through fireEvent rather than on the node, so the close it
+    // causes is flushed before the panel is looked for. The event is built here
+    // because the answer being asserted is on the event itself.
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(copy, event);
+
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("leaves Escape alone inside the panel once something nearer has answered it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    // A tooltip or a popover opened from inside the panel calls preventDefault
+    // on the Escape that dismisses it. Closing the panel on that one takes the
+    // operator two surfaces back for one keypress, and this is the only path
+    // where it can happen: before Escape reached the panel body at all, the
+    // panel could not close underneath a control that had already answered.
+    const copy = within(peekPanel()).getByRole("button", {
+      name: "Copy Org id",
+    });
+    copy.addEventListener("keydown", (event) => event.preventDefault());
+    fireEvent.keyDown(copy, { key: "Escape" });
+
+    expect(peekPanel()).toBeTruthy();
+  });
+
   it("still closes on Escape pressed on the peeked row's own control", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const trigger = await peekOn(FIRST_ORG.name);

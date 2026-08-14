@@ -271,27 +271,31 @@ export function OrganizationsList(): JSX.Element {
   );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    // Ahead of both allow-lists below. Radix calls preventDefault when it
+    // handles Escape itself, so a tooltip or a popover opened from inside the
+    // panel takes the first Escape and the panel does not close underneath it.
     if (!peeked || event.defaultPrevented) return;
 
-    // Two controls answer here, and everything else under this handler keeps
-    // its own keys: the pager, another row's peek control, a button in the
-    // panel body. An arrow key on one of those is a reflex to scroll, and
-    // answering it moves the panel to a record the operator is not on and eats
-    // the scroll on the way. Escape on one of them would drag the keyboard
-    // back to the peeked row.
-    //
-    // The panel container, not its contents: a control in the panel body is
-    // the case above, so admitting the whole subtree would fix nothing.
+    // Nothing else under this handler answers either key. The pager and another
+    // row's peek control keep their own, and the two keys below are scoped
+    // separately because they fail in different ways.
     const fromTrigger =
       event.target instanceof HTMLElement
         ? event.target.closest(PEEK_TRIGGER_SELECTOR)
         : null;
     const fromPeekedTrigger =
       fromTrigger !== null && peekedRow.current?.contains(fromTrigger) === true;
-    const fromPanel = event.target === peekPanel.current;
-    if (!fromPeekedTrigger && !fromPanel) return;
 
     if (event.key === "Escape") {
+      // The whole panel, its contents included. Escape has no reflex of its own
+      // for the panel to steal, and it is the dismiss gesture for whichever
+      // surface holds focus, so a button in the panel body has to answer it.
+      // Closing does not drop the keyboard: closePeek moves it to the peeked
+      // row's control, off the subtree that is about to unmount.
+      const insidePanel =
+        event.target instanceof HTMLElement &&
+        peekPanel.current?.contains(event.target) === true;
+      if (!fromPeekedTrigger && !insidePanel) return;
       event.preventDefault();
       closePeek();
       return;
@@ -299,15 +303,20 @@ export function OrganizationsList(): JSX.Element {
 
     const step = ARROW_STEP[event.key];
     if (!step) return;
+    // The panel container only, not its contents. An arrow key on a button in
+    // the panel body is a reflex to scroll, and answering it would move the
+    // panel to a record the operator is not on and eat the scroll on the way.
+    const fromPanel = event.target === peekPanel.current;
+    if (!fromPeekedTrigger && !fromPanel) return;
     // Stop at the ends: paging replaces the row nodes the anchor depends on.
     const next = rows[peekedIndex + step];
     if (!next) return;
     event.preventDefault();
     openPeek(next.original);
     // Only where the operator was already on a control. The peek moves out
-    // from under this one, and the allow-list above is written in terms of the
-    // peeked row, so leaving the keyboard behind would strand it on a control
-    // that answers neither the arrow keys nor Escape.
+    // from under this one, and the arrow allow-list above is written in terms
+    // of the peeked row, so leaving the keyboard behind would strand it on a
+    // control that answers neither the arrow keys nor Escape.
     //
     // Focus stays put for anyone arrowing from the panel. That is the panel's
     // own navigation, and pulling the keyboard out to a row control would take
