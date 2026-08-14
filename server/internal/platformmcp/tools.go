@@ -74,13 +74,13 @@ type operationBudgetResult struct {
 	Message string `json:"message"`
 }
 
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource) *mcp.Server {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "gram-platform-mcp",
-		Title:   "Gram Platform MCP",
+		Name:    "speakeasy-aicp-platform-mcp",
+		Title:   "Speakeasy AICP Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Instructions: "Use this server to inspect the selected Gram organization. All mutations are unavailable during the read-only rollout.",
+		Instructions: "Use this server to inspect the selected organization and help distribute reviewed MCP servers to an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization and add the ready server to the project's existing Default plugin. For the guided flow, use register_platform_mcp_for_project, get_platform_mcp_onboarding_status, attach_platform_mcp_identity_provider when confirmed, and add_platform_mcp_to_default_plugin.",
 		PageSize:     32,
 	})
 
@@ -91,7 +91,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
 		registerUnavailableCatalogTools(server)
 	} else {
-		registerCatalogTools(server, catalog, registrations.budgets.Catalog, cursorCodec)
+		registerCatalogTools(server, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableCatalogRegistrationTool(server)
@@ -108,7 +108,20 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerReadinessTools(server, registrations.readiness)
 	}
-	registerUnavailableTools(server)
+	if onboarding == nil || distributions == nil || catalog == nil || registrations == nil || registrations.store == nil {
+		registerUnavailableTools(server)
+	} else {
+		registerOnboardingLifecycleTools(server, onboarding, registrations, distributions)
+	}
+	if feedback == nil {
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        "send_platform_mcp_feedback",
+			Title:       "Send Platform MCP Feedback",
+			Description: "Send bounded Platform MCP feedback. Feedback is not enabled in the current rollout.",
+		}, unavailableTool("platform_mcp_feedback"))
+	} else {
+		registerFeedbackTool(server, feedback)
+	}
 	return server
 }
 
@@ -141,7 +154,7 @@ func registerUnavailableCatalogRegistrationTool(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
-		Description: "Register an approved catalog MCP in a project. Registration is not enabled in the current rollout.",
+		Description: "Register an approved catalog MCP in a project. Registration is not available in the current preview.",
 	}, unavailableTool("catalog_registration"))
 }
 
@@ -149,7 +162,7 @@ func registerUnavailableSetupHandoffTool(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
-		Description: "Create a secure setup handoff. Provider handoffs are not enabled in the current rollout.",
+		Description: "Create a secure setup handoff. Provider setup is not available in the current preview.",
 	}, unavailableTool("setup_handoff"))
 }
 
@@ -161,8 +174,8 @@ func registerUnavailableTools(server *mcp.Server) {
 		feature     string
 	}{
 
-		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not enabled in the read-only rollout.", "plugin_distribution"},
-		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not enabled in the read-only rollout.", "plugin_distribution"},
+		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not available in the current preview.", "plugin_distribution"},
+		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
 	} {
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        tool.name,
@@ -178,8 +191,8 @@ func registerUnavailableReadinessTools(server *mcp.Server) {
 		title       string
 		description string
 	}{
-		{"get_mcp_readiness", "Get MCP Readiness", "Check configured MCP readiness. Readiness checks are not enabled in the current rollout."},
-		{"get_mcp_repair_plan", "Get MCP Repair Plan", "Get a safe MCP repair plan. Repair planning is not enabled in the current rollout."},
+		{"get_mcp_readiness", "Get MCP Readiness", "Check configured MCP readiness. Readiness checks are not available in the current preview."},
+		{"get_mcp_repair_plan", "Get MCP Repair Plan", "Get a safe MCP repair plan. Repair planning is not available in the current preview."},
 	} {
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        tool.name,
@@ -193,8 +206,14 @@ func registerUnavailableReadinessTools(server *mcp.Server) {
 func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
+	case errors.Is(err, ErrReadinessRegistrationNotFound):
+		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and authenticated connection. Use the ID returned by register_platform_mcp_for_project or get_platform_mcp_onboarding_status."}
+	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
+		result = operationBudgetResult{Code: "invalid_request", Message: "The requested Platform MCP operation is invalid or no longer matches the reviewed catalogue. Re-read the supported tool result and do not retry unchanged input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		result = operationBudgetResult{Code: "rate_limited", Message: "This Platform MCP operation is temporarily rate limited. Retry after a short delay."}
+	case errors.Is(err, ErrCatalogUnavailable):
+		result = operationBudgetResult{Code: unavailableCode, Reason: "catalog_unavailable", Message: "The reviewed MCP Catalogue is temporarily unavailable. Retry the catalogue search after a short delay; other Platform MCP tools may remain available."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Message: "This Platform MCP operation is temporarily unavailable."}
 	case errors.Is(err, ErrRegistrationCap):
@@ -202,7 +221,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrRegistrationConflict):
 		result = operationBudgetResult{Code: "conflict", Message: "This Platform MCP registration conflicts with the current project state."}
 	case errors.Is(err, ErrTargetIneligible):
-		result = operationBudgetResult{Code: "ineligible_organization", Message: "This project is not eligible for Platform MCP registration."}
+		result = operationBudgetResult{Code: "ineligible_project", Message: "This project is not eligible for Platform MCP registration because it already has an active legacy toolset-backed MCP."}
 	default:
 		return nil, false
 	}

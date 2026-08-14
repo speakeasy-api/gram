@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -207,6 +206,28 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:    "stripe-api-key",
+			Usage:   "The Stripe API key",
+			EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "stripe-webhook-secret",
+			Usage:   "The Stripe webhook signing secret",
+			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-tum",
+			Aliases: []string{"stripe.price_id_tum"},
+			Usage:   "The Stripe metered TUM price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name",
+			Aliases: []string{"stripe.meter_event_name"},
+			Usage:   "The Stripe TUM meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -320,6 +341,12 @@ func newWorkerCommand() *cli.Command {
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for transactional emails (billing usage alerts). Empty or 'unset' disables email sending.",
 			EnvVars:  []string{"LOOPS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "email-template-ids",
+			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
+			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
 			Required: false,
 		},
 	}
@@ -441,7 +468,11 @@ func newWorkerCommand() *cli.Command {
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
-			platformAdmission := platformmcp.NewAdmissionChecker(productFeatures, featureFlags, platformmcp.NewPostgresNewModelEligibility(db))
+			platformAdmission := platformmcp.NewAdmissionChecker(
+				productFeatures,
+				featureFlags,
+				platformmcp.NewPostgresNewModelEligibility(db),
+			)
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
@@ -466,8 +497,10 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient)
+			emailService, err := newEmailService(ctx, c, logger, guardianPolicy)
+			if err != nil {
+				return err
+			}
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
@@ -503,7 +536,12 @@ func newWorkerCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe client: %w", err)
+			}
+
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}

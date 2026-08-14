@@ -25,12 +25,11 @@ type InspectCatalogCandidateInput struct {
 	CatalogRef  string `json:"catalog_ref" jsonschema:"canonical catalog reference returned by search_mcp_catalog"`
 }
 
-func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec) {
+func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_mcp_catalog",
 		Title:       "Search MCP Catalog",
 		Description: "Search reviewed catalog MCP candidates available for Platform onboarding. The results do not install or distribute an MCP.",
-		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -57,6 +56,9 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 		}
 		candidates, err := catalog.Search(ctx, normalizeCatalogQuery(input.Query))
 		if err != nil {
+			if result, ok := operationBudgetToolResult(ErrCatalogUnavailable); ok {
+				return result, SearchCatalogOutput{}, nil
+			}
 			return nil, SearchCatalogOutput{}, ErrCatalogUnavailable
 		}
 		providerKey := normalizeCatalogProviderKey(input.ProviderKey)
@@ -69,6 +71,11 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 		page, nextPosition, err := catalogSearchPage(filtered, position)
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
+		}
+		if onboarding != nil {
+			if err := onboarding.RecordCatalogExplored(ctx, principal); err != nil {
+				return nil, SearchCatalogOutput{}, err
+			}
 		}
 		output := SearchCatalogOutput{Candidates: page}
 		if nextPosition > 0 {
@@ -113,6 +120,9 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 			return nil, CatalogDetails{}, ErrCatalogRejected
 		}
 		if err != nil {
+			if result, ok := operationBudgetToolResult(ErrCatalogUnavailable); ok {
+				return result, CatalogDetails{}, nil
+			}
 			return nil, CatalogDetails{}, ErrCatalogUnavailable
 		}
 		return nil, details, nil

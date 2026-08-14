@@ -315,6 +315,8 @@ type BillingCycleUsage struct {
 type BillingMetadatum struct {
 	ID                    uuid.UUID
 	OrganizationID        string
+	StripeCustomerID      pgtype.Text
+	StripeSubscriptionID  pgtype.Text
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
@@ -1330,6 +1332,16 @@ type OpenrouterApiKey struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type OpenrouterSpendDaily struct {
+	ID             uuid.UUID
+	OrganizationID string
+	KeyType        string
+	Day            pgtype.Date
+	SpendUsd       pgtype.Numeric
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type OrganizationFeature struct {
@@ -2464,6 +2476,24 @@ type SpendRuleEvent struct {
 	WindowStart    pgtype.Timestamptz
 	WindowEnd      pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
+}
+
+type StripeMeterReport struct {
+	ID             uuid.UUID
+	OrganizationID string
+	CycleStart     pgtype.Timestamptz
+	Seq            int32
+	DeltaTokens    int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type StripeWebhookReceipt struct {
+	StripeEventID  string
+	OrganizationID string
+	EventType      string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 // Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.

@@ -649,6 +649,78 @@ func (q *Queries) GetActiveUserCountByMessages(ctx context.Context, arg GetActiv
 	return active_user_count, err
 }
 
+const getAssistantSessionSummaryProjection = `-- name: GetAssistantSessionSummaryProjection :one
+WITH target_assistant AS (
+  SELECT a.id
+  FROM assistants a
+  WHERE a.id = $1
+    AND a.project_id = $2
+    AND a.deleted IS FALSE
+),
+assistant_chats AS MATERIALIZED (
+  SELECT DISTINCT at.chat_id
+  FROM assistant_threads at
+  JOIN target_assistant a ON a.id = at.assistant_id
+  JOIN chats c
+    ON c.id = at.chat_id
+    AND c.project_id = at.project_id
+    AND c.deleted IS FALSE
+  WHERE at.project_id = $2
+    AND at.source_kind <> 'setup'
+    AND at.deleted IS FALSE
+    AND ($3::text = '' OR c.external_user_id = $3::text)
+    AND ($4::text = '' OR c.user_id = $4::text)
+),
+activity AS (
+  SELECT
+    ac.chat_id,
+    COUNT(*)::bigint AS messages
+  FROM assistant_chats ac
+  JOIN chat_messages cm
+    ON cm.chat_id = ac.chat_id
+    AND cm.project_id = $2
+  WHERE cm.created_at >= $5
+    AND cm.created_at <= $6
+  GROUP BY ac.chat_id
+)
+SELECT
+  EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
+  COUNT(*)::bigint AS sessions,
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages
+FROM activity
+`
+
+type GetAssistantSessionSummaryProjectionParams struct {
+	AssistantID    uuid.UUID
+	ProjectID      uuid.UUID
+	ExternalUserID string
+	UserID         string
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
+}
+
+type GetAssistantSessionSummaryProjectionRow struct {
+	AssistantExists bool
+	Sessions        int64
+	Messages        int64
+}
+
+// Returns the range-bounded Postgres portion of the assistant activity
+// summary. Setup/onboarding threads are excluded from runtime activity.
+func (q *Queries) GetAssistantSessionSummaryProjection(ctx context.Context, arg GetAssistantSessionSummaryProjectionParams) (GetAssistantSessionSummaryProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantSessionSummaryProjection,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	var i GetAssistantSessionSummaryProjectionRow
+	err := row.Scan(&i.AssistantExists, &i.Sessions, &i.Messages)
+	return i, err
+}
+
 const getAssistantThreadAssistantIDByChatID = `-- name: GetAssistantThreadAssistantIDByChatID :one
 SELECT t.assistant_id
 FROM assistant_threads t
@@ -1326,6 +1398,82 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 	var last_cursor_id pgtype.Text
 	err := row.Scan(&last_cursor_id)
 	return last_cursor_id, err
+}
+
+const listAssistantSessionSummaryChats = `-- name: ListAssistantSessionSummaryChats :many
+SELECT
+  at.chat_id,
+  at.correlation_id
+FROM assistant_threads at
+JOIN assistants a
+  ON a.id = at.assistant_id
+  AND a.project_id = at.project_id
+  AND a.deleted IS FALSE
+JOIN chats c
+  ON c.id = at.chat_id
+  AND c.project_id = at.project_id
+  AND c.deleted IS FALSE
+WHERE at.assistant_id = $1
+  AND at.project_id = $2
+  AND at.source_kind <> 'setup'
+  AND at.deleted IS FALSE
+  AND at.correlation_id > $3
+  AND ($4::text = '' OR c.external_user_id = $4::text)
+  AND ($5::text = '' OR c.user_id = $5::text)
+ORDER BY at.correlation_id
+LIMIT $6
+`
+
+type ListAssistantSessionSummaryChatsParams struct {
+	AssistantID        uuid.UUID
+	ProjectID          uuid.UUID
+	AfterCorrelationID string
+	ExternalUserID     string
+	UserID             string
+	PageLimit          int32
+}
+
+type ListAssistantSessionSummaryChatsRow struct {
+	ChatID        uuid.UUID
+	CorrelationID string
+}
+
+// Keyset page over every visible runtime chat for an assistant. This is
+// deliberately independent of message activity: completion telemetry can be
+// in range even when its corresponding message was persisted outside the
+// selected range. The endpoint consumes fixed-size pages so it remains
+// uncapped without constructing an unbounded UUID array or ClickHouse IN list.
+// Runtime ingestion maps each live assistant correlation to exactly one chat:
+// the dashboard correlation is the server-minted chat id, while other sources
+// derive the chat id from (assistant, correlation), and the live correlation
+// key is unique. Correlation is immutable after insertion, so it is also a
+// stable cursor while activity updates the thread. The keyset is backed by
+// assistant_threads_project_id_assistant_id_correlation_id_key.
+func (q *Queries) ListAssistantSessionSummaryChats(ctx context.Context, arg ListAssistantSessionSummaryChatsParams) ([]ListAssistantSessionSummaryChatsRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantSessionSummaryChats,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.AfterCorrelationID,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantSessionSummaryChatsRow
+	for rows.Next() {
+		var i ListAssistantSessionSummaryChatsRow
+		if err := rows.Scan(&i.ChatID, &i.CorrelationID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatContentPartsByChatID = `-- name: ListChatContentPartsByChatID :many

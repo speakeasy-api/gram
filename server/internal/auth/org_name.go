@@ -2,15 +2,10 @@ package auth
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"math/big"
-	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var orgNameAdjectives = []string{
@@ -78,93 +73,4 @@ func generateLegibleOrgName() string {
 	adj := orgNameAdjectives[adjIdx.Int64()]
 	noun := orgNameNouns[nounIdx.Int64()]
 	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
-}
-
-// maxOrgNameLength is measured in Unicode code points, not bytes.
-const maxOrgNameLength = 100
-
-// maxRawOrgNameBytes bounds the input before any of it is copied. A name at
-// maxOrgNameLength occupies at most four bytes per code point, so this leaves
-// ample room for surrounding whitespace while keeping an unauthenticated caller
-// from making the server allocate a normalized copy of an arbitrary payload.
-const maxRawOrgNameBytes = 4 * maxOrgNameLength * 10
-
-// minOrgNameLettersOrNumbers keeps punctuation-only values from becoming
-// organization names.
-const minOrgNameLettersOrNumbers = 2
-
-const shortOrgNameFormat = "organization name must contain at least %d letters or numbers"
-
-// Zero-width joiners are allowed because they are required by several scripts.
-const (
-	zeroWidthNonJoiner = '\u200C'
-	zeroWidthJoiner    = '\u200D'
-)
-
-// validateOrgName returns a whitespace-normalized display name when the input
-// contains only graphic characters and permitted joiners.
-func validateOrgName(name string) (string, error) {
-	invalidChars := func() error {
-		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
-	}
-
-	if len(name) > maxRawOrgNameBytes {
-		return "", oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
-	}
-
-	if !utf8.ValidString(name) {
-		return "", invalidChars()
-	}
-
-	normalized := normalizeOrgNameSpaces(name)
-	if normalized == "" {
-		return "", oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
-	}
-
-	if utf8.RuneCountInString(normalized) > maxOrgNameLength {
-		return "", oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
-	}
-
-	lettersOrNumbers := 0
-	for _, r := range normalized {
-		if !unicode.IsGraphic(r) && r != zeroWidthJoiner && r != zeroWidthNonJoiner {
-			return "", invalidChars()
-		}
-		if unicode.IsLetter(r) || unicode.IsNumber(r) {
-			lettersOrNumbers++
-		}
-	}
-
-	if lettersOrNumbers < minOrgNameLettersOrNumbers {
-		return "", oops.E(
-			oops.CodeInvalid,
-			fmt.Errorf(shortOrgNameFormat, minOrgNameLettersOrNumbers),
-			shortOrgNameFormat,
-			minOrgNameLettersOrNumbers,
-		)
-	}
-
-	return normalized, nil
-}
-
-// normalizeOrgNameSpaces converts Unicode space separators to ASCII spaces,
-// collapses runs, and trims the ends. Other whitespace remains for validation.
-func normalizeOrgNameSpaces(name string) string {
-	var b strings.Builder
-	b.Grow(len(name))
-
-	pendingSpace := false
-	for _, r := range name {
-		if unicode.Is(unicode.Zs, r) {
-			pendingSpace = b.Len() > 0
-			continue
-		}
-		if pendingSpace {
-			b.WriteRune(' ')
-			pendingSpace = false
-		}
-		b.WriteRune(r)
-	}
-
-	return b.String()
 }

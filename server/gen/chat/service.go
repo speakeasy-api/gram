@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
+	// Get assistant session activity totals for a time range.
+	GetAssistantSessionSummary(context.Context, *GetAssistantSessionSummaryPayload) (res *AssistantSessionSummary, err error)
 	// Aggregate work-units analysis results over time for the project: work done
 	// and cost/token efficiency per UTC day.
 	GetWorkUnitsTrend(context.Context, *GetWorkUnitsTrendPayload) (res *WorkUnitsTrendResult, err error)
@@ -81,13 +83,26 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources"}
+var MethodNames = [12]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
 	Type string
 	// Claude Code usage details.
 	Claude *ClaudeAgentUsage
+}
+
+// AssistantSessionSummary is the result type of the chat service
+// getAssistantSessionSummary method.
+type AssistantSessionSummary struct {
+	// Number of sessions with activity in the range
+	Sessions int64
+	// Number of messages created in the range
+	Messages int64
+	// Tokens consumed in the range
+	TotalTokens int64
+	// Cost in USD incurred in the range
+	TotalCost float64
 }
 
 // Chat is the result type of the chat service loadChat method.
@@ -410,6 +425,19 @@ type GenerateTitlePayload struct {
 type GenerateTitleResult struct {
 	// The current title after the operation (empty when reset to auto-generated)
 	Title string
+}
+
+// GetAssistantSessionSummaryPayload is the payload type of the chat service
+// getAssistantSessionSummary method.
+type GetAssistantSessionSummaryPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The assistant whose activity to summarize
+	AssistantID string
+	// Start of the activity range (ISO 8601)
+	From string
+	// End of the activity range (ISO 8601)
+	To string
 }
 
 // GetWorkUnitsTrendPayload is the payload type of the chat service

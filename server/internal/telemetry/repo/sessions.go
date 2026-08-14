@@ -264,11 +264,17 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		case attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		case attributeDimScalar:
+			values := f.Values
+			column := dim.column
+			if f.Dimension == "email" {
+				values = normalizedEmailDimensionValues(values)
+				column = "lower(" + column + ")"
+			}
 			if dim.coLocateSessionFilters {
-				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(dim.column, f.Values))
+				coLocatedPredicates = append(coLocatedPredicates, sessionScalarRowPredicate(column, values))
 				continue
 			}
-			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
+			sb = sb.Having(sessionScalarHaving(column, values))
 		case attributeDimArray:
 			sb = sb.Having(sessionArrayHaving(dim.column, f.Values))
 		default:
@@ -598,7 +604,13 @@ func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMe
 			tuplePredicates = append(tuplePredicates, pred)
 			tupleArgs = append(tupleArgs, args...)
 		default:
-			sb = sb.Having(sessionSummaryValuesHaving("s."+dim.column, f.Values))
+			column := "s." + dim.column
+			values := f.Values
+			if f.Dimension == "email" {
+				column = "arrayMap(x -> lower(x), " + column + ")"
+				values = normalizedEmailDimensionValues(values)
+			}
+			sb = sb.Having(sessionSummaryValuesHaving(column, values))
 		}
 	}
 
@@ -640,6 +652,14 @@ func sessionSummaryValuesHaving(colExpr string, values []string) squirrel.Sqlize
 		return nonEmptyPred
 	}
 	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
+func normalizedEmailDimensionValues(values []string) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = strings.ToLower(value)
+	}
+	return out
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -743,6 +763,69 @@ func (q *Queries) GetChatSessionFactsByChatIDs(ctx context.Context, arg GetChatS
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating chat session facts: %w", err)
+	}
+	return result, nil
+}
+
+// ChatMetricsSummary is an exact range aggregate for a set of chat sessions.
+type ChatMetricsSummary struct {
+	TotalTokens int64   `ch:"total_tokens"`
+	TotalCost   float64 `ch:"total_cost"`
+}
+
+// GetChatMetricsSummaryByIDsParams scopes an activity summary to one project,
+// a set of chat ids, and an inclusive event-time range.
+type GetChatMetricsSummaryByIDsParams struct {
+	ProjectID string
+	ChatIDs   []string
+	From      time.Time
+	To        time.Time
+}
+
+// GetChatMetricsSummaryByIDs returns exact usage totals for the requested chats
+// and event-time range. Managed assistant completions are not represented in
+// chat_session_summaries, so this projection aggregates their canonical usage
+// attributes directly without loading individual log records.
+func (q *Queries) GetChatMetricsSummaryByIDs(ctx context.Context, arg GetChatMetricsSummaryByIDsParams) (ChatMetricsSummary, error) {
+	if len(arg.ChatIDs) == 0 {
+		return ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	builder := sq.Select(
+		"toInt64("+totalTokensExpr+") as total_tokens",
+		"toFloat64(sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '')) as total_cost",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.ProjectID).
+		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
+		Where("time_unix_nano >= ?", arg.From.UnixNano()).
+		Where("time_unix_nano <= ?", arg.To.UnixNano())
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("building assistant session usage summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("querying assistant session summary: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return ChatMetricsSummary{}, fmt.Errorf("reading assistant session summary: %w", err)
+		}
+		return ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	var result ChatMetricsSummary
+	if err := rows.ScanStruct(&result); err != nil {
+		return ChatMetricsSummary{}, fmt.Errorf("scanning assistant session summary: %w", err)
 	}
 	return result, nil
 }

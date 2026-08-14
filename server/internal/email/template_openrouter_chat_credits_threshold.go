@@ -19,8 +19,8 @@ type OpenRouterChatCreditsThreshold struct {
 	Exhausted bool
 }
 
-func (t OpenRouterChatCreditsThreshold) TransactionalID() TransactionalID {
-	return transactionalIDOpenRouterChatCreditsThreshold
+func (t OpenRouterChatCreditsThreshold) Key() TemplateKey {
+	return TemplateKeyOpenRouterChatCredits
 }
 
 func (t OpenRouterChatCreditsThreshold) AddToAudience() bool { return false }

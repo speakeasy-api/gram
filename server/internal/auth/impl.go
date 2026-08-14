@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -117,6 +118,7 @@ type Service struct {
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
 	authzProvisioner    *authz.Provisioner
+	organizationSeeder  OrganizationFeatureSeeder
 	trialBundleSeeder   EnterpriseTrialBundleSeeder
 	auditLogger         *audit.Logger
 	trialNotifier       trialemails.Notifier
@@ -137,6 +139,7 @@ func NewService(
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
+	organizationSeeder OrganizationFeatureSeeder,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
 	trialNotifier trialemails.Notifier,
@@ -162,6 +165,7 @@ func NewService(
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
 		authzProvisioner:    authzProvisioner,
+		organizationSeeder:  organizationSeeder,
 		trialBundleSeeder:   trialBundleSeeder,
 		auditLogger:         auditLogger,
 		trialNotifier:       trialNotifier,
@@ -512,7 +516,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// value must never be able to block an ordinary login.
 	orgName := conv.PtrValOr(payload.OrgName, "")
 	if strings.TrimSpace(orgName) != "" {
-		validated, err := validateOrgName(orgName)
+		validated, err := orgprovision.ValidateName(orgName)
 		if err != nil {
 			return nil, err
 		}
@@ -997,7 +1001,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("user already has an active organization"), "user already has an active organization")
 	}
 
-	orgName, err := validateOrgName(payload.OrgName)
+	orgName, err := orgprovision.ValidateName(payload.OrgName)
 	if err != nil {
 		return err
 	}
@@ -1121,6 +1125,13 @@ func (s *Service) persistProvisionedOrganization(
 		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
 	}); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
+	}
+
+	if s.organizationSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	}
+	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 
 	if opts.ProvisionTrial {

@@ -29,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
@@ -44,6 +45,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  Fragment,
   useState,
   useCallback,
   useEffect,
@@ -98,6 +100,11 @@ import {
 } from "./policy-delete-dialog";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
+import { policyEnabledActionLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 
 /** Per-policy config for the Non-Corporate Accounts category: the list of
  *  email domains treated as corporate. Rendered inside the category's
@@ -499,7 +506,14 @@ function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
   return (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5">
       <span className="flex min-w-0 items-center gap-1.5 font-medium">
-        <span className="truncate">{row.policy.name}</span>
+        <span
+          className={cn(
+            "truncate",
+            !row.policy.enabled && "text-muted-foreground",
+          )}
+        >
+          {row.policy.name}
+        </span>
         {row.kind === "prompt" && (
           <SimpleTooltip tooltip="Prompt-based policy">
             <Sparkles
@@ -605,6 +619,18 @@ function PolicyCenterContent() {
     },
   });
 
+  const toggleEnabledMutation = useTogglePolicyEnabled();
+
+  const handleToggleEnabled = (row: PolicyRow) => {
+    toggleEnabledMutation.mutate(
+      togglePolicyEnabledVariables(
+        row.policy.id,
+        row.policy.name,
+        !row.policy.enabled,
+      ),
+    );
+  };
+
   // Redirect a deep-linked policy to its detail page once its data has loaded.
   // Guarded by a ref so it fires once per id (not on every policies re-fetch),
   // and marks unknown ids handled so a stale id doesn't retry every render.
@@ -642,8 +668,16 @@ function PolicyCenterContent() {
         ]
       : []),
     {
+      label: policyEnabledActionLabel(row.policy.enabled),
+      disabled: toggleEnabledMutation.isPending,
+      onClick: () => {
+        setTimeout(() => handleToggleEnabled(row), 0);
+      },
+    },
+    {
       label: "Delete",
       destructive: true,
+      separatorBefore: true,
       onClick: () => {
         setTimeout(() => handleDelete(row), 0);
       },
@@ -653,6 +687,15 @@ function PolicyCenterContent() {
   const confirmDelete = () => {
     if (!policyToDelete) return;
     deleteMutation.mutate({ request: { id: policyToDelete.policy.id } });
+  };
+
+  const confirmDisableInstead = () => {
+    if (!policyToDelete) return;
+    const row = policyToDelete;
+    setPolicyToDelete(null);
+    toggleEnabledMutation.mutate(
+      togglePolicyEnabledVariables(row.policy.id, row.policy.name, false),
+    );
   };
 
   // Empty state for the Policies tab only. It must NOT short-circuit the whole
@@ -714,7 +757,8 @@ function PolicyCenterContent() {
   const insightsContext = [
     "Page: Policy Center.",
     `Total policies: ${policyRows.length}.`,
-    `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action})`).join(", ") || "none"}.`,
+    `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
+    `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
     "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
@@ -734,6 +778,29 @@ function PolicyCenterContent() {
         <span className="inline-flex">
           <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />
         </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "0.5fr",
+      render: (row) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={row.policy.enabled}
+            disabled={toggleEnabledMutation.isPending}
+            onCheckedChange={(checked) =>
+              toggleEnabledMutation.mutate(
+                togglePolicyEnabledVariables(
+                  row.policy.id,
+                  row.policy.name,
+                  checked,
+                ),
+              )
+            }
+            aria-label={row.policy.enabled ? "Disable policy" : "Enable policy"}
+          />
+        </div>
       ),
     },
     {
@@ -821,17 +888,20 @@ function PolicyCenterContent() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {policyActions(row).map((action) => (
-                <DropdownMenuItem
-                  key={action.label}
-                  className={cn(
-                    "cursor-pointer",
-                    action.destructive &&
-                      "text-destructive focus:text-destructive",
-                  )}
-                  onSelect={() => action.onClick()}
-                >
-                  {action.label}
-                </DropdownMenuItem>
+                <Fragment key={action.label}>
+                  {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuItem
+                    disabled={action.disabled}
+                    className={cn(
+                      "cursor-pointer",
+                      action.destructive &&
+                        "text-destructive focus:text-destructive",
+                    )}
+                    onSelect={() => action.onClick()}
+                  >
+                    {action.label}
+                  </DropdownMenuItem>
+                </Fragment>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -962,6 +1032,11 @@ function PolicyCenterContent() {
               </code>{" "}
               policy will be permanently deleted.
             </Text>
+            {policyToDelete?.policy.enabled ? (
+              <Text variant="body">
+                To stop scanning without losing this policy, disable it instead.
+              </Text>
+            ) : null}
             {policyDeleteImpactText && (
               <Text variant="body">{policyDeleteImpactText}</Text>
             )}
@@ -987,10 +1062,23 @@ function PolicyCenterContent() {
               >
                 Cancel
               </Button>
+              {policyToDelete?.policy.enabled ? (
+                <Button
+                  variant="secondary"
+                  onClick={confirmDisableInstead}
+                  disabled={
+                    deleteMutation.isPending || toggleEnabledMutation.isPending
+                  }
+                >
+                  Disable instead
+                </Button>
+              ) : null}
               <Button
                 variant="destructive-primary"
                 onClick={confirmDelete}
-                disabled={deleteMutation.isPending}
+                disabled={
+                  deleteMutation.isPending || toggleEnabledMutation.isPending
+                }
               >
                 Delete Policy
               </Button>

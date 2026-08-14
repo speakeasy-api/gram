@@ -49,7 +49,9 @@
       "files": [
         "**/*.config.{ts,js,mts,mjs}",
         "vite.config.ts",
-        "src/main.tsx"
+        "src/main.tsx",
+        "src/**/*.test.{ts,tsx}",
+        "src/**/*.spec.{ts,tsx}"
       ],
       "rules": {
         "typescript/explicit-module-boundary-types": "off"

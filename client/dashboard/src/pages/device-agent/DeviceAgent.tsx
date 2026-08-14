@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MdmIntegrationsTab } from "@/pages/org/device-integrations/DeviceIntegrations";
 import React from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
@@ -60,6 +61,12 @@ function DeviceAgentTabs() {
   const mdmFlag = telemetry.isFeatureEnabled("gram-device-integrations");
   const mdmEnabled = mdmFlag ?? false;
 
+  // Fleet configuration is org-admin only. Org readers (plain members) can
+  // reach the Setup tab but must not see or open the Configuration tab; the
+  // server enforces the same org:admin gate on agent.getConfiguration.
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canConfigure = hasScope("org:admin");
+
   // filter(Boolean) normalizes trailing slashes so a bookmarked
   // /device-agent/mdm-integrations/ still lands on the MDM tab and tab
   // switches never build double-slash URLs.
@@ -68,7 +75,7 @@ function DeviceAgentTabs() {
   const onConfigurationTab = lastSegment === "configuration";
   const onMdmTab = lastSegment === "mdm-integrations";
   let currentTab = "setup";
-  if (onConfigurationTab) {
+  if (onConfigurationTab && canConfigure) {
     currentTab = "configuration";
   } else if (onMdmTab && mdmEnabled) {
     currentTab = "mdm-integrations";
@@ -90,6 +97,13 @@ function DeviceAgentTabs() {
     return <Navigate to={basePath} replace />;
   }
 
+  // Same guard for a deep link to the Configuration tab as a non-admin: only
+  // redirect once grants have resolved, so an admin refreshing the URL isn't
+  // bounced while RBAC is still loading.
+  if (onConfigurationTab && !rbacLoading && !canConfigure) {
+    return <Navigate to={basePath} replace />;
+  }
+
   return (
     <>
       <div className="mb-6">
@@ -106,12 +120,14 @@ function DeviceAgentTabs() {
         <div className="border-border -mx-8 border-b px-8">
           <PageTabsList>
             <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
-            <PageTabsTrigger value="configuration">
-              <span className="inline-flex items-center gap-2">
-                Configuration
-                <ReleaseStageBadge stage="preview" noTooltip />
-              </span>
-            </PageTabsTrigger>
+            {canConfigure && (
+              <PageTabsTrigger value="configuration">
+                <span className="inline-flex items-center gap-2">
+                  Configuration
+                  <ReleaseStageBadge stage="preview" noTooltip />
+                </span>
+              </PageTabsTrigger>
+            )}
             {mdmEnabled && (
               <PageTabsTrigger value="mdm-integrations">
                 <span className="inline-flex items-center gap-2">
@@ -127,9 +143,11 @@ function DeviceAgentTabs() {
           <DeviceAgentSetup />
         </TabsContent>
 
-        <TabsContent value="configuration" className="mt-6">
-          <DeviceAgentConfigurationTab />
-        </TabsContent>
+        {canConfigure && (
+          <TabsContent value="configuration" className="mt-6">
+            <DeviceAgentConfigurationTab />
+          </TabsContent>
+        )}
 
         {mdmEnabled && (
           <TabsContent value="mdm-integrations" className="mt-6">

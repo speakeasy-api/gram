@@ -262,12 +262,13 @@ Sending transactional email goes through `server/internal/email`. The package wr
 
 ### Adding a new template
 
-Follow these four steps:
+Follow the `craft-transactional-emails` skill. The Go integration is:
 
-1. Add a `TransactionalID` constant to `server/internal/email/templates.go` — single registry, grep-friendly.
-2. Create `server/internal/email/template_<name>.go` with a struct implementing the `Template` interface (`TransactionalID()`, `Variables()`, `AddToAudience()`).
-3. Append a zero value of the struct to `RegisteredTemplates` in `templates.go` so tests catch duplicate IDs (e.g. `AccessRequestCreated{}`).
-4. Write `server/internal/email/template_<name>_test.go` covering: `TransactionalID` returns the expected constant, `Variables` returns the correct snake_case keys with all keys present, `AddToAudience` returns the expected bool.
+1. Add a stable `TemplateKey` constant to `server/internal/email/templates.go`. Provider IDs never belong in application source.
+2. Create `server/internal/email/template_<name>.go` with a struct implementing `Key()`, `Variables()`, and `AddToAudience()`.
+3. Append a fully initialized zero value to `RegisteredTemplates` so the application/manifest contract checks include it.
+4. Add the matching LMX and `manifest.json` entry under `server/internal/email/loops/`; merge CI creates the Loops email and gram-infra supplies its environment-specific ID at runtime.
+5. Test the key, complete snake_case variable map, and audience behavior.
 
 To send: call `s.emailSvc.Send(ctx, recipientEmail, tmpl)` where `tmpl` is your populated template struct.
 
