@@ -291,7 +291,8 @@ SELECT
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE
-    -- The id arms match whole values only: both columns are unique-indexed, so equality stays index-usable where a wildcard ILIKE would force a sequential scan on every keystroke.
+    -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
+    -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
     (
         $1::text IS NULL
         OR om.name ILIKE '%' || $1::text || '%'
