@@ -48,6 +48,8 @@ sdk:
   - "pnpm-lock.yaml"
 
 sdk-gen:
+  - ".mise-tasks/gen/sdk.sh"
+  - ".speakeasy/out.openapi.yaml"
   - ".speakeasy/workflow.yaml"
   - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
   - "hooks/sdk/.speakeasy/gen.yaml"
