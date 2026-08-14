@@ -3121,6 +3121,240 @@ func DecodeCreateOrganizationResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildRearmTrialRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "rearmTrial" endpoint
+func (c *Client) BuildRearmTrialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RearmTrialAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "rearmTrial", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRearmTrialRequest returns an encoder for requests sent to the admin
+// rearmTrial server.
+func EncodeRearmTrialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RearmTrialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "rearmTrial", "*admin.RearmTrialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRearmTrialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "rearmTrial", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRearmTrialResponse returns a decoder for responses returned by the
+// admin rearmTrial endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeRearmTrialResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRearmTrialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RearmTrialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			res := NewRearmTrialAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RearmTrialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RearmTrialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RearmTrialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RearmTrialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RearmTrialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RearmTrialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RearmTrialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RearmTrialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+				}
+				err = ValidateRearmTrialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+				}
+				return nil, NewRearmTrialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RearmTrialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+				}
+				err = ValidateRearmTrialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+				}
+				return nil, NewRearmTrialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "rearmTrial", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RearmTrialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rearmTrial", err)
+			}
+			err = ValidateRearmTrialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rearmTrial", err)
+			}
+			return nil, NewRearmTrialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "rearmTrial", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.

@@ -74,6 +74,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -644,6 +645,51 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
 		return orgprovision.Unavailable{}
 	}
+}
+
+// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm needs.
+// It degrades rather than refusing to boot, because every other admin endpoint
+// works without OpenRouter; the unavailable case is logged at Error on startup.
+//
+// The nil arguments are a billing tracker and a key refresher, neither reached.
+func newAdminTrialKeyReviver(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	redisClient *redis.Client,
+	c *cli.Context,
+) admin.TrialKeyReviver {
+	env := c.String("environment")
+	if env == "local" {
+		return openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+	}
+
+	provisioningKey := c.String("openrouter-provisioning-key")
+	if provisioningKey == "" {
+		logger.ErrorContext(ctx, "trial re-arm is unavailable: no OpenRouter provisioning key configured")
+		return admin.TrialKeysUnavailable{}
+	}
+
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		logger.ErrorContext(ctx, "trial re-arm is unavailable: no usable encryption key configured", attr.SlogError(err))
+		return admin.TrialKeysUnavailable{}
+	}
+
+	return openrouter.New(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		db,
+		env,
+		provisioningKey,
+		nil,
+		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
+		nil,
+		encryptionClient,
+	)
 }
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {

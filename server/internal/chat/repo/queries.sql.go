@@ -191,6 +191,7 @@ chat_activity AS (
   -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
+    cc.created_at,
     COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
   CROSS JOIN LATERAL (
@@ -202,7 +203,7 @@ chat_activity AS (
 SELECT COUNT(*) AS total
 FROM chat_activity ca
 WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
-  AND ($2::timestamptz IS NULL OR ca.last_message_timestamp <= $2)
+  AND ($2::timestamptz IS NULL OR ca.created_at <= $2)
 `
 
 type CountChatsParams struct {
@@ -233,6 +234,9 @@ type CountChatsParams struct {
 // filters become a cheap join instead of a correlated subquery per chat. The
 // parameter-only gate makes it a one-time filter that skips the scan entirely
 // when neither risk filter is active.
+// Interval overlap, mirroring ListChats: last activity after the range opens,
+// created before it closes. Bounding last_message_timestamp above would evict
+// an actively-writing chat as soon as a message lands past the caller's @to.
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
 		arg.FromTime,
@@ -2286,8 +2290,14 @@ filtered_chats AS (
     cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
+  -- The range test is interval overlap: the chat was active after the range
+  -- opened (last message >= @from_time) and existed before it closed
+  -- (created_at <= @to_time). Bounding last_message_timestamp above instead
+  -- would evict an actively-writing chat the moment a new message lands past
+  -- the caller's @to — the dashboard freezes @to when a range is picked, so
+  -- running sessions would flicker out of the list until the next reload.
   WHERE ($13::timestamptz IS NULL OR cs.last_message_timestamp >= $13)
-    AND ($14::timestamptz IS NULL OR cs.last_message_timestamp <= $14)
+    AND ($14::timestamptz IS NULL OR cc.created_at <= $14)
 ),
 limited_chats AS (
   SELECT

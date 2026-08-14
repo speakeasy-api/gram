@@ -71,3 +71,8 @@ func ExtendTrialAdminPath() string {
 func CreateOrganizationAdminPath() string {
 	return "/admin/organization.create"
 }
+
+// RearmTrialAdminPath returns the URL path to the admin service rearmTrial HTTP endpoint.
+func RearmTrialAdminPath() string {
+	return "/admin/trial.rearm"
+}
