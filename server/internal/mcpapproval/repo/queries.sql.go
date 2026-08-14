@@ -1156,6 +1156,63 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 	return items, nil
 }
 
+const listStandingServerDecisionsForProject = `-- name: ListStandingServerDecisionsForProject :many
+SELECT
+    r.target_key
+  , r.target_raw
+  , d.decision
+  , d.granted_principal_urns
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT decision, granted_principal_urns
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.project_id = $1
+  AND r.target_kind = 'server_url'
+  AND r.deleted IS FALSE
+`
+
+type ListStandingServerDecisionsForProjectRow struct {
+	TargetKey            string
+	TargetRaw            string
+	Decision             string
+	GrantedPrincipalUrns []string
+}
+
+// The latest decision per server_url review in a project — what enforcement
+// derived its grants from. Read by the policy-creation backfill so a blocking
+// policy created after decisions were recorded honors them, instead of
+// blocking servers whose rows still read approved.
+func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, projectID uuid.UUID) ([]ListStandingServerDecisionsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listStandingServerDecisionsForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStandingServerDecisionsForProjectRow
+	for rows.Next() {
+		var i ListStandingServerDecisionsForProjectRow
+		if err := rows.Scan(
+			&i.TargetKey,
+			&i.TargetRaw,
+			&i.Decision,
+			&i.GrantedPrincipalUrns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockApprovalRequestForResearch = `-- name: LockApprovalRequestForResearch :one
 SELECT id
 FROM mcp_approval_requests
