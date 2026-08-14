@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getOrganization: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  listOrganizationProjects: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -18,6 +19,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getSession: mocks.getSession,
     getOrganization: mocks.getOrganization,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    listOrganizationProjects: mocks.listOrganizationProjects,
   };
 });
 
@@ -56,6 +58,10 @@ beforeEach(() => {
       ? Promise.resolve({ members: [MEMBER] })
       : Promise.reject(new Error(`no organization ${organizationID}`)),
   );
+  // Not this view's query: the record nav in the sidebar asks for it on every
+  // view. Unmocked it reaches the real fetch and the suite waits on a socket.
+  mocks.listOrganizationProjects.mockReset();
+  mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
 });
 
 afterEach(() => {

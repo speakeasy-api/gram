@@ -14,7 +14,7 @@ import { TrialCallout } from "./TrialCallout";
 
 export function RecordLayout(): JSX.Element {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isError, error } = useQuery({
     ...organizationQuery(idOrSlug),
     enabled: !!idOrSlug,
   });
@@ -30,16 +30,16 @@ export function RecordLayout(): JSX.Element {
     [],
   );
 
-  if (isLoading) {
-    return <span className="text-muted-foreground text-sm">Loading...</span>;
-  }
-
-  // No chrome and no outlet for a record that failed to load. A contextual nav
-  // and four views over nothing strand the operator with a back link.
-  if (isError || !data) {
+  // `data`, not the status: React Query keeps the last good record when a
+  // refetch over it fails, and `AppSidebar` branches on the same `data`, so
+  // neither column takes away a record the other is still drawing. A record
+  // that never arrived gets no chrome and no outlet, which would strand the
+  // operator with a back link; a paused query is pending rather than failed
+  // and has no error to name.
+  if (!data) {
     return (
       <span className="text-muted-foreground text-sm">
-        Error: {errorMessage(error)}
+        {isError ? `Error: ${errorMessage(error)}` : "Loading..."}
       </span>
     );
   }

@@ -10,6 +10,7 @@ import { renderRouteTree } from "@/test/harness";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getOrganization: vi.fn(),
+  listOrganizationProjects: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -18,6 +19,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     ...actual,
     getSession: mocks.getSession,
     getOrganization: mocks.getOrganization,
+    listOrganizationProjects: mocks.listOrganizationProjects,
   };
 });
 
@@ -58,6 +60,10 @@ beforeEach(() => {
   });
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(ORG);
+  // Not this view's query: the record nav in the sidebar asks for it on every
+  // view. Unmocked it reaches the real fetch and the suite waits on a socket.
+  mocks.listOrganizationProjects.mockReset();
+  mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
 });
 
 afterEach(() => {

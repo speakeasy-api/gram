@@ -158,6 +158,33 @@ describe("AppSidebar", () => {
     expect(hrefs()).toContain("/projects");
   });
 
+  it("keeps the record nav when a refetch over the record fails", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+    mocks.getOrganization.mockRejectedValue(
+      new GramAdminError(500, { message: "organization read failed" }, "500"),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+
+    await waitFor(() => {
+      expect(
+        qc.getQueryState(organizationQuery(ORG.slug).queryKey)?.status,
+      ).toBe("error");
+    });
+    // The layout holds the record through the same failure, so a global nav
+    // here would take the record's own nav away from a record still on screen.
+    expect(
+      screen.getByRole("link", { name: "All organizations" }),
+    ).toBeTruthy();
+    expect(hrefs()).not.toContain("/projects");
+  });
+
   it("falls back to the global nav while the record is still loading", async () => {
     mocks.getOrganization.mockImplementation(() => new Promise(() => {}));
 

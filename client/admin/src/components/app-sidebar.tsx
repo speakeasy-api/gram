@@ -36,8 +36,9 @@ export function AppSidebar({
 
   // The same query the record layout reads, so it costs no second request and
   // the two cannot disagree about which record this is. The sidebar has to ask:
-  // a contextual nav over a record that failed to load leaves the operator a
-  // back link and nothing else.
+  // a contextual nav over a record that never arrived leaves the operator a
+  // back link and nothing else. `RecordLayout` branches on this same `data`, so
+  // a record held through a failed refetch keeps its nav as well as its views.
   const { data: org } = useQuery({
     ...organizationQuery(idOrSlug),
     enabled: !!idOrSlug,

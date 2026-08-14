@@ -1,6 +1,8 @@
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { organizationQuery } from "@/lib/adminQueries";
 import { GramAdminError } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
@@ -124,6 +126,51 @@ describe("RecordLayout", () => {
 
     expect(await screen.findByText("Loading...")).toBeTruthy();
     expect(screen.queryByText(/Error/)).toBeNull();
+  });
+
+  it("says it is loading rather than reporting an error while the read is paused", async () => {
+    // Offline, so the query is pending and not fetching. React Query calls that
+    // neither loading nor errored, and there is no error to name: a branch that
+    // asks about the failure first prints the words "Error: null".
+    onlineManager.setOnline(false);
+    try {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      expect(await screen.findByText("Loading...")).toBeTruthy();
+      expect(screen.queryByText(/Error/)).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("keeps a record it is holding when a refetch over it fails", async () => {
+    // The cache seeded before the mount is what `useOpenOrganization` leaves
+    // behind, so the layout's own read is a refetch over a record the operator
+    // is already reading.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+    mocks.getOrganization.mockRejectedValue(
+      new GramAdminError(500, { message: "organization read failed" }, "500"),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+
+    await waitFor(() => {
+      expect(
+        qc.getQueryState(organizationQuery(ORG.slug).queryKey)?.status,
+      ).toBe("error");
+    });
+    // A record still in hand is a record the operator keeps reading. Asking
+    // about the failure first takes the page out from under them.
+    expect(screen.getByRole("heading", { name: ORG.name })).toBeTruthy();
+    expect(screen.queryByText(/organization read failed/)).toBeNull();
   });
 
   it("renders no view at all when the record fails to load", async () => {

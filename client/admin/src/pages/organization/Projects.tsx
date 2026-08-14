@@ -70,17 +70,24 @@ export function ProjectsRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const { data } = useQuery(organizationQuery(idOrSlug));
   if (!data) return null;
-  return <Projects org={data} />;
+  return <Projects idOrSlug={idOrSlug} org={data} />;
 }
 
-export function Projects({ org }: { org: AdminOrganization }): JSX.Element {
+// `idOrSlug` is the address the operator is on, not `org.slug`. Rewriting it
+// would move the record to another cache entry on the next link press.
+export function Projects({
+  idOrSlug,
+  org,
+}: {
+  idOrSlug: string;
+  org: AdminOrganization;
+}): JSX.Element {
   const navigate = useNavigate();
   const { data, isLoading, isError } = useQuery({
     ...organizationProjectsQuery(org.id),
     enabled: !!org.id,
   });
 
-  const idOrSlug = org.slug || org.id;
   // Rebuilt only when the record changes. A fresh column set each render
   // rebuilds the row model with it.
   const columns = useMemo(() => projectColumns(idOrSlug), [idOrSlug]);

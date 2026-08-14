@@ -1,4 +1,10 @@
-import { cleanup, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { routeTree } from "@/routeTree.gen";
@@ -114,6 +120,37 @@ describe("Projects", () => {
     expect(link.getAttribute("href")).toBe(
       `/organizations/${ORG.slug}/projects/${PROJECT.slug}`,
     );
+  });
+
+  it("keeps a record reached by id addressed by id", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.id}/projects`,
+    });
+
+    // Reading the address off the record instead of the route sends every
+    // project link to a second cache entry for one organization, and costs a
+    // second read of the record to fill it.
+    const link = await screen.findByRole("link", { name: PROJECT.name });
+    expect(link.getAttribute("href")).toBe(
+      `/organizations/${ORG.id}/projects/${PROJECT.slug}`,
+    );
+  });
+
+  it("keeps that address when the row itself is clicked", async () => {
+    // The row and the link are two ways to the same project, and only one of
+    // them is an anchor a test can read an href off.
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.id}/projects`,
+    });
+
+    const link = await screen.findByRole("link", { name: PROJECT.name });
+    fireEvent.click(rowFor(link));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(
+        `/organizations/${ORG.id}/projects/${PROJECT.slug}`,
+      );
+    });
   });
 
   it("renders the project under the record it belongs to", async () => {
