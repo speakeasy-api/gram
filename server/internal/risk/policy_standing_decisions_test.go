@@ -192,6 +192,48 @@ func TestCreateRiskPolicy_AllowAllRejectsNarrowStandingApprovals(t *testing.T) {
 	require.Contains(t, err.Error(), narrowURL, "the rejection names the offending server")
 }
 
+// Decisions recorded before RecordDecision normalized an empty approved set
+// stored ARRAY[] for an everyone-approval. Replaying that literally would
+// grant nobody — an approved server still blocked, the exact contradiction
+// the backfill removes — so the replay applies the same normalization the
+// writer does today.
+func TestCreateRiskPolicy_EmptyApprovedPrincipalsMeanEveryone(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskServiceWithRealIntake(t)
+
+	legacyURL := "https://mcp.example.com/legacy-empty-approval"
+	seedStandingDecision(t, ctx, ti, legacyURL, "approved", []string{})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Sources: []string{"shadow_mcp"},
+		Action:  "block",
+	})
+	require.NoError(t, err)
+
+	principals := shadowMCPPolicyURLPrincipals(t, ctx, ti.conn, policy.ID)
+	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, principals[legacyURL],
+		"an empty approved set is an everyone-approval, not a grant to nobody")
+}
+
+// The same legacy row must not read as person-scoped either: an allow_all
+// policy creation proceeds, because an everyone-approval is expressible
+// there (it simply writes nothing).
+func TestCreateRiskPolicy_AllowAllAcceptsEmptyApprovedPrincipals(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskServiceWithRealIntake(t)
+
+	seedStandingDecision(t, ctx, ti, "https://mcp.example.com/legacy-empty-allow-all", "approved", []string{})
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("allow_all"),
+	})
+	require.NoError(t, err)
+}
+
 // Enabling a disabled blocking policy is the same moment as creating one: it
 // starts enforcing, so the standing decisions apply to it right then.
 func TestUpdateRiskPolicy_TransitionIntoBlockingBackfills(t *testing.T) {

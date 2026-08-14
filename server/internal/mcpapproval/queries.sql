@@ -368,6 +368,17 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: LockProjectEnforcementState :exec
+-- Serializes the two writers of a project's enforcement grants: recording a
+-- decision (which writes onto every blocking policy) and creating or
+-- transitioning a blocking policy (which replays every standing decision).
+-- Without a shared lock the two transactions can each miss the other's
+-- uncommitted row and both commit, leaving a decision unenforced on the new
+-- policy — the exact contradiction the backfill exists to remove. An
+-- advisory transaction lock releases on commit or rollback, so neither
+-- writer can forget to unlock.
+SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || @project_id::text, 0));
+
 -- name: ListStandingServerDecisionsForProject :many
 -- The latest decision per server_url review in a project — what enforcement
 -- derived its grants from. Read by the policy-creation backfill so a blocking

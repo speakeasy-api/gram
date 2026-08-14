@@ -5,8 +5,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -44,13 +46,21 @@ import (
 // when nothing can express the radius.
 func reconcileDecisionGrants(
 	ctx context.Context,
-	db riskrepo.DBTX,
+	db pgx.Tx,
 	organizationID string,
 	projectID uuid.UUID,
 	canonicalURL string,
 	approved bool,
 	principals []urn.Principal,
 ) error {
+	// Serialized against the policy-creation backfill: two check-then-write
+	// transactions that each read what the other writes would otherwise miss
+	// each other's uncommitted rows and both commit, leaving this decision
+	// unenforced on a policy created in the same instant.
+	if err := repo.New(db).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
+		return fmt.Errorf("lock project enforcement state: %w", err)
+	}
+
 	rows, err := riskrepo.New(db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("list shadow mcp policies for decision: %w", err)

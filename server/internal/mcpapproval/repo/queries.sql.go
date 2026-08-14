@@ -1241,6 +1241,23 @@ func (q *Queries) LockApprovalRequestForResearch(ctx context.Context, arg LockAp
 	return id, err
 }
 
+const lockProjectEnforcementState = `-- name: LockProjectEnforcementState :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || $1::text, 0))
+`
+
+// Serializes the two writers of a project's enforcement grants: recording a
+// decision (which writes onto every blocking policy) and creating or
+// transitioning a blocking policy (which replays every standing decision).
+// Without a shared lock the two transactions can each miss the other's
+// uncommitted row and both commit, leaving a decision unenforced on the new
+// policy — the exact contradiction the backfill exists to remove. An
+// advisory transaction lock releases on commit or rollback, so neither
+// writer can forget to unlock.
+func (q *Queries) LockProjectEnforcementState(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockProjectEnforcementState, projectID)
+	return err
+}
+
 const markApprovalRequestEvidenceChanged = `-- name: MarkApprovalRequestEvidenceChanged :execrows
 UPDATE mcp_approval_requests r
 SET evidence_changed_at = COALESCE(r.evidence_changed_at, clock_timestamp())

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -38,12 +39,23 @@ import (
 // fails and names the servers; the admin re-decides them or picks
 // block-by-default.
 func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, policyID uuid.UUID) error {
+	// The same lock decision-time enforcement takes, so a decision recorded
+	// concurrently with this policy's creation is either fully enforced
+	// before the replay reads, or reads this policy after it commits —
+	// never silently missed by both.
+	if err := repo.New(tx).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
+		return fmt.Errorf("lock project enforcement state for backfill: %w", err)
+	}
+
 	policy, err := riskrepo.New(tx).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
 		ID:        policyID,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("load policy for standing-decision backfill: %w", err)
+	}
+	if err := policyBelongsToOrganization(policy, organizationID); err != nil {
+		return err
 	}
 	if !policy.Enabled || policy.Action != "block" || !slices.Contains(policy.Sources, shadowmcp.SourceShadowMCP) {
 		// Not a blocking shadow-MCP policy; there is no grant state to derive.
@@ -63,7 +75,7 @@ func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pg
 			if row.Decision != decisionApproved {
 				continue
 			}
-			principals, err := parseGrantedPrincipals(row.GrantedPrincipalUrns)
+			principals, err := standingDecisionPrincipals(row)
 			if err != nil {
 				return err
 			}
@@ -79,7 +91,7 @@ func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pg
 	}
 
 	for _, row := range standing {
-		principals, err := parseGrantedPrincipals(row.GrantedPrincipalUrns)
+		principals, err := standingDecisionPrincipals(row)
 		if err != nil {
 			return err
 		}
@@ -89,6 +101,35 @@ func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pg
 	}
 
 	return nil
+}
+
+// policyBelongsToOrganization refuses a policy outside the caller's
+// organization scope. The ids arrive from the caller's auth context, but
+// every operation on customer data is qualified by organization anyway: a
+// policy resolved by (id, project) that answers to a different organization
+// is a caller bug this must refuse to write grants for.
+func policyBelongsToOrganization(policy riskrepo.RiskPolicy, organizationID string) error {
+	if policy.OrganizationID != organizationID {
+		return fmt.Errorf("policy %s does not belong to the caller's organization scope", policy.ID)
+	}
+	return nil
+}
+
+// standingDecisionPrincipals reads a stored decision's blast radius,
+// normalizing an approved row with no principals to everyone — the same rule
+// RecordDecision applies on write. Rows recorded before that normalization
+// existed store the empty set for an everyone-approval, and replaying the
+// empty set literally would grant nobody: an approved server still blocked,
+// which is the contradiction this replay exists to remove.
+func standingDecisionPrincipals(row repo.ListStandingServerDecisionsForProjectRow) ([]urn.Principal, error) {
+	principals, err := parseGrantedPrincipals(row.GrantedPrincipalUrns)
+	if err != nil {
+		return nil, err
+	}
+	if row.Decision == decisionApproved && len(principals) == 0 {
+		return []urn.Principal{authz.AllUsersPrincipal()}, nil
+	}
+	return principals, nil
 }
 
 // parseGrantedPrincipals reads a decision's stored blast radius. The URNs
