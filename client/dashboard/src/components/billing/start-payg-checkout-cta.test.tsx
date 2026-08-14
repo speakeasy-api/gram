@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   isPending: vi.fn(),
   capture: vi.fn(),
+  hookOptions: vi.fn(),
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -35,20 +36,38 @@ vi.mock("@/contexts/Telemetry", () => ({
 }));
 
 vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
-  useCreateStripeCheckoutMutation: () => ({
-    mutate: mocks.mutate,
-    isPending: mocks.isPending() as boolean,
-  }),
+  useCreateStripeCheckoutMutation: (options?: CheckoutHookOptions) => {
+    mocks.hookOptions(options);
+    return {
+      mutate: mocks.mutate,
+      isPending: mocks.isPending() as boolean,
+    };
+  },
 }));
 
 import { resetPaygCheckoutLocks } from "./payg-checkout-lock";
 import { StartPaygCheckoutCTA } from "./start-payg-checkout-cta";
 
+/** The callbacks React Query drops when the calling mount goes away. */
 type MutateCallbacks = {
   onSuccess: (link: string) => void;
   onError: (error: unknown) => void;
-  onSettled: () => void;
 };
+
+/** The callbacks React Query keeps on the mutation itself. */
+type CheckoutHookOptions = { onSettled?: () => void };
+
+/** The hook options from the most recent render, as React Query would use. */
+function hookOptions(): CheckoutHookOptions | undefined {
+  return mocks.hookOptions.mock.calls.at(-1)?.[0] as
+    | CheckoutHookOptions
+    | undefined;
+}
+
+/** Runs the mutation-level settle callback, which outlives any single mount. */
+function settle() {
+  hookOptions()?.onSettled?.();
+}
 
 const DAY = 24 * 60 * 60 * 1000;
 const CHECKOUT_URL = "https://checkout.stripe.test/c/pay/session";
@@ -64,7 +83,7 @@ function resolveWith(link: string) {
   mocks.mutate.mockImplementation(
     (_variables: unknown, callbacks: MutateCallbacks) => {
       callbacks.onSuccess(link);
-      callbacks.onSettled();
+      settle();
     },
   );
 }
@@ -73,7 +92,7 @@ function rejectWith(error: unknown) {
   mocks.mutate.mockImplementation(
     (_variables: unknown, callbacks: MutateCallbacks) => {
       callbacks.onError(error);
-      callbacks.onSettled();
+      settle();
     },
   );
 }
@@ -257,6 +276,32 @@ describe("StartPaygCheckoutCTA", () => {
 
     expect(first!.hasAttribute("disabled")).toBe(false);
     expect(second!.hasAttribute("disabled")).toBe(false);
+  });
+
+  // React Query only runs the callbacks passed to `mutate` while the mount that
+  // dispatched them still has listeners, so a lock released from there alone
+  // would stay held forever once a navigation unmounts the CTA mid-checkout.
+  it("releases the lock when the CTA unmounts before the checkout settles", () => {
+    // The checkout stays in flight for as long as the CTA is mounted.
+    mocks.mutate.mockImplementation(() => {});
+    const { unmount } = render(<StartPaygCheckoutCTA />);
+
+    fireEvent.click(cta()!);
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+
+    unmount();
+    // Only the mutation-level callback survives the unmount.
+    settle();
+
+    resolveWith(CHECKOUT_URL);
+    render(<StartPaygCheckoutCTA />);
+
+    const button = cta()!;
+    expect(button.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(button);
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(2);
+    expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
   });
 
   it("disables the button while the mutation is pending", () => {

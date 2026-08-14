@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -35,20 +36,25 @@ import (
 type checkoutStripeClient struct {
 	mu sync.Mutex
 
-	customers      map[string]*stripeclient.Customer
-	checkoutURLs   map[string]string
-	customerInputs []stripeclient.CreateCustomerInput
-	checkoutInputs []stripeclient.CreateCheckoutSessionInput
-	customerError  error
-	checkoutError  error
+	customers       map[string]*stripeclient.Customer
+	checkoutResults map[string]checkoutStripeResult
+	customerInputs  []stripeclient.CreateCustomerInput
+	checkoutInputs  []stripeclient.CreateCheckoutSessionInput
+	customerError   error
+	checkoutError   error
+}
+
+type checkoutStripeResult struct {
+	input stripeclient.CreateCheckoutSessionInput
+	url   string
 }
 
 func newCheckoutStripeClient() *checkoutStripeClient {
 	return &checkoutStripeClient{
-		customers:      make(map[string]*stripeclient.Customer),
-		checkoutURLs:   make(map[string]string),
-		customerInputs: make([]stripeclient.CreateCustomerInput, 0),
-		checkoutInputs: make([]stripeclient.CreateCheckoutSessionInput, 0),
+		customers:       make(map[string]*stripeclient.Customer),
+		checkoutResults: make(map[string]checkoutStripeResult),
+		customerInputs:  make([]stripeclient.CreateCustomerInput, 0),
+		checkoutInputs:  make([]stripeclient.CreateCheckoutSessionInput, 0),
 	}
 }
 
@@ -76,11 +82,14 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 	if c.checkoutError != nil {
 		return nil, c.checkoutError
 	}
-	if checkoutURL, ok := c.checkoutURLs[input.IdempotencyKey]; ok {
-		return &stripeclient.CheckoutSession{URL: checkoutURL}, nil
+	if result, ok := c.checkoutResults[input.IdempotencyKey]; ok {
+		if !reflect.DeepEqual(result.input, input) {
+			return nil, fmt.Errorf("idempotency key %q reused with different checkout input", input.IdempotencyKey)
+		}
+		return &stripeclient.CheckoutSession{URL: result.url}, nil
 	}
-	checkoutURL := fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutURLs)+1)
-	c.checkoutURLs[input.IdempotencyKey] = checkoutURL
+	checkoutURL := fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutResults)+1)
+	c.checkoutResults[input.IdempotencyKey] = checkoutStripeResult{input: input, url: checkoutURL}
 	return &stripeclient.CheckoutSession{URL: checkoutURL}, nil
 }
 
@@ -105,6 +114,27 @@ func (c *checkoutStripeClient) snapshot() (int, []stripeclient.CreateCustomerInp
 	checkouts := make([]stripeclient.CreateCheckoutSessionInput, len(c.checkoutInputs))
 	copy(checkouts, c.checkoutInputs)
 	return len(c.customers), customers, checkouts
+}
+
+func TestCheckoutStripeClientRejectsIdempotencyKeyReuseWithDifferentInput(t *testing.T) {
+	t.Parallel()
+
+	client := newCheckoutStripeClient()
+	input := stripeclient.CreateCheckoutSessionInput{
+		CustomerID:       "cus_first",
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "billing-test",
+		SuccessURL:       "https://app.example.test/billing-test/billing",
+		CancelURL:        "https://app.example.test/billing-test/billing",
+		TrialEnd:         nil,
+		IdempotencyKey:   "checkout-session:<ORG_ID>",
+	}
+
+	_, err := client.CreateCheckoutSession(t.Context(), input)
+	require.NoError(t, err)
+	input.CustomerID = "cus_second"
+	_, err = client.CreateCheckoutSession(t.Context(), input)
+	require.ErrorContains(t, err, "reused with different checkout input")
 }
 
 type stripeCheckoutTestInstance struct {

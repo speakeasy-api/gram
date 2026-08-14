@@ -48,7 +48,15 @@ export function StartPaygCheckoutCTA({
   const { hasScope } = useRBAC();
   const { trial, activeOrganizationId } = useSession();
   const telemetry = useTelemetry();
-  const checkout = useCreateStripeCheckoutMutation();
+  // The lock is released by the mutation's own callback rather than one passed
+  // to `mutate`: React Query skips the per-call callbacks when the mount that
+  // dispatched them unmounts while the request is still in flight, which would
+  // leave the organization locked for every later mount.
+  const checkout = useCreateStripeCheckoutMutation({
+    onSettled: () => {
+      setPaygCheckoutLocked(activeOrganizationId, false);
+    },
+  });
   const [failed, setFailed] = useState(false);
   // A trial that ends while the page is open has to take the CTA with it, so
   // the lifecycle below reads a clock that re-renders on the trial's own
@@ -87,9 +95,6 @@ export function StartPaygCheckoutCTA({
             error: error instanceof Error ? error.message : "unknown",
           });
           setFailed(true);
-        },
-        onSettled: () => {
-          setPaygCheckoutLocked(activeOrganizationId, false);
         },
       },
     );
