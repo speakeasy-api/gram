@@ -265,15 +265,19 @@ var blockElements = map[string]bool{
 // svg is tracked apart from the other skipped elements because it is foreign
 // content with browser breakout semantics: a block-level HTML start tag pops
 // an unclosed svg. Without that, one unclosed icon in a page header swallows
-// every character after it. The remaining skipped elements stay strict on
-// purpose — an unclosed template really does capture the rest of the document
-// in a browser, and script/style are raw text to the tokenizer anyway.
+// every character after it. foreignObject is the exception to the breakout —
+// it is an HTML integration point, so block elements inside it are legal svg
+// content and must not pop the enclosing svg. The remaining skipped elements
+// stay strict on purpose — an unclosed template really does capture the rest
+// of the document in a browser, and script/style are raw text to the
+// tokenizer anyway.
 func extractText(document string) string {
 	tokenizer := html.NewTokenizer(strings.NewReader(document))
 
 	var out strings.Builder
 	skipDepth := 0
 	svgDepth := 0
+	foreignDepth := 0
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
@@ -283,11 +287,15 @@ func extractText(document string) string {
 			name, _ := tokenizer.TagName()
 			if string(name) == "svg" && tokenType == html.StartTagToken {
 				svgDepth++
+			} else if string(name) == "foreignobject" && svgDepth > 0 && tokenType == html.StartTagToken {
+				foreignDepth++
 			} else if skippedElements[string(name)] && tokenType == html.StartTagToken {
 				skipDepth++
 			}
 			if blockElements[string(name)] {
-				svgDepth = 0
+				if foreignDepth == 0 {
+					svgDepth = 0
+				}
 				out.WriteString("\n")
 			}
 		case html.EndTagToken:
@@ -295,6 +303,13 @@ func extractText(document string) string {
 			if string(name) == "svg" {
 				if svgDepth > 0 {
 					svgDepth--
+				}
+				if svgDepth == 0 {
+					foreignDepth = 0
+				}
+			} else if string(name) == "foreignobject" {
+				if foreignDepth > 0 {
+					foreignDepth--
 				}
 			} else if skippedElements[string(name)] && skipDepth > 0 {
 				skipDepth--

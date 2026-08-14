@@ -265,6 +265,18 @@ func TestFetchPage_ExtractsStructuredAndMalformedHTML(t *testing.T) {
 			excludes: []string{"icon label"},
 		},
 		{
+			// foreignObject is an HTML integration point: block elements
+			// inside it are legal svg content and must not trigger the
+			// unclosed-svg breakout, or the svg nodes after the subtree
+			// leak into the extracted text.
+			name: "foreignObject does not break out of its svg",
+			body: `<div>Before chart.
+				<svg><foreignObject><div><p>embedded html</p></div></foreignObject><text>axis label</text></svg>
+				After chart.</div>`,
+			contains: []string{"Before chart.", "After chart."},
+			excludes: []string{"axis label"},
+		},
+		{
 			// An unclosed template genuinely captures the rest of the
 			// document in a browser, so staying dark is the faithful read.
 			name:     "an unclosed template stays inert",
