@@ -248,24 +248,3 @@ func TestShareableError_AsGoa_AppCanceledWithLiveContextIsFault(t *testing.T) {
 	require.True(t, appCanceled.Temporary, "an unexpected error stays retryable")
 	require.Equal(t, string(CodeUnexpected), appCanceled.Name)
 }
-
-func TestDetailExpandsNestedShareableCauses(t *testing.T) {
-	t.Parallel()
-
-	require.Empty(t, Detail(nil))
-
-	// Plain chains render exactly as Error() does.
-	plain := fmt.Errorf("outer: %w", errors.New("inner"))
-	require.Equal(t, "outer: inner", Detail(plain))
-
-	// A ShareableError's Error() stops at its public text; Detail appends the
-	// hidden cause, through fmt wrappers on either side and at every depth.
-	inner := E(CodeUnexpected, errors.New("connection refused"), "insert rows")
-	mid := fmt.Errorf("process page: %w", inner)
-	outer := E(CodeUnexpected, mid, "sync data")
-	wrapped := fmt.Errorf("poll: %w", outer)
-	require.Equal(t, "poll: sync data: process page: insert rows: connection refused", Detail(wrapped))
-
-	// A shareable with no cause renders just its text.
-	require.Equal(t, "bare", Detail(E(CodeUnexpected, nil, "bare")))
-}

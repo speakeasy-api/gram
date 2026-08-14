@@ -755,7 +755,7 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, syncID uuid.UUID, sc
 		NextPollAfter:   conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
+		return fmt.Errorf("record ai integration usage poll success: %w", err)
 	}
 	return nil
 }
@@ -818,7 +818,7 @@ func (s *Store) EnsureTimeSyncSchedule(ctx context.Context, configID uuid.UUID, 
 func (s *Store) AdvanceWatermark(ctx context.Context, syncID uuid.UUID, checkpoint timewindowpoller.PollCheckpoint) error {
 	encoded, err := checkpoint.MarshalText()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to encode ai integration sync checkpoint")
+		return fmt.Errorf("encode ai integration sync checkpoint: %w", err)
 	}
 	shadowWatermark := checkpoint.Watermark
 	if shadowWatermark.IsZero() {
@@ -829,7 +829,7 @@ func (s *Store) AdvanceWatermark(ctx context.Context, syncID uuid.UUID, checkpoi
 		PollCheckpoint:  conv.ToPGText(string(encoded)),
 		SyncID:          syncID,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to advance ai integration sync schedule watermark")
+		return fmt.Errorf("advance ai integration sync schedule watermark: %w", err)
 	}
 	return nil
 }
@@ -842,7 +842,7 @@ func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUI
 		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll success")
+		return fmt.Errorf("record ai integration sync schedule poll success: %w", err)
 	}
 	return nil
 }
@@ -876,19 +876,12 @@ const pollFailureBackoffCeiling = 6 * time.Hour
 // retrying can plausibly fix. Every recorded failure doubles the delay until
 // the next poll, capped at 2^pollFailureMaxBackoffDoublings times the
 // schedule's base interval, so chronic failures decay to a slow cadence
-// instead of retrying at full speed indefinitely.
-func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error, pauseAfter int32) error {
-	// String(), not oops.Detail: the recorded error is shown to org members
-	// in the dashboard, so expansion stops at the outermost oops boundary
-	// and any interior oops wrap (e.g. around raw infrastructure errors)
-	// keeps its cause private.
+// instead of retrying at full speed indefinitely. userFacingErr must already be
+// safe to show to organization members; this method persists Error() verbatim.
+func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, userFacingErr error, pauseAfter int32) error {
 	var errStr string
-	if cause != nil {
-		errStr = cause.Error()
-		var shareable *oops.ShareableError
-		if errors.As(cause, &shareable) {
-			errStr = shareable.String()
-		}
+	if userFacingErr != nil {
+		errStr = userFacingErr.Error()
 	}
 
 	// The streak before this failure decides the backoff; a lookup failure
@@ -924,13 +917,13 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 		PauseAfter:            pauseAfter,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll failure")
+		return fmt.Errorf("record ai integration sync schedule poll failure: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
-	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause, 0)
+func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, userFacingErr error) error {
+	return s.RecordSchedulePollFailure(ctx, configID, provider, t, userFacingErr, 0)
 }
 
 // epochTime is the never-synced watermark sentinel for time-kind schedules

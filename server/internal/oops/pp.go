@@ -104,28 +104,6 @@ func (e *ShareableError) Unwrap() error {
 	return e.cause
 }
 
-// Detail renders err's full chain for internal surfaces: worker logs, spans,
-// and Temporal failure messages. Error() on a ShareableError returns only its
-// public text, so a chain that passes through an oops wrapper truncates
-// there; Detail appends each reachable ShareableError's hidden cause chain.
-// Surfaces shown to tenants must keep using Error() or String(), which stop
-// at the boundary a wrap chose to expose.
-func Detail(err error) string {
-	if err == nil {
-		return ""
-	}
-	var shareable *ShareableError
-	if !errors.As(err, &shareable) {
-		return err.Error()
-	}
-	text := err.Error()
-	cause := shareable.Unwrap()
-	if cause == nil {
-		return text
-	}
-	return text + ": " + Detail(cause)
-}
-
 // MarshalJSON implements the json.Marshaler interface.
 func (e *ShareableError) MarshalJSON() ([]byte, error) {
 	bs, err := json.Marshal(e.public)

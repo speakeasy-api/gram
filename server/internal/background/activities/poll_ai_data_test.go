@@ -80,7 +80,7 @@ func TestPollRejectedByProviderSeesThroughWrappedSyncErrors(t *testing.T) {
 			CursorPersisted:     "",
 		},
 	}
-	wrapped := oops.E(oops.CodeUnauthorized, syncErr, "anthropic compliance rejected the configured api key")
+	wrapped := fmt.Errorf("sync anthropic compliance data: %w", syncErr)
 
 	require.True(t, pollRejectedByProvider(wrapped))
 }
@@ -107,7 +107,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 			CursorPersisted:     "activity_5",
 		},
 	}
-	cause := oops.E(oops.CodeUnexpected, syncErr, "sync anthropic compliance data")
+	cause := fmt.Errorf("sync anthropic compliance data: %w", syncErr)
 
 	err := newPollFailureError(configID, aiintegrations.ProviderAnthropicCompliance, 5, false, cause)
 
@@ -118,9 +118,6 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Contains(t, appErr.Message(), "provider=anthropic_compliance")
 	require.Contains(t, appErr.Message(), fmt.Sprintf("attempt=5/%d", PollUsageMaxAttempts))
 
-	// The message expands the oops wrapper's cause chain: on their own,
-	// oops errors stringify to just their public text, which used to leave
-	// worker logs and spans without the underlying failure or progress.
 	require.Contains(t, appErr.Message(), "[discover_activities] list anthropic compliance activities: 503 Service Unavailable")
 	require.Contains(t, appErr.Message(), "(progress:")
 
@@ -142,7 +139,7 @@ func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
 	t.Parallel()
 
 	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	cause := oops.E(oops.CodeUnauthorized, &cursorapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}, "cursor rejected the configured api key")
+	cause := fmt.Errorf("fetch cursor usage window: %w", &cursorapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"})
 
 	err := newPollFailureError(configID, aiintegrations.ProviderCursor, 1, true, cause)
 
@@ -155,6 +152,39 @@ func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
 	require.True(t, details.NonRetryable)
 	require.Empty(t, details.Stages)
 	require.Nil(t, details.Progress)
+}
+
+func TestCustomerPollErrorOmitsCodexPayload(t *testing.T) {
+	t.Parallel()
+
+	decodeCause := errors.New("json: cannot unmarshal string into Go struct field codexCostPayload.hour of type int")
+	payload := []byte(`{"event_id":"event_1","payload":{"hour":"invalid","identity":{"email":"user@example.com"}}}`)
+	internalErr := fmt.Errorf("sync codex cost data: %w", &aiintegrations.CodexCostLogDecodeError{
+		LogID:   "eclf_bad",
+		Payload: payload,
+		Cause:   decodeCause,
+	})
+
+	userFacingErr := userFacingPollError(aiintegrations.ScheduleCodexCompliance, internalErr)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, userFacingErr, &shareable)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code)
+	require.Contains(t, userFacingErr.Error(), "eclf_bad")
+	require.Contains(t, userFacingErr.Error(), "cannot unmarshal string")
+	require.NotContains(t, userFacingErr.Error(), "user@example.com")
+
+	temporalErr := newPollFailureError(
+		uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+		aiintegrations.ProviderCodexCompliance,
+		5,
+		false,
+		internalErr,
+	)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, temporalErr, &appErr)
+	require.Contains(t, appErr.Message(), "user@example.com")
+	require.Contains(t, appErr.Message(), `\"hour\":\"invalid\"`)
 }
 
 func TestAIUsagePollFailureDetailsMarshalToJSON(t *testing.T) {

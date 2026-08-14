@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
@@ -74,6 +73,28 @@ type codexComplianceClient interface {
 	DownloadLog(ctx context.Context, logID string) ([]byte, error)
 }
 
+// CodexCostLogDecodeError carries the provider payload that failed to decode
+// for internal failure surfaces. Customer-facing error rendering must omit
+// Payload because compliance events can contain user-identifying data.
+type CodexCostLogDecodeError struct {
+	// LogID identifies the compliance log file containing the payload.
+	LogID string
+
+	// Payload is the JSONL record that failed to decode.
+	Payload []byte
+
+	// Cause is the JSON decoder error.
+	Cause error
+}
+
+func (e *CodexCostLogDecodeError) Error() string {
+	return fmt.Sprintf("decode codex compliance cost log %s payload=%q: %v", e.LogID, e.Payload, e.Cause)
+}
+
+func (e *CodexCostLogDecodeError) Unwrap() error {
+	return e.Cause
+}
+
 type CodexCostImportService struct {
 	logger          *slog.Logger
 	store           *Store
@@ -101,10 +122,10 @@ func NewCodexCostImportService(logger *slog.Logger, store *Store, telemetryLogge
 // untouched instead of skipping late-arriving log files.
 func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderCodexCompliance {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for codex cost import: %s", cfg.Provider)
+		return fmt.Errorf("unsupported ai integration provider for codex cost import: %s", cfg.Provider)
 	}
 	if cfg.ExternalOrganizationID == nil {
-		return oops.E(oops.CodeInvalid, nil, "external_organization_id is required for codex_compliance")
+		return fmt.Errorf("external_organization_id is required for codex_compliance")
 	}
 
 	progress := &CodexCostSyncProgress{
@@ -277,12 +298,7 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 
 	written, dropped, err := src.processPage(ctx, logParams)
 	if err != nil {
-		// Deliberately an oops boundary, unlike this file's content errors:
-		// the recorded poll error is shown to org members, and the cause here
-		// is raw infrastructure error text (ClickHouse driver detail) that
-		// must not reach tenants. Internal surfaces recover it via
-		// oops.Detail.
-		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
+		return fmt.Errorf("insert codex cost telemetry logs: %w", err)
 	}
 	src.progress.CostEventsDeduped += dropped
 	src.progress.CostEventsWritten += written
@@ -319,14 +335,28 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	logParams := make([]telemetry.LogParams, 0)
 	for {
-		var event codexCostEvent
-		err := decoder.Decode(&event)
-		switch {
-		case errors.Is(err, io.EOF):
+		var payload json.RawMessage
+		err := decoder.Decode(&payload)
+		if errors.Is(err, io.EOF) {
 			return logParams, nil
-		case err != nil:
-			return nil, fmt.Errorf("decode codex compliance cost log %s: %w", file.ID, err)
-		case event.Type != codexComplianceCostsEventType:
+		}
+		if err != nil {
+			return nil, &CodexCostLogDecodeError{
+				LogID:   file.ID,
+				Payload: codexCostPayloadAt(body, decoder.InputOffset()),
+				Cause:   err,
+			}
+		}
+
+		var event codexCostEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, &CodexCostLogDecodeError{
+				LogID:   file.ID,
+				Payload: payload,
+				Cause:   err,
+			}
+		}
+		if event.Type != codexComplianceCostsEventType {
 			continue
 		}
 
@@ -338,6 +368,17 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 			logParams = append(logParams, logParam)
 		}
 	}
+}
+
+func codexCostPayloadAt(body []byte, offset int64) []byte {
+	if offset < 0 || offset >= int64(len(body)) {
+		return nil
+	}
+	payload := bytes.TrimLeft(body[offset:], " \t\r\n")
+	if newline := bytes.IndexByte(payload, '\n'); newline >= 0 {
+		payload = payload[:newline]
+	}
+	return bytes.Clone(bytes.TrimSpace(payload))
 }
 
 func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexCostEvent) (telemetry.LogParams, bool, error) {

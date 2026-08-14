@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
@@ -159,6 +160,28 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, message, cfg.LastPollError)
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
+}
+
+func TestRecordUsagePollFailureStoresOnlyCustomerMessage(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	externalOrgID := "org-openai"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, &watermark)
+	userFacingErr := oops.E(
+		oops.CodeUnexpected,
+		errors.New(`provider payload contains "user@example.com"`),
+		"sync codex cost data",
+	)
+
+	require.NoError(t, store.RecordUsagePollFailure(ctx, created.Config.ID, ProviderCodexCompliance, time.Now(), userFacingErr))
+
+	cfg, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCodexCompliance)
+	require.NoError(t, err)
+	require.Equal(t, "sync codex cost data", cfg.LastPollError)
+	require.NotContains(t, cfg.LastPollError, "user@example.com")
 }
 
 func TestInitialPollLookbackForProviderUsesLongCodexBackfill(t *testing.T) {

@@ -278,13 +278,18 @@ func TestBuildCodexCostLogParamsDecodeErrorNamesLogAndCause(t *testing.T) {
 		FileSHA256: "",
 	}
 
-	_, err := buildCodexCostLogParams(cfg, file, []byte("\x1f\x8b not json"))
+	body := []byte("\x1f\x8b not json")
+	_, err := buildCodexCostLogParams(cfg, file, body)
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "decode codex compliance cost log eclf_bad")
-	// The json cause survives the wrap so last_poll_error shows what was
-	// actually wrong with the bytes.
 	require.Contains(t, err.Error(), "invalid character")
+	require.Contains(t, err.Error(), `payload="\x1f\x8b not json"`)
+
+	var decodeErr *CodexCostLogDecodeError
+	require.ErrorAs(t, err, &decodeErr)
+	require.Equal(t, file.ID, decodeErr.LogID)
+	require.Equal(t, body, decodeErr.Payload)
 }
 
 // Pagination edge cases (empty windows, non-advancing last_end_time, window
