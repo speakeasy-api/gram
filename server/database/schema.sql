@@ -6534,8 +6534,17 @@ CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
   mcp_server_owned boolean NOT NULL DEFAULT FALSE,
   mcp_endpoint_id uuid,
   mcp_endpoint_owned boolean NOT NULL DEFAULT FALSE,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable because not every acting surface holds an OAuth connection: the
+  -- Project Assistant acts under its own assistant identity rather than an
+  -- external user's connection. External Platform MCP writes still populate
+  -- both columns.
+  connection_id uuid,
+  connection_generation uuid,
+  -- The real user the write is attributed to, and the surface that made it
+  -- ('platform_mcp', 'project_assistant', 'dashboard'). Values are validated in
+  -- application code so the vocabulary can grow without a migration.
+  user_id TEXT,
+  acting_surface TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -6599,8 +6608,15 @@ CREATE TABLE IF NOT EXISTS platform_mcp_operation_receipts (
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   registration_id uuid,
-  connection_id uuid NOT NULL,
-  connection_generation uuid NOT NULL,
+  -- Nullable for the same reason as on catalog registrations: an assistant
+  -- write has no OAuth connection.
+  connection_id uuid,
+  connection_generation uuid,
+  -- Idempotency belongs to the real user and the exact target, not to a
+  -- connection generation, so reauthorization cannot replay a create. See
+  -- platform_mcp_operation_receipts_user_operation_key below.
+  user_id TEXT,
+  acting_surface TEXT,
   operation TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
   input_hash TEXT NOT NULL,
@@ -6625,8 +6641,19 @@ CREATE TABLE IF NOT EXISTS platform_mcp_operation_receipts (
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE NO ACTION
 );
 
+-- Superseded by platform_mcp_operation_receipts_user_operation_key. Kept for
+-- the expand phase so receipts written by the current code keep their
+-- uniqueness guarantee; drop it once every writer populates user_id.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_operation_receipts_connection_operation_key
 ON platform_mcp_operation_receipts (organization_id, project_id, connection_id, operation, idempotency_key);
+
+-- Idempotency scoped to the real user and exact project target, independent of
+-- connection generation: reauthorization mints a new generation, and keying on
+-- it would let the same idempotency key replay a create. Partial because rows
+-- written before user_id existed carry NULL and must not collide.
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_operation_receipts_user_operation_key
+ON platform_mcp_operation_receipts (organization_id, user_id, project_id, operation, idempotency_key)
+WHERE user_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_expires_at_idx
 ON platform_mcp_operation_receipts (expires_at);
