@@ -107,10 +107,12 @@ function DataTableRow<T extends RowData>({
   row,
   onClick,
   className,
+  ref,
 }: {
   row: Row<DataTableFeatures, T>;
-  onClick?: (row: T) => void;
+  onClick?: (row: T, event: React.MouseEvent<HTMLTableRowElement>) => void;
   className?: string;
+  ref?: React.Ref<HTMLTableRowElement>;
 }) {
   // The row itself stays a plain row: it takes no focus and it holds no
   // `button` role, because either one breaks the table structure the
@@ -124,12 +126,13 @@ function DataTableRow<T extends RowData>({
         if ((event.target as HTMLElement).closest("a,button,input,label")) {
           return;
         }
-        onClick(row.original);
+        onClick(row.original, event);
       }
     : undefined;
 
   return (
     <TableRow
+      ref={ref}
       className={cn(onClick && "cursor-pointer", className)}
       onClick={handleClick}
     >

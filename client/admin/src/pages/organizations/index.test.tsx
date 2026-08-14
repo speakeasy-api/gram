@@ -111,8 +111,8 @@ const NEXT_PAGE_ORG: AdminOrganization = {
   updated_at: "2026-07-11T00:00:00Z",
 };
 
-const [FIRST_ORG] = ORGS;
-if (!FIRST_ORG) throw new Error("ORGS needs a row");
+const [FIRST_ORG, SECOND_ORG] = ORGS;
+if (!FIRST_ORG || !SECOND_ORG) throw new Error("ORGS needs two rows");
 
 // The columns render a date through toLocaleDateString, so the expected text
 // has to come out of the same formatter. Reading the field off the fixture is
@@ -169,6 +169,20 @@ function rowFor(link: HTMLElement): HTMLTableRowElement {
   const row = link.closest("tr");
   if (!row) throw new Error("the name link is not inside a row");
   return row;
+}
+
+function peekOn(link: HTMLElement): void {
+  const cell = within(rowFor(link)).getAllByRole("cell").at(-1);
+  if (!cell) throw new Error("the row needs a cell to click");
+  fireEvent.click(cell, { altKey: true });
+}
+
+function peekPanel(): HTMLElement {
+  return screen.getByRole("complementary", { name: "Organization peek" });
+}
+
+function isPeeked(link: HTMLElement): boolean {
+  return rowFor(link).classList.contains("bg-muted");
 }
 
 function urlFor(search: Record<string, unknown>): string {
@@ -537,6 +551,226 @@ describe("organizations list", () => {
     // Enter opens an organization they never chose.
     expect(link.isConnected).toBe(false);
     expect(document.activeElement).toBe(document.body);
+  });
+});
+
+describe("organizations list peek", () => {
+  it("docks a panel beside the list rather than leaving the page", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    peekOn(link);
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/organizations");
+
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["Name", "Slug", "Type"]);
+  });
+
+  it("highlights the row it is peeking at and no other", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    peekOn(link);
+
+    expect(isPeeked(link)).toBe(true);
+    expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
+      false,
+    );
+  });
+
+  it("walks peek down the list and stops at the last row", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    peekOn(first);
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+    ).toBeTruthy();
+    expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
+      true,
+    );
+    expect(isPeeked(first)).toBe(false);
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
+    expect(
+      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+    ).toBeTruthy();
+  });
+
+  it("walks peek back up the list and stops at the first row", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const second = await screen.findByRole("link", { name: SECOND_ORG.name });
+    peekOn(second);
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowUp" });
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowUp" });
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+  });
+
+  it("scrolls the row peek moves to into view", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    peekOn(first);
+
+    const second = rowFor(screen.getByRole("link", { name: SECOND_ORG.name }));
+    const scrollIntoView = vi.spyOn(second, "scrollIntoView");
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
+
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("closes on Escape and puts focus back on the row's name link", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    peekOn(link);
+
+    fireEvent.keyDown(peekPanel(), { key: "Escape" });
+
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("link", { name: FIRST_ORG.name }),
+    );
+  });
+
+  it("gives the operator's own column visibility back when peek closes", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Slug" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("columnheader", { name: "Slug" })).toBeNull();
+    });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    peekOn(link);
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["Name", "Type"]);
+
+    fireEvent.keyDown(peekPanel(), { key: "Escape" });
+
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual([
+      "Name",
+      "Type",
+      "Members",
+      "WorkOS",
+      "Disabled",
+      "Trial ends",
+      "Created",
+    ]);
+  });
+
+  it("shows the name column while it is open, even when the operator hid it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Name" }));
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Slug" })).toBeTruthy();
+    });
+    expect(screen.queryByRole("columnheader", { name: "Name" })).toBeNull();
+
+    // The name link is gone with the column, so the row is reached by its slug.
+    const row = screen.getByText(FIRST_ORG.slug).closest("tr");
+    if (!row) throw new Error("the slug cell is not inside a row");
+    fireEvent.click(row, { altKey: true });
+
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["Name", "Slug", "Type"]);
+    expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
+
+    fireEvent.keyDown(peekPanel(), { key: "Escape" });
+
+    expect(screen.queryByRole("columnheader", { name: "Name" })).toBeNull();
+  });
+
+  it("leaves the arrow keys to the Columns menu while it is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const second = screen.getByRole("link", { name: SECOND_ORG.name });
+    peekOn(first);
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.keyDown(screen.getByRole("menuitemcheckbox", { name: "Name" }), {
+      key: "ArrowDown",
+    });
+
+    expect(isPeeked(first)).toBe(true);
+    expect(isPeeked(second)).toBe(false);
+  });
+
+  it("leaves Escape to the Columns menu while it is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    peekOn(first);
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.keyDown(screen.getByRole("menuitemcheckbox", { name: "Name" }), {
+      key: "Escape",
+    });
+
+    expect(isPeeked(first)).toBe(true);
+  });
+
+  it("drops peek when the operator pages away from the record", async () => {
+    mocks.listOrganizations.mockImplementation((params) =>
+      Promise.resolve(
+        params?.cursor
+          ? { organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    peekOn(link);
+    expect(peekPanel()).toBeTruthy();
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Organization peek" }),
+      ).toBeNull();
+    });
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual([
+      "Name",
+      "Slug",
+      "Type",
+      "Members",
+      "WorkOS",
+      "Disabled",
+      "Trial ends",
+      "Created",
+    ]);
   });
 });
 
