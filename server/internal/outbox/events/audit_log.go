@@ -45,7 +45,7 @@ var (
 	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
-	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed or demoted")
+	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, demoted, or re-armed")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")

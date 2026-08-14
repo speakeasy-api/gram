@@ -102,15 +102,11 @@ type ExtendTrialParams struct {
 //   - converted_at IS NULL is load-bearing. A mid-trial conversion leaves ends_at
 //     in the future, so nothing else would reject it.
 //   - ends_at > clock_timestamp() is load-bearing. It is the ordinary case.
-//   - demoted_at IS NULL is forward-looking. MarkTrialDemoted only demotes an
-//     already-expired trial and nothing moves ends_at forward afterwards, so in
-//     every state the application can currently reach it is subsumed by the
-//     ends_at condition. It is kept as defence against a future re-arm path.
+//   - demoted_at IS NULL is defence in depth: no writer leaves demoted_at set
+//     with ends_at in the future.
 //
-// Extending a demoted trial is deliberately not the same as re-arming it:
-// demotion also disabled the organization's model provider keys and nothing in
-// this repository can re-enable them, so clearing demoted_at would advertise a
-// running trial whose keys stay dead (AGE-3208).
+// Extending a demoted trial is not re-arming it: a re-arm also revives the
+// model provider keys and restores the account type. See RearmTrial.
 //
 // Two things this query deliberately does not check:
 //
@@ -204,16 +200,17 @@ const insertTrialFixture = `-- name: InsertTrialFixture :exec
 INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
 VALUES (
     $1,
-    'enterprise',
     $2,
     $3,
-    $4::timestamptz,
-    $5::timestamptz
+    $4,
+    $5::timestamptz,
+    $6::timestamptz
 )
 `
 
 type InsertTrialFixtureParams struct {
 	OrganizationID string
+	Tier           string
 	CreatedAt      pgtype.Timestamptz
 	EndsAt         pgtype.Timestamptz
 	ConvertedAt    pgtype.Timestamptz
@@ -224,6 +221,7 @@ type InsertTrialFixtureParams struct {
 func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertTrialFixture,
 		arg.OrganizationID,
+		arg.Tier,
 		arg.CreatedAt,
 		arg.EndsAt,
 		arg.ConvertedAt,
@@ -303,5 +301,71 @@ func (q *Queries) MarkTrialDemoted(ctx context.Context, organizationID string) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const rearmTrial = `-- name: RearmTrial :one
+UPDATE trials
+SET demoted_at = NULL,
+    ends_at = clock_timestamp() + make_interval(days => $1::int),
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND demoted_at IS NOT NULL
+  AND converted_at IS NULL
+RETURNING tier, ends_at
+`
+
+type RearmTrialParams struct {
+	RearmForDays   int32
+	OrganizationID string
+}
+
+type RearmTrialRow struct {
+	Tier   string
+	EndsAt pgtype.Timestamptz
+}
+
+// Operator-initiated reinstatement of a demoted trial. Returns the tier the
+// trial grants, which the handler writes back onto the organization.
+//
+// ends_at moves to a window measured from now, not left where it is:
+// MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
+// alone leaves a row the next sweep demotes again.
+//
+// converted_at IS NULL guards nothing today, because MarkTrialConverted has no
+// production caller. It is written for the conversion path that will (AGE-3218).
+func (q *Queries) RearmTrial(ctx context.Context, arg RearmTrialParams) (RearmTrialRow, error) {
+	row := q.db.QueryRow(ctx, rearmTrial, arg.RearmForDays, arg.OrganizationID)
+	var i RearmTrialRow
+	err := row.Scan(&i.Tier, &i.EndsAt)
+	return i, err
+}
+
+const restoreOrganizationFromTrial = `-- name: RestoreOrganizationFromTrial :one
+UPDATE organization_metadata
+SET gram_account_type = $1,
+    whitelisted = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = $2
+RETURNING name, slug
+`
+
+type RestoreOrganizationFromTrialParams struct {
+	AccountType    string
+	OrganizationID string
+}
+
+type RestoreOrganizationFromTrialRow struct {
+	Name string
+	Slug string
+}
+
+// Undoes DemoteOrganizationToFree's two writes. whitelisted is set
+// unconditionally because demotion cleared it and the signup arming path never
+// writes it, so replaying that path would leave the book-a-demo gate up.
+func (q *Queries) RestoreOrganizationFromTrial(ctx context.Context, arg RestoreOrganizationFromTrialParams) (RestoreOrganizationFromTrialRow, error) {
+	row := q.db.QueryRow(ctx, restoreOrganizationFromTrial, arg.AccountType, arg.OrganizationID)
+	var i RestoreOrganizationFromTrialRow
+	err := row.Scan(&i.Name, &i.Slug)
 	return i, err
 }

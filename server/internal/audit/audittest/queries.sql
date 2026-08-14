@@ -3,6 +3,8 @@ SELECT
   action,
   organization_id,
   project_id,
+  actor_id,
+  actor_type,
   actor_display_name,
   subject_id,
   subject_type,
