@@ -7,17 +7,18 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// ErrPrincipalNotFound reports that a Gram user could not be resolved to an
-// active in-organization principal.
+// ErrPrincipalNotFound reports that a principal does not resolve to an active
+// target in the organization.
 var ErrPrincipalNotFound = errors.New("principal not found")
 
-// ErrPrincipalInvalid reports caller input that cannot be a concrete user
+// ErrPrincipalInvalid reports caller input that cannot identify a supported
 // principal.
 var ErrPrincipalInvalid = errors.New("principal invalid")
 
@@ -111,27 +112,30 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 	case urn.PrincipalTypeRole:
 		roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
 		if !ok {
-			return fmt.Errorf("invalid role principal %q", principal.String())
+			return fmt.Errorf("%w: role principal %q", ErrPrincipalInvalid, principal.String())
 		}
 		if roleKind != "organization" && roleKind != "global" {
-			return fmt.Errorf("invalid role principal %q", principal.String())
+			return fmt.Errorf("%w: role principal %q", ErrPrincipalInvalid, principal.String())
 		}
 		roleID, err := uuid.Parse(rawRoleID)
 		if err != nil {
-			return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
+			return fmt.Errorf("%w: role principal %q: %w", ErrPrincipalInvalid, principal.String(), err)
 		}
 		row, err := repo.New(db).GetOrganizationRoleByID(ctx, repo.GetOrganizationRoleByIDParams{
 			OrganizationID: organizationID,
 			ID:             roleID,
 		})
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("validate role principal %q: %w", principal.String(), ErrPrincipalNotFound)
+			}
 			return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
 		}
 		if row.RoleUrn != principal.String() {
-			return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
+			return fmt.Errorf("%w: role principal %q does not match active role %q", ErrPrincipalInvalid, principal.String(), row.RoleUrn)
 		}
 	default:
-		return fmt.Errorf("unsupported principal type %q", principal.Type)
+		return fmt.Errorf("%w: unsupported principal type %q", ErrPrincipalInvalid, principal.Type)
 	}
 
 	return nil

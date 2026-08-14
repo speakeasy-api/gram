@@ -1130,7 +1130,10 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			}
 			if parsed.Type == urn.PrincipalTypeRole {
 				if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, parsed); err != nil {
-					return nil, oops.E(oops.CodeBadRequest, err, "invalid role principal URN: %s", raw)
+					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+						return nil, oops.E(oops.CodeBadRequest, err, "invalid role principal URN: %s", raw)
+					}
+					return nil, oops.E(oops.CodeUnexpected, err, "validate role principal URN: %s", raw).LogError(ctx, s.logger)
 				}
 			}
 			principalURN = parsed.String()

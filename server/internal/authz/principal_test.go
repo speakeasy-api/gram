@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -145,7 +146,16 @@ func TestValidatePrincipal(t *testing.T) {
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "principal-validator"))
-	require.ErrorContains(t, err, "invalid role principal")
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+
+	conn.Close()
+	err = ValidatePrincipal(ctx, conn, organizationID, rolePrincipal)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrPrincipalInvalid)
+	require.NotErrorIs(t, err, ErrPrincipalNotFound)
 }
 
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {
