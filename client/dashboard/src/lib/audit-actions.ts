@@ -261,7 +261,7 @@ export function staticActionPhrase(action: AuditAction): string {
       return "removed GCP KMS key";
 
     case "billing_metadata:create_stripe_checkout":
-      return "started Stripe checkout";
+      return "started Stripe checkout for";
     case "billing_metadata:update":
       return "updated billing metadata";
     case "chat_analysis_settings:upsert":
