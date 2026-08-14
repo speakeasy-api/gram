@@ -45,7 +45,10 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
   },
 }));
 
-import { resetPaygCheckoutLocks } from "./payg-checkout-lock";
+import {
+  isPaygCheckoutLocked,
+  resetPaygCheckoutLocks,
+} from "./payg-checkout-lock";
 import { StartPaygCheckoutCTA } from "./start-payg-checkout-cta";
 
 /** The callbacks React Query drops when the calling mount goes away. */
@@ -55,23 +58,54 @@ type MutateCallbacks = {
 };
 
 /** The callbacks React Query keeps on the mutation itself. */
-type CheckoutHookOptions = { onSettled?: () => void };
+type CheckoutHookOptions = {
+  onMutate?: () => unknown;
+  onSettled?: (
+    data: string | undefined,
+    error: unknown,
+    variables: unknown,
+    context: unknown,
+  ) => void;
+};
 
-/** The hook options from the most recent render, as React Query would use. */
+/**
+ * The hook options from the most recent render. React Query hands a pending
+ * mutation the options of whatever rendered last, so settling deliberately
+ * reads the newest ones — only the context is pinned to the dispatch.
+ */
 function hookOptions(): CheckoutHookOptions | undefined {
   return mocks.hookOptions.mock.calls.at(-1)?.[0] as
     | CheckoutHookOptions
     | undefined;
 }
 
+/** The context React Query captures once, when the mutation starts. */
+let dispatchedContext: unknown;
+
+/** Leaves the mutation in flight, the way a request in progress would. */
+function stayPending() {
+  mocks.mutate.mockImplementation(() => {
+    dispatchedContext = hookOptions()?.onMutate?.();
+  });
+}
+
 /** Runs the mutation-level settle callback, which outlives any single mount. */
-function settle() {
-  hookOptions()?.onSettled?.();
+function settle(context: unknown) {
+  hookOptions()?.onSettled?.(undefined, null, {}, context);
 }
 
 const DAY = 24 * 60 * 60 * 1000;
 const CHECKOUT_URL = "https://checkout.stripe.test/c/pay/session";
 const ORGANIZATION_ID = "org-under-test";
+const OTHER_ORGANIZATION_ID = "org-switched-to";
+
+/** Points the session at `organizationId` with a trial that is still running. */
+function sessionFor(organizationId: string) {
+  mocks.session.mockReturnValue({
+    trial: activeTrial(),
+    activeOrganizationId: organizationId,
+  });
+}
 
 const activeTrial = () => ({
   startedAt: new Date(Date.now() - 3 * DAY),
@@ -82,8 +116,9 @@ const activeTrial = () => ({
 function resolveWith(link: string) {
   mocks.mutate.mockImplementation(
     (_variables: unknown, callbacks: MutateCallbacks) => {
+      const context = hookOptions()?.onMutate?.();
       callbacks.onSuccess(link);
-      settle();
+      settle(context);
     },
   );
 }
@@ -91,8 +126,9 @@ function resolveWith(link: string) {
 function rejectWith(error: unknown) {
   mocks.mutate.mockImplementation(
     (_variables: unknown, callbacks: MutateCallbacks) => {
+      const context = hookOptions()?.onMutate?.();
       callbacks.onError(error);
-      settle();
+      settle(context);
     },
   );
 }
@@ -117,12 +153,10 @@ describe("StartPaygCheckoutCTA", () => {
     resetPaygCheckoutLocks();
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
-    mocks.session.mockReturnValue({
-      trial: activeTrial(),
-      activeOrganizationId: ORGANIZATION_ID,
-    });
+    sessionFor(ORGANIZATION_ID);
     mocks.isPending.mockReturnValue(false);
-    mocks.mutate.mockImplementation(() => {});
+    dispatchedContext = undefined;
+    stayPending();
     assign.mockReset();
     vi.spyOn(window.location, "assign").mockImplementation((url) => {
       assign(url);
@@ -229,7 +263,7 @@ describe("StartPaygCheckoutCTA", () => {
   it("starts a single checkout for a rapid double click", () => {
     // The mutation stays in flight, which is when a second click would
     // otherwise create a second Stripe session.
-    mocks.mutate.mockImplementation(() => {});
+    stayPending();
     render(<StartPaygCheckoutCTA />);
 
     const button = cta()!;
@@ -244,7 +278,7 @@ describe("StartPaygCheckoutCTA", () => {
   // shared or a click on one surface can open a second Stripe session while
   // the other's request is still in flight.
   it("starts a single checkout across two mounted instances", () => {
-    mocks.mutate.mockImplementation(() => {});
+    stayPending();
     render(
       <>
         <StartPaygCheckoutCTA />
@@ -283,7 +317,7 @@ describe("StartPaygCheckoutCTA", () => {
   // would stay held forever once a navigation unmounts the CTA mid-checkout.
   it("releases the lock when the CTA unmounts before the checkout settles", () => {
     // The checkout stays in flight for as long as the CTA is mounted.
-    mocks.mutate.mockImplementation(() => {});
+    stayPending();
     const { unmount } = render(<StartPaygCheckoutCTA />);
 
     fireEvent.click(cta()!);
@@ -291,10 +325,47 @@ describe("StartPaygCheckoutCTA", () => {
 
     unmount();
     // Only the mutation-level callback survives the unmount.
-    settle();
+    settle(dispatchedContext);
 
     resolveWith(CHECKOUT_URL);
     render(<StartPaygCheckoutCTA />);
+
+    const button = cta()!;
+    expect(button.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(button);
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(2);
+    expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+  });
+
+  // React Query hands a pending mutation whatever options rendered last, so an
+  // organization switch mid-checkout would release the lock on the organization
+  // switched *to* and wedge the one that actually started the checkout. The
+  // dispatching organization has to come back through the mutation context.
+  it("releases the dispatching organization after an organization switch", () => {
+    stayPending();
+    const { rerender } = render(<StartPaygCheckoutCTA />);
+
+    fireEvent.click(cta()!);
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    expect(isPaygCheckoutLocked(ORGANIZATION_ID)).toBe(true);
+
+    // The user switches organizations while the checkout is still in flight.
+    sessionFor(OTHER_ORGANIZATION_ID);
+    rerender(<StartPaygCheckoutCTA />);
+
+    act(() => {
+      settle(dispatchedContext);
+    });
+
+    expect(isPaygCheckoutLocked(ORGANIZATION_ID)).toBe(false);
+    // The organization switched to never started a checkout of its own.
+    expect(isPaygCheckoutLocked(OTHER_ORGANIZATION_ID)).toBe(false);
+
+    // Switching back finds the first organization usable, not wedged.
+    resolveWith(CHECKOUT_URL);
+    sessionFor(ORGANIZATION_ID);
+    rerender(<StartPaygCheckoutCTA />);
 
     const button = cta()!;
     expect(button.hasAttribute("disabled")).toBe(false);

@@ -48,13 +48,22 @@ export function StartPaygCheckoutCTA({
   const { hasScope } = useRBAC();
   const { trial, activeOrganizationId } = useSession();
   const telemetry = useTelemetry();
-  // The lock is released by the mutation's own callback rather than one passed
-  // to `mutate`: React Query skips the per-call callbacks when the mount that
-  // dispatched them unmounts while the request is still in flight, which would
-  // leave the organization locked for every later mount.
+  // The lock is released by the mutation's own callbacks rather than ones
+  // passed to `mutate`: React Query skips the per-call callbacks when the mount
+  // that dispatched them unmounts while the request is still in flight, which
+  // would leave the organization locked for every later mount.
+  //
+  // The organization travels through the mutation context instead of a closure
+  // because React Query rewrites a pending mutation's options on every render:
+  // switching organizations mid-checkout would otherwise release the lock on
+  // the organization switched *to* and wedge the one that started it. The
+  // context is captured once, when the mutation starts.
   const checkout = useCreateStripeCheckoutMutation({
-    onSettled: () => {
-      setPaygCheckoutLocked(activeOrganizationId, false);
+    onMutate: () => activeOrganizationId,
+    onSettled: (_data, _error, _variables, context) => {
+      if (typeof context === "string") {
+        setPaygCheckoutLocked(context, false);
+      }
     },
   });
   const [failed, setFailed] = useState(false);
