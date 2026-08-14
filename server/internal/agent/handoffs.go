@@ -118,19 +118,23 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
 	}
-	if _, err := io.WriteString(blobW, payload.Content); err != nil {
-		_ = blobW.Close()
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
-	}
-	if err := blobW.Close(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
-	}
 	// The blob URL is a second capability: it must reach the database and
 	// nothing else — never the response, the audit trail, or a log line.
+	// Defined the moment the URL exists, so every failure from here down can
+	// undo the upload, including one that only partly materialized.
 	cleanupBlob := func() {
 		if err := s.blobStore.Delete(context.WithoutCancel(ctx), blobURL); err != nil {
 			s.logger.WarnContext(ctx, "orphaned handoff blob not deleted", attr.SlogError(err))
 		}
+	}
+	if _, err := io.WriteString(blobW, payload.Content); err != nil {
+		_ = blobW.Close()
+		cleanupBlob()
+		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
+	}
+	if err := blobW.Close(); err != nil {
+		cleanupBlob()
+		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -232,8 +236,21 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	// caller sees a generic error.
 	blobURL, err := url.Parse(rawBlobURL)
 	if err != nil {
+		// Nothing addressable to delete, so the bucket lifecycle is the only
+		// backstop left for this one.
 		return oops.E(oops.CodeUnexpected, err, "resolve handoff document").LogError(r.Context(), s.logger)
 	}
+
+	// The claim already burned the link, so the document must not outlive it
+	// on any path: a failed read or a half-written response leaves the link
+	// just as dead, and keeping the blob would mean a burned handoff still
+	// sitting in storage. Deferred so delivery failures burn it too.
+	defer func() {
+		if err := s.blobStore.Delete(context.WithoutCancel(r.Context()), blobURL); err != nil {
+			s.logger.WarnContext(r.Context(), "consumed handoff blob not deleted", attr.SlogError(err))
+		}
+	}()
+
 	rdr, err := s.blobStore.Read(r.Context(), blobURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read handoff document").LogError(r.Context(), s.logger)
@@ -248,13 +265,6 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if _, err := io.Copy(w, rdr); err != nil {
 		s.logger.DebugContext(r.Context(), "write handoff response", attr.SlogError(err))
-	}
-
-	// Burn the document itself, best-effort: the row's claim already makes the
-	// link dead, so a failed delete only means the bucket lifecycle policy
-	// collects the orphan later.
-	if err := s.blobStore.Delete(context.WithoutCancel(r.Context()), blobURL); err != nil {
-		s.logger.WarnContext(r.Context(), "consumed handoff blob not deleted", attr.SlogError(err))
 	}
 	return nil
 }
