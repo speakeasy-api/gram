@@ -43,8 +43,8 @@ func TestAdmissionChecker(t *testing.T) {
 	t.Parallel()
 
 	rollout := &feature.InMemory{}
-	rollout.SetFlag(feature.FlagPlatformMCPRollout, "organization-enabled", true)
-	rollout.SetFlag(feature.FlagPlatformMCPRollout, "organization-disabled", false)
+	rollout.SetFlag(feature.FlagPlatformMCP, "organization-enabled", true)
+	rollout.SetFlag(feature.FlagPlatformMCP, "organization-disabled", false)
 
 	tests := []struct {
 		name         string
@@ -108,13 +108,17 @@ func TestAdmissionChecker(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got, err := NewAdmissionChecker(test.capability, rollout, test.eligibility).Evaluate(t.Context(), test.organization, "organization-slug")
-		if test.wantErr != "" {
-			require.ErrorContains(t, err, test.wantErr, test.name)
-		} else {
-			require.NoError(t, err, test.name)
-		}
-		require.Equal(t, test.want, got, test.name)
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := NewAdmissionChecker(test.capability, rollout, test.eligibility).Evaluate(t.Context(), test.organization, "organization-slug")
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, test.want, got)
+		})
 	}
 }
 
@@ -136,7 +140,7 @@ func TestAdmissionCheckerReturnsIndeterminateForInvalidOrCanceledContext(t *test
 	t.Parallel()
 
 	rollout := &feature.InMemory{}
-	rollout.SetFlag(feature.FlagPlatformMCPRollout, "organization", true)
+	rollout.SetFlag(feature.FlagPlatformMCP, "organization", true)
 	checker := NewAdmissionChecker(testCapabilityChecker{enabled: true}, rollout, testNewModelEligibility{eligible: true})
 
 	admission, err := checker.Evaluate(t.Context(), "", "organization")

@@ -99,7 +99,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("getConfiguration", func() {
-		Description("Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.")
+		Description("Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.")
 
 		Security(security.Session)
 

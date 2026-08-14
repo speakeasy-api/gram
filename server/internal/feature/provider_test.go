@@ -9,22 +9,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
+const testFeatureFlag feature.Flag = "test-feature"
+
 func TestEvaluateFlagInMemory(t *testing.T) {
 	t.Parallel()
 
 	provider := &feature.InMemory{}
-	provider.SetFlag(feature.FlagPlatformMCPRollout, "enabled", true)
-	provider.SetFlag(feature.FlagPlatformMCPRollout, "disabled", false)
+	provider.SetFlag(testFeatureFlag, "enabled", true)
+	provider.SetFlag(testFeatureFlag, "disabled", false)
 
-	enabled, err := feature.EvaluateFlag(t.Context(), provider, feature.FlagPlatformMCPRollout, "enabled", nil)
+	enabled, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "enabled", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationEnabled, enabled)
 
-	disabled, err := feature.EvaluateFlag(t.Context(), provider, feature.FlagPlatformMCPRollout, "disabled", nil)
+	disabled, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "disabled", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationDisabled, disabled)
 
-	missing, err := feature.EvaluateFlag(t.Context(), provider, feature.FlagPlatformMCPRollout, "missing", nil)
+	missing, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "missing", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationIndeterminate, missing)
 }
@@ -32,7 +34,7 @@ func TestEvaluateFlagInMemory(t *testing.T) {
 func TestEvaluateFlagLegacyProviderIsIndeterminate(t *testing.T) {
 	t.Parallel()
 
-	result, err := feature.EvaluateFlag(t.Context(), legacyProvider{}, feature.FlagPlatformMCPRollout, "organization", nil)
+	result, err := feature.EvaluateFlag(t.Context(), legacyProvider{}, testFeatureFlag, "organization", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationIndeterminate, result)
 }

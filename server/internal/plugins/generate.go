@@ -404,7 +404,7 @@ const mcpSharedFingerprintKey = "__shared__"
 const mcpPlatformFingerprintKey = "__platform_mcp__"
 
 const (
-	platformMCPPluginName = "gram-platform-mcp"
+	platformMCPPluginName = "speakeasy-aicp-platform-mcp"
 	platformMCPPluginRoot = "platform-mcp"
 )
 
@@ -726,9 +726,9 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	if cfg.PlatformMCPEnabled {
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        platformMCPPluginName,
-			DisplayName: "Gram Platform MCP",
+			DisplayName: "Speakeasy AICP Platform MCP",
 			Source:      "./" + platformMCPPluginRoot,
-			Description: "Read-only organization administration through the Gram Platform MCP.",
+			Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
 		})
 	}
 
@@ -830,8 +830,8 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	}
 
 	if cfg.PlatformMCPEnabled {
-		b.WriteString("## Gram Platform MCP\n\n")
-		b.WriteString("The `gram-platform-mcp` plugin provides read-only organization administration through Gram OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
+		b.WriteString("## Speakeasy AICP Platform MCP\n\n")
+		b.WriteString("The `speakeasy-aicp-platform-mcp` plugin provides read-only organization administration through Speakeasy OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
 	}
 
 	if len(plugins) > 0 {
@@ -2004,8 +2004,8 @@ func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) e
 
 	meta, err := marshalJSON(claudePluginMeta{
 		Name:        platformMCPPluginName,
-		DisplayName: "Gram Platform MCP",
-		Description: "Read-only organization administration through the Gram Platform MCP.",
+		DisplayName: "Speakeasy AICP Platform MCP",
+		Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
 		Version:     "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0"),
 		Author:      pluginAuthor{Name: "Gram", URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",

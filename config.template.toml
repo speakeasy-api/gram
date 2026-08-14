@@ -6,3 +6,7 @@
 # product_id_pro = "..."
 # meter_id_tool_calls = "..."
 # meter_id_servers = "..."
+
+# [stripe]
+# price_id_tum = "..."
+# meter_event_name = "tum"

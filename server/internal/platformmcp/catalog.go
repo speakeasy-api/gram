@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Catalogue values intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -20,6 +21,10 @@ var (
 	ErrCatalogRejected    = errors.New("platform mcp catalog candidate rejected")
 )
 
+// CatalogDescriptor binds a Platform catalogue source to a server-owned registry.
+// CanonicalRef and AllowedRemoteURL are optional only for a registry-wide source:
+// the exact entry and remote are then revalidated on every inspection. Existing
+// reviewed descriptors keep pinning both values for a narrower provider contract.
 type CatalogDescriptor struct {
 	ProviderKey      string
 	Registry         externalmcp.Registry
@@ -29,6 +34,8 @@ type CatalogDescriptor struct {
 }
 
 type CatalogCandidate struct {
+	// ProviderKey is a server-issued opaque registry-source identity. It is not a
+	// provider credential, remote URL, or client-supplied provider configuration.
 	ProviderKey string `json:"provider_key"`
 	CatalogRef  string `json:"catalog_ref"`
 	Name        string `json:"name"`
@@ -38,14 +45,30 @@ type CatalogCandidate struct {
 	SetupIntent string `json:"setup_intent"`
 }
 
+type CatalogConfigurationField struct {
+	Key         string   `json:"key"`
+	Kind        string   `json:"kind"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Required    bool     `json:"required"`
+	Secret      bool     `json:"secret"`
+	Default     string   `json:"default,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
+}
+
 type CatalogDetails struct {
 	CatalogCandidate
-	Transport string   `json:"transport"`
-	ToolNames []string `json:"tool_names"`
+	Transport              string                      `json:"transport"`
+	ToolNames              []string                    `json:"tool_names"`
+	Configuration          []CatalogConfigurationField `json:"configuration"`
+	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 
-	// remoteURL is resolved only from an approved descriptor and is deliberately
-	// not projected through MCP tool responses. M1 rejects entries that need
-	// arbitrary remote headers.
+	// remoteURLTemplate is derived only from an inspected server-owned registry
+	// entry. It is never returned to Platform MCP callers and only becomes a
+	// concrete Remote MCP URL after declared non-secret variables are validated.
+	remoteURLTemplate string
+	// remoteURL is retained for existing focused fixtures/tests that construct
+	// an already-resolved reviewed candidate directly.
 	remoteURL string
 }
 
@@ -54,60 +77,178 @@ type Catalog interface {
 	Inspect(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error)
 }
 
+type RegistryCatalogSource struct {
+	// Client is constructed by server composition. The local fixture uses a
+	// development-CA-aware client; normal browser-catalogue registries share the
+	// standard client. It is never chosen from Platform MCP input.
+	Client      *externalmcp.RegistryClient
+	Descriptors []CatalogDescriptor
+}
+
+type registryCatalogDescriptor struct {
+	CatalogDescriptor
+	client *externalmcp.RegistryClient
+}
+
 type RegistryCatalog struct {
-	client      *externalmcp.RegistryClient
-	descriptors map[string]CatalogDescriptor
+	descriptors map[string]registryCatalogDescriptor
+}
+
+type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, error)
+
+type DynamicRegistryCatalog struct {
+	client *externalmcp.RegistryClient
+	load   CatalogDescriptorLoader
+}
+
+func NewDynamicRegistryCatalog(client *externalmcp.RegistryClient, load CatalogDescriptorLoader) *DynamicRegistryCatalog {
+	return &DynamicRegistryCatalog{client: client, load: load}
+}
+
+func (c *DynamicRegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCandidate, error) {
+	catalog, err := c.current(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return catalog.Search(ctx, query)
+}
+
+func (c *DynamicRegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
+	catalog, err := c.current(ctx)
+	if err != nil {
+		return CatalogDetails{}, err
+	}
+	return catalog.Inspect(ctx, providerKey, catalogRef)
+}
+
+func (c *DynamicRegistryCatalog) current(ctx context.Context) (*RegistryCatalog, error) {
+	if c == nil || c.client == nil || c.load == nil {
+		return nil, ErrCatalogUnavailable
+	}
+	descriptors, err := c.load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load platform mcp catalog descriptors: %w", err)
+	}
+	return NewRegistryCatalog(c.client, descriptors), nil
 }
 
 func NewRegistryCatalog(client *externalmcp.RegistryClient, descriptors []CatalogDescriptor) *RegistryCatalog {
-	byKey := make(map[string]CatalogDescriptor, len(descriptors))
-	for _, descriptor := range descriptors {
-		if descriptor.ProviderKey == "" || descriptor.Registry.ID == uuid.Nil || !isHTTPSURL(descriptor.Registry.URL) || descriptor.CanonicalRef == "" || !isHTTPSURL(descriptor.AllowedRemoteURL) || hasUnresolvedRemoteTemplate(descriptor.AllowedRemoteURL) || descriptor.SetupIntent == "" {
+	return NewRegistryCatalogSources([]RegistryCatalogSource{{Client: client, Descriptors: descriptors}})
+}
+
+// BrowserCatalogDescriptor maps one configured browser-catalogue registry to a
+// stable opaque Platform MCP source identity. The registry row and its endpoint
+// remain server-owned; callers only receive this identity after a search result.
+func BrowserCatalogDescriptor(registry externalmcp.Registry) CatalogDescriptor {
+	return CatalogDescriptor{
+		ProviderKey: "browser-catalog-registry-" + registry.ID.String(),
+		Registry:    registry,
+		SetupIntent: "dashboard_source_settings",
+	}
+}
+
+func isBrowserCatalogProviderKey(providerKey string) bool {
+	_, id, found := strings.Cut(providerKey, "browser-catalog-registry-")
+	if !found || id == "" {
+		return false
+	}
+	_, err := uuid.Parse(id)
+	return err == nil
+}
+
+// NewRegistryCatalogSources composes only server-owned registry sources. The
+// opaque ProviderKey remains unique across every source, preventing a selected
+// entry from being reinterpreted against a different registry.
+func NewRegistryCatalogSources(sources []RegistryCatalogSource) *RegistryCatalog {
+	byKey := make(map[string]registryCatalogDescriptor)
+	for _, source := range sources {
+		if source.Client == nil {
 			continue
 		}
-		byKey[descriptor.ProviderKey] = descriptor
+		for _, descriptor := range source.Descriptors {
+			if descriptor.ProviderKey == "" || descriptor.Registry.ID == uuid.Nil || !isHTTPSURL(descriptor.Registry.URL) || descriptor.SetupIntent == "" {
+				continue
+			}
+			if (descriptor.CanonicalRef == "") != (descriptor.AllowedRemoteURL == "") {
+				continue
+			}
+			if descriptor.AllowedRemoteURL != "" && (!validCatalogRemoteTemplate(descriptor.AllowedRemoteURL) || hasUnresolvedRemoteTemplate(descriptor.AllowedRemoteURL)) {
+				continue
+			}
+			// Refuse ambiguous source identities. A duplicate registry/source must
+			// be fixed in server composition rather than silently routing a
+			// selection to a different catalogue source.
+			if _, exists := byKey[descriptor.ProviderKey]; exists {
+				continue
+			}
+			byKey[descriptor.ProviderKey] = registryCatalogDescriptor{CatalogDescriptor: descriptor, client: source.Client}
+		}
 	}
-	return &RegistryCatalog{client: client, descriptors: byKey}
+	return &RegistryCatalog{descriptors: byKey}
 }
 
 func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCandidate, error) {
-	if c == nil || c.client == nil {
+	if c == nil {
 		return nil, ErrCatalogUnavailable
 	}
 
 	candidates := make([]CatalogCandidate, 0, len(c.descriptors))
-	for _, descriptor := range c.descriptors {
-		result, err := c.client.ListServers(ctx, descriptor.Registry, externalmcp.ListServersParams{Search: &query})
+	for _, source := range c.descriptors {
+		result, err := source.client.ListServers(ctx, source.Registry, externalmcp.ListServersParams{Search: &query})
 		if err != nil {
 			return nil, fmt.Errorf("list platform mcp catalog: %w", err)
 		}
 		for _, entry := range result.Servers {
-			if entry.RegistrySpecifier != descriptor.CanonicalRef || !entryHasAllowedStreamableHTTPRemote(entry, descriptor.AllowedRemoteURL) {
+			if !descriptorAllowsEntry(source.CatalogDescriptor, entry) {
 				continue
 			}
-			candidates = append(candidates, catalogCandidateFromEntry(descriptor, entry))
+			candidates = append(candidates, catalogCandidateFromEntry(source.CatalogDescriptor, entry))
 		}
 	}
+
 	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].ProviderKey == candidates[j].ProviderKey {
+			return candidates[i].CatalogRef < candidates[j].CatalogRef
+		}
 		return candidates[i].ProviderKey < candidates[j].ProviderKey
 	})
 	return candidates, nil
 }
 
 func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
-	if c == nil || c.client == nil {
+	if c == nil {
 		return CatalogDetails{}, ErrCatalogUnavailable
 	}
-	descriptor, ok := c.descriptors[providerKey]
-	if !ok || catalogRef != descriptor.CanonicalRef {
+	source, ok := c.descriptors[providerKey]
+	if !ok || catalogRef == "" || (source.CanonicalRef != "" && catalogRef != source.CanonicalRef) {
+		return CatalogDetails{}, ErrCatalogRejected
+	}
+	descriptor := source.CatalogDescriptor
+
+	entries, err := source.client.ListServers(ctx, descriptor.Registry, externalmcp.ListServersParams{Search: &catalogRef})
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("find platform mcp catalog candidate: %w", err)
+	}
+	var entry *types.ExternalMCPServerEntry
+	for _, candidate := range entries.Servers {
+		if candidate.RegistrySpecifier == catalogRef && descriptorAllowsEntry(descriptor, candidate) {
+			entry = candidate
+			break
+		}
+	}
+	if entry == nil {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
 
-	details, err := c.client.GetServerDetails(ctx, descriptor.Registry, descriptor.CanonicalRef, []string{descriptor.AllowedRemoteURL})
+	allowedURLs := streamableHTTPRemoteURLs(entry)
+	if descriptor.AllowedRemoteURL != "" {
+		allowedURLs = []string{descriptor.AllowedRemoteURL}
+	}
+	details, err := source.client.GetServerDetails(ctx, descriptor.Registry, catalogRef, allowedURLs)
 	if err != nil {
 		return CatalogDetails{}, fmt.Errorf("inspect platform mcp catalog candidate: %w", err)
 	}
-	if details.RemoteURL != descriptor.AllowedRemoteURL || hasUnresolvedRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP || len(details.Headers) != 0 {
+	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP || !containsString(allowedURLs, details.RemoteURL) {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
 
@@ -118,28 +259,39 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 		}
 	}
 	sort.Strings(toolNames)
+	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
 			ProviderKey: providerKey,
-			CatalogRef:  descriptor.CanonicalRef,
+			CatalogRef:  catalogRef,
 			Name:        details.Name,
 			Description: details.Description,
 			Version:     details.Version,
 			ToolCount:   len(toolNames),
 			SetupIntent: descriptor.SetupIntent,
 		},
-		Transport: string(details.TransportType),
-		ToolNames: toolNames,
-		remoteURL: details.RemoteURL,
+		Transport:              string(details.TransportType),
+		ToolNames:              toolNames,
+		Configuration:          configuration,
+		RequiresDashboardSetup: catalogRequiresDashboardSetup(configuration),
+		remoteURLTemplate:      details.RemoteURL,
+		remoteURL:              details.RemoteURL,
 	}, nil
 }
 
-func entryHasAllowedStreamableHTTPRemote(entry *types.ExternalMCPServerEntry, allowedRemoteURL string) bool {
-	if !isHTTPSURL(allowedRemoteURL) || hasUnresolvedRemoteTemplate(allowedRemoteURL) {
+func descriptorAllowsEntry(descriptor CatalogDescriptor, entry *types.ExternalMCPServerEntry) bool {
+	if entry == nil || (descriptor.CanonicalRef != "" && entry.RegistrySpecifier != descriptor.CanonicalRef) {
 		return false
 	}
+	if descriptor.AllowedRemoteURL != "" {
+		return entryHasAllowedStreamableHTTPRemote(entry, descriptor.AllowedRemoteURL)
+	}
+	return len(streamableHTTPRemoteURLs(entry)) > 0
+}
+
+func entryHasAllowedStreamableHTTPRemote(entry *types.ExternalMCPServerEntry, allowedRemoteURL string) bool {
 	for _, remote := range entry.Remotes {
-		if remote != nil && remote.URL == allowedRemoteURL && isHTTPSURL(remote.URL) && !hasUnresolvedRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") && len(remote.Headers) == 0 {
+		if remote != nil && remote.URL == allowedRemoteURL && validCatalogRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") {
 			return true
 		}
 	}
@@ -151,8 +303,86 @@ func isHTTPSURL(rawURL string) bool {
 	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil && parsed.Fragment == ""
 }
 
+func streamableHTTPRemoteURLs(entry *types.ExternalMCPServerEntry) []string {
+	urls := make([]string, 0, len(entry.Remotes))
+	for _, remote := range entry.Remotes {
+		if remote != nil && strings.EqualFold(remote.TransportType, "streamable-http") && validCatalogRemoteTemplate(remote.URL) {
+			urls = append(urls, remote.URL)
+		}
+	}
+	return urls
+}
+
+func validCatalogRemoteTemplate(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil && parsed.Fragment == ""
+}
+
 func hasUnresolvedRemoteTemplate(rawURL string) bool {
 	return strings.ContainsAny(rawURL, "{}")
+}
+
+func catalogConfiguration(headers []externalmcp.RemoteHeader, variables map[string]externalmcp.RemoteVariable) []CatalogConfigurationField {
+	fields := make([]CatalogConfigurationField, 0, len(headers)+len(variables))
+	for _, header := range headers {
+		if header.Name == "" {
+			continue
+		}
+		fields = append(fields, CatalogConfigurationField{
+			Key:         "header:" + strings.ToLower(header.Name),
+			Kind:        "header",
+			Name:        header.Name,
+			Description: stringValue(header.Description),
+			Required:    header.IsRequired,
+			Secret:      header.IsSecret || sensitiveHeaderName(header.Name),
+			Default:     stringValue(header.Placeholder),
+		})
+	}
+	variableNames := make([]string, 0, len(variables))
+	for name := range variables {
+		variableNames = append(variableNames, name)
+	}
+	sort.Strings(variableNames)
+	for _, name := range variableNames {
+		variable := variables[name]
+		fields = append(fields, CatalogConfigurationField{
+			Key:         "url_variable:" + name,
+			Kind:        "url_variable",
+			Name:        name,
+			Description: stringValue(variable.Description),
+			Required:    variable.IsRequired,
+			Secret:      variable.IsSecret,
+			Default:     stringValue(variable.Default),
+			Choices:     append([]string(nil), variable.Choices...),
+		})
+	}
+	sort.Slice(fields, func(i, j int) bool { return fields[i].Key < fields[j].Key })
+	return fields
+}
+
+func catalogRequiresDashboardSetup(fields []CatalogConfigurationField) bool {
+	for _, field := range fields {
+		if field.Secret && field.Required {
+			return true
+		}
+	}
+	return false
+}
+
+func sensitiveHeaderName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "api-key":
+		return true
+	default:
+		return false
+	}
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.ExternalMCPServerEntry) CatalogCandidate {
@@ -162,7 +392,7 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 	}
 	return CatalogCandidate{
 		ProviderKey: descriptor.ProviderKey,
-		CatalogRef:  descriptor.CanonicalRef,
+		CatalogRef:  entry.RegistrySpecifier,
 		Name:        name,
 		Description: entry.Description,
 		Version:     entry.Version,

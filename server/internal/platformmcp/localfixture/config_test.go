@@ -26,6 +26,7 @@ func TestNewConfigBuildsCodeOwnedCatalogDescriptor(t *testing.T) {
 	require.NotContains(t, resources[0].Text, config.RemoteURL())
 	require.Equal(t, SetupIntent, descriptor.SetupIntent)
 	require.Equal(t, "https://localhost:8080", descriptor.Registry.URL)
+	require.Equal(t, "/v0.1/servers/local-fixture%2Freviewed-mcp/versions/latest", config.RegistryDetailsPath())
 	require.Equal(t, "https://localhost:8080/platform-mcp/local-fixture/mcp", descriptor.AllowedRemoteURL)
 	require.NotZero(t, descriptor.Registry.ID)
 	require.NotZero(t, config.RemoteSessionIssuerID())

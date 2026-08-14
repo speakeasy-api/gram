@@ -71,8 +71,26 @@ describe("parseExclusionExpression", () => {
     expect(parseExclusionExpression("match = value").ok).toBe(false);
   });
 
-  it("rejects an invalid regex", () => {
-    expect(parseExclusionExpression('match ~= "("').ok).toBe(false);
+  it("parses RE2-only regex syntax that JS RegExp rejects", () => {
+    // Inline flags and (?P<name>) groups are valid RE2 — the dialect the
+    // server and analyzers compile. Pattern validity is checked against RE2
+    // (wasm engine at save time, API on create), never with JS RegExp, so
+    // parsing must not reject these.
+    expect(
+      parseExclusionExpression('match ~= "(?i)jane\\.doe@acme\\.com"'),
+    ).toMatchObject({
+      ok: true,
+      value: { matchType: "regex", matchValue: "(?i)jane\\.doe@acme\\.com" },
+    });
+    expect(
+      parseExclusionExpression('match ~= "(?P<user>[a-z]+)@acme\\.com"').ok,
+    ).toBe(true);
+  });
+
+  it("rejects an over-long regex", () => {
+    expect(parseExclusionExpression(`match ~= "${"a".repeat(513)}"`).ok).toBe(
+      false,
+    );
   });
 
   it("rejects two match clauses", () => {

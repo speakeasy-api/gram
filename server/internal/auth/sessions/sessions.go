@@ -81,7 +81,7 @@ func NewManager(
 	return &Manager{
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		billingRepo:  billingRepo,

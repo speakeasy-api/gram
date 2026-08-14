@@ -346,7 +346,7 @@ func registerReviewedMCP(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
 	require.NoError(t, err)
-	receipt, err = store.CompleteRegistration(ctx, principal, project, request, receipt, remoteURL)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, remoteURL)
 	require.NoError(t, err)
 	registration, err := platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, SourceKind: request.SourceKind, CatalogProvider: request.CatalogProvider, CatalogReference: request.CatalogReference})
 	require.NoError(t, err)

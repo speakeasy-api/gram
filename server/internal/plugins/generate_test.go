@@ -79,7 +79,7 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, platformMCPPluginName, meta.Name)
-	require.Equal(t, "Gram Platform MCP", meta.DisplayName)
+	require.Equal(t, "Speakeasy AICP Platform MCP", meta.DisplayName)
 	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
 
 	var mcpConfig claudeMCPConfig
@@ -107,9 +107,9 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
 	require.Equal(t, marketplaceEntry{
 		Name:        platformMCPPluginName,
-		DisplayName: "Gram Platform MCP",
+		DisplayName: "Speakeasy AICP Platform MCP",
 		Source:      "./platform-mcp",
-		Description: "Read-only organization administration through the Gram Platform MCP.",
+		Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
 	}, claude.Plugins[1])
 
 	var cursor marketplaceManifest
