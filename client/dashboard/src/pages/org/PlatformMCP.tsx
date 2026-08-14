@@ -335,13 +335,14 @@ export function PlatformMCPOnboardingContent({
           },
         },
         {
-          onSuccess: async () => {
+          onSuccess: () => {
             // Wait for the selected client and any fresh-workflow reset to reach
             // the shared query before the next sheet can be opened. Otherwise a
             // fast click can briefly render the previous workflow's evidence.
-            await invalidate();
-            setAgentPickerOpen(false);
-            setInstallMethodPickerOpen(true);
+            void invalidate().then(() => {
+              setAgentPickerOpen(false);
+              setInstallMethodPickerOpen(true);
+            });
           },
         },
       );
