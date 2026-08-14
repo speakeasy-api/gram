@@ -25,7 +25,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -95,14 +94,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return err
 	}
 
-	// The transport exists only while the picker rollout flag is on for the
-	// org; a provider outage reads as off. 404 matches how the island's
-	// absence hides the surface entirely.
-	enabled, ferr := s.features.IsFlagEnabled(ctx, feature.FlagConsentToolFiltering, endpoint.OrganizationID, nil)
-	if ferr != nil {
-		logger.WarnContext(ctx, "evaluate consent tool filtering flag", attr.SlogError(ferr))
-	}
-	if ferr != nil || !enabled {
+	// The transport exists only while tool filtering is enabled for the org
+	// (rollout flag or the organization's admin opt-in); a provider outage
+	// reads as off. 404 matches how the island's absence hides the surface
+	// entirely.
+	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never

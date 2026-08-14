@@ -343,6 +343,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		CustomerManagedEncryptionKeysEnabled:    isEnabled(FeatureCustomerManagedEncryptionKeys),
 		RemoteSessionAutoRefreshEnabled:         isEnabled(FeatureRemoteSessionAutoRefresh),
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
+		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		DeviceAgent:                             deviceAgent,
 	}, nil
 }

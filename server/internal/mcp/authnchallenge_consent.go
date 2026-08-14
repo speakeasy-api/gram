@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -226,6 +227,23 @@ func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
 }
 
+// consentToolFilteringEnabled reports whether the consent-screen tool picker
+// is on for the organization: via the staged engineering rollout flag or via
+// the organization admin's own opt-in (the consent_tool_filtering product
+// feature, managed from the MCP Connections page). Provider outages and an
+// unavailable checker both degrade to off.
+func (s *Service) consentToolFilteringEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
+	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagConsentToolFiltering, organizationID, nil)
+	if err != nil {
+		logger.WarnContext(ctx, "evaluate consent tool filtering flag", attr.SlogError(err))
+		enabled = false
+	}
+	if !enabled && s.platformFeatureChecker != nil {
+		enabled = s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
+	}
+	return enabled
+}
+
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
 // Enforcement wins over the opt-in so an organization that turns on both still
 // gets the stricter behavior, and an unavailable feature checker degrades to
@@ -393,18 +411,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// The picker island renders only while the rollout flag is on for the
+	// The picker island renders only while tool filtering is enabled for the
 	// org (provider outage reads as off): enforcement of stored selections
 	// is always live, but authoring new ones stays dark until every runtime
 	// pod enforces them. Without the island the approve button must not
 	// depend on it for enabling — the template couples the two.
 	showToolsIsland := false
 	if !challengeState.FirstParty {
-		enabled, ferr := s.features.IsFlagEnabled(ctx, feature.FlagConsentToolFiltering, endpoint.OrganizationID, nil)
-		if ferr != nil {
-			logger.WarnContext(ctx, "evaluate consent tool filtering flag", attr.SlogError(ferr))
-		}
-		showToolsIsland = ferr == nil && enabled
+		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
 	}
 	prefillAttr := ""
 	if showToolsIsland {

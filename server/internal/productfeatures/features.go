@@ -46,6 +46,11 @@ const (
 	// FeatureRemoteSessionAutoRefresh, which only governs whether the opt-in
 	// control is visible and leaves the choice to each user.
 	FeatureRemoteSessionAutoRefreshEnforced Feature = "remote_session_auto_refresh_enforced"
+	// FeatureConsentToolFiltering lets organization admins turn on the
+	// consent-screen tool picker for their organization, independent of the
+	// staged engineering rollout flag. Enforcement of stored selections is
+	// always on; this only governs whether new approvals can author one.
+	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
 )
 
 type FeatureCache struct {
