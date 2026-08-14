@@ -2210,6 +2210,8 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		DisabledAt:         v.DisabledAt,
 		FreeTrialStartedAt: v.FreeTrialStartedAt,
 		FreeTrialEndsAt:    v.FreeTrialEndsAt,
+		TrialState:         v.TrialState,
+		TrialEndsAt:        v.TrialEndsAt,
 		MemberCount:        *v.MemberCount,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,

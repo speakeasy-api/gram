@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 type orgFixture struct {
@@ -304,4 +305,105 @@ func TestListOrganizations_FullPageWithFilterEndsTheWalk(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Organizations, 2)
 	require.Nil(t, page.NextCursor)
+}
+
+type trialFixture struct {
+	orgID       string
+	endsAt      time.Time
+	convertedAt *time.Time
+	demotedAt   *time.Time
+}
+
+func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFixture) {
+	t.Helper()
+
+	err := trialsRepo.New(conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
+		OrganizationID: f.orgID,
+		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-30 * 24 * time.Hour)),
+		EndsAt:         conv.ToPGTimestamptz(f.endsAt),
+		ConvertedAt:    conv.PtrToPGTimestamptz(f.convertedAt),
+		DemotedAt:      conv.PtrToPGTimestamptz(f.demotedAt),
+	})
+	require.NoError(t, err)
+}
+
+// endingSoonWindow mirrors the INTERVAL in the trial_state CASE; the fixtures below straddle it by an hour to pin it.
+const endingSoonWindow = 7 * 24 * time.Hour
+
+type trialStateCase struct {
+	orgID string
+	want  string
+	trial *trialFixture
+}
+
+func TestAdminListOrganizations_TrialState(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	now := time.Now().UTC()
+	demotedAt := now.Add(-72 * time.Hour)
+	convertedAt := now.Add(-96 * time.Hour)
+
+	cases := []trialStateCase{
+		{orgID: "org_trial_none", want: "none"},
+		{orgID: "org_trial_running", want: "running", trial: &trialFixture{endsAt: now.Add(30 * 24 * time.Hour)}},
+		{orgID: "org_trial_ending_soon", want: "ending_soon", trial: &trialFixture{endsAt: now.Add(24 * time.Hour)}},
+		{orgID: "org_trial_expired", want: "expired", trial: &trialFixture{endsAt: now.Add(-24 * time.Hour)}},
+		{orgID: "org_trial_demoted", want: "demoted", trial: &trialFixture{endsAt: now.Add(12 * 24 * time.Hour), demotedAt: &demotedAt}},
+		{orgID: "org_trial_converted", want: "converted", trial: &trialFixture{endsAt: now.Add(18 * 24 * time.Hour), convertedAt: &convertedAt}},
+		{orgID: "org_trial_demoted_past", want: "demoted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt}},
+		{orgID: "org_trial_converted_past", want: "converted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), convertedAt: &convertedAt}},
+
+		// MarkTrialConverted guards on converted_at alone, so a demoted trial can later convert. Paying beats demoted.
+		{orgID: "org_trial_converted_after_demotion", want: "converted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt, convertedAt: &convertedAt}},
+
+		{orgID: "org_trial_window_inside", want: "ending_soon", trial: &trialFixture{endsAt: now.Add(endingSoonWindow - time.Hour)}},
+		{orgID: "org_trial_window_outside", want: "running", trial: &trialFixture{endsAt: now.Add(endingSoonWindow + time.Hour)}},
+	}
+
+	for _, c := range cases {
+		seedOrg(t, ctx, conn, orgFixture{id: c.orgID, name: "Org " + c.orgID, slug: c.orgID, whitelisted: true})
+		if c.trial != nil {
+			f := *c.trial
+			f.orgID = c.orgID
+			seedTrial(t, ctx, conn, f)
+		}
+	}
+
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
+	require.NoError(t, err)
+	require.Len(t, res.Organizations, len(cases))
+
+	byID := map[string]*gen.AdminOrganization{}
+	for _, o := range res.Organizations {
+		byID[o.ID] = o
+	}
+
+	for _, c := range cases {
+		org := byID[c.orgID]
+		require.NotNil(t, org, "organization %s missing from the list", c.orgID)
+		require.NotNil(t, org.TrialState, "organization %s has no trial state", c.orgID)
+		require.Equal(t, c.want, *org.TrialState, "list trial state for %s", c.orgID)
+
+		detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: c.orgID})
+		require.NoError(t, err)
+		require.NotNil(t, detail.TrialState)
+		require.Equal(t, c.want, *detail.TrialState, "detail trial state for %s", c.orgID)
+		require.Equal(t, org.TrialEndsAt, detail.TrialEndsAt, "trial end date for %s", c.orgID)
+
+		if c.trial == nil {
+			require.Nil(t, org.TrialEndsAt, "organization %s never trialled, so it has no trial end date", c.orgID)
+			continue
+		}
+
+		require.NotNil(t, org.TrialEndsAt, "organization %s should report its trial end date", c.orgID)
+		got, err := time.Parse(time.RFC3339, *org.TrialEndsAt)
+		require.NoError(t, err, "parsing trial end date for %s", c.orgID)
+		require.WithinDuration(t, c.trial.endsAt, got, time.Second, "trial end date for %s", c.orgID)
+	}
+
+	// Expand only: the old free trial fields stay on the API.
+	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
+	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }
