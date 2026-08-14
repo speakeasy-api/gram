@@ -712,6 +712,50 @@ describe("organizations list", () => {
     expect(option.getAttribute("aria-checked")).toBe("true");
   });
 
+  // These two assert the request rather than the parsed search, because the
+  // empty string has to be gone by the time anything is sent, and asserting the
+  // schema's output would pass while it survived one step further on.
+  //
+  // The hazard is specific to the type group. `trialStates` and
+  // `disabledStates` drop whatever they do not recognise, so an empty string
+  // reaching them is harmless. `accountTypes` deliberately keeps an
+  // unrecognised value, so an empty one would be sent as an account type, and
+  // the server matches no organization against it: a blank table under a
+  // control still reading "All types".
+  it("sends no filter for a group a link left empty", async () => {
+    // `?type=` is not the empty list the schema already drops. It arrives as an
+    // empty string, and `text()` normalising to undefined is the only thing
+    // between it and the request.
+    await renderRouteTree(routeTree, {
+      initialPath: "/organizations?type=&trial=&disabled=",
+    });
+
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+    const params = lastListParams();
+    expect(params.account_types).toBeUndefined();
+    expect(params.trial_states).toBeUndefined();
+    expect(params.disabled_states).toBeUndefined();
+    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
+      "All types",
+    );
+  });
+
+  it("sends no filter for a group a link filled with whitespace", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: "/organizations?type=%20&trial=%20&disabled=%20",
+    });
+
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+    const params = lastListParams();
+    expect(params.account_types).toBeUndefined();
+    expect(params.trial_states).toBeUndefined();
+    expect(params.disabled_states).toBeUndefined();
+  });
+
   it("opens on the group the operator asked for", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
