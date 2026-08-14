@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  policyEnabledActionLabel,
-  policyStatusLabel,
-} from "./policy-enabled";
+import { policyEnabledActionLabel, policyStatusLabel } from "./policy-enabled";
 
 describe("policyEnabledActionLabel", () => {
   it("offers Disable while the policy is enforcing", () => {
