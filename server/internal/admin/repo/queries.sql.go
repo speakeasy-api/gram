@@ -291,7 +291,15 @@ SELECT
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE
-    ($1::text IS NULL OR om.name ILIKE '%' || $1::text || '%' OR om.slug ILIKE '%' || $1::text || '%')
+    -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
+    -- Exactness buys no index here, so do not "restore" one: the ILIKE arms share this OR group and no trigram index exists, so Postgres cannot build a BitmapOr and any non-null q scans the table whatever the id arms do.
+    (
+        $1::text IS NULL
+        OR om.name ILIKE '%' || $1::text || '%'
+        OR om.slug ILIKE '%' || $1::text || '%'
+        OR om.id = $1::text
+        OR om.workos_id = $1::text
+    )
     AND ($2::text IS NULL OR om.gram_account_type = $2::text)
     AND ($3::boolean OR om.disabled_at IS NULL)
     AND ($4::text IS NULL OR om.id > $4::text)

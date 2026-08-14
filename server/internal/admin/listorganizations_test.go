@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -406,4 +407,140 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 	// Expand only: the old free trial fields stay on the API.
 	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
 	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
+}
+
+type searchByIDCase struct {
+	name    string
+	q       string
+	wantIDs []string
+}
+
+// requireSearchMatches asserts the exact set of organizations a payload returns, ignoring order.
+func requireSearchMatches(t *testing.T, ctx context.Context, svc *Service, payload *gen.ListOrganizationsPayload, wantIDs []string, label string) {
+	t.Helper()
+
+	res, err := svc.ListOrganizations(ctx, payload)
+	require.NoError(t, err, "listing organizations for %s", label)
+
+	got := make([]string, len(res.Organizations))
+	for i, o := range res.Organizations {
+		got[i] = o.ID
+	}
+	require.ElementsMatch(t, wantIDs, got, "organizations matched by %s", label)
+}
+
+func TestListOrganizations_SearchByID(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const (
+		alphaID   = "org_search_id_alpha"
+		bravoID   = "org_search_id_bravo"
+		charlieID = "org_search_id_charlie"
+
+		bravoWorkosID = "org_workos_placeholder_bravo"
+	)
+
+	workosID := bravoWorkosID
+	seedOrg(t, ctx, conn, orgFixture{id: alphaID, name: "Alpha Holdings", slug: "alpha-holdings", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: bravoID, name: "Bravo Holdings", slug: "bravo-holdings", workosID: &workosID, whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: charlieID, name: "Charlie Networks", slug: "charlie-networks", whitelisted: true})
+
+	cases := []searchByIDCase{
+		{name: "full organization id", q: alphaID, wantIDs: []string{alphaID}},
+		{name: "full workos id", q: bravoWorkosID, wantIDs: []string{bravoID}},
+		{name: "id no organization holds", q: "org_search_id_delta", wantIDs: nil},
+		// The id arms are exact, so a fragment of a real id matches nothing.
+		{name: "fragment of an organization id", q: "search_id_alpha", wantIDs: nil},
+		{name: "fragment of a workos id", q: "placeholder_bravo", wantIDs: nil},
+		{name: "name, unchanged by the id arms", q: "charlie", wantIDs: []string{charlieID}},
+	}
+
+	for _, c := range cases {
+		requireSearchMatches(t, ctx, svc, &gen.ListOrganizationsPayload{Q: conv.PtrEmpty(c.q)}, c.wantIDs, c.name)
+	}
+}
+
+func TestListOrganizations_SearchByIDIsCaseSensitive(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// Both id spaces are opaque and case significant, and a real WorkOS id embeds an uppercase ULID.
+	const (
+		mixedID       = "org_search_id_MixedCase"
+		mixedWorkosID = "org_workos_placeholder_MixedCase"
+	)
+
+	workosID := mixedWorkosID
+	seedOrg(t, ctx, conn, orgFixture{id: mixedID, name: "Mixed Case Holdings", slug: "mixed-case-holdings", workosID: &workosID, whitelisted: true})
+
+	cases := []searchByIDCase{
+		{name: "organization id at its own casing", q: mixedID, wantIDs: []string{mixedID}},
+		{name: "organization id case folded", q: strings.ToLower(mixedID), wantIDs: nil},
+		{name: "workos id at its own casing", q: mixedWorkosID, wantIDs: []string{mixedID}},
+		{name: "workos id case folded", q: strings.ToLower(mixedWorkosID), wantIDs: nil},
+
+		// The contrast that makes the two case-folded rows above meaningful: name and slug still ignore casing.
+		{name: "name case folded", q: "mixed case holdings", wantIDs: []string{mixedID}},
+		{name: "slug upper cased", q: "MIXED-CASE-HOLDINGS", wantIDs: []string{mixedID}},
+	}
+
+	for _, c := range cases {
+		requireSearchMatches(t, ctx, svc, &gen.ListOrganizationsPayload{Q: conv.PtrEmpty(c.q)}, c.wantIDs, c.name)
+	}
+}
+
+type searchFilterCase struct {
+	name            string
+	q               string
+	includeDisabled bool
+	accountType     string
+	cursor          string
+	wantIDs         []string
+}
+
+// An id match is one arm of the q group, not an escape from the group: it still meets every other filter.
+func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const (
+		disabledID = "org_search_id_disabled"
+		proID      = "org_search_id_pro"
+		cursorID   = "org_search_id_cursor"
+
+		disabledWorkosID = "org_workos_placeholder_disabled"
+	)
+
+	disabledAt := time.Now().UTC().Add(-24 * time.Hour)
+	workosID := disabledWorkosID
+	seedOrg(t, ctx, conn, orgFixture{id: disabledID, name: "Disabled Holdings", slug: "disabled-holdings", workosID: &workosID, whitelisted: true, disabledAt: &disabledAt})
+	seedOrg(t, ctx, conn, orgFixture{id: proID, name: "Pro Holdings", slug: "pro-holdings", accountType: "pro", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: cursorID, name: "Cursor Holdings", slug: "cursor-holdings", whitelisted: true})
+
+	cases := []searchFilterCase{
+		{name: "disabled organization by id, disabled excluded", q: disabledID, wantIDs: nil},
+		{name: "disabled organization by id, disabled included", q: disabledID, includeDisabled: true, wantIDs: []string{disabledID}},
+		{name: "disabled organization by workos id, disabled excluded", q: disabledWorkosID, wantIDs: nil},
+		{name: "disabled organization by workos id, disabled included", q: disabledWorkosID, includeDisabled: true, wantIDs: []string{disabledID}},
+
+		{name: "pro organization by id, filtered to free", q: proID, accountType: "free", wantIDs: nil},
+		{name: "pro organization by id, filtered to pro", q: proID, accountType: "pro", wantIDs: []string{proID}},
+
+		{name: "organization by id, at or before the cursor", q: cursorID, cursor: cursorID, wantIDs: nil},
+		{name: "organization by id, after the cursor", q: cursorID, cursor: "org_search_id_a", wantIDs: []string{cursorID}},
+	}
+
+	for _, c := range cases {
+		payload := &gen.ListOrganizationsPayload{
+			Q:               conv.PtrEmpty(c.q),
+			IncludeDisabled: conv.PtrEmpty(c.includeDisabled),
+			AccountType:     conv.PtrEmpty(c.accountType),
+			Cursor:          conv.PtrEmpty(c.cursor),
+		}
+		requireSearchMatches(t, ctx, svc, payload, c.wantIDs, c.name)
+	}
 }
