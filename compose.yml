@@ -102,6 +102,7 @@ services:
       - ./local/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
       - "${OTLP_GRPC_PORT}:4317"
+      - "${OTLP_HTTP_PORT}:4318"
     depends_on:
       - lgtm
 

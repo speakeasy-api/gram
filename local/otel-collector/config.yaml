@@ -3,6 +3,8 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
 
 exporters:
   otlp/lgtm:
@@ -10,16 +12,14 @@ exporters:
     tls:
       insecure: true
 
-processors:
-  batch:
-
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
       exporters: [otlp/lgtm]
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      exporters: [otlp/lgtm]
+    logs:
+      receivers: [otlp]
       exporters: [otlp/lgtm]
