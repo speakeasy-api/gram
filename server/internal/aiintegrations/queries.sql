@@ -302,17 +302,23 @@ WHERE ai_integration_config_id = @ai_integration_config_id
 -- next_poll_after hours out, and keeping it would leave a just-fixed
 -- integration dark until the backed-off time arrives. Healthy schedules
 -- keep their cadence.
--- name: ClearSyncSchedulePauses :exec
-UPDATE ai_integration_syncs
-SET next_poll_after = CASE
-      WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
-      THEN clock_timestamp()
-      ELSE next_poll_after
-    END,
-    auto_paused_at = NULL,
-    consecutive_failures = 0,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id;
+-- name: ClearSyncSchedulePauses :one
+WITH cleared AS (
+  UPDATE ai_integration_syncs
+  SET next_poll_after = CASE
+        WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
+        THEN clock_timestamp()
+        ELSE next_poll_after
+      END,
+      auto_paused_at = NULL,
+      consecutive_failures = 0,
+      updated_at = clock_timestamp()
+  WHERE ai_integration_config_id = @ai_integration_config_id
+  RETURNING schedule, next_poll_after, consecutive_failures
+)
+SELECT next_poll_after, consecutive_failures
+FROM cleared
+WHERE schedule = @schedule;
 
 -- name: AdvanceWatermark :exec
 UPDATE ai_integration_syncs

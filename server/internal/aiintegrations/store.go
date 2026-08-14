@@ -454,9 +454,15 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	// Saving the integration is the user's "try again" signal: lift any
 	// automatic pauses so schedules stopped over a rejected configuration
 	// start polling again with a fresh failure budget.
-	if err := q.ClearSyncSchedulePauses(ctx, row.ID); err != nil {
+	clearedRow, err := q.ClearSyncSchedulePauses(ctx, repo.ClearSyncSchedulePausesParams{
+		AiIntegrationConfigID: row.ID,
+		Schedule:              providerSched.schedule,
+	})
+	if err != nil {
 		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to clear ai integration sync pauses")
 	}
+	syncRow.NextPollAfter = clearedRow.NextPollAfter
+	syncRow.ConsecutiveFailures = clearedRow.ConsecutiveFailures
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
 		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(providerSched.schedule)))

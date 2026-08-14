@@ -361,7 +361,9 @@ func TestClearSyncSchedulePausesMakesFailingSchedulesDue(t *testing.T) {
 	// A settings-only save clears the streak and must also pull the
 	// backed-off next poll in, or the just-fixed integration stays dark
 	// until the backed-off time arrives.
-	upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "", false, true, &extOrgID, nil)
+	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "", false, true, &extOrgID, nil)
+	require.Equal(t, int32(0), updated.Config.ConsecutiveFailures)
+	require.LessOrEqual(t, updated.Config.NextPollAfter, time.Now().Add(time.Second))
 
 	state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
 	require.Equal(t, int32(0), state.ConsecutiveFailures)

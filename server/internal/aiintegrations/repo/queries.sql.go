@@ -50,18 +50,34 @@ func (q *Queries) AdvanceWatermark(ctx context.Context, arg AdvanceWatermarkPara
 	return err
 }
 
-const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :exec
-UPDATE ai_integration_syncs
-SET next_poll_after = CASE
-      WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
-      THEN clock_timestamp()
-      ELSE next_poll_after
-    END,
-    auto_paused_at = NULL,
-    consecutive_failures = 0,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $1
+const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :one
+WITH cleared AS (
+  UPDATE ai_integration_syncs
+  SET next_poll_after = CASE
+        WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
+        THEN clock_timestamp()
+        ELSE next_poll_after
+      END,
+      auto_paused_at = NULL,
+      consecutive_failures = 0,
+      updated_at = clock_timestamp()
+  WHERE ai_integration_config_id = $2
+  RETURNING schedule, next_poll_after, consecutive_failures
+)
+SELECT next_poll_after, consecutive_failures
+FROM cleared
+WHERE schedule = $1
 `
+
+type ClearSyncSchedulePausesParams struct {
+	Schedule              string
+	AiIntegrationConfigID uuid.UUID
+}
+
+type ClearSyncSchedulePausesRow struct {
+	NextPollAfter       pgtype.Timestamptz
+	ConsecutiveFailures int32
+}
 
 // ClearSyncSchedulePauses lifts any automatic pause on all of a config's
 // schedules and resets their failure streaks. Runs whenever the user saves
@@ -70,9 +86,11 @@ WHERE ai_integration_config_id = $1
 // next_poll_after hours out, and keeping it would leave a just-fixed
 // integration dark until the backed-off time arrives. Healthy schedules
 // keep their cadence.
-func (q *Queries) ClearSyncSchedulePauses(ctx context.Context, aiIntegrationConfigID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearSyncSchedulePauses, aiIntegrationConfigID)
-	return err
+func (q *Queries) ClearSyncSchedulePauses(ctx context.Context, arg ClearSyncSchedulePausesParams) (ClearSyncSchedulePausesRow, error) {
+	row := q.db.QueryRow(ctx, clearSyncSchedulePauses, arg.Schedule, arg.AiIntegrationConfigID)
+	var i ClearSyncSchedulePausesRow
+	err := row.Scan(&i.NextPollAfter, &i.ConsecutiveFailures)
+	return i, err
 }
 
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
