@@ -586,6 +586,60 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const listUserAccountsByEmails = `-- name: ListUserAccountsByEmails :many
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = $1
+  AND lower(email) = ANY(ARRAY(SELECT lower(e) FROM unnest($2::text[]) AS e))
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC
+`
+
+type ListUserAccountsByEmailsParams struct {
+	OrganizationID string
+	Emails         []string
+}
+
+type ListUserAccountsByEmailsRow struct {
+	ID            uuid.UUID
+	UserID        pgtype.Text
+	Provider      string
+	Email         pgtype.Text
+	AccountType   pgtype.Text
+	ExternalOrgID pgtype.Text
+	LastSeenAt    pgtype.Timestamptz
+}
+
+// Resolves account emails back to their directory owner. This supports telemetry
+// rows whose only identity is a linked personal/provider account email.
+func (q *Queries) ListUserAccountsByEmails(ctx context.Context, arg ListUserAccountsByEmailsParams) ([]ListUserAccountsByEmailsRow, error) {
+	rows, err := q.db.Query(ctx, listUserAccountsByEmails, arg.OrganizationID, arg.Emails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserAccountsByEmailsRow
+	for rows.Next() {
+		var i ListUserAccountsByEmailsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.Email,
+			&i.AccountType,
+			&i.ExternalOrgID,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserAccountsByUsers = `-- name: ListUserAccountsByUsers :many
 SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts

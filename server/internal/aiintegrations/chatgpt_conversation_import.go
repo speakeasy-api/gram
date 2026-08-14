@@ -25,7 +25,6 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -121,10 +120,10 @@ func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *
 // land under ON CONFLICT (chat_id, external_message_id) DO NOTHING.
 func (s *ChatGPTConversationImportService) SyncChatGPTConversations(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderChatGPTCompliance {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for chatgpt conversation import: %s", cfg.Provider)
+		return fmt.Errorf("unsupported ai integration provider for chatgpt conversation import: %s", cfg.Provider)
 	}
 	if cfg.ExternalOrganizationID == nil {
-		return oops.E(oops.CodeInvalid, nil, "external_organization_id (workspace id) is required for chatgpt_compliance")
+		return fmt.Errorf("external_organization_id (workspace id) is required for chatgpt_compliance")
 	}
 
 	progress := &ChatGPTConversationSyncProgress{
@@ -438,7 +437,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 	src.progress.MessagesWritten += written
 	src.progressMu.Unlock()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write chatgpt conversation messages")
+		return fmt.Errorf("write chatgpt conversation messages: %w", err)
 	}
 	return nil
 }
@@ -476,7 +475,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		PreferStoredTitle: false,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "upsert chatgpt compliance chat")
+		return fmt.Errorf("upsert chatgpt compliance chat: %w", err)
 	}
 	if !known {
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
@@ -484,7 +483,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 			ChatID:                chatID,
 			ProjectID:             src.cfg.ProjectID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "link chatgpt compliance chat")
+			return fmt.Errorf("link chatgpt compliance chat: %w", err)
 		}
 		src.progressMu.Lock()
 		src.progress.ChatsUpserted++
@@ -546,7 +545,7 @@ func parseChatGPTConversationEvents(file codexapi.LogFile, body []byte) ([]chatg
 		sum := sha256.Sum256(body)
 		actual := hex.EncodeToString(sum[:])
 		if !strings.EqualFold(actual, file.FileSHA256) {
-			return nil, oops.E(oops.CodeUnexpected, nil, "chatgpt compliance log sha256 mismatch for %s", file.ID)
+			return nil, fmt.Errorf("chatgpt compliance log sha256 mismatch for %s", file.ID)
 		}
 	}
 
@@ -558,7 +557,7 @@ func parseChatGPTConversationEvents(file codexapi.LogFile, body []byte) ([]chatg
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "decode chatgpt compliance log event in %s", file.ID)
+			return nil, fmt.Errorf("decode chatgpt compliance log event in %s: %w", file.ID, err)
 		}
 		if event.Type != "" && event.Type != chatgptConversationEventType {
 			continue

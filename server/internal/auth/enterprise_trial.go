@@ -20,9 +20,13 @@ import (
 // on the date they were given.
 const enterpriseTrialDuration = 14 * 24 * time.Hour
 
-// EnterpriseTrialBundleSeeder enables the entitlements an enterprise trial
-// organization starts with. The dependency travels as a function because the
-// productfeatures package that implements it imports auth.
+// OrganizationFeatureSeeder enables baseline organization entitlements. The
+// dependency travels as a function because the productfeatures package that
+// implements it imports auth.
+type OrganizationFeatureSeeder func(ctx context.Context, tx pgx.Tx, organizationID string) error
+
+// EnterpriseTrialBundleSeeder enables the additional entitlements an enterprise
+// trial organization starts with.
 type EnterpriseTrialBundleSeeder func(ctx context.Context, tx pgx.Tx, organizationID string) error
 
 // armEnterpriseTrialTx turns an organization the caller's transaction just

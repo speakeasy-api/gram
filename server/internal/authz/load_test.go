@@ -49,7 +49,7 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Admin", adminRole.WorkosName)
 
-	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, SystemRoleAdmin, "role:global:"+adminRole.ID.String())
+	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, "role:global:"+adminRole.ID.String())
 	require.NoError(t, err)
 	require.NotEmpty(t, grants)
 

@@ -16,6 +16,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 )
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
@@ -45,6 +46,7 @@ type ProxyManager struct {
 	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
 	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
 	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
+	platformMCPSelectedUseRecorder        toolcallobserver.SuccessRecorder
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -62,6 +64,7 @@ func NewProxyManager(
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
 	toolDispositions ToolDispositionResolver,
+	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -80,6 +83,7 @@ func NewProxyManager(
 		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
+		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
 	}
 }
 
@@ -189,6 +193,14 @@ func (f *ProxyManager) BuildTarget(
 	// and the resources/list RBAC filter are deferred to a follow-up —
 	// the proxy interceptor surface is in place so they can attach later
 	// without touching the proxy package again.
+	toolsCallResponseInterceptors := []proxy.ToolsCallResponseInterceptor{
+		f.toolsCallUsageTrackingInterceptor,
+		clickHouseLogInterceptor,
+	}
+	if f.platformMCPSelectedUseRecorder != nil && identity.RemoteMCPServerID != "" {
+		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
+	}
+
 	return &proxy.Proxy{
 		GuardianPolicy:              f.guardianPolicy,
 		GuardianClientOptions:       nil,
@@ -212,12 +224,9 @@ func (f *ProxyManager) BuildTarget(
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
-		RemoteMessageInterceptors:    nil,
-		ToolsCallRequestInterceptors: toolsCallReqInterceptors,
-		ToolsCallResponseInterceptors: []proxy.ToolsCallResponseInterceptor{
-			f.toolsCallUsageTrackingInterceptor,
-			clickHouseLogInterceptor,
-		},
+		RemoteMessageInterceptors:     nil,
+		ToolsCallRequestInterceptors:  toolsCallReqInterceptors,
+		ToolsCallResponseInterceptors: toolsCallResponseInterceptors,
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

@@ -25,6 +25,18 @@ WHERE organization_id = @organization_id
   AND is_default IS TRUE
   AND deleted IS FALSE;
 
+-- name: GetDefaultPluginForUpdate :one
+-- Serializes mutation of the existing Default plugin with concurrent deletion.
+-- Callers must use this inside the transaction that attaches or removes a
+-- plugin server; a deleted plugin deliberately returns no row.
+SELECT *
+FROM plugins
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: PromoteToDefaultPlugin :one
 -- Self-heals projects that already have a plugin sitting on the reserved
 -- "default" slug (e.g. created manually before this feature shipped) by

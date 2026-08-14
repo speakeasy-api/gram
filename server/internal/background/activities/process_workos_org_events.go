@@ -645,7 +645,7 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 	}
 
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+existing.ID.String())
-	if err := authz.DeleteRoleGrants(ctx, repo, org.ID, payload.Slug, rolePrincipal.String()); err != nil {
+	if err := authz.DeleteRoleGrants(ctx, repo, org.ID, rolePrincipal.String()); err != nil {
 		return fmt.Errorf("delete grants for role %q: %w", payload.Slug, err)
 	}
 

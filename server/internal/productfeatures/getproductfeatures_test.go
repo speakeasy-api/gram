@@ -48,6 +48,23 @@ func TestProductFeaturesService_GetProductFeatures_DeviceAgent(t *testing.T) {
 	require.True(t, res.DeviceAgent, "a device has synced")
 }
 
+func TestProductFeaturesService_PlatformMCP(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	require.NoError(t, err)
+	require.False(t, res.PlatformMcpEnabled)
+
+	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		FeatureName: string(productfeatures.FeaturePlatformMCP),
+		Enabled:     true,
+	}))
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	require.NoError(t, err)
+	require.True(t, res.PlatformMcpEnabled)
+}
+
 func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)

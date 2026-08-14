@@ -699,6 +699,9 @@ func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) err
 }
 
 // ServerDetails contains detailed information about an MCP server including connection info.
+// Headers and variables are copied from the selected server-owned remote. Callers
+// must still validate configuration values against these declarations; they must
+// never treat the registry response as permission to accept arbitrary endpoints.
 type ServerDetails struct {
 	Name          string
 	Description   string
@@ -707,6 +710,7 @@ type ServerDetails struct {
 	TransportType externalmcptypes.TransportType
 	Tools         []serverTool
 	Headers       []RemoteHeader
+	Variables     map[string]RemoteVariable
 }
 
 // GetServerDetails fetches server details including the remote URL from the registry.
@@ -790,6 +794,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	var transportType externalmcptypes.TransportType
 	var tools []serverTool
 	var headers []RemoteHeader
+	var variables map[string]RemoteVariable
 	remoteIndex := -1 // Use -1 as sentinel to detect when no remote matched
 	for i, remote := range serverResp.Server.Remotes {
 		// Skip remotes not in allowed list (if filter is active)
@@ -803,12 +808,14 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeStreamableHTTP
 			headers = remote.Headers
+			variables = remote.Variables
 			remoteIndex = i
 			break
 		} else if remote.Type == "sse" {
 			remoteURL = remote.URL
 			transportType = externalmcptypes.TransportTypeSSE
 			headers = remote.Headers
+			variables = remote.Variables
 			remoteIndex = i
 		}
 	}
@@ -837,6 +844,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		TransportType: transportType,
 		Tools:         tools,
 		Headers:       headers,
+		Variables:     variables,
 	}
 
 	// Store in cache on success.

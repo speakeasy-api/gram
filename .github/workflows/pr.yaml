@@ -1779,6 +1779,10 @@ jobs:
         run: aube run test
         working-directory: client/dashboard
 
+      - name: Test admin
+        run: aube run test
+        working-directory: client/admin
+
       - name: Prune aube store
         if: success()
         run: aube store prune

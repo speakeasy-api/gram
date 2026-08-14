@@ -105,7 +105,10 @@ func setupSnapshotBillingCycleUsageTestWithEmail(t *testing.T, dbName string) (a
 		conn,
 		chConn,
 		cache.NewRedisCacheAdapter(redisClient),
-		email.NewService(testenv.NewLogger(t), captured),
+		email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+			"tum_usage_threshold": "tum-threshold-test-id",
+			"tum_usage_overage":   "tum-overage-test-id",
+		}), true),
 	)
 
 	return act, conn, chConn, orgID, project.ID, captured
@@ -343,7 +346,10 @@ func TestSnapshotBillingCycleUsage_NoProjects(t *testing.T) {
 		conn,
 		chConn,
 		cache.NewRedisCacheAdapter(redisClient),
-		email.NewService(testenv.NewLogger(t), &captureLoopsClient{sent: nil, failNext: 0}),
+		email.NewService(testenv.NewLogger(t), &captureLoopsClient{sent: nil, failNext: 0}, email.NewTemplateIDs(map[string]string{
+			"tum_usage_threshold": "tum-threshold-test-id",
+			"tum_usage_overage":   "tum-overage-test-id",
+		}), true),
 	)
 	require.NoError(t, act.Do(ctx, []string{orgID}))
 
