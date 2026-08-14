@@ -2,6 +2,7 @@
 import {
   columnVisibilityFeature,
   FlexRender,
+  metaHelper,
   tableFeatures,
   type ReactTable,
   type Row,
@@ -37,7 +38,19 @@ import {
  * `column.getCanHide`, which this wrapper and its header both call. A table
  * with no Columns control still registers it for that reason.
  */
-export const dataTableFeatures = tableFeatures({ columnVisibilityFeature });
+/**
+ * Per-column classes, carried on the column definition because the header and
+ * the body cell are rendered here rather than by the page.
+ */
+export type DataTableColumnMeta = {
+  headClassName?: string;
+  cellClassName?: string;
+};
+
+export const dataTableFeatures = tableFeatures({
+  columnVisibilityFeature,
+  columnMeta: metaHelper<DataTableColumnMeta>(),
+});
 
 export type DataTableFeatures = typeof dataTableFeatures;
 
@@ -93,7 +106,11 @@ function DataTableHeader<T extends RowData>({
             // A placeholder header and a colSpan above 1 both appear only when
             // columns are grouped. Handling one and not the other would leave a
             // group heading sitting over a single column.
-            <TableHead key={header.id} colSpan={header.colSpan}>
+            <TableHead
+              key={header.id}
+              colSpan={header.colSpan}
+              className={header.column.columnDef.meta?.headClassName}
+            >
               {header.isPlaceholder ? null : <FlexRender header={header} />}
             </TableHead>
           ))}
@@ -106,11 +123,13 @@ function DataTableHeader<T extends RowData>({
 function DataTableRow<T extends RowData>({
   row,
   onClick,
+  onAltClick,
   className,
   ref,
 }: {
   row: Row<DataTableFeatures, T>;
   onClick?: (row: T, event: React.MouseEvent<HTMLTableRowElement>) => void;
+  onAltClick?: (row: T, event: React.MouseEvent<HTMLTableRowElement>) => void;
   className?: string;
   ref?: React.Ref<HTMLTableRowElement>;
 }) {
@@ -119,25 +138,56 @@ function DataTableRow<T extends RowData>({
   // assistive technology walks. A clickable row instead carries a real link
   // in one of its cells, and that link owns the keyboard path and the
   // accessible name. This handler only widens the mouse target.
-  const handleClick = onClick
-    ? (event: React.MouseEvent<HTMLTableRowElement>) => {
-        // The link in the cell already navigates, and it also lets the
-        // operator open the record in a new tab.
-        if ((event.target as HTMLElement).closest("a,button,input,label")) {
-          return;
+  const handleClick =
+    onClick || onAltClick
+      ? (event: React.MouseEvent<HTMLTableRowElement>) => {
+          // The link in the cell already navigates, and it also lets the
+          // operator open the record in a new tab.
+          const control = (event.target as HTMLElement).closest(
+            "a,button,input,label",
+          );
+
+          // Alt turns a link's default into "save link", never a navigation, so
+          // a row that wants the gesture may have it and cancels the download.
+          // The other three modifiers are the browser's open-in-tab and
+          // open-in-window, which stay the link's own.
+          if (
+            onAltClick &&
+            event.altKey &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.shiftKey &&
+            (control === null || control.matches("a"))
+          ) {
+            event.preventDefault();
+            onAltClick(row.original, event);
+            return;
+          }
+
+          if (!onClick || control) return;
+          onClick(row.original, event);
         }
-        onClick(row.original, event);
-      }
-    : undefined;
+      : undefined;
 
   return (
     <TableRow
       ref={ref}
-      className={cn(onClick && "cursor-pointer", className)}
+      // Every row state stays fully opaque, including the two the base row
+      // gives a half-alpha tint. A pinned cell inherits the colour and paints
+      // it a second time on its own layer, so a translucent one both doubles
+      // up and lets the scrolled row show through. A page's own colour wins.
+      className={cn(
+        "bg-background hover:bg-muted has-aria-expanded:bg-muted",
+        onClick && "cursor-pointer",
+        className,
+      )}
       onClick={handleClick}
     >
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id}>
+        <TableCell
+          key={cell.id}
+          className={cell.column.columnDef.meta?.cellClassName}
+        >
           <FlexRender cell={cell} />
         </TableCell>
       ))}

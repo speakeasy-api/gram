@@ -472,6 +472,7 @@ export function OrganizationsList(): JSX.Element {
                                 ref={isPeeked ? peekedRow : undefined}
                                 className={cn(isPeeked && "bg-muted")}
                                 onClick={openOrganization}
+                                onAltClick={togglePeek}
                               />
                             );
                           })
