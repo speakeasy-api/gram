@@ -30,6 +30,8 @@ const (
 	ActionOrganizationEnterpriseTrialDemoted Action = "organization:enterprise_trial_demoted"
 
 	ActionOrganizationEnterpriseTrialRearmed Action = "organization:enterprise_trial_rearmed"
+
+	ActionOrganizationEnterpriseTrialExtended Action = "organization:enterprise_trial_extended"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -399,6 +401,60 @@ func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx
 	metadata, err := marshalAuditPayload(map[string]any{
 		"account_type":  event.AccountType,
 		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+// LogOrganizationEnterpriseTrialExtendedEvent records an operator moving a
+// running trial's end date forward. Both dates are carried because the day count
+// alone cannot be turned back into the date the trial used to end.
+type LogOrganizationEnterpriseTrialExtendedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	ExtendedByDays      int
+	PreviousTrialEndsAt time.Time
+	TrialEndsAt         time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialExtendedEvent) error {
+	action := ActionOrganizationEnterpriseTrialExtended
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"extended_by_days":       event.ExtendedByDays,
+		"previous_trial_ends_at": event.PreviousTrialEndsAt,
+		"trial_ends_at":          event.TrialEndsAt,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

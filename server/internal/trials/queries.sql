@@ -67,7 +67,7 @@ WHERE organization_id = @organization_id
   AND demoted_at IS NULL
 RETURNING *;
 
--- name: ExtendTrial :execrows
+-- name: ExtendTrial :one
 -- Operator-initiated extension. The interval is added to the existing ends_at
 -- rather than to the current time: "give them another two weeks" means two weeks
 -- on top of whatever the trial has left, and adding to now would silently
@@ -82,10 +82,16 @@ RETURNING *;
 -- session TimeZone has to revisit them.
 --
 -- Only a running trial can be extended, and the conditions that define running
--- are here rather than in the handler so the database enforces them. Zero rows
+-- are here rather than in the handler so the database enforces them. No row
 -- means either that the trial cannot be extended or that the organization does
--- not exist at all; the two share a row count but not an operator action, so the
--- handler tells them apart with a follow-up read rather than merging them.
+-- not exist at all; the two share an empty result but not an operator action, so
+-- the handler tells them apart with a follow-up read rather than merging them.
+--
+-- The previous ends_at comes back from a CTE that reads the row before the
+-- update rather than from subtracting the interval afterwards: the calendar-day
+-- arithmetic above has no exact inverse across a daylight saving boundary, and
+-- the audit entry has to carry the date the row actually held. The UPDATE joins
+-- the CTE so the locking read runs first, as DemoteOrganizationToFree does.
 --
 -- The three conditions are not equally load-bearing today, and it is worth
 -- saying which is which:
@@ -112,13 +118,21 @@ RETURNING *;
 --     afterwards should not have silently lost the ability to extend in between,
 --     and a trial that keeps expiring during the investigation punishes the
 --     investigation.
+WITH previous AS (
+    SELECT trials.organization_id, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = @organization_id
+    FOR UPDATE
+)
 UPDATE trials
-SET ends_at = ends_at + make_interval(days => @extend_by_days::int),
+SET ends_at = trials.ends_at + make_interval(days => @extend_by_days::int),
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND converted_at IS NULL
-  AND demoted_at IS NULL
-  AND ends_at > clock_timestamp();
+FROM previous
+WHERE trials.organization_id = previous.organization_id
+  AND trials.converted_at IS NULL
+  AND trials.demoted_at IS NULL
+  AND trials.ends_at > clock_timestamp()
+RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;
 
 -- name: RearmTrial :one
 -- Operator-initiated reinstatement of a demoted trial. Returns the tier the

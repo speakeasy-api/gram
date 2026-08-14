@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -82,4 +83,24 @@ func DecodeAuditData(payload []byte) (map[string]any, error) {
 	}
 
 	return snapshot, nil
+}
+
+// RejectAction makes every audit insert for one action fail, so a caller can
+// prove that its mutation and its entry commit together.
+//
+// It alters the schema, so it is only sound in a test that owns its database,
+// and it can be called once per database. There is no seam inside the Logger to
+// fail instead: it holds no state.
+func RejectAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) error {
+	literal := strings.ReplaceAll(string(action), "'", "''")
+	stmt := fmt.Sprintf(
+		"ALTER TABLE audit_logs ADD CONSTRAINT audittest_reject_action CHECK (action <> '%s')",
+		literal,
+	)
+
+	if _, err := dbtx.Exec(ctx, stmt); err != nil {
+		return fmt.Errorf("reject audit action %s: %w", action, err)
+	}
+
+	return nil
 }

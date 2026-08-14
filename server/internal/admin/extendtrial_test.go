@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"testing"
 	"time"
@@ -11,8 +12,14 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -413,4 +420,144 @@ func TestExtendTrial_ExtensionsAccumulate(t *testing.T) {
 	after := readTrial(t, ctx, conn, "org_ext_twice")
 	require.WithinDuration(t, seededEndsAt.Add(8*24*time.Hour), after.EndsAt.Time, time.Second,
 		"a second extension must build on the first")
+}
+
+func TestExtendTrial_WritesAnAuditEntry(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// id, name and slug all differ, so an assertion on one cannot pass on
+	// another. The seeded end date is ten days out and the extension is three,
+	// so the two dates in the metadata are far apart and neither is now().
+	seededEndsAt := time.Now().UTC().Add(10 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_audit", name: "org_ext_audit Name", slug: "org_ext_audit-slug", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_audit", endsAt: seededEndsAt})
+	before := readTrial(t, ctx, conn, "org_ext_audit")
+
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID:   "session-ext-audit",
+		Email:       "operator@example.test",
+		OIDCSubject: "oidc-subject-ext-audit",
+		Name:        "Test Operator",
+		HD:          "example.test",
+	})
+
+	countBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+
+	_, err = svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_audit", Days: 3})
+	require.NoError(t, err)
+
+	countAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+	require.Equal(t, countBefore+1, countAfter, "an extension must leave a trace in the organization's feed")
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+	require.Equal(t, "organization", entry.SubjectType)
+	require.Equal(t, "org_ext_audit", entry.SubjectID)
+	require.Equal(t, "org_ext_audit Name", entry.SubjectDisplay, "the customer's feed must name the organization, not only its id")
+	require.Equal(t, "org_ext_audit-slug", entry.SubjectSlug)
+	require.NotNil(t, entry.ActorDisplayName, "the entry must name who extended the trial")
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+
+	var metadata struct {
+		ExtendedByDays      int       `json:"extended_by_days"`
+		PreviousTrialEndsAt time.Time `json:"previous_trial_ends_at"`
+		TrialEndsAt         time.Time `json:"trial_ends_at"`
+	}
+	require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
+	require.Equal(t, 3, metadata.ExtendedByDays)
+
+	// The two dates the database wrote, in the order they happened. Reading them
+	// back to front would describe a trial that was cut short.
+	after := readTrial(t, ctx, conn, "org_ext_audit")
+	require.WithinDuration(t, before.EndsAt.Time, metadata.PreviousTrialEndsAt, 0, "the entry must carry the end date the row held before the extension")
+	require.WithinDuration(t, after.EndsAt.Time, metadata.TrialEndsAt, 0, "the entry must carry the end date the row holds now")
+	require.True(t, metadata.TrialEndsAt.After(metadata.PreviousTrialEndsAt), "an extension must read forwards")
+
+	// The trial lifecycle event; any other would deliver this to nobody.
+	_, err = audittestrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, audittestrepo.GetLatestOutboxPayloadByOrgParams{
+		OrganizationID: "org_ext_audit",
+		EventType:      string(events.OrganizationEnterpriseTrialV1.EventType()),
+	})
+	require.NoError(t, err, "an extension must enqueue an outbox entry on the enterprise trial event")
+}
+
+func TestExtendTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_actor", name: "Actor Co", slug: "ext-actor", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_actor", endsAt: time.Now().UTC().Add(10 * 24 * time.Hour)})
+
+	const operatorEmail = "operator@example.test"
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID:   "session-ext-actor",
+		Email:       operatorEmail,
+		OIDCSubject: "oidc-subject-ext-actor",
+		Name:        "Test Operator",
+		HD:          "example.test",
+	})
+
+	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_actor", Days: 3})
+	require.NoError(t, err)
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+
+	// The customer reads this feed, so a Speakeasy action carries the collective
+	// label. The read-side mask cannot reach this entry: it matches an actor id
+	// against a Gram user, and an admin session has an OIDC subject instead.
+	require.NotNil(t, entry.ActorDisplayName)
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+
+	// Without this, an entry naming nobody at all would satisfy the one above.
+	require.Equal(t, "oidc-subject-ext-actor", entry.ActorID,
+		"the entry must still record which operator acted, in the field the customer's feed does not render")
+	require.Equal(t, "user", entry.ActorType)
+
+	for name, field := range map[string]string{
+		"actor display name": conv.PtrValOr(entry.ActorDisplayName, ""),
+		"actor id":           entry.ActorID,
+		"subject display":    entry.SubjectDisplay,
+		"subject slug":       entry.SubjectSlug,
+		"metadata":           string(entry.Metadata),
+		"before snapshot":    string(entry.BeforeSnapshot),
+		"after snapshot":     string(entry.AfterSnapshot),
+	} {
+		require.NotContains(t, field, operatorEmail, "the operator's email must not reach the customer's audit feed through the %s", name)
+	}
+}
+
+// TestExtendTrial_AFailedAuditEntryRollsBackTheExtension pins that the write and
+// its entry commit together. An extension that outlived a failed entry would
+// leave the feed silent, which is the whole point of this slice.
+func TestExtendTrial_AFailedAuditEntryRollsBackTheExtension(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	seededEndsAt := time.Now().UTC().Add(10 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_atomic", name: "Atomic Co", slug: "ext-atomic", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_atomic", endsAt: seededEndsAt})
+	before := readTrial(t, ctx, conn, "org_ext_atomic")
+
+	// Failing the audit insert deterministically, from outside the handler. The
+	// test owns its database, so the constraint reaches no other test.
+	require.NoError(t, audittest.RejectAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended))
+
+	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_atomic", Days: 3})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	after := readTrial(t, ctx, conn, "org_ext_atomic")
+	require.Equal(t, before.EndsAt.Time, after.EndsAt.Time,
+		"an extension whose audit entry failed must not survive: was %s, now %s", before.EndsAt.Time, after.EndsAt.Time)
+	require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
+
+	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
