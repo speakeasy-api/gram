@@ -336,13 +336,16 @@ trackedFiles:
   src/funcs/pluginsDeletePlugin.ts: {}
   src/funcs/pluginsDownloadCodexInstallScript.ts: {}
   src/funcs/pluginsDownloadObservabilityPlugin.ts: {}
+  src/funcs/pluginsDownloadPlatformMCPPlugin.ts: {}
   src/funcs/pluginsDownloadPluginPackage.ts: {}
   src/funcs/pluginsGetMarketplaceSettings.ts: {}
+  src/funcs/pluginsGetPlatformMCPPackageStatus.ts: {}
   src/funcs/pluginsGetPlugin.ts: {}
   src/funcs/pluginsGetPublishStatus.ts: {}
   src/funcs/pluginsListPlugins.ts: {}
   src/funcs/pluginsPublishPlugins.ts: {}
   src/funcs/pluginsRemovePluginServer.ts: {}
+  src/funcs/pluginsRepairPlatformMCPPackage.ts: {}
   src/funcs/pluginsSetPluginAssignments.ts: {}
   src/funcs/pluginsUpdateMarketplaceSettings.ts: {}
   src/funcs/pluginsUpdatePlugin.ts: {}
@@ -1046,6 +1049,7 @@ trackedFiles:
   src/models/components/periodusage.ts: {}
   src/models/components/platformmcponboardingsetuphandoff.ts: {}
   src/models/components/platformmcponboardingstate.ts: {}
+  src/models/components/platformmcppackagestatusresult.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
@@ -1533,6 +1537,7 @@ trackedFiles:
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
+  src/models/operations/downloadplatformmcpplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
   src/models/operations/enableadminopenrouterkey.ts: {}
   src/models/operations/enablewebhooks.ts: {}
@@ -1599,6 +1604,7 @@ trackedFiles:
   src/models/operations/getotelforwardingconfig.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
+  src/models/operations/getplatformmcppackagestatus.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
@@ -1812,6 +1818,7 @@ trackedFiles:
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
+  src/models/operations/repairplatformmcppackage.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resolvechallenge.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
@@ -2393,6 +2400,8 @@ trackedFiles:
   src/react-query/pauseTrigger.ts: {}
   src/react-query/platformMCPOnboarding.core.ts: {}
   src/react-query/platformMCPOnboarding.ts: {}
+  src/react-query/platformMCPPackageStatus.core.ts: {}
+  src/react-query/platformMCPPackageStatus.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
   src/react-query/plugins.core.ts: {}
@@ -2401,6 +2410,8 @@ trackedFiles:
   src/react-query/pluginsDownloadCodexInstallScript.ts: {}
   src/react-query/pluginsDownloadObservabilityPlugin.core.ts: {}
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
+  src/react-query/pluginsDownloadPlatformMCPPlugin.core.ts: {}
+  src/react-query/pluginsDownloadPlatformMCPPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
   src/react-query/productFeatures.core.ts: {}
@@ -2451,6 +2462,7 @@ trackedFiles:
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
+  src/react-query/repairPlatformMCPPackage.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resolveChallenge.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
@@ -4372,6 +4384,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  downloadPlatformMCPPlugin:
+    speakeasy-default-download-platform-MCP-plugin:
+      parameters:
+        query:
+          platform: "claude"
+      responses:
+        "200":
+          application/zip: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   downloadPluginPackage:
     speakeasy-default-download-plugin-package:
       parameters:
@@ -5127,6 +5151,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getPlatformMCPPackageStatus:
+    speakeasy-default-get-platform-MCP-package-status:
+      responses:
+        "200":
+          application/json: {"admission": "indeterminate", "agent_plugin_filename": "<value>", "available": true, "claude_filename": "<value>", "direct_download_available": false, "freshness": "stale", "marketplace_connected": true, "package_name": "<value>", "package_present": false, "repair_allowed": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getPlugin:
     speakeasy-default-get-plugin:
       parameters:
@@ -7531,6 +7564,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  repairPlatformMCPPackage:
+    speakeasy-default-repair-platform-MCP-package:
+      responses:
+        "200":
+          application/json: {"admission": "disabled", "agent_plugin_filename": "<value>", "available": false, "claude_filename": "<value>", "direct_download_available": false, "freshness": "indeterminate", "marketplace_connected": true, "package_name": "<value>", "package_present": false, "repair_allowed": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   requestAccess:
     speakeasy-default-request-access:
       requestBody:

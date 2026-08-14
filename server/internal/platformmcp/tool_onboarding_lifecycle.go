@@ -11,7 +11,7 @@ import (
 )
 
 type RegisterOnboardingMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit Gram project slug selected by the user"`
+	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit AICP project slug selected by the user"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
 	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_candidate configuration field key; never include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
@@ -31,7 +31,7 @@ type onboardingLifecycleErrorResult struct {
 	Message string `json:"message"`
 }
 type GetOnboardingMCPStatusToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit Gram project slug selected by the user"`
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug selected by the user"`
 	Force       bool   `json:"force,omitempty" jsonschema:"force one authenticated readiness recheck after secure dashboard setup or provider authorization; limited to three probes per minute for this registration"`
 }
 type GetOnboardingMCPStatusToolOutput struct {
@@ -45,8 +45,8 @@ type GetOnboardingMCPStatusToolOutput struct {
 	Message        string `json:"message"`
 }
 type AttachOnboardingMCPIdentityProviderToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit Gram project slug selected by the user"`
-	Confirmed   bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that Gram may attach the reviewed MCP's discovered remote identity provider; never include credentials, client secrets, OAuth codes, or tokens"`
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug selected by the user"`
+	Confirmed   bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that the AI Control Plane may attach the reviewed MCP's discovered remote identity provider; never include credentials, client secrets, OAuth codes, or tokens"`
 }
 type AttachOnboardingMCPIdentityProviderToolOutput struct {
 	ProjectSlug      string `json:"project_slug"`
@@ -58,7 +58,7 @@ type AttachOnboardingMCPIdentityProviderToolOutput struct {
 	AuthorizationURL string `json:"authorization_url,omitempty"`
 }
 type DistributeOnboardingMCPToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit Gram project slug selected by the user"`
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug selected by the user"`
 }
 type DistributeOnboardingMCPToolOutput struct {
 	ProjectSlug      string `json:"project_slug"`
@@ -181,7 +181,7 @@ func registerOnboardingLifecycleTools(server *mcp.Server, onboarding *Onboarding
 			return nil, AttachOnboardingMCPIdentityProviderToolOutput{}, ErrOnboardingInvalid
 		}
 		if !input.Confirmed {
-			content, marshalErr := json.Marshal(onboardingLifecycleErrorResult{Code: "confirmation_required", Message: "Ask the user to explicitly confirm that Gram may attach the reviewed MCP's discovered remote identity provider, then call this tool again with confirmed: true."})
+			content, marshalErr := json.Marshal(onboardingLifecycleErrorResult{Code: "confirmation_required", Message: "Ask the user to explicitly confirm that the AI Control Plane may attach the reviewed MCP's discovered remote identity provider, then call this tool again with confirmed: true."})
 			if marshalErr != nil {
 				return nil, AttachOnboardingMCPIdentityProviderToolOutput{}, marshalErr
 			}
@@ -249,7 +249,7 @@ func onboardingReadinessNextAction(readiness Readiness, found bool) (string, str
 	}
 	switch readiness.EvidenceCode {
 	case "upstream_identity_provider_not_configured":
-		return "attach_platform_mcp_identity_provider", "Ask the user to confirm that Gram may attach the reviewed MCP's discovered remote identity provider, then call attach_platform_mcp_identity_provider. Provider URLs are safe to show; never ask for credentials, OAuth codes, or tokens in chat."
+		return "attach_platform_mcp_identity_provider", "Ask the user to confirm that the AI Control Plane may attach the reviewed MCP's discovered remote identity provider, then call attach_platform_mcp_identity_provider. Provider URLs are safe to show; never ask for credentials, OAuth codes, or tokens in chat."
 	case "multiple_upstream_identity_providers":
 		return "select_upstream_identity_provider", "Open the secure dashboard setup and select exactly one upstream identity provider for this MCP, then recheck readiness."
 	case "upstream_authorization_required":
@@ -278,7 +278,7 @@ func onboardingIdentityProviderAttachmentUnavailableResult() (*mcp.CallToolResul
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, AttachOnboardingMCPIdentityProviderToolOutput{}, nil
 }
 func onboardingIdentityProviderAttachmentAuthorizationUnavailableResult() (*mcp.CallToolResult, AttachOnboardingMCPIdentityProviderToolOutput, error) {
-	content, err := json.Marshal(onboardingLifecycleErrorResult{Code: "identity_provider_attached_authorization_url_unavailable", Message: "The discovered remote identity provider was attached, but Gram could not create the server-issued Inspect authorization link. Open the registered MCP's Inspect page and use Connect or Authorize, then force a fresh onboarding status check."})
+	content, err := json.Marshal(onboardingLifecycleErrorResult{Code: "identity_provider_attached_authorization_url_unavailable", Message: "The discovered remote identity provider was attached, but the AI Control Plane could not create the server-issued Inspect authorization link. Open the registered MCP's Inspect page and use Connect or Authorize, then force a fresh onboarding status check."})
 	if err != nil {
 		return nil, AttachOnboardingMCPIdentityProviderToolOutput{}, err
 	}
@@ -307,7 +307,7 @@ func onboardingLifecycleToolError(err error) (*mcp.CallToolResult, bool) {
 	var result onboardingLifecycleErrorResult
 	switch {
 	case errors.Is(err, ErrDistributionNotReady):
-		result = onboardingLifecycleErrorResult{Code: "not_ready", Message: "Complete secure setup and recheck fresh readiness in the Gram dashboard before adding this MCP."}
+		result = onboardingLifecycleErrorResult{Code: "not_ready", Message: "Complete secure setup and recheck fresh readiness in the AI Control Plane dashboard before adding this MCP."}
 	case errors.Is(err, ErrDistributionDefaultAbsent):
 		result = onboardingLifecycleErrorResult{Code: "default_plugin_missing", Message: "This project does not have an existing Default plugin, so Platform MCP cannot add the MCP."}
 	case errors.Is(err, ErrDistributionTargetUnavailable):

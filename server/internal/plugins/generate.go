@@ -3,6 +3,7 @@ package plugins
 import (
 	"bytes"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -101,7 +102,7 @@ type GenerateConfig struct {
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
 	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
-	// package to the literal-default project's Claude marketplace only.
+	// package to the literal-default project's supported client marketplaces.
 	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
@@ -369,7 +370,7 @@ const mcpGeneratorVersion = "11"
 // platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
 // or changing the first-party Platform MCP never triggers a fleet-wide customer
 // plugin republish.
-const platformMCPGeneratorVersion = "1"
+const platformMCPGeneratorVersion = "2"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -404,9 +405,23 @@ const mcpSharedFingerprintKey = "__shared__"
 const mcpPlatformFingerprintKey = "__platform_mcp__"
 
 const (
-	platformMCPPluginName = "speakeasy-aicp-platform-mcp"
-	platformMCPPluginRoot = "platform-mcp"
+	platformMCPPluginName         = "speakeasy-aicp-platform-mcp"
+	platformMCPServerName         = "platform-mcp"
+	platformMCPPluginRoot         = "platform-mcp"
+	platformMCPDescription        = "Manage reviewed MCP Catalogue servers through the Speakeasy AICP Platform MCP."
+	platformMCPCursorPluginRoot   = cursorPluginRoot + "/platform-mcp-cursor"
+	platformMCPCodexPluginRoot    = "platform-mcp-codex"
+	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
+	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
 )
+
+// platformMCPSkillsFS is the single source for reviewed skills distributed with
+// every Platform MCP package. Add skills as
+// platform_mcp_skills/<canonical-name>/SKILL.md; loadPlatformMCPSkills validates
+// directory/frontmatter names before any package is generated.
+//
+//go:embed platform_mcp_skills/*/SKILL.md
+var platformMCPSkillsFS embed.FS
 
 // MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
 // plugins that would be generated for the given plugins — a map of plugin slug ->
@@ -688,6 +703,13 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 // observability entry is listed first (so it's the first thing team admins see)
 // and only when a hooks key is configured, matching generateHooksFiles.
 func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	return generateSharedFilesWithPlatformClients(plugins, cfg, true)
+}
+
+// generateSharedFilesWithPlatformClients allows an indeterminate-admission
+// publish to preserve a complete B1 Claude/portable package without advertising
+// B2/B3 marketplace entries whose native package directories are not present.
+func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateConfig, includePlatformNativeClients bool) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
@@ -728,8 +750,27 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 			Name:        platformMCPPluginName,
 			DisplayName: "Speakeasy AICP Platform MCP",
 			Source:      "./" + platformMCPPluginRoot,
-			Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
+			Description: platformMCPDescription,
 		})
+		if includePlatformNativeClients {
+			cursorPlugins = append(cursorPlugins, marketplaceEntry{
+				Name:        "platform-mcp-cursor",
+				DisplayName: "",
+				Source:      "platform-mcp-cursor",
+				Description: platformMCPDescription,
+			})
+			codexPlugins = append(codexPlugins, codexMarketplaceEntry{
+				Name: "platform-mcp-codex",
+				Source: codexMarketplaceSource{
+					Source: "local",
+					Path:   "./" + platformMCPCodexPluginRoot,
+				},
+				Policy: codexMarketplacePolicy{
+					Installation:   "AVAILABLE",
+					Authentication: "ON_USE",
+				},
+			})
+		}
 	}
 
 	for _, p := range plugins {
@@ -831,7 +872,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	if cfg.PlatformMCPEnabled {
 		b.WriteString("## Speakeasy AICP Platform MCP\n\n")
-		b.WriteString("The `speakeasy-aicp-platform-mcp` plugin provides read-only organization administration through Speakeasy OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
+		b.WriteString("The `speakeasy-aicp-platform-mcp` plugin connects supported agents to Speakeasy through OAuth and includes a reviewed workflow for adding an MCP Catalogue server to an explicit project. Installing the package grants no organization access until OAuth and live authorization succeed.\n\n")
 	}
 
 	if len(plugins) > 0 {
@@ -1997,39 +2038,291 @@ func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
 }
 
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
-	platformURL, err := url.Parse(strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp")
-	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
-		return fmt.Errorf("invalid Platform MCP server URL %q", cfg.ServerURL)
+	platformURL, err := platformMCPURL(cfg.ServerURL)
+	if err != nil {
+		return err
 	}
 
+	packages := []struct {
+		root     string
+		platform string
+	}{
+		{root: platformMCPPluginRoot, platform: "claude"},
+		{root: platformMCPCursorPluginRoot, platform: "cursor"},
+		{root: platformMCPCodexPluginRoot, platform: "codex"},
+		{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
+		{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
+	}
+	for _, packageSpec := range packages {
+		packageFiles, err := generatePlatformMCPPackageForClient(cfg, platformURL.String(), packageSpec.platform)
+		if err != nil {
+			return err
+		}
+		for filePath, content := range packageFiles {
+			files[path.Join(packageSpec.root, filePath)] = content
+		}
+	}
+	return nil
+}
+
+func platformMCPURL(serverURL string) (*url.URL, error) {
+	platformURL, err := url.Parse(strings.TrimRight(serverURL, "/") + "/platform-mcp")
+	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+		return nil, fmt.Errorf("invalid Platform MCP server URL %q", serverURL)
+	}
+	return platformURL, nil
+}
+
+func platformMCPManifestVersion(cfg GenerateConfig) string {
+	return "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0")
+}
+
+func loadPlatformMCPSkills() (map[string][]byte, error) {
+	entries, err := platformMCPSkillsFS.ReadDir("platform_mcp_skills")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded Platform MCP skills: %w", err)
+	}
+	skills := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !domainskills.ValidSpecName(entry.Name()) {
+			return nil, fmt.Errorf("invalid Platform MCP skill directory %q", entry.Name())
+		}
+		content, err := platformMCPSkillsFS.ReadFile(path.Join("platform_mcp_skills", entry.Name(), "SKILL.md"))
+		if err != nil {
+			return nil, fmt.Errorf("read Platform MCP skill %q: %w", entry.Name(), err)
+		}
+		if !bytes.Contains(content, []byte("\nname: "+entry.Name()+"\n")) {
+			return nil, fmt.Errorf("platform MCP skill %q frontmatter name must match its directory", entry.Name())
+		}
+		if !bytes.Contains(content, []byte("\ndescription:")) {
+			return nil, fmt.Errorf("platform MCP skill %q must declare a description", entry.Name())
+		}
+		skills[entry.Name()] = content
+	}
+	if len(skills) == 0 {
+		return nil, errors.New("platform MCP package must contain at least one reviewed skill")
+	}
+	return skills, nil
+}
+
+func emitPlatformMCPSkills(files map[string][]byte) error {
+	skills, err := loadPlatformMCPSkills()
+	if err != nil {
+		return err
+	}
+	for name, content := range skills {
+		files[path.Join("skills", name, "SKILL.md")] = bytes.Clone(content)
+	}
+	return nil
+}
+
+func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
 		Name:        platformMCPPluginName,
 		DisplayName: "Speakeasy AICP Platform MCP",
-		Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
-		Version:     "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0"),
-		Author:      pluginAuthor{Name: "Gram", URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
+		Description: platformMCPDescription,
+		Version:     platformMCPManifestVersion(cfg),
+		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
 		UserConfig:  nil,
 	})
 	if err != nil {
-		return fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
+		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
 	}
-	files[path.Join(platformMCPPluginRoot, ".claude-plugin/plugin.json")] = meta
+	files[".claude-plugin/plugin.json"] = meta
 
 	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
-		platformMCPPluginName: {
+		platformMCPServerName: {
 			Type:    "http",
 			Command: "",
 			Args:    nil,
-			URL:     platformURL.String(),
+			URL:     platformURL,
 			Headers: nil,
 		},
 	}})
 	if err != nil {
-		return fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
+		return nil, fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
 	}
-	files[path.Join(platformMCPPluginRoot, ".mcp.json")] = mcpConfig
-	return nil
+	files[".mcp.json"] = mcpConfig
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func platformMCPPluginInfo(platformURL string) PluginInfo {
+	return PluginInfo{
+		Name:        "Speakeasy AICP Platform MCP",
+		Slug:        platformMCPPluginName,
+		Description: platformMCPDescription,
+		Servers: []PluginServerInfo{{
+			DisplayName: platformMCPServerName,
+			Policy:      "optional",
+			MCPURL:      platformURL,
+			IsPublic:    true,
+			IsOAuth:     true,
+			IsUnproxied: false,
+			EnvConfigs:  nil,
+		}},
+		// Platform skills are emitted through emitPlatformMCPSkills after the
+		// native adapter runs. Keeping them out of this ordinary plugin model avoids
+		// coupling the first-party package to the hooks-backed skill-feedback sidecar.
+		Skills:               nil,
+		AgentPluginsV1Issues: nil,
+	}
+}
+
+func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateCursorPluginInDir(files, "", "platform-mcp-cursor", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP Cursor package: %w", err)
+	}
+	var manifest cursorPluginMeta
+	if err := json.Unmarshal(files[".cursor-plugin/plugin.json"], &manifest); err != nil {
+		return nil, fmt.Errorf("decode Platform MCP Cursor manifest: %w", err)
+	}
+	manifest.Version = platformMCPManifestVersion(cfg)
+	manifest.Author = cursorAuthor{Name: "Speakeasy", Email: ""}
+	manifest.Homepage = "https://www.speakeasy.com/product/gram"
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP Cursor manifest: %w", err)
+	}
+	files[".cursor-plugin/plugin.json"] = manifestJSON
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPCodexPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateCodexPluginInDir(files, "", "platform-mcp-codex", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP Codex package: %w", err)
+	}
+	var manifest codexPluginMeta
+	if err := json.Unmarshal(files[".codex-plugin/plugin.json"], &manifest); err != nil {
+		return nil, fmt.Errorf("decode Platform MCP Codex manifest: %w", err)
+	}
+	manifest.Version = platformMCPManifestVersion(cfg)
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP Codex manifest: %w", err)
+	}
+	files[".codex-plugin/plugin.json"] = manifestJSON
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateOpenCodePluginInDir(files, "", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP OpenCode package: %w", err)
+	}
+	skills, err := loadPlatformMCPSkills()
+	if err != nil {
+		return nil, err
+	}
+	for name, content := range skills {
+		files[path.Join(platformMCPPluginName, "skills", name, "SKILL.md")] = bytes.Clone(content)
+	}
+	return files, nil
+}
+
+func generatePlatformMCPAgentPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	manifest := agentPluginManifest{
+		Schema:      agentPluginSchemaID,
+		Name:        platformMCPPluginName,
+		Version:     platformMCPManifestVersion(cfg),
+		Description: platformMCPDescription,
+		Author:      agentPluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
+	}
+	mcpConfig := agentMCPConfig{
+		Schema: agentMCPSchemaID,
+		MCPServers: map[string]agentMCPServer{
+			platformMCPServerName: {
+				Type:    "streamable-http",
+				Command: "",
+				Args:    nil,
+				Env:     nil,
+				CWD:     "",
+				URL:     platformURL,
+				Headers: nil,
+			},
+		},
+	}
+	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
+		return nil, fmt.Errorf("validate Platform Agent Plugin manifest: %w", err)
+	}
+	if err := validateAgentPluginDocument(agentMCPSchemaID, mcpConfig); err != nil {
+		return nil, fmt.Errorf("validate Platform Agent Plugin MCP config: %w", err)
+	}
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform Agent Plugin manifest: %w", err)
+	}
+	mcpJSON, err := marshalJSON(mcpConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform Agent Plugin MCP config: %w", err)
+	}
+	files := map[string][]byte{
+		"plugin.json": manifestJSON,
+		"mcp.json":    mcpJSON,
+	}
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPPackageForClient(cfg GenerateConfig, platformURL, platform string) (map[string][]byte, error) {
+	switch platform {
+	case "claude":
+		return generatePlatformMCPPackage(cfg, platformURL)
+	case "cursor":
+		return generatePlatformMCPCursorPackage(cfg, platformURL)
+	case "codex":
+		return generatePlatformMCPCodexPackage(cfg, platformURL)
+	case "opencode":
+		return generatePlatformMCPOpenCodePackage(cfg, platformURL)
+	case "agent-plugin":
+		return generatePlatformMCPAgentPackage(cfg, platformURL)
+	default:
+		return nil, fmt.Errorf("unsupported Platform MCP platform: %s", platform)
+	}
+}
+
+// GeneratePlatformMCPPluginPackage produces a credential-free direct-install
+// package from the same server-owned definition used by marketplace publishing.
+func GeneratePlatformMCPPluginPackage(serverURL, version, platform string) (map[string][]byte, error) {
+	cfg := GenerateConfig{
+		OrgName:            "",
+		OrgEmail:           "",
+		OrgID:              "",
+		ServerURL:          serverURL,
+		APIKey:             "",
+		HooksAPIKey:        "",
+		ProjectSlug:        "",
+		IsDefaultProject:   false,
+		Version:            version,
+		PlatformMCPEnabled: false,
+		MarketplaceName:    "",
+		BrowserLogin:       false,
+		HooksOrgName:       "",
+		InstallFailOpen:    false,
+	}
+	platformURL, err := platformMCPURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	return generatePlatformMCPPackageForClient(cfg, platformURL.String(), platform)
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {

@@ -5,6 +5,7 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
+import { RequireScope } from "@/components/require-scope";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
@@ -35,12 +36,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
-import { Activity } from "lucide-react";
+import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
+import { PlatformMCPOnboardingContent } from "../org/PlatformMCP";
+import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus";
 import {
   MarketplaceCard,
   UninitializedMarketplaceCard,
@@ -383,7 +386,7 @@ export default function Plugins(): JSX.Element {
             </Text>
             <div className="border-border flex-1 border-t" />
           </div>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <ObservabilityPluginCard
               publishStatus={publishStatus}
               isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
@@ -393,6 +396,9 @@ export default function Plugins(): JSX.Element {
                 void handleObservabilityDownload(platform);
               }}
             />
+            <RequireScope scope="org:admin" level="section">
+              <PlatformMCPPluginCard />
+            </RequireScope>
           </div>
         </Stack>
       </ResourceListPage>
@@ -647,6 +653,157 @@ function ObservabilityPluginCard({
       <PlatformInstrumentationSheet
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
+      />
+    </Card.Entity>
+  );
+}
+
+function PlatformMCPPluginCard(): JSX.Element {
+  const { fetch: authFetch } = useFetcher();
+  const [installOpen, setInstallOpen] = useState(false);
+  const [isInstallMenuOpen, setIsInstallMenuOpen] = useState(false);
+  const [downloadingPackage, setDownloadingPackage] = useState<
+    "claude" | "cursor" | "codex" | "opencode" | null
+  >(null);
+  const status = usePlatformMCPPackageStatus(undefined, undefined, {
+    refetchInterval: 5_000,
+  });
+  const packageStatus = status.data;
+  const directDownloadReady =
+    packageStatus?.available === true && packageStatus.directDownloadAvailable;
+
+  const downloadPackage = async (
+    platform: "claude" | "cursor" | "codex" | "opencode",
+  ) => {
+    setIsInstallMenuOpen(false);
+    setDownloadingPackage(platform);
+    try {
+      const response = await authFetch(
+        `/rpc/plugins.downloadPlatformMCPPlugin?platform=${platform}`,
+        {},
+      );
+      if (!response.ok) throw new Error("download failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download =
+        response.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ??
+        `speakeasy-aicp-platform-mcp-${platform}.zip`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error("Could not download the Platform MCP package");
+      console.error("Platform MCP plugin download failed", error);
+    } finally {
+      setDownloadingPackage(null);
+    }
+  };
+
+  const statusLabel = (() => {
+    if (!packageStatus?.available) return "Not available for this organization";
+    if (
+      packageStatus.marketplaceConnected &&
+      packageStatus.freshness === "current"
+    ) {
+      return "Included in your organization marketplace";
+    }
+    if (
+      packageStatus.marketplaceConnected &&
+      (packageStatus.freshness === "missing" ||
+        packageStatus.freshness === "stale")
+    ) {
+      return "Marketplace update available";
+    }
+    return "Available as a direct download";
+  })();
+
+  return (
+    <Card.Entity
+      className="border-primary/30 bg-primary/[0.02]"
+      icon={<Network className="text-primary h-10 w-10 opacity-80" />}
+    >
+      <div className="mb-2 flex items-center gap-1.5">
+        <Text
+          variant="subheading"
+          as="div"
+          className="text-md truncate"
+          title="Speakeasy AICP Platform MCP"
+        >
+          Platform MCP
+        </Text>
+        <Badge variant="information">
+          <Badge.Text>Platform</Badge.Text>
+        </Badge>
+      </div>
+
+      <Text small muted className="mb-3 line-clamp-3">
+        Connects your selected coding agent to Speakeasy through OAuth and
+        includes a reviewed workflow for adding an MCP Catalogue server to an
+        explicit project.
+      </Text>
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        <Text small muted>
+          {statusLabel}
+        </Text>
+        <DropdownMenu
+          open={isInstallMenuOpen}
+          onOpenChange={setIsInstallMenuOpen}
+        >
+          <DropdownMenuTrigger asChild>
+            <PluginInstallButton
+              size="sm"
+              loading={downloadingPackage !== null}
+              disabled={!packageStatus?.available || status.isLoading}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => {
+                setIsInstallMenuOpen(false);
+                // Let the dropdown release its focus trap before opening the
+                // first sheet in the shared tracked setup flow.
+                setTimeout(() => setInstallOpen(true), 0);
+              }}
+            >
+              Guided setup (preferred)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={!directDownloadReady || downloadingPackage !== null}
+              onClick={() => void downloadPackage("claude")}
+            >
+              Download as zip — Claude
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!directDownloadReady || downloadingPackage !== null}
+              onClick={() => void downloadPackage("cursor")}
+            >
+              Download as zip — Cursor
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!directDownloadReady || downloadingPackage !== null}
+              onClick={() => void downloadPackage("codex")}
+            >
+              Download as zip — Codex
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!directDownloadReady || downloadingPackage !== null}
+              onClick={() => void downloadPackage("opencode")}
+            >
+              Download as zip — OpenCode
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <PlatformMCPOnboardingContent
+        sheetOnly
+        setupOpen={installOpen}
+        onSetupOpenChange={setInstallOpen}
       />
     </Card.Entity>
   );

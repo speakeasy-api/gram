@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -66,6 +67,8 @@ type platformMCPConfig struct {
 
 var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128"}
 
+const platformMCPLocalFixtureReadinessLifetime = 15 * time.Minute
+
 // configurePlatformMCP composes the Platform MCP HTTP surfaces separately from
 // the general server startup flow. Dashboard and MCP authentication remain at
 // their respective transports; shared management reads are composed inside the
@@ -115,7 +118,16 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	fixtureOAuth := localfixture.NewOAuthHTTP(fixtureConfig)
 	fixtureMCP := localfixture.NewMCPHTTP(fixtureOAuth)
 	fixtureRegistry := config.Registry.WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
-	catalog := platformmcp.NewRegistryCatalog(fixtureRegistry, []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()})
+	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
+		browserDescriptors, err := loadBrowserPlatformMCPCatalogDescriptors(ctx, config.DB)
+		if err != nil {
+			return nil, err
+		}
+		return []platformmcp.RegistryCatalogSource{
+			{Client: config.Registry, Descriptors: browserDescriptors, BestEffort: true},
+			{Client: fixtureRegistry, Descriptors: []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()}},
+		}, nil
+	})
 	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	if err != nil {
 		return fmt.Errorf("create local Platform MCP registration store: %w", err)
@@ -131,6 +143,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			ProviderSetupCompletionURL: oauth.ProviderSetupCompletionURL(),
 			Resource:                   fixtureConfig.RemoteURL(),
 			TestOnlyAllowedCIDRBlocks:  platformMCPLocalFixtureLoopbackCIDRBlocks,
+			TestOnlyReadinessLifetime:  platformMCPLocalFixtureReadinessLifetime,
 		},
 		localfixture.NewClientConfigurator(fixtureConfig, fixtureOAuth, config.DB, config.GuardianPolicy),
 	)
@@ -159,11 +172,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
+		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager),
 	).WithTelemetry(telemetry)
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
+		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)

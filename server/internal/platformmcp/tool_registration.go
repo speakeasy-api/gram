@@ -8,7 +8,7 @@ import (
 )
 
 type RegisterCatalogMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit Gram project slug that will own the reviewed MCP"`
+	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit AICP project slug that will own the reviewed MCP"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
 	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_catalog_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
@@ -32,7 +32,7 @@ func registerCatalogRegistrationTool(server *mcp.Server, registrations *Registra
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
-		Description: "Register one reviewed catalog MCP in an explicit Gram project. Registration creates private project configuration only; it does not distribute the MCP or publish a plugin package.",
+		Description: "Register one reviewed catalog MCP in an explicit AICP project. Registration creates private project configuration only; it does not distribute the MCP or publish a plugin package.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

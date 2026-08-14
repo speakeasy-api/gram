@@ -8,7 +8,7 @@ import (
 )
 
 type GetMCPReadinessToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit Gram project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_platform_mcp_for_project; get_platform_mcp_onboarding_status also resolves the workflow-bound registration and returns its ID"`
 	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration"`
 }
@@ -25,7 +25,7 @@ type GetMCPReadinessToolOutput struct {
 }
 
 type GetMCPRepairPlanToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit Gram project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_platform_mcp_for_project; get_platform_mcp_onboarding_status also resolves the workflow-bound registration and returns its ID"`
 }
 

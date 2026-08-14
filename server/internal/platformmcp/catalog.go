@@ -83,11 +83,16 @@ type RegistryCatalogSource struct {
 	// standard client. It is never chosen from Platform MCP input.
 	Client      *externalmcp.RegistryClient
 	Descriptors []CatalogDescriptor
+	// BestEffort is reserved for optional sources in local composition. Normal
+	// production catalogue sources remain strict so an upstream failure is not
+	// silently presented as a complete result set.
+	BestEffort bool
 }
 
 type registryCatalogDescriptor struct {
 	CatalogDescriptor
-	client *externalmcp.RegistryClient
+	client     *externalmcp.RegistryClient
+	bestEffort bool
 }
 
 type RegistryCatalog struct {
@@ -95,14 +100,20 @@ type RegistryCatalog struct {
 }
 
 type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, error)
+type RegistryCatalogSourceLoader func(ctx context.Context) ([]RegistryCatalogSource, error)
 
 type DynamicRegistryCatalog struct {
-	client *externalmcp.RegistryClient
-	load   CatalogDescriptorLoader
+	client      *externalmcp.RegistryClient
+	load        CatalogDescriptorLoader
+	loadSources RegistryCatalogSourceLoader
 }
 
 func NewDynamicRegistryCatalog(client *externalmcp.RegistryClient, load CatalogDescriptorLoader) *DynamicRegistryCatalog {
 	return &DynamicRegistryCatalog{client: client, load: load}
+}
+
+func NewDynamicRegistryCatalogSources(load RegistryCatalogSourceLoader) *DynamicRegistryCatalog {
+	return &DynamicRegistryCatalog{loadSources: load}
 }
 
 func (c *DynamicRegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCandidate, error) {
@@ -122,7 +133,17 @@ func (c *DynamicRegistryCatalog) Inspect(ctx context.Context, providerKey, catal
 }
 
 func (c *DynamicRegistryCatalog) current(ctx context.Context) (*RegistryCatalog, error) {
-	if c == nil || c.client == nil || c.load == nil {
+	if c == nil {
+		return nil, ErrCatalogUnavailable
+	}
+	if c.loadSources != nil {
+		sources, err := c.loadSources(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load platform mcp catalog sources: %w", err)
+		}
+		return NewRegistryCatalogSources(sources), nil
+	}
+	if c.client == nil || c.load == nil {
 		return nil, ErrCatalogUnavailable
 	}
 	descriptors, err := c.load(ctx)
@@ -181,7 +202,7 @@ func NewRegistryCatalogSources(sources []RegistryCatalogSource) *RegistryCatalog
 			if _, exists := byKey[descriptor.ProviderKey]; exists {
 				continue
 			}
-			byKey[descriptor.ProviderKey] = registryCatalogDescriptor{CatalogDescriptor: descriptor, client: source.Client}
+			byKey[descriptor.ProviderKey] = registryCatalogDescriptor{CatalogDescriptor: descriptor, client: source.Client, bestEffort: source.BestEffort}
 		}
 	}
 	return &RegistryCatalog{descriptors: byKey}
@@ -193,17 +214,29 @@ func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCa
 	}
 
 	candidates := make([]CatalogCandidate, 0, len(c.descriptors))
+	var firstBestEffortErr error
+	successfulSources := 0
 	for _, source := range c.descriptors {
 		result, err := source.client.ListServers(ctx, source.Registry, externalmcp.ListServersParams{Search: &query})
 		if err != nil {
-			return nil, fmt.Errorf("list platform mcp catalog: %w", err)
+			if !source.bestEffort {
+				return nil, fmt.Errorf("list platform mcp catalog: %w", err)
+			}
+			if firstBestEffortErr == nil {
+				firstBestEffortErr = err
+			}
+			continue
 		}
+		successfulSources++
 		for _, entry := range result.Servers {
 			if !descriptorAllowsEntry(source.CatalogDescriptor, entry) {
 				continue
 			}
 			candidates = append(candidates, catalogCandidateFromEntry(source.CatalogDescriptor, entry))
 		}
+	}
+	if successfulSources == 0 && firstBestEffortErr != nil {
+		return nil, fmt.Errorf("list platform mcp catalog: %w", firstBestEffortErr)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
