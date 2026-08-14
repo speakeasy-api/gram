@@ -3165,6 +3165,34 @@ describe("organizations list bulk account type", () => {
     expect(screen.getByText("Nothing selected")).toBeTruthy();
   });
 
+  it("clears the selection when a platform total opens the rows behind it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    fireEvent.click(screen.getByRole("button", { name: /^Disabled/ }));
+
+    // A stat cell replaces the filters, so the rows under the selection are a
+    // different set from the one the operator ticked. It reaches the selection
+    // through the search in the URL, the same way the filter sheet does.
+    await waitFor(() => {
+      expect(screen.getByText("Nothing selected")).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Set account type" }),
+    ).toBeNull();
+
+    // The strip is a sibling above the bar the bulk control lives in, so a
+    // selection swaps that bar's contents and leaves the totals alone. Document
+    // order, not layout: happy-dom lays nothing out.
+    const strip = screen.getByRole("group", { name: "Platform totals" });
+    await tick(FIRST_ORG.name);
+    expect(screen.getByRole("group", { name: "Platform totals" })).toBe(strip);
+    expect(
+      strip.compareDocumentPosition(bulkTrigger()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("does not bring the selection back when the operator pages back", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
