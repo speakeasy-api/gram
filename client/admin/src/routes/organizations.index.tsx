@@ -61,9 +61,7 @@ function text(value: unknown): string | undefined {
 // the second, so both are read as a set of one or more.
 function values(value: unknown): string[] {
   const items = Array.isArray(value) ? (value as unknown[]) : [value];
-  return items
-    .map(text)
-    .filter((item): item is string => item !== undefined && item !== "");
+  return items.map(text).filter((item): item is string => item !== undefined);
 }
 
 // `?disabled=true` is the parameter this list used to carry, and it meant
