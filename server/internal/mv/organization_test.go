@@ -70,6 +70,29 @@ func TestDescribeOrganizationDoesNotOverwriteConcurrentPaygUpdate(t *testing.T) 
 	require.Equal(t, string(billing.TierPayg), persisted.GramAccountType)
 }
 
+func TestDescribeOrganizationPreservesResolvedTierWhenPersistenceFails(t *testing.T) {
+	t.Parallel()
+
+	queries, orgID := seedOrganization(t, billing.TierBase)
+	ctx, cancel := context.WithCancel(t.Context())
+	repo := &organizationBillingRepo{
+		getCustomerTier: func(context.Context, string) (*billing.Tier, bool, error) {
+			cancel()
+			tier := billing.TierPro
+			return &tier, true, nil
+		},
+	}
+
+	got, err := mv.DescribeOrganization(ctx, testenv.NewLogger(t), queries, repo, orgID)
+	require.NoError(t, err)
+	require.Equal(t, string(billing.TierPro), got.GramAccountType)
+	require.True(t, got.HasActiveSubscription)
+
+	persisted, err := queries.GetOrganizationMetadata(t.Context(), orgID)
+	require.NoError(t, err)
+	require.Equal(t, string(billing.TierBase), persisted.GramAccountType)
+}
+
 func seedOrganization(t *testing.T, tier billing.Tier) (*orgrepo.Queries, string) {
 	t.Helper()
 

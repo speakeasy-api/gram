@@ -15,16 +15,22 @@ func TestStubUsageTiersIncludesPayg(t *testing.T) {
 	client := billing.NewStubClient(testenv.NewLogger(t), testenv.NewTracerProvider(t))
 	tiers, err := client.GetUsageTiers(t.Context())
 	require.NoError(t, err)
-	require.NotNil(t, tiers.Payg)
-	require.Zero(t, tiers.Payg.BasePrice)
-	require.Zero(t, tiers.Payg.IncludedToolCalls)
-	require.Zero(t, tiers.Payg.IncludedServers)
-	require.Zero(t, tiers.Payg.IncludedCredits)
-	require.Zero(t, tiers.Payg.PricePerAdditionalToolCall)
-	require.Zero(t, tiers.Payg.PricePerAdditionalServer)
-	require.Empty(t, tiers.Payg.IncludedBullets)
-	require.Empty(t, tiers.Payg.AddOnBullets)
-	require.ElementsMatch(t, []string{
+	require.Equal(t, billing.NewPaygTierLimits(), tiers.Payg)
+}
+
+func TestNewPaygTierLimits(t *testing.T) {
+	t.Parallel()
+
+	want := billing.NewPaygTierLimits()
+	require.Zero(t, want.BasePrice)
+	require.Zero(t, want.IncludedToolCalls)
+	require.Zero(t, want.IncludedServers)
+	require.Zero(t, want.IncludedCredits)
+	require.Zero(t, want.PricePerAdditionalToolCall)
+	require.Zero(t, want.PricePerAdditionalServer)
+	require.Empty(t, want.IncludedBullets)
+	require.Empty(t, want.AddOnBullets)
+	require.Equal(t, []string{
 		"Oauth 2.1 proxy support",
 		"Register your own OAuth server",
 		"Custom domain",
@@ -32,5 +38,10 @@ func TestStubUsageTiersIncludesPayg(t *testing.T) {
 		"SSO",
 		"Audit logs",
 		"Self-hosting Gram dataplane",
-	}, tiers.Payg.FeatureBullets)
+	}, want.FeatureBullets)
+
+	other := billing.NewPaygTierLimits()
+	require.NotSame(t, want, other)
+	want.FeatureBullets[0] = "changed"
+	require.Equal(t, "Oauth 2.1 proxy support", other.FeatureBullets[0])
 }

@@ -72,6 +72,7 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 				}
 			default:
 				logger.ErrorContext(ctx, "error setting account type", attr.SlogError(err))
+				org.GramAccountType = string(*customerTier)
 			}
 		} else {
 			org.GramAccountType = string(*customerTier)
