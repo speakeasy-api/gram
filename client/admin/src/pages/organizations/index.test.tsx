@@ -171,9 +171,6 @@ function rowFor(link: HTMLElement): HTMLTableRowElement {
   return row;
 }
 
-// Alt, not meta and not shift: meta-click is the browser's open-in-new-tab, and
-// shift-click belongs to the range selection a later slice adds. The last cell,
-// because it holds no link whichever columns are on screen.
 function peekOn(link: HTMLElement): void {
   const cell = within(rowFor(link)).getAllByRole("cell").at(-1);
   if (!cell) throw new Error("the row needs a cell to click");
@@ -185,8 +182,6 @@ function peekPanel(): HTMLElement {
 }
 
 function isPeeked(link: HTMLElement): boolean {
-  // A token, not a substring: the stock row already carries
-  // `data-[state=selected]:bg-muted` and `hover:bg-muted/50`.
   return rowFor(link).classList.contains("bg-muted");
 }
 
@@ -571,11 +566,8 @@ describe("organizations list peek", () => {
     expect(
       within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
     ).toBeTruthy();
-    // The whole point of the panel. A detail page would take the filters and
-    // the scroll position with it.
     expect(router.state.location.pathname).toBe("/organizations");
 
-    // Narrowed to the columns that identify a row. The panel carries the rest.
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual(["Name", "Slug", "Type"]);
@@ -608,8 +600,6 @@ describe("organizations list peek", () => {
     );
     expect(isPeeked(first)).toBe(false);
 
-    // The next page is a different request and a different set of row nodes,
-    // and it would take the anchor peek walks from with it. So peek stops.
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
     expect(
       within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
@@ -637,8 +627,6 @@ describe("organizations list peek", () => {
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });
     peekOn(first);
 
-    // The scroll box is capped at 60vh, so the row peek moves to can sit below
-    // the fold with nothing on screen to say peek moved at all.
     const second = rowFor(screen.getByRole("link", { name: SECOND_ORG.name }));
     const scrollIntoView = vi.spyOn(second, "scrollIntoView");
 
@@ -657,8 +645,6 @@ describe("organizations list peek", () => {
     expect(
       screen.queryByRole("complementary", { name: "Organization peek" }),
     ).toBeNull();
-    // The row itself takes no focus by design, so the link in its Name cell is
-    // where the keyboard goes back to.
     expect(document.activeElement).toBe(
       screen.getByRole("link", { name: FIRST_ORG.name }),
     );
@@ -681,8 +667,6 @@ describe("organizations list peek", () => {
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
-    // Peek's own hides are derived on the way into the table, never written
-    // back, so closing it cannot undo a choice the operator made.
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
@@ -696,10 +680,6 @@ describe("organizations list peek", () => {
     ]);
   });
 
-  // Radix renders the menu in a portal, but a portal still bubbles through the
-  // React tree, and an open menu hides the rest of the page from the
-  // accessibility tree. So both cases below read the highlight off the rows
-  // rather than querying the panel by role.
   it("leaves the arrow keys to the Columns menu while it is open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });
@@ -711,7 +691,6 @@ describe("organizations list peek", () => {
       key: "ArrowDown",
     });
 
-    // The menu owns the arrow keys for its own roving focus.
     expect(isPeeked(first)).toBe(true);
     expect(isPeeked(second)).toBe(false);
   });
@@ -726,7 +705,6 @@ describe("organizations list peek", () => {
       key: "Escape",
     });
 
-    // One Escape dismisses the menu. It must not take the panel with it.
     expect(isPeeked(first)).toBe(true);
   });
 
@@ -751,15 +729,11 @@ describe("organizations list peek", () => {
     fireEvent.click(next);
     await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
 
-    // Peek holds an id and resolves it against the rows on screen. Holding the
-    // record instead leaves a panel docked beside a table that no longer has it.
     await waitFor(() => {
       expect(
         screen.queryByRole("complementary", { name: "Organization peek" }),
       ).toBeNull();
     });
-    // The narrow column set is keyed on the same id, so an id left behind
-    // narrows the table with no panel beside it to explain why.
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([

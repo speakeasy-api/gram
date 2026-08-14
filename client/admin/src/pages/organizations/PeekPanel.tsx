@@ -10,9 +10,6 @@ import { cn } from "@/lib/utils";
 
 const COPY_CONFIRM_MS = 1500;
 
-// The same formatter the Trial ends column uses, so the panel and the row it is
-// docked beside cannot disagree. Slice 2a replaces both with a shared
-// `formatTrial`, which does not exist yet.
 function fmtDateShort(iso?: string): string {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -53,8 +50,6 @@ function CopyValue({
       <Button
         variant="ghost"
         size="icon-xs"
-        // The name carries the confirmation as well as the icon does. A check
-        // on its own says nothing to a screen reader.
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
         onClick={() => {
           void navigator.clipboard.writeText(value);
@@ -69,13 +64,6 @@ function CopyValue({
   );
 }
 
-/**
- * One organization's account facts, docked beside the list.
- *
- * It answers the question that otherwise costs a trip to the detail page and
- * the list's filters and scroll position with it, so it reads a record the
- * table already holds and issues no request of its own.
- */
 export function PeekPanel({
   org,
   onClose,
@@ -87,9 +75,6 @@ export function PeekPanel({
 }): JSX.Element {
   const root = useRef<HTMLElement>(null);
 
-  // Opening the panel with the pointer leaves focus on the row body, which is
-  // not focusable, so the keyboard would have nowhere to send Escape or the
-  // arrow keys from.
   useEffect(() => {
     root.current?.focus();
   }, []);
@@ -138,8 +123,7 @@ export function PeekPanel({
       </dl>
 
       <Separator className="mt-4" />
-      {/* Mounted empty on purpose. Disable ships in 3b and Extend trial in 3c,
-          and reserving the strip now means neither one moves the grid above. */}
+      {/* Empty on purpose: reserved so later actions do not move the grid. */}
       <div className="flex min-h-8 items-center gap-2" />
     </aside>
   );

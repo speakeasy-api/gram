@@ -7,8 +7,6 @@ import { renderWithApp } from "@/test/harness";
 
 import { PeekPanel } from "./PeekPanel";
 
-// Every optional field is set, so a field that reads the wrong record property
-// still has something to render and the assertion has to catch it by value.
 const ORG: AdminOrganization = {
   id: "org_placeholder_one",
   name: "Placeholder One",
@@ -23,12 +21,8 @@ const ORG: AdminOrganization = {
   updated_at: "2026-01-07T00:00:00Z",
 };
 
-// Written out rather than imported from the panel. Reading the constant under
-// test would move this expectation along with a shortened confirmation.
 const COPY_CONFIRM_MS = 1500;
 
-// The panel formats a date the same way the list column does, so the expected
-// text has to come out of the same formatter. The format is not what is asserted.
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
@@ -47,8 +41,6 @@ function noop(): void {}
 
 beforeEach(() => {
   writeText.mockClear();
-  // happy-dom ships no clipboard, and a real one would be a shared surface
-  // between suites either way.
   Object.defineProperty(navigator, "clipboard", {
     value: { writeText },
     configurable: true,
@@ -94,7 +86,6 @@ describe("PeekPanel", () => {
     const values = screen.getAllByRole("definition");
     expect(values.at(1)?.textContent).toBe("-");
     expect(values.at(-1)?.textContent).toBe("-");
-    // Nothing to copy, so nothing offers to.
     expect(screen.queryByRole("button", { name: "Copy WorkOS id" })).toBeNull();
   });
 
@@ -105,7 +96,6 @@ describe("PeekPanel", () => {
     if (!workosID) throw new Error("the record under test needs a WorkOS id");
 
     const button = screen.getByRole("button", { name: "Copy WorkOS id" });
-    // Tokens, not substrings: every lucide icon also carries the class `lucide`.
     expect(iconOf(button).classList.contains("lucide-copy")).toBe(true);
     expect(iconOf(button).classList.contains("lucide-check")).toBe(false);
 
@@ -113,12 +103,8 @@ describe("PeekPanel", () => {
     try {
       fireEvent.click(button);
 
-      // The whole id. The list column shows the first twelve characters, and an
-      // operator pasting that into WorkOS gets nothing back.
       expect(writeText).toHaveBeenCalledWith(workosID);
 
-      // The name carries the confirmation as well as the icon does: a check on
-      // its own says nothing to a screen reader.
       const confirmed = screen.getByRole("button", {
         name: "WorkOS id copied",
       });

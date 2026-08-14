@@ -31,12 +31,6 @@ const ROUTE_ID = "/organizations/";
 const PAGE_SIZE = 50;
 const NO_ORGS: AdminOrganization[] = [];
 
-// The columns peek keeps are the ones that name a row. Everything it hides is
-// in the panel beside the table, so nothing is lost and the table fits.
-//
-// Module scope: a value rebuilt on every render rebuilds the column model with
-// it. It is also merged over the operator's own visibility rather than written
-// into it, so closing peek cannot undo a choice they made.
 const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   member_count: false,
   workos_id: false,
@@ -71,8 +65,7 @@ export function OrganizationsList(): JSX.Element {
   const [columnVisibility, setColumnVisibility] =
     useState<ColumnVisibilityState>({});
 
-  // The id, never the record. A page change or a filter change replaces every
-  // row, and a panel holding the record outlives the table that produced it.
+  // An id, not the record: a page or filter change replaces every row.
   const [peekedId, setPeekedId] = useState<string>();
   const peekedRow = useRef<HTMLTableRowElement>(null);
 
@@ -130,8 +123,6 @@ export function OrganizationsList(): JSX.Element {
 
   const orgs = data?.organizations ?? NO_ORGS;
 
-  // Derived on the way in, so the forced hides never reach the operator's own
-  // state. Memoised because a fresh object each render is a fresh column model.
   const effectiveVisibility = useMemo(
     () =>
       peekedId
@@ -153,26 +144,20 @@ export function OrganizationsList(): JSX.Element {
 
   const rows = table.getRowModel().rows;
 
-  // One pass gives both the record the panel paints and the anchor the arrow
-  // keys step from.
+  // findIndex, not table.getRow: getRow throws once a page change drops the id.
   const peekedIndex = peekedId ? rows.findIndex((r) => r.id === peekedId) : -1;
   const peeked = peekedIndex === -1 ? undefined : rows[peekedIndex];
 
-  // Reset while rendering rather than in an effect, so the panel never paints a
-  // record the table on screen has already dropped.
+  // During render, not in an effect: an effect paints a dropped record first.
   if (peekedId && !peeked) {
     setPeekedId(undefined);
   }
 
   useEffect(() => {
-    // The scroll box is capped at 60vh, so a row the arrow keys move peek to
-    // can sit below the fold with nothing on screen to say peek moved.
     peekedRow.current?.scrollIntoView({ block: "nearest" });
   }, [peekedId]);
 
   const closePeek = (): void => {
-    // The row itself takes no focus by design, so the keyboard goes back to the
-    // link in its Name cell. Read before the state change, while it is on screen.
     const link = peekedRow.current?.querySelector("a");
     setPeekedId(undefined);
     link?.focus();
@@ -182,9 +167,7 @@ export function OrganizationsList(): JSX.Element {
     org: AdminOrganization,
     event: MouseEvent<HTMLTableRowElement>,
   ): void => {
-    // Alt, not meta and not shift: meta-click is the browser's own
-    // open-in-new-tab, and shift-click belongs to the range selection a later
-    // slice adds. A plain click still opens the organization.
+    // Alt, not Meta (the browser's open-in-new-tab) and not Shift (range select).
     if (event.altKey) {
       setPeekedId(org.id);
       return;
@@ -193,10 +176,6 @@ export function OrganizationsList(): JSX.Element {
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    // Radix renders the Columns menu in a portal, but a portal still bubbles
-    // through the React tree, and the menu owns the arrow keys for its roving
-    // focus and Escape for its own dismissal. It claims both by preventing the
-    // default, which is the general form of "this key is already spoken for".
     if (!peeked || event.defaultPrevented) return;
 
     if (event.key === "Escape") {
@@ -207,8 +186,7 @@ export function OrganizationsList(): JSX.Element {
 
     const step = ARROW_STEP[event.key];
     if (!step) return;
-    // Stop at the ends. Paging would replace every row node, taking the anchor
-    // peek walks from with it.
+    // Stop at the ends: paging replaces the row nodes the anchor depends on.
     const next = rows[peekedIndex + step];
     if (!next) return;
     event.preventDefault();
@@ -228,10 +206,6 @@ export function OrganizationsList(): JSX.Element {
           </div>
         )}
 
-        {/* Scoped here, not to the document: the handler has to reach the row
-            links and the panel, and stay out of the toolbar's search box and
-            account-type select above. The pager below stays full width, because
-            it moves the list rather than the record the panel holds. */}
         <div className="flex items-start gap-4" onKeyDown={handleKeyDown}>
           <div className="min-w-0 flex-1 rounded-lg border">
             <TableActionBar table={table} />

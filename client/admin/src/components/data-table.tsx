@@ -110,8 +110,6 @@ function DataTableRow<T extends RowData>({
   ref,
 }: {
   row: Row<DataTableFeatures, T>;
-  // The event travels with the record. A page that reads a modifier key off
-  // the click has nowhere else to get it, and the record cannot carry it.
   onClick?: (row: T, event: React.MouseEvent<HTMLTableRowElement>) => void;
   className?: string;
   ref?: React.Ref<HTMLTableRowElement>;
