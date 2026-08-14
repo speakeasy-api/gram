@@ -593,13 +593,16 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid bypass request id")
 	}
 
-	// Resolved under the caller's project, never by id alone. The id arrives
-	// from the caller, and there is no database-level pin for this pair (see
-	// AIS-470), so this read is the primary control against promoting another
-	// project's bypass request into this project's queue.
+	// Resolved under the caller's organization and project, never by id
+	// alone. The id arrives from the caller, and there is no database-level
+	// pin for this pair (see AIS-470), so this read is the primary control
+	// against promoting another tenant's bypass request into this project's
+	// queue. The org pin also guarantees the row's organization_id — which
+	// the admission below runs under — is the caller's.
 	bypass, err := repo.New(s.db).GetBypassRequestForPromotion(ctx, repo.GetBypassRequestForPromotionParams{
-		ID:        bypassID,
-		ProjectID: projectID,
+		ID:             bypassID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
