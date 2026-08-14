@@ -425,4 +425,42 @@ var _ = Service("admin", func() {
 		shared.CursorPagination()
 		Meta("openapi:operationId", "adminListOrganizations")
 	})
+
+	// Appended rather than inserted mid-block, and that is a diff-size choice
+	// and nothing more. Generated type names come from the method name, so
+	// position cannot rename anything; appending only keeps goa from reordering
+	// the declarations below it. Measured on this change, appending cost 19
+	// deleted lines under server/gen where the disable and enable slice's
+	// mid-block insert churned 3777 lines of types.go.
+	//
+	// The one positional effect that is real is the one disableOrganization
+	// above documents: the OpenAPI emitter deduplicates structurally identical
+	// request bodies and names the shared schema after whichever method it met
+	// first. This payload's {id, days} shape is unique, so it needs no
+	// openapi:typename.
+	Method("extendTrial", func() {
+		Description("Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id", "days")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+			Attribute("days", Int, "Number of days to add to the trial's current end date.", func() {
+				Minimum(constants.MinTrialExtensionDays)
+				Maximum(constants.MaxTrialExtensionDays)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/trial.extend")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminExtendTrial")
+	})
 })

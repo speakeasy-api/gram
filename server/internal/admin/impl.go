@@ -25,11 +25,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 type Service struct {
@@ -561,6 +563,62 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+}
+
+func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
+	// The design bounds this too, but that validation is generated into the
+	// request decoder and only runs at the HTTP boundary. Repeating it here is
+	// what stops a negative day count from shortening a trial through an
+	// endpoint named extend if a future caller reaches the service another way.
+	//
+	// The check must stay on the wide payload.Days and the int32 narrowing must
+	// stay below it. Narrowing first would let 1<<32 + 1 truncate to 1 and
+	// quietly extend by a day, and a non-HTTP caller is the only one who can
+	// pass a day count that large at all. TestExtendTrial_DayCountBounds pins
+	// this order.
+	if payload.Days < constants.MinTrialExtensionDays || payload.Days > constants.MaxTrialExtensionDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	rows, err := trialsRepo.New(s.db).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: payload.ID,
+		ExtendByDays:   int32(payload.Days),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, s.logger)
+	}
+	// Zero rows has two causes that mean different things to the operator, and
+	// only the second is a conflict: the organization does not exist at all, or
+	// it exists and its trial cannot be extended. Disable and enable both answer
+	// not-found for an id that matches nothing, so an operator who pastes one bad
+	// id must not be told to go and look at a trial by this endpoint alone.
+	//
+	// The lookup is on the failure path only, so the happy path still costs one
+	// write and one read.
+	if rows == 0 {
+		_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+			ID:        payload.ID,
+			AllowSlug: false,
+		})
+		switch {
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			return nil, oops.C(oops.CodeNotFound)
+		case lookupErr != nil:
+			// Falling through to the conflict here would report a trial state we
+			// never managed to read.
+			return nil, oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unextended trial").LogError(ctx, s.logger)
+		}
+
+		// The organization exists, so it is the trial that blocks the write:
+		// converted, demoted, expired, or never granted. Which one is not the
+		// operator's business, and arming a trial that was never granted is the
+		// auth flow's job rather than this endpoint's. failed_precondition would
+		// read better than conflict, but the admin service does not declare it,
+		// so it would leave as a 500.
+		return nil, oops.E(oops.CodeConflict, nil, "organization has no running enterprise trial to extend")
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.

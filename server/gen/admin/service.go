@@ -43,6 +43,10 @@ type Service interface {
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
+	// Extends a running enterprise trial by adding days to its current end date.
+	// Only a running trial can be extended: one that has converted, has been
+	// demoted, or has already expired is rejected rather than re-armed.
+	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -65,7 +69,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [12]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -222,6 +226,16 @@ type EnableOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
+}
+
+// ExtendTrialPayload is the payload type of the admin service extendTrial
+// method.
+type ExtendTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days to add to the trial's current end date.
+	Days int
 }
 
 // GetOrganizationPayload is the payload type of the admin service
