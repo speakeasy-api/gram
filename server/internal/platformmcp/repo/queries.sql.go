@@ -19,7 +19,7 @@ SET registration_id = $1,
 WHERE id = $2
   AND organization_id = $3
   AND status = 'pending'
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
 `
 
 type AttachPlatformMCPOperationReceiptRegistrationParams struct {
@@ -38,6 +38,8 @@ func (q *Queries) AttachPlatformMCPOperationReceiptRegistration(ctx context.Cont
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.Operation,
 		&i.IdempotencyKey,
 		&i.InputHash,
@@ -169,7 +171,7 @@ SET registration_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $4
   AND organization_id = $5
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
 `
 
 type CompletePlatformMCPOperationReceiptParams struct {
@@ -196,6 +198,8 @@ func (q *Queries) CompletePlatformMCPOperationReceipt(ctx context.Context, arg C
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.Operation,
 		&i.IdempotencyKey,
 		&i.InputHash,
@@ -471,7 +475,7 @@ INSERT INTO platform_mcp_catalog_registrations (
     $7,
     $8
 )
-RETURNING id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePlatformMCPCatalogRegistrationParams struct {
@@ -481,8 +485,8 @@ type CreatePlatformMCPCatalogRegistrationParams struct {
 	CatalogProvider      string
 	CatalogReference     string
 	Status               string
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 }
 
 func (q *Queries) CreatePlatformMCPCatalogRegistration(ctx context.Context, arg CreatePlatformMCPCatalogRegistrationParams) (PlatformMcpCatalogRegistration, error) {
@@ -515,6 +519,8 @@ func (q *Queries) CreatePlatformMCPCatalogRegistration(ctx context.Context, arg 
 		&i.McpEndpointOwned,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -890,15 +896,15 @@ INSERT INTO platform_mcp_operation_receipts (
     $10,
     $11
 )
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
 `
 
 type CreatePlatformMCPOperationReceiptParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.NullUUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 	Operation            string
 	IdempotencyKey       string
 	InputHash            string
@@ -929,6 +935,8 @@ func (q *Queries) CreatePlatformMCPOperationReceipt(ctx context.Context, arg Cre
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.Operation,
 		&i.IdempotencyKey,
 		&i.InputHash,
@@ -1262,7 +1270,7 @@ func (q *Queries) ExpireActivePlatformMCPOnboardingWorkflow(ctx context.Context,
 }
 
 const getActivePlatformMCPCatalogRegistration = `-- name: GetActivePlatformMCPCatalogRegistration :one
-SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
 WHERE organization_id = $1
   AND project_id = $2
@@ -1307,6 +1315,8 @@ func (q *Queries) GetActivePlatformMCPCatalogRegistration(ctx context.Context, a
 		&i.McpEndpointOwned,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1763,7 +1773,7 @@ func (q *Queries) GetPlatformMCPAuthorizationGrantForConsume(ctx context.Context
 }
 
 const getPlatformMCPCatalogRegistrationByID = `-- name: GetPlatformMCPCatalogRegistrationByID :one
-SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
 WHERE id = $1
   AND organization_id = $2
@@ -1798,6 +1808,8 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationByID(ctx context.Context, arg
 		&i.McpEndpointOwned,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1807,7 +1819,7 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationByID(ctx context.Context, arg
 }
 
 const getPlatformMCPCatalogRegistrationForLifecycle = `-- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
-SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
+SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
 FROM platform_mcp_catalog_registrations AS registration
 JOIN platform_mcp_connections AS created_connection
   ON created_connection.id = registration.connection_id
@@ -1869,6 +1881,8 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 		&i.McpEndpointOwned,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2128,7 +2142,7 @@ func (q *Queries) GetPlatformMCPOnboardingSelectedProject(ctx context.Context, a
 }
 
 const getPlatformMCPOperationReceipt = `-- name: GetPlatformMCPOperationReceipt :one
-SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.expires_at, receipt.created_at, receipt.updated_at
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.expires_at, receipt.created_at, receipt.updated_at
 FROM platform_mcp_operation_receipts AS receipt
 JOIN platform_mcp_connections AS connection
   ON connection.id = receipt.connection_id
@@ -2166,6 +2180,8 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 		&i.RegistrationID,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.Operation,
 		&i.IdempotencyKey,
 		&i.InputHash,
@@ -4092,7 +4108,7 @@ WHERE id = $10
   AND organization_id = $11
   AND project_id = $12
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePlatformMCPCatalogRegistrationComponentsParams struct {
@@ -4144,6 +4160,8 @@ func (q *Queries) UpdatePlatformMCPCatalogRegistrationComponents(ctx context.Con
 		&i.McpEndpointOwned,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
