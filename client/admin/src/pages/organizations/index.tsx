@@ -39,6 +39,21 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   created_at: false,
 };
 
+// Mac reports "Mac" here and labels the key Option; every other platform calls
+// it Alt. Naming the wrong one makes the hint worse than no hint.
+const PEEK_KEY = navigator.userAgent.includes("Mac") ? "\u2325 Option" : "Alt";
+
+function PeekHint(): JSX.Element {
+  return (
+    <span className="text-muted-foreground hidden items-center gap-1 text-xs sm:flex">
+      <kbd className="bg-muted rounded border px-1.5 py-0.5 font-sans text-[11px] leading-none">
+        {PEEK_KEY}
+      </kbd>
+      + click a row to peek
+    </span>
+  );
+}
+
 const ARROW_STEP: Record<string, number | undefined> = {
   ArrowDown: 1,
   ArrowUp: -1,
@@ -208,7 +223,7 @@ export function OrganizationsList(): JSX.Element {
 
         <div className="flex items-start gap-4" onKeyDown={handleKeyDown}>
           <div className="min-w-0 flex-1 rounded-lg border">
-            <TableActionBar table={table} />
+            <TableActionBar table={table} hint={<PeekHint />} />
 
             <div
               className={cn(
