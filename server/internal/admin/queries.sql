@@ -202,7 +202,13 @@ WHERE our.organization_id = @organization_id
 ORDER BY u.email ASC
 LIMIT 200;
 
--- name: AdminGetOrganizationByIDOrSlug :one
+-- name: AdminGetOrganization :one
+-- Resolving a slug is opt-in because every admin write is keyed on id alone.
+-- Both columns are bare TEXT, so one organization's slug can equal another's
+-- id; a read-after-write that allowed slugs could then describe a different
+-- organization than the one just written, and the operator would see a 200
+-- reporting the write never happened. Reads that are not following a write pass
+-- allow_slug true, which the dashboard relies on.
 SELECT
     om.id,
     om.name,
@@ -233,6 +239,6 @@ SELECT
     )::bigint AS member_count
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
-WHERE om.id = sqlc.arg('id_or_slug')::text
-   OR om.slug = sqlc.arg('id_or_slug')::text
+WHERE om.id = sqlc.arg('id')::text
+   OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
 LIMIT 1;

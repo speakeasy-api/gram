@@ -49,7 +49,7 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	return column_1, err
 }
 
-const adminGetOrganizationByIDOrSlug = `-- name: AdminGetOrganizationByIDOrSlug :one
+const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
     om.name,
@@ -81,11 +81,16 @@ SELECT
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = $1::text
-   OR om.slug = $1::text
+   OR ($2::boolean AND om.slug = $1::text)
 LIMIT 1
 `
 
-type AdminGetOrganizationByIDOrSlugRow struct {
+type AdminGetOrganizationParams struct {
+	ID        string
+	AllowSlug bool
+}
+
+type AdminGetOrganizationRow struct {
 	ID                 string
 	Name               string
 	Slug               string
@@ -102,9 +107,15 @@ type AdminGetOrganizationByIDOrSlugRow struct {
 	MemberCount        int64
 }
 
-func (q *Queries) AdminGetOrganizationByIDOrSlug(ctx context.Context, idOrSlug string) (AdminGetOrganizationByIDOrSlugRow, error) {
-	row := q.db.QueryRow(ctx, adminGetOrganizationByIDOrSlug, idOrSlug)
-	var i AdminGetOrganizationByIDOrSlugRow
+// Resolving a slug is opt-in because every admin write is keyed on id alone.
+// Both columns are bare TEXT, so one organization's slug can equal another's
+// id; a read-after-write that allowed slugs could then describe a different
+// organization than the one just written, and the operator would see a 200
+// reporting the write never happened. Reads that are not following a write pass
+// allow_slug true, which the dashboard relies on.
+func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganizationParams) (AdminGetOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganization, arg.ID, arg.AllowSlug)
+	var i AdminGetOrganizationRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,

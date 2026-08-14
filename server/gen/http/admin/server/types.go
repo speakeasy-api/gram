@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -4184,6 +4186,11 @@ func ValidateDisableOrganizationRequestBody(body *DisableOrganizationRequestBody
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
+	}
 	return
 }
 
@@ -4192,6 +4199,11 @@ func ValidateDisableOrganizationRequestBody(body *DisableOrganizationRequestBody
 func ValidateEnableOrganizationRequestBody(body *EnableOrganizationRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
 	}
 	return
 }

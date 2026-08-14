@@ -531,8 +531,14 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
 }
 
+// readOrganizationAfterWrite returns the organization a write just landed on.
+// The read is keyed on id alone because every admin write is, so resolving a
+// slug here could return a different organization than the one written.
 func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, errMsg string) (*gen.AdminOrganization, error) {
-	row, err := repo.New(s.db).AdminGetOrganizationByIDOrSlug(ctx, id)
+	row, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        id,
+		AllowSlug: false,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
@@ -544,7 +550,10 @@ func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, err
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
-	row, err := repo.New(s.db).AdminGetOrganizationByIDOrSlug(ctx, payload.IDOrSlug)
+	row, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.IDOrSlug,
+		AllowSlug: true,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
@@ -554,7 +563,7 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	return adminOrganizationFromGetRow(row), nil
 }
 
-func adminOrganizationFromGetRow(row repo.AdminGetOrganizationByIDOrSlugRow) *gen.AdminOrganization {
+func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                 row.ID,
 		Name:               row.Name,

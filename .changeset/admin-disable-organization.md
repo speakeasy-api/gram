@@ -16,4 +16,12 @@ instead of moving it, so the record of when access was cut stays true. Neither
 direction touches the whitelist flag, which is the separate not-yet-approved
 gate, nor the WorkOS webhook cursor, which only the webhook path may write.
 
+All three organization writes now read the organization back by id alone, which
+also corrects the existing update endpoint. An organization id and another
+organization's slug can be the same string, and the read that produced the
+response resolved either, so a write could return a different organization than
+the one it changed. Addressing one of these writes by slug now returns a
+not-found instead of a success describing an organization that was never
+touched. Reading an organization by slug is unchanged.
+
 The admin dashboard row action and confirmation dialog follow.

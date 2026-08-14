@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildLoginPayload builds the payload for the admin login endpoint from CLI
@@ -148,7 +150,13 @@ func BuildDisableOrganizationPayload(adminDisableOrganizationBody string, adminD
 	{
 		err = json.Unmarshal([]byte(adminDisableOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var adminSessionToken *string
@@ -173,7 +181,13 @@ func BuildEnableOrganizationPayload(adminEnableOrganizationBody string, adminEna
 	{
 		err = json.Unmarshal([]byte(adminEnableOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var adminSessionToken *string

@@ -289,7 +289,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/ServeImageForm'
+                            $ref: '#/components/schemas/DisableOrganizationRequestBody'
             responses:
                 "200":
                     description: OK response.
@@ -365,7 +365,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/ServeImageForm'
+                            $ref: '#/components/schemas/DisableOrganizationRequestBody'
             responses:
                 "200":
                     description: OK response.
@@ -60173,6 +60173,15 @@ components:
             required:
                 - organization_id
                 - key_type
+        DisableOrganizationRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Organization ID.
+                    minLength: 1
+            required:
+                - id
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:

@@ -273,7 +273,9 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("id")
 
-			Attribute("id", String, "Organization ID.")
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
 		})
 
 		Result(AdminOrganization)
@@ -293,7 +295,9 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("id")
 
-			Attribute("id", String, "Organization ID.")
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
 		})
 
 		Result(AdminOrganization)
