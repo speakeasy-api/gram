@@ -14,14 +14,30 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
+
+// identityMapReplaceLockKey serializes the whole staging rebuild + swap. The
+// TRUNCATE/INSERT/EXCHANGE sequence is not atomic in ClickHouse, so without a
+// single writer a retry can interleave with a timed-out predecessor's in-flight
+// statements and publish mixed data — or a delayed EXCHANGE can republish the
+// previous generation after a successor already swapped.
+const identityMapReplaceLockKey = "identity-map:replace-lock"
+
+// identityMapReplaceLockTTL outlives one activity attempt (2m StartToClose)
+// plus the ClickHouse connection's 60s server-side statement lifetime, so by
+// the time the lock lapses no statement from the holder can still land. The
+// activity's 8m ScheduleToCloseTimeout leaves room for a retry after a lapsed
+// lock; a fully exhausted budget just defers to the next tick.
+const identityMapReplaceLockTTL = 5 * time.Minute
 
 type identityMapStore interface {
 	ListIdentityMapEntries(ctx context.Context) ([]activitiesrepo.ListIdentityMapEntriesRow, error)
@@ -35,13 +51,15 @@ type SyncIdentityMap struct {
 	logger    *slog.Logger
 	store     identityMapStore
 	telemetry identityMapTelemetry
+	cache     cache.Cache
 }
 
-func NewSyncIdentityMap(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *SyncIdentityMap {
+func NewSyncIdentityMap(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn, cacheAdapter cache.Cache) *SyncIdentityMap {
 	return &SyncIdentityMap{
 		logger:    logger.With(attr.SlogComponent("sync_identity_map")),
 		store:     activitiesrepo.New(db),
 		telemetry: telemetryrepo.New(chConn),
+		cache:     cacheAdapter,
 	}
 }
 
@@ -65,8 +83,30 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 		})
 	}
 
+	// Single-writer claim across the whole replacement. Losing the race defers
+	// to the holder (the retry or the next tick picks up after the claim
+	// clears); a claim leaked by a crashed attempt lapses at the TTL, after
+	// which no statement from that attempt can still be in flight.
+	claimed, err := s.cache.Add(ctx, identityMapReplaceLockKey, identityMapReplaceLockTTL)
+	if err != nil {
+		return nil, fmt.Errorf("claim identity map replacement lock: %w", err)
+	}
+	if !claimed {
+		return nil, fmt.Errorf("identity map replacement already in progress")
+	}
+
 	if err := s.telemetry.ReplaceIdentityMap(ctx, entries); err != nil {
+		// Deliberately keep the claim: this attempt may have statements in
+		// flight, and the TTL is what guarantees they are dead before the
+		// next writer starts.
 		return nil, fmt.Errorf("replace identity map: %w", err)
+	}
+
+	// Release on success only, so the schedule and link-event triggers are
+	// not blocked for the remainder of the TTL. Best effort: a leaked claim
+	// merely delays the next refresh.
+	if err := s.cache.Delete(context.WithoutCancel(ctx), identityMapReplaceLockKey); err != nil {
+		s.logger.WarnContext(ctx, "failed to release identity map replacement lock", attr.SlogError(err))
 	}
 
 	// This success line is the staleness signal: a quiet component means the

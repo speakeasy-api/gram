@@ -304,7 +304,7 @@ func NewActivities(
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
-		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn),
+		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
