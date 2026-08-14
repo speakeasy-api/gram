@@ -65,6 +65,13 @@ type CreatedOrganization struct {
 func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name string) (CreatedOrganization, error) {
 	var empty CreatedOrganization
 
+	// The third argument must stay empty. It sets external_id AND the
+	// idempotency key, and the only value available before the create returns
+	// is derived from the name. Two organizations may legitimately share a
+	// display name, and a name-derived key would make WorkOS answer the second
+	// create with the first organization, after which the second Gram insert
+	// collides on the unique index over workos_id. AGE-3214 covers giving this
+	// call a key that is actually unique per attempt.
 	workosOrgID, err := client.CreateOrganization(ctx, name, "")
 	if err != nil {
 		return empty, fmt.Errorf("create WorkOS organization: %w", err)

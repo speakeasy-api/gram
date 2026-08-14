@@ -17,8 +17,14 @@ The new organization is safe to create even while WorkOS is delivering the event
 for it. Both writers derive the Gram organization id from the WorkOS one, so the
 admin write and the event sync land on the same row whichever gets there first,
 and an organization the sync already created keeps the slug it was given rather
-than being renamed. If WorkOS refuses the create, nothing is stored in Gram, and
-the operator gets an error naming WorkOS rather than a half-made organization.
+than being renamed.
+
+A deployment with no WorkOS configuration refuses the request and says so, rather
+than minting an organization nobody could log into. If WorkOS refuses the create,
+Gram stores nothing and the request fails as an upstream error, with the detail in
+the server logs rather than in the response. If a later step fails, everything
+Gram wrote is rolled back, but the WorkOS organization is already real and the
+event sync creates a Gram row for it shortly afterwards.
 
 Names are validated exactly as self-serve signup validates them, because both
 paths now run the same validator: an organization created by an operator cannot

@@ -639,8 +639,14 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 // The WorkOS create happens before the transaction opens, because it is the one
 // step that cannot be rolled back. Everything Gram stores is written inside a
 // single transaction afterwards, so a failure below leaves no organization row,
-// no role grants and no entitlements: only an unreferenced WorkOS organization,
-// which the operator can see and retry against.
+// no role grants and no entitlements from this call.
+//
+// That is not the same as leaving nothing. Wherever the WorkOS webhook is
+// configured, organization.created arrives about ten seconds later and the sync
+// activity writes the organization row and its role grants anyway, without the
+// default entitlements this handler would have seeded. AGE-3213 covers that gap.
+// Retrying the create is still the right move: the derived ID makes the retry
+// land on that row rather than beside it.
 func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
 	name, err := orgprovision.ValidateName(payload.Name)
 	if err != nil {
@@ -650,7 +656,13 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
 	switch {
 	case errors.Is(err, orgprovision.ErrUnavailable):
-		return nil, oops.E(oops.CodeInvariantViolation, err, "this server has no WorkOS configuration, so it cannot create organizations")
+		// CodeInvalid and not CodeInvariantViolation, which reads like the
+		// better fit and is not. server/design/shared/errors.go maps
+		// invariant_violation to 500, and the admin app trusts a response body
+		// only below 500, so the explanation below would never reach the
+		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
+		// layer does not read that map.
+		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
 	case err != nil:
 		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
 	}
@@ -689,11 +701,26 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
 		}
-		found, findErr := orgslug.FindUnique(ctx, queries, base)
-		if findErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+
+		// Read again now that the lock is held. The read above was taken before
+		// it, and under READ COMMITTED the sync activity can hold the lock,
+		// insert this very row under slug base, and commit in the gap. Deciding
+		// from the stale read would then hand back a suffixed variant, and the
+		// upsert below writes slug unconditionally, so it would overwrite a slug
+		// already serving in the organization's URL.
+		afterLock, reReadErr := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
+		switch {
+		case reReadErr == nil:
+			uniqueSlug = afterLock.Slug
+		case errors.Is(reReadErr, pgx.ErrNoRows):
+			found, findErr := orgslug.FindUnique(ctx, queries, base)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
 		}
-		uniqueSlug = found
 	default:
 		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
 	}
@@ -709,9 +736,12 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// The unique index over workos_id is what turns a diverging ID
 		// derivation into a loud failure instead of a duplicate.
 		WorkosID: conv.ToPGText(created.WorkOSOrganizationID),
-		// Set explicitly rather than defaulted: whitelisting waives the
-		// book-a-demo gate, and an operator creating an organization is not
-		// saying anything about that.
+		// On insert this changes nothing: the query already coalesces a null
+		// whitelisted to FALSE. It is a statement of intent at the call site
+		// rather than the mechanism, and it does carry weight on the conflict
+		// arm, where a null would preserve whatever the existing row holds and
+		// FALSE states that an operator creating an organization is not
+		// whitelisting it.
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
