@@ -159,7 +159,7 @@ INSERT INTO billing_cycle_usage (
   , tum_tokens
   , finalized_at
 ) VALUES (
-    @organization_id
+    @organization_id::text
   , @cycle_start
   , @cycle_end
   , @tum_tokens
@@ -177,11 +177,11 @@ WHERE billing_cycle_usage.finalized_at IS NULL;
 -- name: ListFinalizedBillingCycleStarts :many
 SELECT cycle_start
 FROM billing_cycle_usage
-WHERE organization_id = @organization_id
+WHERE organization_id = @organization_id::text
   AND finalized_at IS NOT NULL;
 
 -- name: ListBillingCycleUsage :many
 SELECT *
 FROM billing_cycle_usage
-WHERE organization_id = @organization_id
+WHERE organization_id = @organization_id::text
 ORDER BY cycle_start;

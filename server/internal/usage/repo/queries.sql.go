@@ -30,7 +30,7 @@ SET stripe_subscription_id = $1,
 WHERE organization_id = $3
   AND stripe_customer_id = $4
   AND (stripe_subscription_id IS NULL OR stripe_subscription_id = $1)
-RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type ActivatePaygBillingMetadataParams struct {
@@ -53,6 +53,12 @@ func (q *Queries) ActivatePaygBillingMetadata(ctx context.Context, arg ActivateP
 		&i.OrganizationID,
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
@@ -124,7 +130,7 @@ func (q *Queries) CreateStripeSubscriptionBillingMetadataFixture(ctx context.Con
 }
 
 const getBillingMetadata = `-- name: GetBillingMetadata :one
-SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
 WHERE organization_id = $1
 `
@@ -137,6 +143,12 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 		&i.OrganizationID,
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
@@ -233,9 +245,9 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 }
 
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
-SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, finalized_at, created_at, updated_at
+SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, billed_tum_tokens, billed_frozen_at, finalized_at, created_at, updated_at
 FROM billing_cycle_usage
-WHERE organization_id = $1
+WHERE organization_id = $1::text
 ORDER BY cycle_start
 `
 
@@ -254,6 +266,8 @@ func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID stri
 			&i.CycleStart,
 			&i.CycleEnd,
 			&i.TumTokens,
+			&i.BilledTumTokens,
+			&i.BilledFrozenAt,
 			&i.FinalizedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -300,7 +314,7 @@ func (q *Queries) ListBillingProjectIDsByOrganization(ctx context.Context, organ
 const listFinalizedBillingCycleStarts = `-- name: ListFinalizedBillingCycleStarts :many
 SELECT cycle_start
 FROM billing_cycle_usage
-WHERE organization_id = $1
+WHERE organization_id = $1::text
   AND finalized_at IS NOT NULL
 `
 
@@ -377,7 +391,7 @@ ON CONFLICT (organization_id) DO UPDATE SET
       WHEN billing_metadata.stripe_customer_id IS NULL THEN clock_timestamp()
       ELSE billing_metadata.updated_at
     END
-RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type StoreStripeCustomerParams struct {
@@ -393,6 +407,12 @@ func (q *Queries) StoreStripeCustomer(ctx context.Context, arg StoreStripeCustom
 		&i.OrganizationID,
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
@@ -456,7 +476,7 @@ INSERT INTO billing_cycle_usage (
   , tum_tokens
   , finalized_at
 ) VALUES (
-    $1
+    $1::text
   , $2
   , $3
   , $4
@@ -513,7 +533,7 @@ ON CONFLICT (organization_id) DO UPDATE SET
   -- field (dashboard TUM form, older SDKs) must not silently clear it.
   , tunneled_mcp_server_limit = COALESCE(EXCLUDED.tunneled_mcp_server_limit, billing_metadata.tunneled_mcp_server_limit)
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 `
 
 type UpsertBillingMetadataParams struct {
@@ -538,6 +558,12 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		&i.OrganizationID,
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
