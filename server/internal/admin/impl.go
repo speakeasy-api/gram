@@ -726,10 +726,8 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
 	}
 
-	// The audit entry is the customer's, so it has to name the organization
-	// rather than only its id. Re-arm gets those columns back from a write it
-	// already makes; extend writes nothing on organization_metadata, so it reads
-	// them, inside the transaction the entry commits with.
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
 	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
 		ID:        payload.ID,
 		AllowSlug: false,
@@ -774,8 +772,8 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 // nothing, so an operator who pastes one bad id must not be told to go and look
 // at a trial by this endpoint alone.
 //
-// The lookup is on the failure path only, and runs on the pool rather than the
-// caller's transaction, which is already unusable by the time it is reached.
+// The lookup is on the failure path only, and runs on the pool because the
+// caller's transaction is about to be rolled back.
 func (s *Service) rejectExtension(ctx context.Context, logger *slog.Logger, organizationID string) error {
 	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
 		ID:        organizationID,

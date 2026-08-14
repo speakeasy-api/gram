@@ -431,8 +431,9 @@ func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx
 }
 
 // LogOrganizationEnterpriseTrialExtendedEvent records an operator moving a
-// running trial's end date forward. Both dates are carried because the day count
-// alone cannot be turned back into the date the trial used to end.
+// running trial's end date forward. Both dates are carried so the entry never
+// depends on inverting the calendar-day arithmetic, which is exact only while
+// every session runs in UTC.
 type LogOrganizationEnterpriseTrialExtendedEvent struct {
 	OrganizationID string
 

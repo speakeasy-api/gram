@@ -772,6 +772,7 @@ func TestRearmTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
 	// The subject is opaque, so it is not the email in another shape.
 	for name, field := range map[string]string{
 		"actor display name": conv.PtrValOr(entry.ActorDisplayName, ""),
+		"actor slug":         entry.ActorSlug,
 		"actor id":           entry.ActorID,
 		"subject display":    entry.SubjectDisplay,
 		"subject slug":       entry.SubjectSlug,

@@ -90,8 +90,15 @@ RETURNING *;
 -- The previous ends_at comes back from a CTE that reads the row before the
 -- update rather than from subtracting the interval afterwards: the calendar-day
 -- arithmetic above has no exact inverse across a daylight saving boundary, and
--- the audit entry has to carry the date the row actually held. The UPDATE joins
--- the CTE so the locking read runs first, as DemoteOrganizationToFree does.
+-- the audit entry has to carry the date the row actually held.
+--
+-- Every condition sits on the locking read and the UPDATE keeps only the join.
+-- That placement is load-bearing under READ COMMITTED. FOR UPDATE re-evaluates
+-- its own conditions against the newest row version once it stops waiting on a
+-- competing writer; the UPDATE's scan cannot, because a row its snapshot already
+-- rejects is skipped before the lock is ever taken. With the conditions on the
+-- UPDATE, a second operator extending a trial in its last moments unblocks onto
+-- a row that just gained two weeks and is told there is no running trial.
 --
 -- The three conditions are not equally load-bearing today, and it is worth
 -- saying which is which:
@@ -122,6 +129,9 @@ WITH previous AS (
     SELECT trials.organization_id, trials.ends_at
     FROM trials
     WHERE trials.organization_id = @organization_id
+      AND trials.converted_at IS NULL
+      AND trials.demoted_at IS NULL
+      AND trials.ends_at > clock_timestamp()
     FOR UPDATE
 )
 UPDATE trials
@@ -129,9 +139,6 @@ SET ends_at = trials.ends_at + make_interval(days => @extend_by_days::int),
     updated_at = clock_timestamp()
 FROM previous
 WHERE trials.organization_id = previous.organization_id
-  AND trials.converted_at IS NULL
-  AND trials.demoted_at IS NULL
-  AND trials.ends_at > clock_timestamp()
 RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;
 
 -- name: RearmTrial :one

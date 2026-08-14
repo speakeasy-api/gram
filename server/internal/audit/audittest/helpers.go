@@ -25,13 +25,16 @@ type LogRecord struct {
 	ActorType        string
 	ActorDisplayName *string
 	ActorDisplay     string
-	SubjectID        string
-	SubjectType      string
-	SubjectDisplay   string
-	SubjectSlug      string
-	Metadata         []byte
-	BeforeSnapshot   []byte
-	AfterSnapshot    []byte
+	// The feed returns this alongside the display name, and the staff mask
+	// clears it only for an actor id that resolves to a Gram user.
+	ActorSlug      string
+	SubjectID      string
+	SubjectType    string
+	SubjectDisplay string
+	SubjectSlug    string
+	Metadata       []byte
+	BeforeSnapshot []byte
+	AfterSnapshot  []byte
 }
 
 func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (LogRecord, error) {
@@ -48,6 +51,7 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 		ActorType:        row.ActorType,
 		ActorDisplayName: conv.FromPGText[string](row.ActorDisplayName),
 		ActorDisplay:     conv.PtrValOr(conv.FromPGText[string](row.ActorDisplayName), ""),
+		ActorSlug:        conv.PtrValOr(conv.FromPGText[string](row.ActorSlug), ""),
 		SubjectID:        row.SubjectID,
 		SubjectType:      row.SubjectType,
 		SubjectDisplay:   conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
