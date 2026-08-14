@@ -807,8 +807,9 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 		{name: "a page past the end is empty", page: new(4), want: []string{}},
 		{name: "an absurd page is empty, not an error", page: new(1 << 40), want: []string{}},
 
-		// The offset the query binds is an int32, so the largest page an operator
-		// can type must clamp rather than wrap into a negative offset.
+		// The query binds the offset as a bigint. The largest page an operator can
+		// type must still clamp, because the multiply that turns it into an offset
+		// would otherwise wrap past the end of int64 and back into a negative.
 		{name: "the largest page there is", page: ptrTo(math.MaxInt64), want: []string{}},
 	}
 
@@ -833,6 +834,16 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 		}
 	}
 	require.Equal(t, pageOrgsByName, walked, "walking every page drops and repeats nothing")
+
+	// Limit 1 is its own boundary. The page ceiling divides by the limit, so a
+	// limit of 1 is the value an arithmetic slip in that ceiling breaks first,
+	// and every case above uses limit 2.
+	for page := 1; page <= len(pageOrgsByName); page++ {
+		payload := sortPayload("name", "asc")
+		payload.IncludeDisabled = nil
+		payload.Limit, payload.Page = new(1), new(page)
+		requireOrder(t, ctx, svc, payload, pageOrgsByName[page-1:page], fmt.Sprintf("limit 1, page %d", page))
+	}
 }
 
 // A page number alone selects offset paging, with the default order.
@@ -880,7 +891,12 @@ func TestListOrganizations_TotalCountsMatchesNotPageLength(t *testing.T) {
 		{name: "disabled included", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), IncludeDisabled: new(true)}, wantTotal: 8, wantLen: 2},
 		{name: "a filter matching nothing", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Q: new("no such organization")}, wantTotal: 0, wantLen: 0},
 
-		// The cursor walk reports the same total, so the two modes agree.
+		// A page past the end still reports what the filters matched. A client that
+		// lands there, from a bookmark or from a filter typed while sitting on a
+		// later page, needs the count to find its way back to a page that exists.
+		{name: "past the end", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(9)}, wantTotal: 7, wantLen: 0},
+		{name: "past the end under a filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings"), Page: new(4)}, wantTotal: 5, wantLen: 0},
+
 		{name: "cursor mode", payload: &gen.ListOrganizationsPayload{Limit: new(2)}, wantTotal: 7, wantLen: 2},
 		{name: "cursor mode under a filter", payload: &gen.ListOrganizationsPayload{Limit: new(2), Q: new("holdings")}, wantTotal: 5, wantLen: 2},
 	}
@@ -890,6 +906,22 @@ func TestListOrganizations_TotalCountsMatchesNotPageLength(t *testing.T) {
 		require.NoError(t, err, "listing organizations for %s", c.name)
 		require.Equal(t, c.wantTotal, res.Total, "total for %s", c.name)
 		require.Len(t, res.Organizations, c.wantLen, "page length for %s", c.name)
+	}
+
+	// The count must not fall as the cursor advances. It counts the rows the
+	// filters matched, not the rows still ahead of the cursor, and the cursor walk
+	// is what the deployed dashboard runs.
+	var cursor *string
+	for page := 1; ; page++ {
+		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Limit: new(2), Cursor: cursor})
+		require.NoError(t, err, "cursor page %d", page)
+		require.Equal(t, int64(7), res.Total, "total on cursor page %d", page)
+
+		if res.NextCursor == nil {
+			require.Equal(t, 4, page, "the walk covers seven rows in four pages of two")
+			break
+		}
+		cursor = res.NextCursor
 	}
 }
 

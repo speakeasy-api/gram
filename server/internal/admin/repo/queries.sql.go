@@ -12,6 +12,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminCountOrganizations = `-- name: AdminCountOrganizations :one
+SELECT count(*)::bigint
+FROM organization_metadata om
+WHERE
+    (
+        $1::text IS NULL
+        OR om.name ILIKE '%' || $1::text || '%'
+        OR om.slug ILIKE '%' || $1::text || '%'
+        OR om.id = $1::text
+        OR om.workos_id = $1::text
+    )
+    AND ($2::text IS NULL OR om.gram_account_type = $2::text)
+    AND ($3::boolean OR om.disabled_at IS NULL)
+`
+
+type AdminCountOrganizationsParams struct {
+	Q               pgtype.Text
+	AccountType     pgtype.Text
+	IncludeDisabled bool
+}
+
+// The count cannot ride on the page query. That query carries the cursor
+// predicate, so a window count inside it reports the rows after the cursor
+// rather than the rows the filters matched, and a page past the end returns no
+// row to carry a count at all. Keeping it out also leaves the page query free to
+// terminate early on its index scan.
+//
+// The filter arms must stay identical to AdminListOrganizations. The trials join
+// is absent on purpose rather than by omission: organization_id is that table's
+// primary key, so the left join there cannot change how many rows match.
+func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrganizationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountOrganizations, arg.Q, arg.AccountType, arg.IncludeDisabled)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const adminGetOrganizationByIDOrSlug = `-- name: AdminGetOrganizationByIDOrSlug :one
 SELECT
     om.id,
@@ -288,8 +325,7 @@ WITH filtered AS (
             FROM organization_user_relationships our
             WHERE our.organization_id = om.id
               AND our.deleted IS FALSE
-        )::bigint AS member_count,
-        count(*) OVER ()::bigint AS total_count
+        )::bigint AS member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
     WHERE
@@ -306,7 +342,7 @@ WITH filtered AS (
         AND ($7::boolean OR om.disabled_at IS NULL)
         AND ($8::text IS NULL OR om.id > $8::text)
 )
-SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count, total_count FROM filtered
+SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
     CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
@@ -354,7 +390,6 @@ type AdminListOrganizationsRow struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	MemberCount        int64
-	TotalCount         int64
 }
 
 // Two paging modes share this query. A caller that supplies no sort key gets the
@@ -396,7 +431,6 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.MemberCount,
-			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

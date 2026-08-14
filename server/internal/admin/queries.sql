@@ -82,8 +82,7 @@ WITH filtered AS (
             FROM organization_user_relationships our
             WHERE our.organization_id = om.id
               AND our.deleted IS FALSE
-        )::bigint AS member_count,
-        count(*) OVER ()::bigint AS total_count
+        )::bigint AS member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
     WHERE
@@ -123,6 +122,29 @@ ORDER BY
     id ASC
 LIMIT sqlc.arg('page_limit')::int
 OFFSET sqlc.arg('page_offset')::bigint;
+
+-- name: AdminCountOrganizations :one
+-- The count cannot ride on the page query. That query carries the cursor
+-- predicate, so a window count inside it reports the rows after the cursor
+-- rather than the rows the filters matched, and a page past the end returns no
+-- row to carry a count at all. Keeping it out also leaves the page query free to
+-- terminate early on its index scan.
+--
+-- The filter arms must stay identical to AdminListOrganizations. The trials join
+-- is absent on purpose rather than by omission: organization_id is that table's
+-- primary key, so the left join there cannot change how many rows match.
+SELECT count(*)::bigint
+FROM organization_metadata om
+WHERE
+    (
+        sqlc.narg('q')::text IS NULL
+        OR om.name ILIKE '%' || sqlc.narg('q')::text || '%'
+        OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%'
+        OR om.id = sqlc.narg('q')::text
+        OR om.workos_id = sqlc.narg('q')::text
+    )
+    AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
+    AND (sqlc.arg('include_disabled')::boolean OR om.disabled_at IS NULL);
 
 -- name: AdminUpdateOrganization :exec
 -- Admin-only mutation. Both fields are optional — caller passes NULL to skip

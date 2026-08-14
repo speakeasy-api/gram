@@ -388,9 +388,16 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").LogError(ctx, s.logger)
 	}
 
-	var total int64
-	if len(rows) > 0 {
-		total = rows[0].TotalCount
+	// Counted separately from the page. A page past the end holds no row to carry
+	// a count, and in cursor mode the page query has already discarded everything
+	// before the cursor.
+	total, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{
+		Q:               conv.PtrToPGText(payload.Q),
+		AccountType:     conv.PtrToPGText(payload.AccountType),
+		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").LogError(ctx, s.logger)
 	}
 
 	var nextCursor *string
@@ -421,8 +428,10 @@ func listOrganizationsOffset(page *int, limit int32) int64 {
 	}
 
 	// Cap the page so that a hand-typed page number cannot overflow the multiply
-	// into a negative offset, which Postgres rejects.
-	if maxPage := math.MaxInt64/int64(limit) + 1; n > maxPage {
+	// into a negative offset, which Postgres rejects. The ceiling carries no +1:
+	// limit is not a constant, so at limit 1 the addition overflows to MinInt64
+	// and the guard fires on every page.
+	if maxPage := math.MaxInt64 / int64(limit); n > maxPage {
 		n = maxPage
 	}
 
