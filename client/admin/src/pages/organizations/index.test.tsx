@@ -3083,13 +3083,42 @@ describe("organizations list bulk account type", () => {
 
     // The select column is leftmost and the actions column is pinned to the
     // right edge, so the keyboard has to walk the row the way the eye does:
-    // checkbox, then the record, then what can be done to it. The widths and
-    // the pin itself are geometry, and happy-dom lays nothing out, so this is
-    // the order and not the placement.
+    // checkbox, then the record, then what can be done to it. happy-dom lays
+    // nothing out, so this is the order and not the placement.
     expect(tabStopBefore(link)).toBe(rowCheckbox(FIRST_ORG.name));
     expect(tabStopBefore(await peekTrigger(FIRST_ORG.name))).not.toBe(
       rowCheckbox(FIRST_ORG.name),
     );
+  });
+
+  it("pins the select column to the left edge, in both the header and the rows", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // The list is wider than the window at every width an operator uses, so an
+    // unpinned checkbox scrolls off the left while the actions column holds the
+    // right. A table whose purpose is picking rows cannot hide the control that
+    // picks them. happy-dom lays nothing out, so these read the classes that
+    // carry the pin; the measurement is in the browser.
+    for (const control of [
+      screen.getByRole("checkbox", {
+        name: "Select every organization on this page",
+      }),
+      rowCheckbox(FIRST_ORG.name),
+    ]) {
+      const pinned = control.closest("th,td");
+      expect(pinned?.classList.contains("sticky")).toBe(true);
+      expect(pinned?.classList.contains("left-0")).toBe(true);
+      expect(pinned?.classList.contains("z-1")).toBe(true);
+      // The table is `w-full`, so a column that did not shrink to the checkbox
+      // would take a share of the freed width and read as an empty gutter.
+      expect(pinned?.classList.contains("w-px")).toBe(true);
+      // Opaque, or the cells sliding under it show through.
+      expect(
+        pinned?.classList.contains("bg-muted") ||
+          pinned?.classList.contains("bg-inherit"),
+      ).toBe(true);
+    }
   });
 
   it("leaves the row's own controls alone when a checkbox is ticked", async () => {

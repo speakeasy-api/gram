@@ -71,6 +71,11 @@ export type DataTableInstance<T extends RowData> = ReactTable<
 
 export const SELECT_COLUMN_ID = "select";
 
+// Mirrors the pin a page puts on a trailing actions column. `w-px` shrinks the
+// column to the checkbox, so the pin does not read as a gutter, and the header
+// row is already `z-10`, so this stays under it.
+const PINNED_LEFT = "sticky left-0 z-1 w-px";
+
 /**
  * The opt-in select column: a checkbox per row and one in the header that ticks
  * and unticks the rows the table is currently holding.
@@ -93,7 +98,17 @@ export function selectColumn<T extends RowData>({
   const column = createColumnHelper<DataTableFeatures, T>();
   return column.display({
     id: SELECT_COLUMN_ID,
-    meta: { label: "Select" },
+    meta: {
+      label: "Select",
+      // Pinned, because an admin list is wider than the window: measured at
+      // 1440 down to 768, the checkbox scrolls off the left edge while a pinned
+      // actions column keeps its place. A table whose purpose is picking rows
+      // cannot let the control that picks them leave the screen.
+      headClassName: cn(PINNED_LEFT, "bg-muted"),
+      // Inherited, so the pinned cell repaints with the row rather than reading
+      // as a flat stripe over a highlighted row's own colour.
+      cellClassName: cn(PINNED_LEFT, "bg-inherit"),
+    },
     // Hiding it would strand a selection the operator could no longer see or
     // undo, the same reason the row controls opt out.
     enableHiding: false,

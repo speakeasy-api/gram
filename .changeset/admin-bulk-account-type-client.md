@@ -19,4 +19,6 @@ done. The selection is dropped whenever the rows change under it, so an account
 type cannot be set on a record that scrolled out of view.
 
 Row selection is opt-in for the shared admin table. A page that does not ask for
-it renders exactly as before.
+it renders exactly as before. The checkbox column is pinned to the left edge, the
+way the actions column is pinned to the right, because the list is wider than the
+window and the control that picks rows would otherwise scroll out of reach.
