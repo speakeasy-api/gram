@@ -532,15 +532,16 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 	event(workEmail, "Skill", "deploy-helper")
 	event(strangerEmail, "weather", "")
 	event("", "weather", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	{
 		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
 			From: now.Add(-time.Hour).Format(time.RFC3339),
 			To:   now.Add(time.Hour).Format(time.RFC3339),
 		})
-		if !assert.NoError(c, err) || !assert.NotNil(c, res) {
-			return
-		}
+		require.NoError(t, err)
+		require.NotNil(t, res)
+		c := t
 
 		// One employee = one bucket under the canonical email; totals are
 		// preserved (folding re-buckets, never drops or double-counts).
@@ -550,9 +551,7 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 			byUser[u.UserEmail] += u.EventCount
 			total += u.EventCount
 		}
-		if !assert.Equal(c, int64(5), total) {
-			return
-		}
+		assert.Equal(c, int64(5), total)
 		assert.Equal(c, int64(3), byUser[workEmail])
 		assert.Equal(c, int64(1), byUser[strangerEmail])
 		assert.Equal(c, int64(1), byUser["Unknown"])
@@ -577,23 +576,19 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 		for _, p := range res.TimeSeries {
 			assert.NotEqual(c, personalEmail, p.UserEmail)
 		}
-	}, 10*time.Second, 200*time.Millisecond)
+	}
 
 	// Drilling into the canonical bucket finds the personal rows too: both
 	// sides of the filter fold through the same map.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
-			From: now.Add(-time.Hour).Format(time.RFC3339),
-			To:   now.Add(time.Hour).Format(time.RFC3339),
-			Filters: []*gen.LogFilter{
-				{Path: "user.email", Operator: "eq", Values: []string{workEmail}},
-			},
-		})
-		if !assert.NoError(c, err) || !assert.NotNil(c, res) {
-			return
-		}
-		assert.Equal(c, int64(3), res.TotalEvents)
-	}, 10*time.Second, 200*time.Millisecond)
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: now.Add(-time.Hour).Format(time.RFC3339),
+		To:   now.Add(time.Hour).Format(time.RFC3339),
+		Filters: []*gen.LogFilter{
+			{Path: "user.email", Operator: "eq", Values: []string{workEmail}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), res.TotalEvents)
 }
 
 func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
@@ -639,21 +634,16 @@ func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testi
 		Limit:                50,
 		CanonicalIdentityOrg: orgID,
 	}
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		rows, _, err := ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.Len(c, rows, 1) {
-			return
-		}
-		assert.Equal(c, workEmail, rows[0].UserEmail)
-		assert.Equal(c, uint64(2), rows[0].CallCount)
-	}, 10*time.Second, 200*time.Millisecond)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	rows, _, err := ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, workEmail, rows[0].UserEmail)
+	require.Equal(t, uint64(2), rows[0].CallCount)
 
 	// Literal mode keeps the split rows — the flag-off behavior.
 	params.CanonicalIdentityOrg = ""
-	rows, _, err := ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
+	rows, _, err = ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 }

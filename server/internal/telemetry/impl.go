@@ -527,10 +527,7 @@ func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType 
 	g, gctx := errgroup.WithContext(ctx)
 	// Fold the enrollment list's email keys to canonical identities when the
 	// org is on the fold, matching the employee detail pages it links to.
-	canonicalOrg := ""
-	if fold, _ := s.canonicalIdentityMode(ctx, params.organizationID); fold {
-		canonicalOrg = params.organizationID
-	}
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
@@ -2127,10 +2124,7 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 	if payload.Cursor != nil {
 		cursor = *payload.Cursor
 	}
-	canonicalOrg := ""
-	if fold, _ := s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID); fold {
-		canonicalOrg = authCtx.ActiveOrganizationID
-	}
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
 	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
 		GramProjectID:        authCtx.ProjectID.String(),
 		CanonicalURL:         canonical.CanonicalURL,
@@ -2831,10 +2825,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	// The user dimension folds one employee's linked emails into one bucket
 	// when the org is on the canonical fold; server/tool dimensions and the
 	// flag-off behavior are unchanged.
-	canonicalOrg := ""
-	if fold, _ := s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID); fold {
-		canonicalOrg = authCtx.ActiveOrganizationID
-	}
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
