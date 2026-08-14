@@ -1,5 +1,11 @@
 import { PanelRightIcon } from "lucide-react";
-import { createContext, useContext, type JSX, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  type JSX,
+  type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -46,9 +52,16 @@ export const PEEK_TRIGGER_SELECTOR = "[data-peek-trigger]";
 export function PeekTrigger({ org }: { org: AdminOrganization }): JSX.Element {
   const { peekedId, togglePeek } = useContext(PeekContext);
   const isPeeked = peekedId === org.id;
+  const [tipOpen, setTipOpen] = useState(false);
 
   return (
-    <Tooltip>
+    // Controlled, and held shut while this row's panel is open. The arrow keys
+    // carry the keyboard to the control of whichever row the peek moves to,
+    // and Radix opens a tooltip on a focus it did not trace to a pointer. So
+    // an uncontrolled tooltip pops open on every arrow press, and it takes the
+    // first Escape to dismiss itself before the panel gets one. An open panel
+    // describes this control better than the tooltip does anyway.
+    <Tooltip open={tipOpen && !isPeeked} onOpenChange={setTipOpen}>
       {/* The control is an icon on its own, so nothing on screen says what it
           does until the pointer rests on it. The tooltip describes the
           control; it does not name it, and the accessible name below is what
@@ -75,9 +88,7 @@ export function PeekTrigger({ org }: { org: AdminOrganization }): JSX.Element {
           <PanelRightIcon />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>
-        {isPeeked ? "Close peek" : "Peek without leaving the list"}
-      </TooltipContent>
+      <TooltipContent>Peek without leaving the list</TooltipContent>
     </Tooltip>
   );
 }

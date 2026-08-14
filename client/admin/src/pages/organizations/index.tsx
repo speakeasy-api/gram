@@ -91,6 +91,10 @@ export function OrganizationsList(): JSX.Element {
   // Raised while rendering, read by the effect that rescues the keyboard.
   const [peekedRecordLeft, setPeekedRecordLeft] = useState(false);
 
+  // Raised by an arrow move that started on a peek control, read by the effect
+  // that follows the peek to the next row's control.
+  const [peekTookTheKeyboard, setPeekTookTheKeyboard] = useState(false);
+
   const announce = useCallback((text: string): void => {
     setAnnouncement((previous) => ({ text, count: previous.count + 1 }));
   }, []);
@@ -198,6 +202,22 @@ export function OrganizationsList(): JSX.Element {
     }
   }, [peekedRecordLeft]);
 
+  // After the commit, because the row the peek moved to is drawn in it and the
+  // ref only points at that row once it is. Same lookup the close path makes,
+  // through the peeked row rather than across the page.
+  //
+  // A screen reader announces the control focus lands on, which repeats what
+  // the live region is politely saying at the same moment. The repeat is
+  // wanted: the two carry the same organization name, so whichever one the
+  // reader drops, the operator still hears where the panel went.
+  useEffect(() => {
+    if (!peekTookTheKeyboard) return;
+    setPeekTookTheKeyboard(false);
+    peekedRow.current
+      ?.querySelector<HTMLElement>(PEEK_TRIGGER_SELECTOR)
+      ?.focus();
+  }, [peekTookTheKeyboard]);
+
   const closePeek = useCallback((): void => {
     const trigger = peekedRow.current?.querySelector<HTMLElement>(
       PEEK_TRIGGER_SELECTOR,
@@ -240,10 +260,11 @@ export function OrganizationsList(): JSX.Element {
     // standing on a control that still reports itself closed. Escape there
     // would drag the keyboard back to the peeked row. The peeked row's own
     // control is exempt: that one is the panel's control.
-    if (event.target instanceof HTMLElement) {
-      const trigger = event.target.closest(PEEK_TRIGGER_SELECTOR);
-      if (trigger && !peekedRow.current?.contains(trigger)) return;
-    }
+    const fromTrigger =
+      event.target instanceof HTMLElement
+        ? event.target.closest(PEEK_TRIGGER_SELECTOR)
+        : null;
+    if (fromTrigger && !peekedRow.current?.contains(fromTrigger)) return;
 
     if (event.key === "Escape") {
       event.preventDefault();
@@ -258,6 +279,15 @@ export function OrganizationsList(): JSX.Element {
     if (!next) return;
     event.preventDefault();
     openPeek(next.original);
+    // Only where the operator was already on a control. The peek moves out
+    // from under this one, and the exemption above is written in terms of the
+    // peeked row, so leaving the keyboard behind would strand it on a control
+    // that answers neither the arrow keys nor Escape.
+    //
+    // Focus stays put for anyone arrowing from inside the panel. That is the
+    // panel's own navigation, and pulling the keyboard out to a row control
+    // would take the operator off the record they are reading.
+    if (fromTrigger) setPeekTookTheKeyboard(true);
   };
 
   return (

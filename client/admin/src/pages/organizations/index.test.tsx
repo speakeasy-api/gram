@@ -918,6 +918,66 @@ describe("organizations list peek", () => {
     ).toHaveLength(1);
   });
 
+  it("carries the keyboard along when the arrow keys move the peek off a control", async () => {
+    // Three rows, because the trap only shows on the second press: the first
+    // move works and leaves the keyboard behind on the row it moved off.
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: [FIRST_ORG, SECOND_ORG, NEXT_PAGE_ORG],
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const trigger = await peekOn(FIRST_ORG.name);
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+    // The control the peek moved to, or the next press meets the guard that
+    // keeps other rows' controls out of this handler and the operator is
+    // stuck on a control that answers nothing.
+    const second = await peekTrigger(SECOND_ORG.name);
+    expect(document.activeElement).toBe(second);
+
+    fireEvent.keyDown(second, { key: "ArrowDown" });
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: NEXT_PAGE_ORG.name }),
+    ).toBeTruthy();
+    expect(document.activeElement).toBe(await peekTrigger(NEXT_PAGE_ORG.name));
+  });
+
+  it("closes on Escape after the arrow keys have moved the peek", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekOn(FIRST_ORG.name);
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const second = await peekTrigger(SECOND_ORG.name);
+    fireEvent.keyDown(second, { key: "Escape" });
+
+    // Escape has to keep working from wherever the arrow keys left the
+    // operator. A keyboard that can move but cannot close is trapped.
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+  });
+
+  it("leaves the keyboard in the panel when the arrow keys come from the panel", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    // The panel takes the focus on mount, and this is the panel's own record
+    // navigation.
+    expect(document.activeElement).toBe(peekPanel());
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
+
+    // Following the peek out to the row control here would take the operator
+    // off the record they are reading and out of the panel they opened.
+    expect(
+      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+    ).toBeTruthy();
+    expect(document.activeElement).toBe(peekPanel());
+  });
+
   it("ignores the arrow keys on a control that is not the peeked row's", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(FIRST_ORG.name);
