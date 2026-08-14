@@ -77,6 +77,15 @@ func fromGetRow(row repo.GetApprovalRequestRow) requestFields {
 	}
 }
 
+func fromTargetRow(row repo.GetApprovalRequestByTargetRow) requestFields {
+	return requestFields{
+		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
+		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
+		Status: row.Status, RequesterCount: row.RequesterCount,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+	}
+}
+
 func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 	// The column is NOT NULL with an array default, but the field is required
 	// at the API boundary, so a nil scan result must still surface as an

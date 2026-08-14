@@ -2,8 +2,11 @@ package mcpapproval_test
 
 import (
 	"context"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,12 +23,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -95,8 +101,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	assembler := evidence.NewAssembler(
+		packagemeta.NewClient(notFoundRegistry{}),
+		telemetryrepo.New(chConn),
+	)
+
 	ti := &testInstance{
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger()),
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), assembler),
 		conn:           conn,
 		repo:           repo.New(conn),
 		features:       features,
@@ -200,14 +213,15 @@ func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 	}
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID: ti.organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "server_url",
-		TargetRaw:      seed.targetKey,
-		TargetKey:      seed.targetKey,
-		ArtifactRef:    conv.ToPGText("npm:@scope/pkg@1.2.3"),
-		VersionPinned:  true,
-		Status:         seed.status,
+		OrganizationID:            ti.organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "server_url",
+		TargetRaw:                 seed.targetKey,
+		TargetKey:                 seed.targetKey,
+		ArtifactRef:               conv.ToPGText("npm:@scope/pkg@1.2.3"),
+		VersionPinned:             true,
+		Status:                    seed.status,
+		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -225,14 +239,15 @@ func seedUnresolvedRequest(t *testing.T, ctx context.Context, ti *testInstance, 
 	t.Helper()
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID: ti.organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "stdio_command",
-		TargetRaw:      raw,
-		TargetKey:      raw,
-		ArtifactRef:    pgtype.Text{},
-		VersionPinned:  false,
-		Status:         "requested",
+		OrganizationID:            ti.organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "stdio_command",
+		TargetRaw:                 raw,
+		TargetKey:                 raw,
+		ArtifactRef:               pgtype.Text{},
+		VersionPinned:             false,
+		Status:                    "requested",
+		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -253,7 +268,7 @@ func seedEvidence(t *testing.T, ctx context.Context, ti *testInstance, projectID
 func seedRequester(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, userID, note string) {
 	t.Helper()
 
-	_, err := ti.repo.CreateApprovalRequestRequester(ctx, repo.CreateApprovalRequestRequesterParams{
+	_, err := ti.repo.UpsertApprovalRequestRequester(ctx, repo.UpsertApprovalRequestRequesterParams{
 		OrganizationID:       ti.organizationID,
 		ProjectID:            projectID,
 		McpApprovalRequestID: requestID,
@@ -283,6 +298,21 @@ func requestStatus(t *testing.T, ctx context.Context, ti *testInstance, projectI
 	require.NoError(t, err)
 
 	return request.Status
+}
+
+// notFoundRegistry answers every package-registry request with a 404, so
+// admissions in tests gather cleanly with "not published there" instead of
+// reaching real registries.
+type notFoundRegistry struct{}
+
+func (notFoundRegistry) Do(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		Status:     http.StatusText(http.StatusNotFound),
+		StatusCode: http.StatusNotFound,
+		Body:       io.NopCloser(strings.NewReader(`{"error":"Not found"}`)),
+		Header:     http.Header{},
+		Request:    request,
+	}, nil
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

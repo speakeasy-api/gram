@@ -21100,6 +21100,210 @@ paths:
             x-speakeasy-name-override: rotateInstanceKey
             x-speakeasy-react-hook:
                 name: RotateLiteLLMInstanceKey
+    /rpc/mcpApproval.createRequest:
+        post:
+            description: Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.
+            operationId: createMcpApprovalRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApprovalRequestSummary'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createRequest mcpApproval
+            tags:
+                - mcpApproval
+            x-speakeasy-name-override: createRequest
+            x-speakeasy-react-hook:
+                name: CreateMcpApprovalRequest
+    /rpc/mcpApproval.ensureServerReview:
+        post:
+            description: Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.
+            operationId: ensureMcpServerReview
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnsureServerReviewRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApprovalRequestSummary'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: ensureServerReview mcpApproval
+            tags:
+                - mcpApproval
+            x-speakeasy-name-override: ensureServerReview
+            x-speakeasy-react-hook:
+                name: EnsureMcpServerReview
     /rpc/mcpApproval.getRequest:
         get:
             description: Fetch one MCP approval request with its evidence and decision history.
@@ -21319,6 +21523,108 @@ paths:
             x-speakeasy-name-override: listRequests
             x-speakeasy-react-hook:
                 name: ListMcpApprovalRequests
+    /rpc/mcpApproval.promote:
+        post:
+            description: Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.
+            operationId: promoteMcpApprovalRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PromoteRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApprovalRequestSummary'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: promote mcpApproval
+            tags:
+                - mcpApproval
+            x-speakeasy-name-override: promote
+            x-speakeasy-react-hook:
+                name: PromoteMcpApprovalRequest
     /rpc/mcpApproval.recordDecision:
         post:
             description: Approve or deny an MCP approval request, recording the rationale and who it applies to.
@@ -56820,7 +57126,7 @@ components:
                     description: The namespace of the requested reference, such as server_url or stdio_command.
                 target_raw:
                     type: string
-                    description: The reference exactly as the requester named it.
+                    description: The stored display form of the requested reference, with credential-shaped material (URL query strings and userinfo, secret-named flag and environment values in commands) redacted at intake.
                 updated_at:
                     type: string
                     description: When the request last changed.
@@ -59738,6 +60044,27 @@ components:
                 - name
                 - slug
                 - mcp_registry_namespace
+        CreateRequestRequestBody:
+            type: object
+            properties:
+                note:
+                    type: string
+                    description: The requester's justification for wanting access to this server. Must not be blank.
+                    maxLength: 4000
+                target:
+                    type: string
+                    description: 'The server reference: a URL, or the stdio command that launches it.'
+                    maxLength: 2048
+                target_kind:
+                    type: string
+                    description: The namespace of the reference.
+                    enum:
+                        - server_url
+                        - stdio_command
+            required:
+                - target_kind
+                - target
+                - note
         CreateResponseBody:
             type: object
             properties:
@@ -61285,6 +61612,15 @@ components:
             required:
                 - organization_id
                 - key_type
+        EnsureServerReviewRequestBody:
+            type: object
+            properties:
+                target:
+                    type: string
+                    description: The server URL the dossier describes.
+                    maxLength: 2048
+            required:
+                - target
         Environment:
             type: object
             properties:
@@ -68697,6 +69033,14 @@ components:
                 - distinct_providers
                 - models
                 - tools
+        PromoteRequestBody:
+            type: object
+            properties:
+                risk_policy_bypass_request_id:
+                    type: string
+                    description: The bypass request to promote.
+            required:
+                - risk_policy_bypass_request_id
         PromptGuardrailEvalResult:
             type: object
             properties:

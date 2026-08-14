@@ -25,6 +25,18 @@ type Client struct {
 	// endpoint.
 	GetRequestDoer goahttp.Doer
 
+	// EnsureServerReview Doer is the HTTP client used to make requests to the
+	// ensureServerReview endpoint.
+	EnsureServerReviewDoer goahttp.Doer
+
+	// CreateRequest Doer is the HTTP client used to make requests to the
+	// createRequest endpoint.
+	CreateRequestDoer goahttp.Doer
+
+	// Promote Doer is the HTTP client used to make requests to the promote
+	// endpoint.
+	PromoteDoer goahttp.Doer
+
 	// RecordDecision Doer is the HTTP client used to make requests to the
 	// recordDecision endpoint.
 	RecordDecisionDoer goahttp.Doer
@@ -49,14 +61,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRequestsDoer:    doer,
-		GetRequestDoer:      doer,
-		RecordDecisionDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListRequestsDoer:       doer,
+		GetRequestDoer:         doer,
+		EnsureServerReviewDoer: doer,
+		CreateRequestDoer:      doer,
+		PromoteDoer:            doer,
+		RecordDecisionDoer:     doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -103,6 +118,78 @@ func (c *Client) GetRequest() goa.Endpoint {
 		resp, err := c.GetRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpApproval", "getRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnsureServerReview returns an endpoint that makes HTTP requests to the
+// mcpApproval service ensureServerReview server.
+func (c *Client) EnsureServerReview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnsureServerReviewRequest(c.encoder)
+		decodeResponse = DecodeEnsureServerReviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnsureServerReviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnsureServerReviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpApproval", "ensureServerReview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateRequest returns an endpoint that makes HTTP requests to the
+// mcpApproval service createRequest server.
+func (c *Client) CreateRequest() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateRequestRequest(c.encoder)
+		decodeResponse = DecodeCreateRequestResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateRequestRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateRequestDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpApproval", "createRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Promote returns an endpoint that makes HTTP requests to the mcpApproval
+// service promote server.
+func (c *Client) Promote() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePromoteRequest(c.encoder)
+		decodeResponse = DecodePromoteResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPromoteRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PromoteDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpApproval", "promote", err)
 		}
 		return decodeResponse(resp)
 	}

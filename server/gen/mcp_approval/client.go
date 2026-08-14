@@ -15,17 +15,23 @@ import (
 
 // Client is the "mcpApproval" service client.
 type Client struct {
-	ListRequestsEndpoint   goa.Endpoint
-	GetRequestEndpoint     goa.Endpoint
-	RecordDecisionEndpoint goa.Endpoint
+	ListRequestsEndpoint       goa.Endpoint
+	GetRequestEndpoint         goa.Endpoint
+	EnsureServerReviewEndpoint goa.Endpoint
+	CreateRequestEndpoint      goa.Endpoint
+	PromoteEndpoint            goa.Endpoint
+	RecordDecisionEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "mcpApproval" service client given the endpoints.
-func NewClient(listRequests, getRequest, recordDecision goa.Endpoint) *Client {
+func NewClient(listRequests, getRequest, ensureServerReview, createRequest, promote, recordDecision goa.Endpoint) *Client {
 	return &Client{
-		ListRequestsEndpoint:   listRequests,
-		GetRequestEndpoint:     getRequest,
-		RecordDecisionEndpoint: recordDecision,
+		ListRequestsEndpoint:       listRequests,
+		GetRequestEndpoint:         getRequest,
+		EnsureServerReviewEndpoint: ensureServerReview,
+		CreateRequestEndpoint:      createRequest,
+		PromoteEndpoint:            promote,
+		RecordDecisionEndpoint:     recordDecision,
 	}
 }
 
@@ -71,6 +77,74 @@ func (c *Client) GetRequest(ctx context.Context, p *GetRequestPayload) (res *App
 		return
 	}
 	return ires.(*ApprovalRequestDetail), nil
+}
+
+// EnsureServerReview calls the "ensureServerReview" endpoint of the
+// "mcpApproval" service.
+// EnsureServerReview may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) EnsureServerReview(ctx context.Context, p *EnsureServerReviewPayload) (res *ApprovalRequestSummary, err error) {
+	var ires any
+	ires, err = c.EnsureServerReviewEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApprovalRequestSummary), nil
+}
+
+// CreateRequest calls the "createRequest" endpoint of the "mcpApproval"
+// service.
+// CreateRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateRequest(ctx context.Context, p *CreateRequestPayload) (res *ApprovalRequestSummary, err error) {
+	var ires any
+	ires, err = c.CreateRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApprovalRequestSummary), nil
+}
+
+// Promote calls the "promote" endpoint of the "mcpApproval" service.
+// Promote may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Promote(ctx context.Context, p *PromotePayload) (res *ApprovalRequestSummary, err error) {
+	var ires any
+	ires, err = c.PromoteEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApprovalRequestSummary), nil
 }
 
 // RecordDecision calls the "recordDecision" endpoint of the "mcpApproval"

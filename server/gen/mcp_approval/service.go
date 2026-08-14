@@ -20,6 +20,16 @@ type Service interface {
 	ListRequests(context.Context, *ListRequestsPayload) (res *ListApprovalRequestsResult, err error)
 	// Fetch one MCP approval request with its evidence and decision history.
 	GetRequest(context.Context, *GetRequestPayload) (res *ApprovalRequestDetail, err error)
+	// Resolve the evidence dossier for a server URL, opening one when none exists.
+	// Gathers evidence without recording any ask or decision, so a server can be
+	// inspected before — or without — anyone requesting it.
+	EnsureServerReview(context.Context, *EnsureServerReviewPayload) (res *ApprovalRequestSummary, err error)
+	// Ask for an MCP server to be reviewed. Repeat asks for the same server attach
+	// to the existing review rather than opening a second one.
+	CreateRequest(context.Context, *CreateRequestPayload) (res *ApprovalRequestSummary, err error)
+	// Promote a risk-policy bypass request into an approval request, carrying its
+	// requester and justification into the review queue.
+	Promote(context.Context, *PromotePayload) (res *ApprovalRequestSummary, err error)
 	// Approve or deny an MCP approval request, recording the rationale and who it
 	// applies to.
 	RecordDecision(context.Context, *RecordDecisionPayload) (res *ApprovalDecision, err error)
@@ -45,7 +55,7 @@ const ServiceName = "mcpApproval"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listRequests", "getRequest", "recordDecision"}
+var MethodNames = [6]string{"listRequests", "getRequest", "ensureServerReview", "createRequest", "promote", "recordDecision"}
 
 // ApprovalDecision is the result type of the mcpApproval service
 // recordDecision method.
@@ -96,14 +106,17 @@ type ApprovalRequestDetail struct {
 	ResearchReports []*ResearchReport
 }
 
-// One MCP server awaiting a decision.
+// ApprovalRequestSummary is the result type of the mcpApproval service
+// ensureServerReview method.
 type ApprovalRequestSummary struct {
 	// The approval request ID.
 	ID string
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind string
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw string
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -137,6 +150,31 @@ type ApprovalRequester struct {
 	RequestedAt string
 }
 
+// CreateRequestPayload is the payload type of the mcpApproval service
+// createRequest method.
+type CreateRequestPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The namespace of the reference.
+	TargetKind string
+	// The server reference: a URL, or the stdio command that launches it.
+	Target string
+	// The requester's justification for wanting access to this server. Must not be
+	// blank.
+	Note string
+}
+
+// EnsureServerReviewPayload is the payload type of the mcpApproval service
+// ensureServerReview method.
+type EnsureServerReviewPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The server URL the dossier describes.
+	Target string
+}
+
 // GetRequestPayload is the payload type of the mcpApproval service getRequest
 // method.
 type GetRequestPayload struct {
@@ -164,6 +202,15 @@ type ListRequestsPayload struct {
 	Status *string
 	// The number of requests to return per page
 	Limit *int32
+}
+
+// PromotePayload is the payload type of the mcpApproval service promote method.
+type PromotePayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The bypass request to promote.
+	RiskPolicyBypassRequestID string
 }
 
 // RecordDecisionPayload is the payload type of the mcpApproval service

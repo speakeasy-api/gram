@@ -15,6 +15,9 @@ FROM mcp_approval_requests r
 WHERE r.project_id = @project_id
   AND r.deleted IS FALSE
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text)
+  -- Unreviewed rows are evidence dossiers nobody has asked about; they live
+  -- on server pages, not in the queue, unless a caller names the status.
+  AND (sqlc.narg(status)::text IS NOT NULL OR r.status <> 'unreviewed')
 ORDER BY r.updated_at DESC
 LIMIT sqlc.arg(page_limit)::int;
 
@@ -31,6 +34,26 @@ SELECT
 FROM mcp_approval_requests r
 WHERE r.id = @id
   AND r.project_id = @project_id
+  AND r.deleted IS FALSE;
+
+-- name: GetApprovalRequestByTarget :one
+-- Resolves the review tracking a target within the caller's project, so the
+-- read-side ensure path can return an existing dossier without re-admitting
+-- it — a page view must not re-run evidence gathering or audit a create that
+-- did not happen.
+SELECT
+  r.*
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = @target_kind
+  AND r.target_key = @target_key
   AND r.deleted IS FALSE;
 
 -- name: ListApprovalRequestsByTargetKeys :many
@@ -122,12 +145,16 @@ WHERE id = @id
 -- name: UpsertApprovalRequest :one
 -- Re-requesting a server reuses the same row rather than starting a second
 -- review, so decisions accumulate as history against one target per project.
--- target_key is what deduplicates; target_raw stays as the requester wrote it.
+-- target_key is what deduplicates; target_raw is the redacted display form of
+-- the reference (URLs stripped of query and userinfo, commands stripped of
+-- credential-shaped values), never the verbatim input — it reaches the queue,
+-- the audit feed, and the webhook stream.
 --
--- A re-request reopens a denied review: the denial stays in the decision
--- history, and the request returns to the queue. An approved or still-pending
--- request keeps its status — re-asking for an approved server changes
--- nothing, and an admin can re-decide at any time.
+-- A real ask (incoming status 'requested') reopens a denied review and
+-- upgrades an unreviewed evidence dossier: the history stays, and the request
+-- joins the queue. An approved or still-pending request keeps its status —
+-- re-asking changes nothing, and an admin can re-decide at any time. An
+-- incoming dossier ('unreviewed') never downgrades an existing row.
 INSERT INTO mcp_approval_requests (
   organization_id
   , project_id
@@ -137,6 +164,7 @@ INSERT INTO mcp_approval_requests (
   , artifact_ref
   , version_pinned
   , status
+  , risk_policy_bypass_request_id
 ) VALUES (
   @organization_id
   , @project_id
@@ -146,16 +174,29 @@ INSERT INTO mcp_approval_requests (
   , sqlc.narg(artifact_ref)::text
   , @version_pinned
   , @status
+  , sqlc.narg(risk_policy_bypass_request_id)::uuid
 )
 ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
 SET updated_at = clock_timestamp()
   , status = CASE
-      WHEN mcp_approval_requests.status = 'denied' THEN EXCLUDED.status
+      WHEN EXCLUDED.status = 'requested'
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
-RETURNING *;
+  -- A later promotion links its bypass request onto an existing review; a
+  -- proactive re-request never clears an existing link.
+  , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
+-- inserted distinguishes a fresh row from a reused one (xmax is zero only for
+-- rows this statement inserted), so the caller can avoid auditing a create
+-- when concurrent dossier opens or a gather retry landed on an existing row.
+RETURNING *, (xmax = 0) AS inserted;
 
--- name: CreateApprovalRequestRequester :one
+-- name: UpsertApprovalRequestRequester :one
+-- One row per person per request: ten people wanting the same server is one
+-- review with ten requesters, and one person asking twice is still one. A
+-- repeat ask keeps the freshest justification without erasing an earlier one
+-- when the new ask carries none.
 INSERT INTO mcp_approval_request_requesters (
   organization_id
   , project_id
@@ -171,6 +212,11 @@ INSERT INTO mcp_approval_request_requesters (
   , sqlc.narg(user_email)::text
   , sqlc.narg(note)::text
 )
+ON CONFLICT (mcp_approval_request_id, user_id) WHERE deleted IS FALSE DO UPDATE
+SET note = COALESCE(EXCLUDED.note, mcp_approval_request_requesters.note)
+  , user_email = COALESCE(EXCLUDED.user_email, mcp_approval_request_requesters.user_email)
+  , requested_at = clock_timestamp()
+  , updated_at = clock_timestamp()
 RETURNING *;
 
 -- name: SetApprovalRequestEvidence :exec
@@ -183,6 +229,22 @@ SET current_evidence = @current_evidence
   , updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: RefreshApprovalRequestEvidence :execrows
+-- Compare-and-set variant used by the read-path gap retry. The fresh document
+-- lands only while the stored evidence is still the exact gather the caller
+-- read and judged gapped: a slower gather losing a race to a concurrent
+-- refresh matches zero rows instead of replacing the newer document, and the
+-- loser re-reads the winner's evidence.
+UPDATE mcp_approval_requests
+SET current_evidence = @current_evidence
+  , evidence_version = @evidence_version
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND evidence_collected_at = sqlc.arg(observed_collected_at)::timestamptz
   AND deleted IS FALSE;
 
 -- name: GetApprovalRequestForDecision :one
@@ -233,3 +295,20 @@ INSERT INTO mcp_research_reports (
   , sqlc.narg(error)::text
 )
 RETURNING *;
+
+-- name: GetBypassRequestForPromotion :one
+-- Resolved under the caller's organization and project, never by id alone:
+-- the id arrives from the caller, and promotion of another tenant's bypass
+-- request into this project's queue is the exact horizontal escalation the
+-- org standard forbids. There is deliberately no database-level pin for this
+-- pair (see AIS-470), so this predicate is the primary control. The project
+-- pin alone would suffice (a project belongs to one organization), but the
+-- org pin also guarantees the row's organization_id — which the promotion
+-- admits under — is the caller's.
+SELECT id, organization_id, project_id, target_kind, target_label, target_key,
+       target_dimensions, requester_user_id, requester_email, note
+FROM risk_policy_bypass_requests
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

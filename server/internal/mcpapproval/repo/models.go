@@ -30,29 +30,6 @@ type McpApprovalDecision struct {
 	Deleted              bool
 }
 
-// One review per MCP server per project. Re-requests reopen the same row so decisions accumulate as history, giving "have we decided on this before?" for free.
-type McpApprovalRequest struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TargetKind     string
-	TargetRaw      string
-	TargetKey      string
-	// Resolved immutable artifact identity. NULL means unidentified, which must surface as unknown rather than as an absence of findings.
-	ArtifactRef pgtype.Text
-	// False for a floating invocation such as an unpinned npx command, where anything scanned may not be what runs.
-	VersionPinned             bool
-	RiskPolicyBypassRequestID uuid.NullUUID
-	Status                    string
-	CurrentEvidence           []byte
-	EvidenceVersion           int32
-	EvidenceCollectedAt       pgtype.Timestamptz
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
-	DeletedAt                 pgtype.Timestamptz
-	Deleted                   bool
-}
-
 // Who asked for a server and why. Separate from the request so demand is visible without duplicating reviews.
 type McpApprovalRequestRequester struct {
 	ID                   uuid.UUID
