@@ -277,6 +277,17 @@ func TestFetchPage_ExtractsStructuredAndMalformedHTML(t *testing.T) {
 			excludes: []string{"axis label"},
 		},
 		{
+			// An unclosed foreignObject must die with the svg that owns it:
+			// here the inner svg closes over its dangling foreignObject, so
+			// the block tag that follows still pops the outer unclosed svg
+			// instead of the stale foreignObject suppressing the breakout.
+			name: "an unclosed foreignObject dies with its svg",
+			body: `<div>Before chart.
+				<svg><svg><foreignObject><span>embedded html</span></svg>
+				<p>After the break.</p></div>`,
+			contains: []string{"Before chart.", "After the break."},
+		},
+		{
 			// An unclosed template genuinely captures the rest of the
 			// document in a browser, so staying dark is the faithful read.
 			name:     "an unclosed template stays inert",

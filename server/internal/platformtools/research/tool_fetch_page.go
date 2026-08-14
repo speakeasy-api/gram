@@ -276,8 +276,12 @@ func extractText(document string) string {
 
 	var out strings.Builder
 	skipDepth := 0
-	svgDepth := 0
 	foreignDepth := 0
+	// svgForeign holds one counter per open svg — its length is the svg
+	// depth — tracking the foreignObject elements opened at that level, so
+	// an unclosed foreignObject dies with the svg that owns it instead of
+	// suppressing the block breakout for the rest of the document.
+	var svgForeign []int
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
@@ -286,29 +290,29 @@ func extractText(document string) string {
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, _ := tokenizer.TagName()
 			if string(name) == "svg" && tokenType == html.StartTagToken {
-				svgDepth++
-			} else if string(name) == "foreignobject" && svgDepth > 0 && tokenType == html.StartTagToken {
+				svgForeign = append(svgForeign, 0)
+			} else if string(name) == "foreignobject" && len(svgForeign) > 0 && tokenType == html.StartTagToken {
+				svgForeign[len(svgForeign)-1]++
 				foreignDepth++
 			} else if skippedElements[string(name)] && tokenType == html.StartTagToken {
 				skipDepth++
 			}
 			if blockElements[string(name)] {
 				if foreignDepth == 0 {
-					svgDepth = 0
+					svgForeign = svgForeign[:0]
 				}
 				out.WriteString("\n")
 			}
 		case html.EndTagToken:
 			name, _ := tokenizer.TagName()
 			if string(name) == "svg" {
-				if svgDepth > 0 {
-					svgDepth--
-				}
-				if svgDepth == 0 {
-					foreignDepth = 0
+				if n := len(svgForeign); n > 0 {
+					foreignDepth -= svgForeign[n-1]
+					svgForeign = svgForeign[:n-1]
 				}
 			} else if string(name) == "foreignobject" {
-				if foreignDepth > 0 {
+				if n := len(svgForeign); n > 0 && svgForeign[n-1] > 0 {
+					svgForeign[n-1]--
 					foreignDepth--
 				}
 			} else if skippedElements[string(name)] && skipDepth > 0 {
@@ -318,7 +322,7 @@ func extractText(document string) string {
 				out.WriteString("\n")
 			}
 		case html.TextToken:
-			if skipDepth == 0 && svgDepth == 0 {
+			if skipDepth == 0 && len(svgForeign) == 0 {
 				out.Write(tokenizer.Text())
 				out.WriteString(" ")
 			}
