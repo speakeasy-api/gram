@@ -69,10 +69,11 @@ JOIN organization_metadata
 WHERE billing_metadata.organization_id = @organization_id
 FOR UPDATE OF billing_metadata, organization_metadata;
 
--- name: GetStripeSubscriptionOwner :one
+-- name: ListStripeSubscriptionOwners :many
 SELECT organization_id
 FROM billing_metadata
-WHERE stripe_subscription_id = @stripe_subscription_id;
+WHERE stripe_subscription_id = @stripe_subscription_id
+ORDER BY organization_id;
 
 -- name: ActivatePaygBillingMetadata :one
 UPDATE billing_metadata

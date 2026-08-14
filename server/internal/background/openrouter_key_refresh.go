@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -34,6 +36,34 @@ func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Contex
 		KeyType: string(keyType),
 	})
 	return err
+}
+
+// SchedulePaygOpenRouterKeyRefresh uses the durable outbox event ID as the
+// workflow identity, so Pub/Sub redelivery cannot start the same refresh twice.
+func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterKeyRefresh(ctx context.Context, eventID, orgID string, keyType openrouter.KeyType, limit *int) error {
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("refresh openrouter key workflow: %w", err)
+	}
+
+	_, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    fmt.Sprintf("v1:openrouter-key-refresh:payg-activation:%s", eventID),
+		TaskQueue:             string(w.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowRunTimeout:    3 * time.Minute,
+	}, OpenrouterKeyRefreshWorkflow, OpenRouterKeyRefreshParams{
+		OrgID:   orgID,
+		Limit:   limit,
+		KeyType: string(keyType),
+	})
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	switch {
+	case errors.As(err, &alreadyStarted):
+		return nil
+	case err != nil:
+		return fmt.Errorf("start PAYG openrouter key refresh workflow: %w", err)
+	default:
+		return nil
+	}
 }
 
 // Called by your service to start (or restart) the workflow

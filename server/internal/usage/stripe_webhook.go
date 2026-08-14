@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -75,9 +74,6 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe Checkout completion identifiers").LogWarn(ctx, logger)
 	}
 	if event.CustomerID == "" {
-		if event.Type == "checkout.session.completed" {
-			return oops.E(oops.CodeBadRequest, nil, "invalid Stripe Checkout completion customer").LogWarn(ctx, logger)
-		}
 		logger.WarnContext(ctx, "skipping Stripe webhook event without a customer")
 		return nil
 	}
@@ -221,12 +217,15 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, errors.New("organization already belongs to another Stripe subscription")
 	}
 
-	owner, err := q.GetStripeSubscriptionOwner(ctx, pgtype.Text{String: event.SubscriptionID, Valid: true})
-	switch {
-	case err == nil && owner != organizationID:
-		return stripeWebhookResult{}, errors.New("stripe subscription already belongs to another organization")
-	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+	owners, err := q.ListStripeSubscriptionOwners(ctx, pgtype.Text{String: event.SubscriptionID, Valid: true})
+	if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("check Stripe subscription ownership: %w", err)
+	}
+	switch {
+	case len(owners) > 1:
+		return stripeWebhookResult{}, errors.New("stripe subscription belongs to multiple organizations")
+	case len(owners) == 1 && owners[0] != organizationID:
+		return stripeWebhookResult{}, errors.New("stripe subscription already belongs to another organization")
 	}
 
 	newlyEnabled := []productfeatures.Feature(nil)
@@ -258,14 +257,6 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	}
 	if err := q.ActivatePaygOrganization(ctx, organizationID); err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("activate PAYG organization: %w", err)
-	}
-
-	if s.keyRefresher == nil {
-		return stripeWebhookResult{}, errors.New("OpenRouter key refresh scheduler is unavailable")
-	}
-	limit := paygOpenRouterChatCreditLimit
-	if err := s.keyRefresher.ScheduleOpenRouterKeyRefresh(ctx, organizationID, openrouter.KeyTypeChat, &limit); err != nil {
-		return stripeWebhookResult{}, fmt.Errorf("schedule PAYG OpenRouter chat key refresh: %w", err)
 	}
 
 	if s.auditLogger == nil {

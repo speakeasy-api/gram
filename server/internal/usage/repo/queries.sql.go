@@ -232,19 +232,6 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 	return i, err
 }
 
-const getStripeSubscriptionOwner = `-- name: GetStripeSubscriptionOwner :one
-SELECT organization_id
-FROM billing_metadata
-WHERE stripe_subscription_id = $1
-`
-
-func (q *Queries) GetStripeSubscriptionOwner(ctx context.Context, stripeSubscriptionID pgtype.Text) (string, error) {
-	row := q.db.QueryRow(ctx, getStripeSubscriptionOwner, stripeSubscriptionID)
-	var organization_id string
-	err := row.Scan(&organization_id)
-	return organization_id, err
-}
-
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
 SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, finalized_at, created_at, updated_at
 FROM billing_cycle_usage
@@ -330,6 +317,33 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 			return nil, err
 		}
 		items = append(items, cycle_start)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStripeSubscriptionOwners = `-- name: ListStripeSubscriptionOwners :many
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_subscription_id = $1
+ORDER BY organization_id
+`
+
+func (q *Queries) ListStripeSubscriptionOwners(ctx context.Context, stripeSubscriptionID pgtype.Text) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStripeSubscriptionOwners, stripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
