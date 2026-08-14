@@ -4,11 +4,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const projects = vi.hoisted(() => ({
   current: [{ id: "p1", name: "Alpha", slug: "alpha" }],
 }));
+const setupEligible = vi.hoisted(() => ({ current: true }));
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: projects.current }),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => ({ orgSlug: "acme" }) }));
+vi.mock("@/hooks/useOnboardingCta", () => ({
+  useOnboardingCta: () => ({ eligible: setupEligible.current }),
+}));
 vi.mock("@/hooks/useOrgWelcomeBanner", () => ({
   useOrgWelcomeBanner: () => ({ visible: true }),
 }));
@@ -30,6 +34,7 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   projects.current = [{ id: "p1", name: "Alpha", slug: "alpha" }];
+  setupEligible.current = true;
 });
 
 describe("OrgWelcomeBanner", () => {
@@ -39,6 +44,14 @@ describe("OrgWelcomeBanner", () => {
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha");
     expect(hrefFor("Start setup wizard")).toBe("/acme/setup");
+  });
+
+  it("drops the setup card when the org cannot run the wizard", () => {
+    setupEligible.current = false;
+    render(<OrgWelcomeBanner />);
+
+    expect(screen.queryByText("Start setup wizard")).toBeNull();
+    expect(screen.getByText("Enter demo org")).toBeTruthy();
   });
 
   it("prefers the last-visited project, then default", () => {

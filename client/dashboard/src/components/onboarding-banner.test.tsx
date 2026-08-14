@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const pathname = vi.hoisted(() => ({ current: "/acme" }));
 
 vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => ({ orgSlug: "acme" }) }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true }),
+}));
 vi.mock("react-router", () => ({
   useLocation: () => ({ pathname: pathname.current }),
 }));

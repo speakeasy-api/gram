@@ -4,6 +4,7 @@ import {
 } from "@/components/brand-mesh";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOnboardingCta } from "@/hooks/useOnboardingCta";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,9 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   const { orgSlug } = useSlugs();
   const orgRoutes = useOrgRoutes();
   const { visible } = useOrgWelcomeBanner();
+  // Same gate as the header's "Finish setup" banner: the wizard is an
+  // enterprise org-admin surface.
+  const { eligible: canSetUpOrg } = useOnboardingCta();
 
   // Same preference order as the overview prefetch on org home.
   const startProject =
@@ -59,15 +63,18 @@ export function OrgWelcomeBanner(): JSX.Element | null {
         : `/${orgSlug}`,
       recommended: true,
     },
-    {
+  ];
+
+  if (canSetUpOrg) {
+    cards.push({
       index: "03",
       title: "Set up the organization",
       body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
       cta: "Start setup wizard",
       meta: "5 steps · resumable",
       to: orgRoutes.setup.href(),
-    },
-  ];
+    });
+  }
 
   if (!visible) return null;
 
@@ -81,11 +88,11 @@ export function OrgWelcomeBanner(): JSX.Element | null {
       <div
         className={cn(
           COLUMN_CLASS,
-          "flex flex-col gap-4 pt-10 pb-10 md:pt-11 md:pb-28",
+          "flex flex-col gap-4 pt-10 pb-10 lg:pt-12 lg:pb-28",
         )}
       >
         <span className="text-eyebrow">Welcome to Speakeasy</span>
-        <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] md:text-[60px]">
+        <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] lg:text-[60px]">
           Choose your
           <br />
           first move
@@ -95,8 +102,15 @@ export function OrgWelcomeBanner(): JSX.Element | null {
       {/* flow-root keeps the cards' negative margin from collapsing out
           through the band, which would drag the band up over the hero. */}
       <div className="bg-background/50 flow-root w-full border-border border-y">
-        <div className={cn(COLUMN_CLASS, "pb-6 md:pb-12")}>
-          <div className="grid grid-cols-1 gap-4 md:-mt-20 md:grid-cols-3">
+        <div className={cn(COLUMN_CLASS, "pt-8 lg:pt-0 pb-8")}>
+          {/* Stacked below lg, side by side above — 2 or 3 across depending
+              on whether the setup card is present. */}
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-4 lg:-mt-20",
+              cards.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2",
+            )}
+          >
             {cards.map((card) => (
               <RouteCardLink key={card.index} card={card} />
             ))}

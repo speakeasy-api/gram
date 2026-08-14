@@ -44,6 +44,10 @@ vi.mock("@/contexts/Auth", () => ({
     slug: "acme",
     projects: [{ id: "project-1", name: "Project One", slug: "project-one" }],
   }),
+  useSession: () => ({
+    rawGramAccountType: "enterprise",
+    hasActiveSubscription: true,
+  }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ projects: { create: vi.fn() } }),
