@@ -312,14 +312,18 @@ INSERT INTO mcp_research_reports (
 RETURNING *;
 
 -- name: GetBypassRequestForPromotion :one
--- Resolved under the caller's project, never by id alone: the id arrives from
--- the caller, and promotion of another project's bypass request into this
--- project's queue is the exact horizontal escalation the org standard forbids.
--- There is deliberately no database-level pin for this pair (see AIS-470), so
--- this predicate is the primary control.
+-- Resolved under the caller's organization and project, never by id alone:
+-- the id arrives from the caller, and promotion of another tenant's bypass
+-- request into this project's queue is the exact horizontal escalation the
+-- org standard forbids. There is deliberately no database-level pin for this
+-- pair (see AIS-470), so this predicate is the primary control. The project
+-- pin alone would suffice (a project belongs to one organization), but the
+-- org pin also guarantees the row's organization_id — which the promotion
+-- admits under — is the caller's.
 SELECT id, organization_id, project_id, target_kind, target_label, target_key,
        target_dimensions, requester_user_id, requester_email, note
 FROM risk_policy_bypass_requests
 WHERE id = @id
+  AND organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE;

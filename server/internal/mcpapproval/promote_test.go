@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -30,12 +31,19 @@ func promotePayload(id string) *gen.PromotePayload {
 // through the risk repo.
 func seedBypassRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, serverURL, requesterID, note string) uuid.UUID {
 	t.Helper()
+	return seedBypassRequestForOrg(t, ctx, ti, ti.organizationID, projectID, serverURL, requesterID, note)
+}
+
+// seedBypassRequestForOrg is seedBypassRequest under an explicit organization,
+// so tests can plant a row whose organization disagrees with the caller's.
+func seedBypassRequestForOrg(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, serverURL, requesterID, note string) uuid.UUID {
+	t.Helper()
 
 	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID:             policyID,
 		ProjectID:      projectID,
-		OrganizationID: ti.organizationID,
+		OrganizationID: organizationID,
 		Name:           "shadow mcp policy " + policyID.String()[:8],
 		Sources:        []string{"shadow_mcp"},
 		AnalyzerConfig: []byte(`{}`),
@@ -62,7 +70,7 @@ func seedBypassRequest(t *testing.T, ctx context.Context, ti *testInstance, proj
 
 	row, err := riskrepo.New(ti.conn).UpsertRiskPolicyBypassRequest(ctx, riskrepo.UpsertRiskPolicyBypassRequestParams{
 		ID:               uuid.New(),
-		OrganizationID:   ti.organizationID,
+		OrganizationID:   organizationID,
 		ProjectID:        projectID,
 		RiskPolicyID:     policyID,
 		TargetKind:       targetKind,
@@ -132,6 +140,37 @@ func TestPromote_OtherProjectBypassIsNotFound(t *testing.T) {
 	theirs := seedBypassRequest(t, ctx, ti, otherProject, "https://theirs.example.com/sse", "their-user", "their reason")
 
 	_, err := ti.service.Promote(ctx, promotePayload(theirs.String()))
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// Nothing entered this project's queue.
+	result, err := ti.service.ListRequests(ctx, listPayload())
+	require.NoError(t, err)
+	require.Empty(t, result.Requests)
+}
+
+// A row whose organization disagrees with the caller's is refused even when
+// its project id matches. Application writes never produce such a row (a
+// project belongs to one organization), so this seeds one directly: the org
+// pin is what guarantees the admission runs under the caller's organization,
+// never one read off the row.
+func TestPromote_ForeignOrganizationBypassIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	foreignOrg := "mcpapproval-foreign-org-" + uuid.NewString()
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          foreignOrg,
+		Name:        foreignOrg,
+		Slug:        foreignOrg,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	theirs := seedBypassRequestForOrg(t, ctx, ti, foreignOrg, ti.projectID, "https://theirs.example.com/sse", "their-user", "their reason")
+
+	_, err = ti.service.Promote(ctx, promotePayload(theirs.String()))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	// Nothing entered this project's queue.
