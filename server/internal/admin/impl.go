@@ -433,9 +433,10 @@ func listOrganizationsOffset(page *int, limit int32) int64 {
 	}
 
 	// Cap the page so that a hand-typed page number cannot overflow the multiply
-	// into a negative offset, which Postgres rejects. The ceiling carries no +1:
-	// limit is not a constant, so at limit 1 the addition overflows to MinInt64
-	// and the guard fires on every page.
+	// into a negative offset, which Postgres rejects. Do not add one to this
+	// ceiling. limit is a variable, so at limit 1 that addition would itself
+	// overflow to MinInt64, the guard would fire on every page, and every page
+	// would come back empty. That was the bug this replaced.
 	if maxPage := math.MaxInt64 / int64(limit); n > maxPage {
 		n = maxPage
 	}
