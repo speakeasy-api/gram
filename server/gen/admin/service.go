@@ -238,9 +238,23 @@ type ListOrganizationsPayload struct {
 	AdminSessionToken *string
 	// Search term applied to name and slug (case-insensitive substring).
 	Q *string
-	// Filter by gram_account_type (e.g. free, pro, enterprise).
+	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
+	// Superseded by account_types, which it joins as one more member of the same
+	// set.
 	AccountType *string
-	// Include organizations with disabled_at set. Defaults to false.
+	// Match any of these gram_account_type values. Empty matches every account
+	// type. A value no organization carries matches nothing rather than failing
+	// the request.
+	AccountTypes []string
+	// Match any of running, ending_soon, expired, demoted, converted or none.
+	// Empty matches every trial state. An unrecognised value matches nothing
+	// rather than failing the request.
+	TrialStates []string
+	// Match any of active or disabled. Empty falls back to include_disabled. An
+	// unrecognised value matches nothing rather than failing the request.
+	DisabledStates []string
+	// Include organizations with disabled_at set. Defaults to false. Superseded by
+	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool
 	// Pagination cursor: id of the last item from the previous page. Ignored when
 	// sort or page is supplied.

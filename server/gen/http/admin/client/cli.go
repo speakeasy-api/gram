@@ -202,7 +202,7 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -214,6 +214,33 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	{
 		if adminListOrganizationsAccountType != "" {
 			accountType = &adminListOrganizationsAccountType
+		}
+	}
+	var accountTypes []string
+	{
+		if adminListOrganizationsAccountTypes != "" {
+			err = json.Unmarshal([]byte(adminListOrganizationsAccountTypes), &accountTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for accountTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var trialStates []string
+	{
+		if adminListOrganizationsTrialStates != "" {
+			err = json.Unmarshal([]byte(adminListOrganizationsTrialStates), &trialStates)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for trialStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var disabledStates []string
+	{
+		if adminListOrganizationsDisabledStates != "" {
+			err = json.Unmarshal([]byte(adminListOrganizationsDisabledStates), &disabledStates)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
 		}
 	}
 	var includeDisabled *bool
@@ -278,6 +305,9 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v := &admin.ListOrganizationsPayload{}
 	v.Q = q
 	v.AccountType = accountType
+	v.AccountTypes = accountTypes
+	v.TrialStates = trialStates
+	v.DisabledStates = disabledStates
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit

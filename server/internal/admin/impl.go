@@ -335,6 +335,34 @@ var listOrganizationsSortColumns = map[string]bool{
 	"trial_ends_at": true,
 }
 
+// listOrganizationsFilters resolves the two set filters the SQL takes from the
+// four the payload offers. The scalar account_type and the include_disabled
+// boolean predate the sets and stay live, because this endpoint keeps serving
+// the dashboard that is on main until AGE-3207 retires them.
+//
+// Unknown values pass straight through to match nothing. An organization can
+// carry an account type from outside the list the dashboard knows, and an
+// operator pasting a colleague's URL is owed an empty table rather than a 422.
+func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) (accountTypes []string, disabledStates []string) {
+	// Union, not override: a caller supplying both asks for both.
+	accountTypes = payload.AccountTypes
+	if payload.AccountType != nil {
+		accountTypes = append(append([]string{}, accountTypes...), *payload.AccountType)
+	}
+
+	// disabled_states overrides the boolean outright. The boolean only picks the
+	// fallback, and these two literals are the arms of the CASE in both queries.
+	disabledStates = payload.DisabledStates
+	if len(disabledStates) == 0 {
+		disabledStates = []string{"active"}
+		if conv.PtrValOr(payload.IncludeDisabled, false) {
+			disabledStates = append(disabledStates, "disabled")
+		}
+	}
+
+	return accountTypes, disabledStates
+}
+
 func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
 	queries := repo.New(s.db)
 
@@ -379,15 +407,18 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		fetchLimit = limit + 1
 	}
 
+	accountTypes, disabledStates := listOrganizationsFilters(payload)
+
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
-		Q:               conv.PtrToPGText(payload.Q),
-		AccountType:     conv.PtrToPGText(payload.AccountType),
-		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
-		AfterID:         afterID,
-		SortBy:          sortBy,
-		SortDir:         sortDir,
-		PageOffset:      pageOffset,
-		PageLimit:       fetchLimit,
+		Q:              conv.PtrToPGText(payload.Q),
+		AccountTypes:   accountTypes,
+		TrialStates:    payload.TrialStates,
+		DisabledStates: disabledStates,
+		AfterID:        afterID,
+		SortBy:         sortBy,
+		SortDir:        sortDir,
+		PageOffset:     pageOffset,
+		PageLimit:      fetchLimit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").LogError(ctx, s.logger)
@@ -397,9 +428,10 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// a count, and in cursor mode the page query has already discarded everything
 	// before the cursor.
 	total, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{
-		Q:               conv.PtrToPGText(payload.Q),
-		AccountType:     conv.PtrToPGText(payload.AccountType),
-		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
+		Q:              conv.PtrToPGText(payload.Q),
+		AccountTypes:   accountTypes,
+		TrialStates:    payload.TrialStates,
+		DisabledStates: disabledStates,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").LogError(ctx, s.logger)
