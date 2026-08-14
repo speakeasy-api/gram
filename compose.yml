@@ -103,6 +103,7 @@ services:
     ports:
       - "${GRAFANA_PORT}:3000" # Grafana UI
       - "${TEMPO_HTTP_PORT}:3200" # Tempo HTTP API
+      - "${LOKI_HTTP_PORT}:3100" # Loki HTTP API
       - "${PROMETHEUS_PORT}:9090" # Prometheus UI/API
       - "${OTLP_GRPC_PORT}:4317" # OTLP gRPC receiver
       - "${OTLP_HTTP_PORT}:4318" # OTLP HTTP receiver
