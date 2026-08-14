@@ -523,6 +523,23 @@ func listOrganizationsOffset(page *int, limit int32) int64 {
 	return (n - 1) * int64(limit)
 }
 
+// GetOrganizationStats counts the whole platform. It takes no filters, so the
+// figures stay put while an operator narrows the list below them.
+func (s *Service) GetOrganizationStats(ctx context.Context, payload *gen.GetOrganizationStatsPayload) (*gen.AdminOrganizationStats, error) {
+	row, err := repo.New(s.db).AdminGetOrganizationStats(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "organization stats").LogError(ctx, s.logger)
+	}
+
+	return &gen.AdminOrganizationStats{
+		Total:             row.Total,
+		CreatedLast7Days:  row.CreatedLast7Days,
+		TrialsEndingSoon:  row.TrialsEndingSoon,
+		Disabled:          row.Disabled,
+		DisabledLast7Days: row.DisabledLast7Days,
+	}, nil
+}
+
 func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {
 	rows, err := repo.New(s.db).AdminListOrganizationMembers(ctx, payload.OrganizationID)
 	if err != nil {
@@ -573,6 +590,11 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	// See ExtendTrial: the design bounds this too, but generated validation only
+	// runs at the HTTP boundary.
+	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
+		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
+	}
 
 	queries := repo.New(s.db)
 	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
@@ -584,6 +606,49 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
+}
+
+func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUpdateAccountTypePayload) (*gen.AdminBulkUpdateAccountTypeResult, error) {
+	if !constants.IsAccountType(payload.AccountType) {
+		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
+	}
+
+	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
+		AccountType: payload.AccountType,
+		Ids:         payload.Ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
+	}
+
+	written := make(map[string]struct{}, len(updated))
+	for _, id := range updated {
+		written[id] = struct{}{}
+	}
+
+	// Naming the ids that matched nothing is the only way the operator can tell
+	// the batch fell short.
+	missing := make([]string, 0, len(payload.Ids))
+	seen := make(map[string]struct{}, len(payload.Ids))
+	for _, id := range payload.Ids {
+		if _, ok := written[id]; ok {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		missing = append(missing, id)
+	}
+
+	if updated == nil {
+		updated = []string{}
+	}
+
+	return &gen.AdminBulkUpdateAccountTypeResult{
+		UpdatedIds: updated,
+		MissingIds: missing,
+	}, nil
 }
 
 func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {

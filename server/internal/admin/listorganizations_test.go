@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -12,8 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -31,7 +35,10 @@ type orgFixture struct {
 	createdAt         *time.Time
 }
 
-func seedOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f orgFixture) {
+// The database handle is an interface rather than a pool so a seeder can share
+// one transaction with the query it is seeding for, which is what lets a
+// boundary fixture meet the same now() the predicate reads.
+func seedOrg(t *testing.T, ctx context.Context, conn testrepo.DBTX, f orgFixture) {
 	t.Helper()
 
 	if f.accountType == "" {
@@ -154,9 +161,104 @@ func TestUpdateOrganization_AccountTypeOnly(t *testing.T) {
 func TestUpdateOrganization_NoFieldsRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, svc, _ := newTestAdminService(t)
+	ctx, svc, conn := newTestAdminService(t)
+	// Must exist, or a missing guard is masked by the handler's not-found.
+	seedOrg(t, ctx, conn, orgFixture{id: "org_x", name: "X Co", slug: "x-co", accountType: "free"})
+
 	_, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: "org_x"})
 	require.Error(t, err)
+	require.ErrorContains(t, err, "at least one of")
+}
+
+func postUpdateOrg(t *testing.T, ctx context.Context, svc *Service, body string) (*gen.AdminOrganization, error) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.update", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	payload, err := srv.DecodeUpdateOrganizationRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return svc.UpdateOrganization(ctx, payload)
+}
+
+// The two paths accepting different sets is the defect this slice prevents, so
+// dropping the allow-list from either one has to turn a test red.
+func TestUpdateOrganization_AccountTypeAllowList(t *testing.T) {
+	t.Parallel()
+
+	t.Run("refuses an out-of-list value and writes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, svc, conn := newTestAdminService(t)
+		seedOrg(t, ctx, conn, orgFixture{id: "org_single_bad", name: "Single Bad", slug: "single-bad", accountType: "free", whitelisted: true})
+		before := readOrgState(t, ctx, conn, "org_single_bad")
+
+		for _, bad := range []string{"gold", "Free", "FREE", ""} {
+			_, err := postUpdateOrg(t, ctx, svc, `{"id":"org_single_bad","account_type":"`+bad+`"}`)
+			require.Error(t, err, "the single path must refuse %q just as the bulk path does", bad)
+			if bad != "" {
+				require.ErrorContains(t, err, bad, "the refusal must name the offending value")
+			}
+		}
+
+		after := readOrgState(t, ctx, conn, "org_single_bad")
+		require.Equal(t, "free", after.GramAccountType)
+		require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
+	})
+
+	t.Run("accepts every allowed value", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, svc, conn := newTestAdminService(t)
+		seedOrg(t, ctx, conn, orgFixture{id: "org_single_ok", name: "Single Ok", slug: "single-ok", accountType: "free"})
+
+		for _, good := range []string{"free", "pro", "enterprise"} {
+			res, err := postUpdateOrg(t, ctx, svc, `{"id":"org_single_ok","account_type":"`+good+`"}`)
+			require.NoError(t, err)
+			require.Equal(t, good, res.AccountType)
+		}
+	})
+
+	t.Run("whitelisted alone still works", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, svc, conn := newTestAdminService(t)
+		seedOrg(t, ctx, conn, orgFixture{id: "org_single_wl", name: "Single WL", slug: "single-wl", accountType: "pro", whitelisted: false})
+
+		res, err := postUpdateOrg(t, ctx, svc, `{"id":"org_single_wl","whitelisted":true}`)
+		require.NoError(t, err)
+		require.True(t, res.Whitelisted)
+		require.Equal(t, "pro", res.AccountType, "a whitelist-only write must leave the account type alone")
+
+		_, err = postUpdateOrg(t, ctx, svc, `{"id":"org_single_wl"}`)
+		require.Error(t, err, "a body with neither account_type nor whitelisted must still be rejected")
+	})
+
+	t.Run("the service refuses what the decoder would", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, svc, conn := newTestAdminService(t)
+		seedOrg(t, ctx, conn, orgFixture{id: "org_single_svc", name: "Single Svc", slug: "single-svc", accountType: "free"})
+		before := readOrgState(t, ctx, conn, "org_single_svc")
+
+		for _, bad := range []string{"gold", "Free", "FREE", ""} {
+			_, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{
+				ID:          "org_single_svc",
+				AccountType: &bad,
+			})
+			require.Error(t, err, "the service must refuse %q even with no decoder in front of it", bad)
+			if bad != "" {
+				require.ErrorContains(t, err, bad, "the refusal must name the offending value")
+			}
+		}
+
+		after := readOrgState(t, ctx, conn, "org_single_svc")
+		require.Equal(t, "free", after.GramAccountType)
+		require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
+	})
 }
 
 func TestGetOrganization_NotFound(t *testing.T) {
@@ -334,7 +436,7 @@ type trialFixture struct {
 	demotedAt   *time.Time
 }
 
-func seedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f trialFixture) {
+func seedTrial(t *testing.T, ctx context.Context, conn trialsRepo.DBTX, f trialFixture) {
 	t.Helper()
 
 	if f.tier == "" {
