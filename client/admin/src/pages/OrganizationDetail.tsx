@@ -18,6 +18,7 @@ import {
   type DataTableFeatures,
 } from "@/components/data-table";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { Trial } from "@/components/Trial";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import { cn } from "@/lib/utils";
 import {
@@ -225,11 +226,8 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
           {fmtDate(org.disabled_at)}
         </span>
       </Row>
-      <Row label="Free trial started">
-        <span className="text-sm">{fmtDate(org.free_trial_started_at)}</span>
-      </Row>
-      <Row label="Free trial ends">
-        <span className="text-sm">{fmtDate(org.free_trial_ends_at)}</span>
+      <Row label="Trial">
+        <Trial org={org} />
       </Row>
       <Row label="Created">
         <span className="text-sm">{fmtDate(org.created_at)}</span>

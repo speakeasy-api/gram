@@ -36,6 +36,13 @@ const ORG: AdminOrganization = {
   slug: "placeholder-one",
   account_type: "pro",
   whitelisted: true,
+  // The stale pair, dated apart from the real trial on purpose. A page back on
+  // `free_trial_ends_at` then shows the wrong date rather than the right one
+  // by coincidence.
+  free_trial_started_at: "2026-02-01T00:00:00Z",
+  free_trial_ends_at: "2026-11-12T00:00:00Z",
+  trial_state: "running",
+  trial_ends_at: "2026-05-06T00:00:00Z",
   member_count: 1,
   created_at: "2026-01-02T00:00:00Z",
   updated_at: "2026-01-07T00:00:00Z",
@@ -63,6 +70,24 @@ const MEMBER: AdminOrganizationMember = {
 // assertion is for: the format is not.
 function longDate(iso: string): string {
   return new Date(iso).toLocaleString();
+}
+
+// The trial is a date without a clock wherever it is read, so it does not come
+// out of `longDate` with the timestamps around it. UTC, because that is the
+// zone the API states these dates in and the zone they are rendered in; see
+// `utils.test.ts`.
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
+}
+
+// The field rows carry no role, so a test reaches one by its label and takes
+// the value beside it.
+function valueBeside(label: string): HTMLElement {
+  const value = screen.getByText(label).nextElementSibling;
+  if (!(value instanceof HTMLElement)) {
+    throw new Error(`the ${label} row has no value beside it`);
+  }
+  return value;
 }
 
 // A Radix tab trigger selects on mousedown, not on click. The panel only
@@ -101,6 +126,48 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("organization detail", () => {
+  it("reads the trial exactly the way the row does", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const trialEndsAt = ORG.trial_ends_at;
+    if (!trialEndsAt) throw new Error("the record under test needs a trial");
+
+    const trial = await screen.findByText("Trial");
+    // Written out, not built from the component. The same string is asserted
+    // against the list's cell, which is the only way two pages that could
+    // drift apart are held together.
+    expect(valueBeside("Trial").textContent).toBe(
+      `Running ends ${shortDate(trialEndsAt)}`,
+    );
+    expect(
+      trial.parentElement?.querySelector('[data-slot="badge"]'),
+    ).toBeTruthy();
+
+    // The defaulted pair is gone from the page, not merely unread: an operator
+    // who sees "Free trial ends" reads a date no organization ever earned.
+    expect(screen.queryByText("Free trial started")).toBeNull();
+    expect(screen.queryByText("Free trial ends")).toBeNull();
+  });
+
+  it("reads a dash for an organization that never trialled", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "none",
+      trial_ends_at: undefined,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByText("Trial");
+    // `free_trial_ends_at` still dates this record, which is the whole reason
+    // the page was moved off it.
+    expect(ORG.free_trial_ends_at).toBeTruthy();
+    expect(valueBeside("Trial").textContent).toBe("-No trial");
+  });
+
   it("renders every projects cell out of the record that produced it", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

@@ -2,17 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 
 import type { DataTableFeatures } from "@/components/data-table";
+import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { cn } from "@/lib/utils";
+import { cn, fmtDateShort } from "@/lib/utils";
 
-function fmtDateShort(iso?: string): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString();
-}
+import { PeekTrigger } from "./PeekTrigger";
 
 const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
 
@@ -20,6 +16,17 @@ const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
 // table does not rebuild its column model on every render. The header of each
 // column doubles as its label in the Columns control.
 export const ORG_COLUMNS = column.columns([
+  // First, not last: peek hides five columns while it is open, so a trailing
+  // control would slide sideways at the moment the operator is using it.
+  column.display({
+    id: "peek",
+    // A plain string, so the Columns control lists it as "Peek" rather than
+    // falling back to the column id.
+    header: "Peek",
+    // Hiding the control would put peek back out of reach of the keyboard.
+    enableHiding: false,
+    cell: ({ row }) => <PeekTrigger org={row.original} />,
+  }),
   column.accessor("name", {
     header: "Name",
     // The link, not the row, carries the keyboard path and the accessible
@@ -82,18 +89,11 @@ export const ORG_COLUMNS = column.columns([
       </span>
     ),
   }),
-  column.accessor("free_trial_ends_at", {
-    header: "Trial ends",
-    cell: ({ row }) => (
-      <span
-        className={cn(
-          "text-sm",
-          !row.original.free_trial_ends_at && "text-muted-foreground",
-        )}
-      >
-        {fmtDateShort(row.original.free_trial_ends_at)}
-      </span>
-    ),
+  // "Trial", not "Trial ends": the cell reads as a state, and the end date is
+  // the detail underneath it rather than the column's subject.
+  column.accessor("trial_state", {
+    header: "Trial",
+    cell: ({ row }) => <Trial org={row.original} />,
   }),
   column.accessor("created_at", {
     header: "Created",

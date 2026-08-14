@@ -6,7 +6,9 @@ import { organizationQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 
 // The row's own behavior lives here, so the slices that add a row menu, a
-// disable action and a trial extension all land in one file.
+// disable action and a trial extension all land in one file. The peek control
+// is a component, and a file that mixes a hook with components loses fast
+// refresh, so it sits in `PeekTrigger.tsx` instead.
 export function useOpenOrganization(): (org: AdminOrganization) => void {
   const navigate = useNavigate();
   const qc = useQueryClient();
