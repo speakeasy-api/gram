@@ -14,6 +14,8 @@ workflow:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
+            transformations:
+                - removeUnused: true
             output: .speakeasy/out.openapi.yaml
         Gram-Public:
             inputs:
