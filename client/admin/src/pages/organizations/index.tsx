@@ -222,40 +222,63 @@ export function OrganizationsList(): JSX.Element {
         )}
 
         <div className="flex items-start gap-4" onKeyDown={handleKeyDown}>
-          <div className="min-w-0 flex-1 rounded-lg border">
-            <TableActionBar table={table} hint={<PeekHint />} />
+          <div className="min-w-0 flex-1">
+            <div className="rounded-lg border">
+              <TableActionBar table={table} hint={<PeekHint />} />
 
-            <div
-              className={cn(
-                "max-h-[60vh] overflow-auto",
-                isPlaceholderData && "opacity-60",
-              )}
-            >
-              <Table>
-                <Table.Header table={table} />
-                <Table.Body>
-                  {rows.length === 0 ? (
-                    <Table.NoResultsMessage>
-                      <span className="text-muted-foreground text-sm">
-                        {emptyStateMessage(isLoading, isError)}
-                      </span>
-                    </Table.NoResultsMessage>
-                  ) : (
-                    rows.map((row) => {
-                      const isPeeked = row.id === peekedId;
-                      return (
-                        <Table.Row
-                          key={row.id}
-                          row={row}
-                          ref={isPeeked ? peekedRow : undefined}
-                          className={cn(isPeeked && "bg-muted")}
-                          onClick={handleRowClick}
-                        />
-                      );
-                    })
-                  )}
-                </Table.Body>
-              </Table>
+              <div
+                className={cn(
+                  "max-h-[60vh] overflow-auto",
+                  isPlaceholderData && "opacity-60",
+                )}
+              >
+                <Table>
+                  <Table.Header table={table} />
+                  <Table.Body>
+                    {rows.length === 0 ? (
+                      <Table.NoResultsMessage>
+                        <span className="text-muted-foreground text-sm">
+                          {emptyStateMessage(isLoading, isError)}
+                        </span>
+                      </Table.NoResultsMessage>
+                    ) : (
+                      rows.map((row) => {
+                        const isPeeked = row.id === peekedId;
+                        return (
+                          <Table.Row
+                            key={row.id}
+                            row={row}
+                            ref={isPeeked ? peekedRow : undefined}
+                            className={cn(isPeeked && "bg-muted")}
+                            onClick={handleRowClick}
+                          />
+                        );
+                      })
+                    )}
+                  </Table.Body>
+                </Table>
+              </div>
+            </div>
+
+            {/* Inside the table's column, not beside it: the pager moves the
+                list, and the panel holds one record the list may not carry. */}
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={isPlaceholderData || pager.stack.length === 0}
+                onClick={goPrev}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={isPlaceholderData || !data?.next_cursor}
+                onClick={goNext}
+              >
+                Next
+              </Button>
             </div>
           </div>
 
@@ -266,27 +289,6 @@ export function OrganizationsList(): JSX.Element {
               className="w-100 shrink-0"
             />
           ) : null}
-        </div>
-
-        {/* Placeholder rows belong to the previous filter, and so does the
-            cursor beside them. Both controls wait for the real page. */}
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={isPlaceholderData || pager.stack.length === 0}
-            onClick={goPrev}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={isPlaceholderData || !data?.next_cursor}
-            onClick={goNext}
-          >
-            Next
-          </Button>
         </div>
       </section>
     </div>
