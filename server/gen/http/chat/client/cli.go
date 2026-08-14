@@ -245,6 +245,56 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	return v, nil
 }
 
+// BuildGetAssistantSessionSummaryPayload builds the payload for the chat
+// getAssistantSessionSummary endpoint from CLI flags.
+func BuildGetAssistantSessionSummaryPayload(chatGetAssistantSessionSummaryAssistantID string, chatGetAssistantSessionSummaryFrom string, chatGetAssistantSessionSummaryTo string, chatGetAssistantSessionSummarySessionToken string, chatGetAssistantSessionSummaryProjectSlugInput string) (*chat.GetAssistantSessionSummaryPayload, error) {
+	var err error
+	var assistantID string
+	{
+		assistantID = chatGetAssistantSessionSummaryAssistantID
+		err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", assistantID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from string
+	{
+		from = chatGetAssistantSessionSummaryFrom
+		err = goa.MergeErrors(err, goa.ValidateFormat("from", from, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var to string
+	{
+		to = chatGetAssistantSessionSummaryTo
+		err = goa.MergeErrors(err, goa.ValidateFormat("to", to, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGetAssistantSessionSummarySessionToken != "" {
+			sessionToken = &chatGetAssistantSessionSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGetAssistantSessionSummaryProjectSlugInput != "" {
+			projectSlugInput = &chatGetAssistantSessionSummaryProjectSlugInput
+		}
+	}
+	v := &chat.GetAssistantSessionSummaryPayload{}
+	v.AssistantID = assistantID
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetWorkUnitsTrendPayload builds the payload for the chat
 // getWorkUnitsTrend endpoint from CLI flags.
 func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWorkUnitsTrendTo string, chatGetWorkUnitsTrendSessionToken string, chatGetWorkUnitsTrendProjectSlugInput string) (*chat.GetWorkUnitsTrendPayload, error) {

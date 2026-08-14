@@ -108,6 +108,13 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
 
+  -- Stripe identity for PAYG organizations. NULL for organizations that have
+  -- not added a payment method through Stripe.
+  stripe_customer_id TEXT,
+  -- Current Stripe subscription. NULL after cancellation and replaced when
+  -- the organization subscribes again.
+  stripe_subscription_id TEXT,
+
   -- Contracted monthly "tokens under management" allowance. NULL means no
   -- contracted limit has been configured.
   tum_monthly_token_limit BIGINT,
@@ -132,7 +139,27 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_organization_id_key
 ON billing_metadata (organization_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_stripe_customer_id_key
+ON billing_metadata (stripe_customer_id)
+WHERE stripe_customer_id IS NOT NULL;
+
 COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
+
+-- Durable completion receipts for accepted Stripe webhooks. A row commits
+-- atomically with the handler's database effects.
+CREATE TABLE IF NOT EXISTS stripe_webhook_receipts (
+  stripe_event_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_webhook_receipts_pkey PRIMARY KEY (stripe_event_id)
+);
+
+CREATE INDEX IF NOT EXISTS stripe_webhook_receipts_organization_id_idx
+ON stripe_webhook_receipts (organization_id);
 
 -- Durable per-billing-cycle "tokens under management" (TUM) snapshots for an
 -- organization. ClickHouse telemetry expires (telemetry_logs after 90 days,
@@ -167,6 +194,59 @@ CREATE TABLE IF NOT EXISTS billing_cycle_usage (
 
 CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
 ON billing_cycle_usage (organization_id, cycle_start);
+
+-- Append-only mirror of TUM meter events reported to Stripe Billing. The
+-- upstream event identifier derives from the organization, cycle start, and
+-- sequence number, making sends idempotent and the ledger exactly replayable.
+CREATE TABLE IF NOT EXISTS stripe_meter_reports (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- Cycle boundary from billing_cycle_usage at report time.
+  cycle_start timestamptz NOT NULL,
+  -- Monotonic sequence within an organization's billing cycle.
+  seq INT NOT NULL,
+  -- Tokens added by this report. The cycle's reported total is the sum of
+  -- these deltas.
+  delta_tokens BIGINT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT stripe_meter_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT stripe_meter_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT stripe_meter_reports_delta_tokens_check CHECK (delta_tokens >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_organization_id_cycle_start_seq_key
+ON stripe_meter_reports (organization_id, cycle_start, seq);
+
+-- Durable per-day OpenRouter spend per platform-managed key. Upstream history
+-- expires, so these rows are the permanent billing-grade record. key_type
+-- mirrors openrouter_api_keys but is deliberately not foreign-keyed so spend
+-- history survives key rotation and deletion.
+CREATE TABLE IF NOT EXISTS openrouter_spend_daily (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- Billing reads 'chat' only; 'internal' spend is stored for observability.
+  -- Allowed values are validated in application code.
+  key_type TEXT NOT NULL DEFAULT 'chat',
+  -- UTC day the spend was attributed to upstream.
+  day DATE NOT NULL,
+  -- Fractional USD as reported by OpenRouter.
+  spend_usd NUMERIC(14, 6) NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT openrouter_spend_daily_pkey PRIMARY KEY (id),
+  CONSTRAINT openrouter_spend_daily_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT openrouter_spend_daily_spend_usd_check CHECK (spend_usd >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS openrouter_spend_daily_organization_id_key_type_day_key
+ON openrouter_spend_daily (organization_id, key_type, day);
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
@@ -6425,8 +6505,11 @@ WHERE connection_id IS NOT NULL
     'read_only_cohort'
   );
 
+-- Lifecycle facts are current-connection evidence, so their idempotency grain
+-- includes connection_generation. A reauthorized connection must record its own
+-- registration, readiness, and distribution milestones.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_attempt_target_key
-ON platform_mcp_onboarding_milestones (organization_id, milestone, project_id, mcp_key, attempt_id) NULLS NOT DISTINCT
+ON platform_mcp_onboarding_milestones (organization_id, milestone, project_id, mcp_key, attempt_id, connection_generation) NULLS NOT DISTINCT
 WHERE attempt_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_first_value_key

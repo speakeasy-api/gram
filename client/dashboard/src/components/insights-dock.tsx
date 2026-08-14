@@ -295,9 +295,11 @@ const CHAT_LANDING_COMPOSER_CSS = `
      host element — custom properties inherit through the shadow boundary, so
      the landing can crossfade through examples without re-rendering the chat
      tree (a changing \`composer.placeholder\` in the Elements config would).
-     The native placeholder is hidden because it cannot be transitioned. */
-  :host-context(.gram-chat-landing) .aui-composer-input::placeholder {
-    color: transparent;
+     The composer's own placeholder is hidden because it cannot be
+     transitioned — it is a ::before on the contenteditable input, since a div
+     has no ::placeholder. */
+  :host-context(.gram-chat-landing) .aui-composer-input[data-empty="true"]::before {
+    content: none;
   }
   :host-context(.gram-chat-landing) .aui-composer-root[data-empty="true"]::before {
     content: var(--gram-composer-placeholder, "Ask anything");
@@ -648,7 +650,12 @@ function InsightsDock({
               open && "grid-rows-[0fr]",
             )}
           >
-            <div className="overflow-hidden">
+            {/* The clip is what makes the grid-rows collapse animate, but it
+                also crops the composer's own menus (slash commands, tool
+                mentions), which open upwards out of the composer box. Elements
+                marks its shadow host while one is open, so the clip lifts for
+                exactly as long as there is a menu to show. */}
+            <div className="overflow-hidden has-[[data-composer-menu-open]]:overflow-visible">
               {/* Granola-style expanded composer: the outer card gains inset
                 padding, the chip row sits at the top, and the input row gets
                 its own bordered rounded container. Collapsed, the padding and

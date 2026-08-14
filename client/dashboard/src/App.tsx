@@ -18,6 +18,7 @@ import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
 import {
   getRecentLabelOverride,
+  pageLabel,
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
 } from "./components/command-palette/recentlyVisited";
@@ -228,8 +229,8 @@ const RouteProvider = () => {
       });
 
     // Prefer a label a detail page registered for this href (e.g. the assistant
-    // name) over the URL-derived fallback, which for id-keyed pages is an opaque
-    // id like "Assistant · 0190abcd".
+    // or conversation name) over the URL-derived fallback, which for id-keyed
+    // pages is just the section title until the override arrives.
     record(
       getRecentLabelOverride(href) ??
         pageLabel(active.title, active.href(), location.pathname),
@@ -237,7 +238,7 @@ const RouteProvider = () => {
 
     // A detail page may register its label *after* this first record (its data
     // loads async). Re-record when that happens so the entry upgrades from the
-    // id fallback to the resource name.
+    // section title to the resource name.
     const onOverride = (event: Event) => {
       const detail = (event as CustomEvent<{ href: string }>).detail;
       if (detail?.href !== href) return;
@@ -384,30 +385,6 @@ const RouteProvider = () => {
   }, [routes, orgRoutes]);
 
   return routeElements;
-};
-
-// Opaque ids make poor Recents labels; detect UUIDs so detail pages keyed by id
-// fall back to "<Section> <short id>" instead of a raw UUID.
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Label a visited page for the Recents list. Section/list pages keep the route
-// title; detail pages prefer the human-readable last path segment (a slug like
-// "notion"), falling back to "<Title> <short id>" when that segment is opaque.
-const pageLabel = (
-  title: string,
-  baseHref: string,
-  pathname: string,
-): string => {
-  if (pathname === baseHref || !pathname.startsWith(baseHref)) return title;
-  const segment = decodeURIComponent(
-    pathname.split("/").filter(Boolean).pop() ?? "",
-  );
-  if (!segment) return title;
-  if (UUID_RE.test(segment) || segment.length > 24) {
-    return `${title} · ${segment.slice(0, 8)}`;
-  }
-  return segment;
 };
 
 // Convert a single route into a command-palette navigation action.

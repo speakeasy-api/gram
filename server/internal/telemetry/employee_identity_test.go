@@ -2,11 +2,14 @@ package telemetry_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
@@ -147,6 +150,106 @@ func TestGetUserMetricsSummary_IgnoresEmailRowsOwnedByAnotherUser(t *testing.T) 
 
 	require.Equal(t, int64(100), m.TotalInputTokens)
 	require.InDelta(t, 2.5, m.TotalCost, 0.001)
+}
+
+func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	projectID := authCtx.ProjectID.String()
+	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
+	personalEmail := "personal-" + uuid.New().String() + "@example.com"
+	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
+
+	now := time.Now().UTC()
+	workChatID := uuid.NewString()
+	personalChatID := uuid.NewString()
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), workChatID, 1, 100, 50, 0, 0, "opus", employeeEmail, "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), personalChatID, 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 9, 900, 900, 0, 0, "opus", "stranger@example.com", "Engineering", nil, "main", "", "", "", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+	for _, email := range []string{employeeEmail, personalEmail} {
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
+			TopN:    10,
+			SortBy:  "total_cost",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Table, 1)
+		require.InDelta(t, 3, result.Table[0].Measures.TotalCost, 0.001)
+		require.Equal(t, int64(2), result.Table[0].Measures.TotalChats)
+
+		sessions, err := ti.service.ListSessions(ctx, &gen.ListSessionsPayload{
+			From:    from,
+			To:      to,
+			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
+			SortBy:  "total_cost",
+			Limit:   10,
+		})
+		require.NoError(t, err)
+		require.Len(t, sessions.Sessions, 2)
+		require.Equal(t, personalChatID, sessions.Sessions[0].GramChatID)
+		require.Equal(t, workChatID, sessions.Sessions[1].GramChatID)
+
+		wideFrom, wideTo := summaryWindow(now)
+		wideSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+			From:    wideFrom,
+			To:      wideTo,
+			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
+			SortBy:  "total_cost",
+			Limit:   10,
+		}, func(result *gen.ListSessionsResult) bool {
+			return len(result.Sessions) == 2
+		})
+		require.Equal(t, personalChatID, wideSessions.Sessions[0].GramChatID)
+		require.Equal(t, workChatID, wideSessions.Sessions[1].GramChatID)
+	}
+}
+
+func TestCostAnalytics_DoesNotExpandAmbiguousAccountEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	firstID, firstEmail := seedConnectedOrgUser(t, ctx, ti, "first")
+	secondID, secondEmail := seedConnectedOrgUser(t, ctx, ti, "second")
+	sharedEmail := "shared-" + uuid.NewString() + "@example.com"
+	linkUserAccount(t, ctx, ti, firstID, sharedEmail, "personal")
+	linkUserAccount(t, ctx, ti, secondID, sharedEmail, "personal")
+
+	now := time.Now().UTC()
+	projectID := authCtx.ProjectID.String()
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 0, 0, 0, "opus", sharedEmail, "", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 0, 0, 0, "opus", firstEmail, "", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 4, 400, 0, 0, 0, "opus", secondEmail, "", nil, "main", "", "", "", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    now.Add(-time.Hour).Format(time.RFC3339),
+		To:      now.Add(time.Hour).Format(time.RFC3339),
+		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{sharedEmail}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Table, 1)
+	require.InDelta(t, 1, result.Table[0].Measures.TotalCost, 0.001)
 }
 
 // userMetrics fetches one employee's metrics summary over a window wide enough

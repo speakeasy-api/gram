@@ -277,6 +277,234 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/organization.create:
+        post:
+            tags:
+                - admin
+            summary: createOrganization admin
+            description: 'Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.'
+            operationId: adminCreateOrganization
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOrganizationRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.disable:
+        post:
+            tags:
+                - admin
+            summary: disableOrganization admin
+            description: 'Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.'
+            operationId: adminDisableOrganization
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DisableOrganizationRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.enable:
+        post:
+            tags:
+                - admin
+            summary: enableOrganization admin
+            description: 'Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.'
+            operationId: adminEnableOrganization
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnableOrganizationRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.get:
         get:
             tags:
@@ -603,25 +831,52 @@ paths:
                     description: Search term applied to name and slug (case-insensitive substring).
                     type: string
                 - allowEmptyValue: true
-                  description: Filter by gram_account_type (e.g. free, pro, enterprise).
+                  description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                   in: query
                   name: account_type
                   schema:
-                    description: Filter by gram_account_type (e.g. free, pro, enterprise).
+                    description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                     type: string
                 - allowEmptyValue: true
-                  description: Include organizations with disabled_at set. Defaults to false.
+                  description: Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.
+                  in: query
+                  name: account_types
+                  schema:
+                    description: Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.
+                  in: query
+                  name: trial_states
+                  schema:
+                    description: Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
+                  in: query
+                  name: disabled_states
+                  schema:
+                    description: Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
                   in: query
                   name: include_disabled
                   schema:
-                    description: Include organizations with disabled_at set. Defaults to false.
+                    description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
                     type: boolean
                 - allowEmptyValue: true
-                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
                   in: query
                   name: cursor
                   schema:
-                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
                     type: string
                 - allowEmptyValue: true
                   description: Page size (default 50, max 100).
@@ -629,6 +884,28 @@ paths:
                   name: limit
                   schema:
                     description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+                  in: query
+                  name: sort
+                  schema:
+                    description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.'
+                  in: query
+                  name: direction
+                  schema:
+                    description: 'Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.'
+                    type: string
+                - allowEmptyValue: true
+                  description: 1-based page number for offset paging (default 1). Supplying it selects offset paging.
+                  in: query
+                  name: page
+                  schema:
+                    description: 1-based page number for offset paging (default 1). Supplying it selects offset paging.
                     format: int64
                     type: integer
             responses:
@@ -728,6 +1005,82 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminProjectDetail'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/trial.extend:
+        post:
+            tags:
+                - admin
+            summary: extendTrial admin
+            description: 'Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.'
+            operationId: adminExtendTrial
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ExtendTrialRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -5765,7 +6118,7 @@ paths:
                 name: UpdateGlobalRemoteSessionIssuer
     /rpc/agent.getConfiguration:
         get:
-            description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:read scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
+            description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
             operationId: getDeviceAgentConfiguration
             parameters:
                 - allowEmptyValue: true
@@ -10537,6 +10890,123 @@ paths:
             tags:
                 - chat
             x-speakeasy-name-override: generateTitle
+    /rpc/chat.getAssistantSessionSummary:
+        get:
+            description: Get assistant session activity totals for a time range.
+            operationId: getAssistantSessionSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant whose activity to summarize
+                  in: query
+                  name: assistant_id
+                  required: true
+                  schema:
+                    description: The assistant whose activity to summarize
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Start of the activity range (ISO 8601)
+                  in: query
+                  name: from
+                  required: true
+                  schema:
+                    description: Start of the activity range (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: End of the activity range (ISO 8601)
+                  in: query
+                  name: to
+                  required: true
+                  schema:
+                    description: End of the activity range (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssistantSessionSummary'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getAssistantSessionSummary chat
+            tags:
+                - chat
+            x-speakeasy-name-override: getAssistantSessionSummary
+            x-speakeasy-react-hook:
+                name: AssistantSessionSummary
+                type: query
     /rpc/chat.getWorkUnitsTrend:
         get:
             description: 'Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.'
@@ -28792,6 +29262,836 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
+    /rpc/platformMcp.dismissOnboarding:
+        post:
+            description: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.
+            operationId: dismissPlatformMCPOnboarding
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: dismissOnboarding platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: dismissOnboarding
+            x-speakeasy-react-hook:
+                name: DismissPlatformMCPOnboarding
+    /rpc/platformMcp.distributeOnboardingCandidate:
+        post:
+            description: Attach the workflow-bound ready local MCP to the selected project's existing Default plugin. The caller supplies only the selected project slug and its opaque server-issued version token.
+            operationId: distributePlatformMCPOnboardingCandidate
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DistributeOnboardingCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: distributeOnboardingCandidate platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: distributeOnboardingCandidate
+            x-speakeasy-react-hook:
+                name: DistributePlatformMCPOnboardingCandidate
+    /rpc/platformMcp.getOnboarding:
+        get:
+            description: Get the current user's safe Platform MCP onboarding projection for the active organization.
+            operationId: getPlatformMCPOnboarding
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getOnboarding platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: getOnboarding
+            x-speakeasy-react-hook:
+                name: PlatformMCPOnboarding
+    /rpc/platformMcp.recheckOnboardingReadiness:
+        post:
+            description: Force a rate-limited authenticated readiness recheck for the workflow-bound local registration.
+            operationId: recheckPlatformMCPOnboardingReadiness
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: recheckOnboardingReadiness platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: recheckOnboardingReadiness
+            x-speakeasy-react-hook:
+                name: RecheckPlatformMCPOnboardingReadiness
+    /rpc/platformMcp.recordAgentConfigurationCopied:
+        post:
+            description: Record that the user copied the displayed Platform MCP configuration or completed an equivalent supported agent-setup action.
+            operationId: recordPlatformMCPAgentConfigurationCopied
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: recordAgentConfigurationCopied platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: recordAgentConfigurationCopied
+            x-speakeasy-react-hook:
+                name: RecordPlatformMCPAgentConfigurationCopied
+    /rpc/platformMcp.recordInstallIntent:
+        post:
+            description: Record a selected manual-install client family for the current user's Platform MCP workflow.
+            operationId: recordPlatformMCPInstallIntent
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecordInstallIntentRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: recordInstallIntent platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: recordInstallIntent
+            x-speakeasy-react-hook:
+                name: RecordPlatformMCPInstallIntent
+    /rpc/platformMcp.removeOnboardingDistribution:
+        post:
+            description: Remove only the workflow-bound MCP from the selected project's existing Default plugin. Registration, readiness, connection, and prior evidence remain intact.
+            operationId: removePlatformMCPOnboardingDistribution
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DistributeOnboardingCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: removeOnboardingDistribution platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: removeOnboardingDistribution
+            x-speakeasy-react-hook:
+                name: RemovePlatformMCPOnboardingDistribution
+    /rpc/platformMcp.repairOnboardingPublication:
+        post:
+            description: Retry in-memory local package publication for the workflow-bound distribution without changing its attachment or version.
+            operationId: repairPlatformMCPOnboardingPublication
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DistributeOnboardingCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: repairOnboardingPublication platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: repairOnboardingPublication
+            x-speakeasy-react-hook:
+                name: RepairPlatformMCPOnboardingPublication
+    /rpc/platformMcp.startOnboarding:
+        post:
+            description: Create or resume the current user's durable Platform MCP onboarding workflow.
+            operationId: startPlatformMCPOnboarding
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: startOnboarding platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: startOnboarding
+            x-speakeasy-react-hook:
+                name: StartPlatformMCPOnboarding
+    /rpc/platformMcp.startOnboardingSetup:
+        post:
+            description: Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.
+            operationId: startPlatformMCPOnboardingSetup
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformMCPOnboardingSetupHandoff'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: startOnboardingSetup platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: startOnboardingSetup
+            x-speakeasy-react-hook:
+                name: StartPlatformMCPOnboardingSetup
     /rpc/plugins.addPluginServer:
         post:
             description: Add an MCP server to a plugin.
@@ -55231,14 +56531,19 @@ components:
             properties:
                 next_cursor:
                     type: string
-                    description: Cursor for the next page; empty when exhausted.
+                    description: Cursor for the next page; empty when exhausted. Omitted in offset mode.
                 organizations:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminOrganization'
                     description: The page of organizations.
+                total:
+                    type: integer
+                    description: Number of organizations matching the filters, before paging.
+                    format: int64
             required:
                 - organizations
+                - total
         AdminOpenRouterKey:
             type: object
             properties:
@@ -55326,6 +56631,20 @@ components:
                 slug:
                     type: string
                     description: The slug of the organization
+                trial_ends_at:
+                    type: string
+                    description: The time at which the enterprise trial ends. Absent when the organization never trialled.
+                    format: date-time
+                trial_state:
+                    type: string
+                    description: Lifecycle state of the organization's enterprise trial.
+                    enum:
+                        - none
+                        - running
+                        - ending_soon
+                        - expired
+                        - demoted
+                        - converted
                 updated_at:
                     type: string
                     description: The last update date of the organization.
@@ -55929,6 +57248,30 @@ components:
                 - updated_at
                 - last_access
                 - valid_at
+        AssistantSessionSummary:
+            type: object
+            properties:
+                messages:
+                    type: integer
+                    description: Number of messages created in the range
+                    format: int64
+                sessions:
+                    type: integer
+                    description: Number of sessions with activity in the range
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Cost in USD incurred in the range
+                    format: double
+                total_tokens:
+                    type: integer
+                    description: Tokens consumed in the range
+                    format: int64
+            required:
+                - sessions
+                - messages
+                - total_tokens
+                - total_cost
         AssistantSkillRef:
             type: object
             properties:
@@ -58146,6 +59489,15 @@ components:
             required:
                 - remote_session_issuer_id
                 - client_id
+        CreateOrganizationRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Display name for the new organization.
+                    minLength: 1
+            required:
+                - name
         CreatePackageForm:
             type: object
             properties:
@@ -59906,6 +61258,15 @@ components:
             required:
                 - organization_id
                 - key_type
+        DisableOrganizationRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Organization ID.
+                    minLength: 1
+            required:
+                - id
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:
@@ -59924,6 +61285,18 @@ components:
                     format: uuid
             required:
                 - id
+        DistributeOnboardingCandidateRequestBody:
+            type: object
+            properties:
+                expected_version:
+                    type: string
+                    description: Opaque current distribution version token from getOnboarding.
+                project_slug:
+                    type: string
+                    description: Exact workflow-selected project slug.
+            required:
+                - project_slug
+                - expected_version
         DistributeSkillRequestBody:
             type: object
             properties:
@@ -60029,6 +61402,15 @@ components:
             required:
                 - organization_id
                 - key_type
+        EnableOrganizationRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Organization ID.
+                    minLength: 1
+            required:
+                - id
         EncryptOpenRouterKeyRequestBody:
             type: object
             properties:
@@ -60288,6 +61670,22 @@ components:
             required:
                 - ok
                 - error
+        ExtendTrialRequestBody:
+            type: object
+            properties:
+                days:
+                    type: integer
+                    description: Number of days to add to the trial's current end date.
+                    format: int64
+                    minimum: 1
+                    maximum: 365
+                id:
+                    type: string
+                    description: Organization ID.
+                    minLength: 1
+            required:
+                - id
+                - days
         ExternalCredentialSummary:
             type: object
             properties:
@@ -61784,7 +63182,7 @@ components:
                     description: Whether logging is enabled
                 platform_mcp_enabled:
                     type: boolean
-                    description: Whether the organization is eligible for the Gram Platform MCP capability
+                    description: Whether the organization can use the Gram Platform MCP capability
                 remote_session_auto_refresh_enabled:
                     type: boolean
                     description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -66751,6 +68149,152 @@ components:
                 - credits
                 - included_credits
                 - has_active_subscription
+        PlatformMCPOnboardingSetupHandoff:
+            type: object
+            properties:
+                dashboard_setup_url:
+                    type: string
+                    description: Server-owned same-origin dashboard Inspect URL for the persisted browser Catalogue registration.
+                handoff:
+                    type: string
+                    description: One-time opaque local-fixture setup handoff.
+            description: Secure setup continuation returned only to the immediate session-authenticated dashboard caller. Browser Catalogue entries return a server-owned Inspect URL; the local synthetic fixture returns a one-time handoff. Neither is part of the onboarding projection.
+        PlatformMCPOnboardingState:
+            type: object
+            properties:
+                agent_configuration_copied:
+                    type: boolean
+                    description: Whether the user copied Platform MCP configuration or completed an equivalent supported agent-setup action in this workflow.
+                catalog_explored:
+                    type: boolean
+                    description: Whether the active workflow observed a successful reviewed MCP Catalog search through Platform MCP.
+                client_family:
+                    type: string
+                    description: Selected manual-install client family when a workflow is active.
+                connection_authorized:
+                    type: boolean
+                    description: Whether the authenticated user has a current authorized Platform MCP connection.
+                connection_ready:
+                    type: boolean
+                    description: Whether the authenticated user's current connection has completed authenticated discovery.
+                distribution_attached:
+                    type: boolean
+                    description: Whether the selected MCP is currently attached to the selected project's existing Default plugin.
+                distribution_expected_version:
+                    type: string
+                    description: Opaque server-issued version token required by distribute, remove, or publication-repair mutations. It binds the selected project and authenticated user without exposing internal IDs or counters.
+                distribution_publication_state:
+                    type: string
+                    description: Bounded package-publication state for the selected project's Default plugin after a distribution change.
+                    enum:
+                        - ""
+                        - pending
+                        - current
+                        - repair_required
+                distribution_state:
+                    type: string
+                    description: Bounded lifecycle state for the selected MCP's existing-Default-plugin distribution.
+                    enum:
+                        - ""
+                        - attached
+                        - removed
+                distribution_tool_succeeded:
+                    type: boolean
+                    description: Whether Platform MCP successfully added the workflow-bound MCP to the selected project's existing Default plugin.
+                enabled:
+                    type: boolean
+                    description: Whether the active organization currently passes the Platform MCP capability and rollout gates.
+                mcp_url:
+                    type: string
+                    description: Canonical Platform MCP endpoint URL supplied by the server.
+                readiness_freshness:
+                    type: string
+                    description: Whether selected-registration readiness is currently fresh.
+                    enum:
+                        - ""
+                        - fresh
+                        - stale
+                        - unavailable
+                readiness_state:
+                    type: string
+                    description: Bounded current readiness state for the selected registration.
+                    enum:
+                        - ""
+                        - ready
+                        - needs_provider_setup
+                        - needs_gram_authorization
+                        - needs_configuration
+                        - auth_failed
+                        - unreachable
+                        - unsupported
+                        - unauthorized
+                        - guide_unavailable
+                        - degraded
+                readiness_verified:
+                    type: boolean
+                    description: Whether Platform MCP observed a successful ready status check for the workflow-bound MCP.
+                registration_complete:
+                    type: boolean
+                    description: Whether the server-owned local candidate is registered for the selected project.
+                repair_action:
+                    type: string
+                    description: A bounded next action when the workflow cannot progress.
+                    enum:
+                        - ""
+                        - enable_platform_mcp
+                        - authorize_platform_mcp
+                        - select_project
+                        - start_setup
+                        - continue_dashboard_setup
+                        - retry_readiness
+                        - retry_registration
+                        - contact_support
+                        - distribute_to_default_plugin
+                        - repair_publication
+                selected_project_name:
+                    type: string
+                    description: Display name of the workflow-bound project, when one has been selected.
+                selected_project_slug:
+                    type: string
+                    description: Slug of the workflow-bound project, when one has been selected.
+                selected_use_verified:
+                    type: boolean
+                    description: Whether the server observed a successful normal Remote MCP tool call for the currently attached selected distribution version.
+                stage:
+                    type: string
+                    description: Current server-derived onboarding stage.
+                    enum:
+                        - not_started
+                        - install_instructions
+                        - authorized
+                        - connection_ready
+                workflow_active:
+                    type: boolean
+                    description: Whether the authenticated user has an active onboarding workflow in this organization.
+            description: Safe, session-authenticated Platform MCP onboarding projection. It contains no provider URLs, credentials, OAuth values, setup handoffs, or internal resource identifiers.
+            required:
+                - enabled
+                - stage
+                - mcp_url
+                - workflow_active
+                - client_family
+                - agent_configuration_copied
+                - connection_authorized
+                - connection_ready
+                - catalog_explored
+                - selected_project_name
+                - selected_project_slug
+                - registration_complete
+                - readiness_state
+                - readiness_freshness
+                - distribution_state
+                - distribution_attached
+                - distribution_tool_succeeded
+                - readiness_verified
+                - distribution_publication_state
+                - selected_use_verified
+                - distribution_expected_version
+                - repair_action
         PlatformToolDefinition:
             type: object
             properties:
@@ -66891,7 +68435,7 @@ components:
                     format: uuid
                 principal_urn:
                     type: string
-                    description: Principal URN (e.g. role:engineering, user:id, or *).
+                    description: Principal URN (e.g. role:organization:<uuid>, user:id, or *).
             required:
                 - id
                 - principal_urn
@@ -67942,6 +69486,20 @@ components:
                 - id
                 - decision
                 - rationale
+        RecordInstallIntentRequestBody:
+            type: object
+            properties:
+                client_family:
+                    type: string
+                    description: Manual-install client family.
+                    enum:
+                        - claude_code
+                        - claude_cowork
+                        - codex
+                        - cursor
+                        - opencode
+            required:
+                - client_family
         RecordSkillResult:
             type: object
             properties:
@@ -77912,6 +79470,8 @@ tags:
       description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminOpenRouterKeys
       description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
+    - name: platformMcp
+      description: Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features

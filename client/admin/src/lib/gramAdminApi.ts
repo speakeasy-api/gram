@@ -11,8 +11,6 @@
 // SameSite=None permits a cross-site cookie; it does not defeat third-party
 // cookie blocking. Same-origin is the fix.
 
-import { queryOptions } from "@tanstack/react-query";
-
 export class GramAdminError extends Error {
   status: number;
   body: unknown;
@@ -23,14 +21,63 @@ export class GramAdminError extends Error {
   }
 }
 
-// gramAdminFetch is a thin wrapper around fetch that:
-// - normalises the path to a root-relative URL,
-// - redirects into the OIDC flow on 401,
-// - throws on non-2xx with a typed error containing status + parsed body.
-export async function gramAdminFetch<T>(
+// A 4xx body names what the operator has to fix, such as "at least one of
+// account_type or whitelisted must be supplied". A 5xx body carries whatever
+// verb phrase the handler passed to oops.E, such as "list organizations"
+// (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
+// than the status line. So trust the body below 500 and nowhere else.
+export function errorMessage(e: unknown): string {
+  if (
+    e instanceof GramAdminError &&
+    e.status < 500 &&
+    e.body &&
+    typeof e.body === "object"
+  ) {
+    const message = (e.body as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+export type QueryParams = Record<
+  string,
+  string | number | boolean | string[] | undefined
+>;
+
+// Values the admin API reads as unset. Every boolean it takes is an opt-in
+// flag, so `false` is the same request as no flag at all.
+//
+// A cache key runs through this too, so the key and the request agree on what
+// "unset" means. Without that, `{type: []}` and `{}` send one request and cache
+// two entries.
+export function omitUnset(params: QueryParams): QueryParams {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return value !== undefined && value !== "" && value !== false;
+    }),
+  );
+}
+
+// An array becomes a repeated key (`type=free&type=pro`). Goa parses that into
+// a slice; a comma-joined value would arrive as one string.
+export function toSearchParams(params: QueryParams): URLSearchParams {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(omitUnset(params))) {
+    if (Array.isArray(value)) {
+      for (const item of value) qs.append(key, item);
+    } else {
+      qs.append(key, String(value));
+    }
+  }
+  return qs;
+}
+
+async function gramAdminRequest(
   path: string,
-  init?: RequestInit,
-): Promise<T> {
+  init: RequestInit | undefined,
+  redirectOnUnauthorized: boolean,
+): Promise<Response> {
   const url = path.startsWith("/") ? path : `/${path}`;
   // Accept is a default, not an override: a caller that sets its own wins.
   const headers = new Headers(init?.headers);
@@ -39,7 +86,7 @@ export async function gramAdminFetch<T>(
   }
   const res = await fetch(url, { ...init, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && redirectOnUnauthorized) {
     // Top-level redirect into the OIDC flow. Use prompt=none so the identity
     // provider returns silently when the operator already has a session with
     // it. The gram admin backend falls back to interactive login if the
@@ -76,7 +123,22 @@ export async function gramAdminFetch<T>(
     );
   }
 
+  return res;
+}
+
+export async function gramAdminFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await gramAdminRequest(path, init, true);
   return (await res.json()) as T;
+}
+
+// For an endpoint that answers 204. A mutation reports its own failure rather
+// than taking the 401 redirect, which would sign the operator back in behind
+// the action they just took.
+async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
+  await gramAdminRequest(path, init, false);
 }
 
 // True once gramAdminFetch has sent the browser to the login page. The document
@@ -100,38 +162,50 @@ export type AdminSessionInfo = {
   name?: string;
 };
 
-// The backend ends the session, never the client, so staleTime keeps a good
-// session from refetching. A failed check holds no data, which React Query
-// always treats as stale, so it still retries on focus and on reconnect.
-export const adminSessionQuery = queryOptions({
-  queryKey: ["adminSession"],
-  queryFn: () => gramAdminFetch<AdminSessionInfo>("/admin/session.get"),
-  staleTime: Infinity,
-});
+export function getSession(): Promise<AdminSessionInfo> {
+  return gramAdminFetch<AdminSessionInfo>("/admin/session.get");
+}
 
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
-// The endpoint answers 204, so this cannot use gramAdminFetch, which always
-// parses a JSON body. The endpoint also deletes only the server-side record and
-// leaves the `gram_admin` cookie in the browser. The next request would
-// therefore 401, and the 401 handler retries with prompt=none, which the
-// identity provider honours silently and signs the operator straight back in.
-// Asking for select_account instead forces the account chooser, so logging out
-// is visible.
+// The endpoint deletes only the server-side record and leaves the `gram_admin`
+// cookie in the browser. The next request would therefore 401, and the 401
+// handler retries with prompt=none, which the identity provider honours
+// silently and signs the operator straight back in. Asking for select_account
+// instead forces the account chooser, so logging out is visible.
 export async function logout(): Promise<void> {
-  const res = await fetch("/admin/auth.logout", { method: "POST" });
-  if (!res.ok) {
-    throw new GramAdminError(
-      res.status,
-      null,
-      `gram admin logout ${res.status} ${res.statusText}`,
-    );
-  }
+  await gramAdminSend("/admin/auth.logout", { method: "POST" });
   window.location.href = "/admin/auth.login?prompt=select_account";
 }
 
+// Derived server-side from the `trials` table, so it is the only trustworthy
+// account of whether an organization ever trialled.
+//
+// A runtime list with the union derived from it, rather than a bare union: a
+// test can then walk every state the server can send, so a seventh state added
+// here fails a test as well as the build. A type annotation alone is one
+// careless edit from being deleted, and nothing would notice.
+export const TRIAL_STATES = [
+  "none",
+  "running",
+  "ending_soon",
+  "expired",
+  "demoted",
+  "converted",
+] as const;
+
+// Not `string`: a typo in a state name has to be a build failure, because
+// every surface that reads it maps the state to a colour.
+export type TrialState = (typeof TRIAL_STATES)[number];
+
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.
+//
+// `free_trial_started_at` and `free_trial_ends_at` are `NOT NULL` columns with
+// a signup-plus-fourteen-days default that no application code writes, so they
+// report a trial for every organization ever made. Nothing here reads them.
+// They stay declared only because the API still sends them; a follow-up takes
+// them off the wire.
 export type AdminOrganization = {
   id: string;
   name: string;
@@ -142,6 +216,8 @@ export type AdminOrganization = {
   disabled_at?: string;
   free_trial_started_at?: string;
   free_trial_ends_at?: string;
+  trial_state?: TrialState;
+  trial_ends_at?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -152,10 +228,19 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
+// Each filter is a repeated parameter the server reads as a set, and an absent
+// one means no filter of that kind: no account_types is every type, no
+// trial_states is every state, no disabled_states is active organizations only.
+//
+// The scalar `account_type` and the `include_disabled` flag these replaced are
+// still accepted by the server, so its half of this change can merge first.
+// Nothing here sends them, and nothing should: two ways to say the same filter
+// is how the browser and the server end up disagreeing about what is on.
 export type ListOrganizationsParams = {
   q?: string;
-  account_type?: string;
-  include_disabled?: boolean;
+  account_types?: string[];
+  trial_states?: string[];
+  disabled_states?: string[];
   cursor?: string;
   limit?: number;
 };
@@ -163,15 +248,9 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
-  const qs = new URLSearchParams();
-  if (params.q) qs.set("q", params.q);
-  if (params.account_type) qs.set("account_type", params.account_type);
-  if (params.include_disabled) qs.set("include_disabled", "true");
-  if (params.cursor) qs.set("cursor", params.cursor);
-  if (params.limit !== undefined) qs.set("limit", String(params.limit));
-  const query = qs.toString();
+  const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
-    `/admin/organizations.list${query ? `?${query}` : ""}`,
+    `/admin/organizations.list${qs ? `?${qs}` : ""}`,
   );
 }
 
@@ -193,12 +272,12 @@ export type AdminProjectDetail = {
 };
 
 export function getProject(idOrSlug: string): Promise<AdminProjectDetail> {
-  const qs = new URLSearchParams({ id_or_slug: idOrSlug });
+  const qs = toSearchParams({ id_or_slug: idOrSlug });
   return gramAdminFetch<AdminProjectDetail>(`/admin/project.get?${qs}`);
 }
 
 export function getOrganization(idOrSlug: string): Promise<AdminOrganization> {
-  const qs = new URLSearchParams({ id_or_slug: idOrSlug });
+  const qs = toSearchParams({ id_or_slug: idOrSlug });
   return gramAdminFetch<AdminOrganization>(`/admin/organization.get?${qs}`);
 }
 
@@ -212,6 +291,71 @@ export function updateOrganization(
   body: UpdateOrganizationRequest,
 ): Promise<AdminOrganization> {
   return gramAdminFetch<AdminOrganization>("/admin/organization.update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type OrganizationRequest = {
+  id: string;
+};
+
+// Both answer the organization in its new state, so a caller updates its cache
+// from the response rather than reading the record back.
+export function disableOrganization(
+  body: OrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function enableOrganization(
+  body: OrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// The server's own bounds, mirrored so a value it would reject never leaves the
+// browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
+// server/internal/constants/trials.go: zero moves nothing but updated_at, a
+// negative shortens a trial through an endpoint named extend, and a year is
+// where a trial becomes a contract.
+export const MIN_TRIAL_EXTENSION_DAYS = 1;
+export const MAX_TRIAL_EXTENSION_DAYS = 365;
+
+export type ExtendTrialRequest = {
+  id: string;
+  days: number;
+};
+
+// The days are added to the trial's current end date, not to today, so an
+// extension applied early does not shorten the trial.
+export function extendTrial(
+  body: ExtendTrialRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type CreateOrganizationRequest = {
+  name: string;
+};
+
+export function createOrganization(
+  body: CreateOrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -233,7 +377,7 @@ export type ListOrganizationProjectsResult = {
 export function listOrganizationProjects(
   organizationID: string,
 ): Promise<ListOrganizationProjectsResult> {
-  const qs = new URLSearchParams({ organization_id: organizationID });
+  const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationProjectsResult>(
     `/admin/organization.projects?${qs}`,
   );
@@ -255,7 +399,7 @@ export type ListOrganizationMembersResult = {
 export function listOrganizationMembers(
   organizationID: string,
 ): Promise<ListOrganizationMembersResult> {
-  const qs = new URLSearchParams({ organization_id: organizationID });
+  const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationMembersResult>(
     `/admin/organization.members?${qs}`,
   );

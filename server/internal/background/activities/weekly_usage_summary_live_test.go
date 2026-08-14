@@ -145,7 +145,9 @@ func TestWeeklyUsageSummary_LiveSendThroughLoops(t *testing.T) {
 	insertWeeklyUsageComponents(t, ctx, chConn, project.ID.String(), previous.Start.Add(elapsed/2), 24_910_230, 9_441_006, 3_531_174, 0)
 
 	guardianPolicy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	emails := email.NewService(testenv.NewLogger(t), loops.New(ctx, testenv.NewLogger(t), guardianPolicy, apiKey))
+	emails := email.NewService(testenv.NewLogger(t), loops.New(ctx, testenv.NewLogger(t), guardianPolicy, apiKey), email.NewTemplateIDs(map[string]string{
+		"weekly_usage_summary": transactionalID,
+	}), true)
 	siteURL, err := url.Parse("https://app.getgram.ai")
 	require.NoError(t, err)
 

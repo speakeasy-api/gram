@@ -60,7 +60,7 @@ type GetProductFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
-	// Whether the organization is eligible for the Gram Platform MCP capability
+	// Whether the organization can use the Gram Platform MCP capability
 	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
