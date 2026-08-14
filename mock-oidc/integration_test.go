@@ -365,8 +365,9 @@ func TestBrowserBaseURLOnlyMovesAuthorizationEndpoint(t *testing.T) {
 	}
 
 	var doc struct {
-		Issuer  string `json:"issuer"`
-		JWKSURI string `json:"jwks_uri"`
+		Issuer   string `json:"issuer"`
+		JWKSURI  string `json:"jwks_uri"`
+		UserInfo string `json:"userinfo_endpoint"`
 	}
 	discoReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/.well-known/openid-configuration", nil)
 	resp, err := http.DefaultClient.Do(discoReq)
@@ -383,6 +384,57 @@ func TestBrowserBaseURLOnlyMovesAuthorizationEndpoint(t *testing.T) {
 	}
 	if got, want := doc.JWKSURI, ts.URL+"/jwks.json"; got != want {
 		t.Errorf("jwks_uri = %q, want %q", got, want)
+	}
+	if got, want := doc.UserInfo, ts.URL+"/userinfo"; got != want {
+		t.Errorf("userinfo_endpoint = %q, want %q", got, want)
+	}
+}
+
+// The base URL is operator-supplied, so a trailing slash or a stray path must
+// still yield a usable endpoint rather than something like `//authorize`. A
+// malformed authorization endpoint surfaces only as a broken login, so it is
+// worth pinning.
+func TestBrowserBaseURLIsNormalised(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		base string
+		want string
+	}{
+		{"trailing slash", "https://devbox.example.ts.net:4000/", "https://devbox.example.ts.net:4000/authorize"},
+		{"path prefix", "https://proxy.example.com/idp", "https://proxy.example.com/idp/authorize"},
+		{"query and fragment", "https://devbox.example.ts.net:4000/?a=b#c", "https://devbox.example.ts.net:4000/authorize"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, _ := newTestServerWithBrowserBase(t, tc.base)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			provider, err := oidc.NewProvider(ctx, ts.URL)
+			if err != nil {
+				t.Fatalf("oidc.NewProvider: %v", err)
+			}
+			if got := provider.Endpoint().AuthURL; got != tc.want {
+				t.Errorf("authorization_endpoint = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A base URL that is not absolute cannot be used to build a redirect, so the
+// server falls back to the issuer rather than advertising something unusable.
+func TestBrowserBaseURLFallsBackWhenUnusable(t *testing.T) {
+	ts, _ := newTestServerWithBrowserBase(t, "not-a-url")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	provider, err := oidc.NewProvider(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("oidc.NewProvider: %v", err)
+	}
+	if got, want := provider.Endpoint().AuthURL, ts.URL+"/authorize"; got != want {
+		t.Errorf("authorization_endpoint = %q, want %q", got, want)
 	}
 }
 

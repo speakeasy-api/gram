@@ -57,13 +57,15 @@ done
 echo ✅ Updated all port mappings for new worktree
 
 # Remote access (zero:remap-hostname) points the browser-facing URLs at a
-# hostname other machines can reach. Those URLs are port-dependent, so the remap
-# above just re-emitted them from mise.toml with GRAM_HOST's default -- clobbering
-# the overrides that were copied in from the main worktree. Re-apply them now, so
-# they land after the ports they reference. No marker means remote access was
-# never set up here; the task is a no-op and the worktree stays on localhost.
-dev_hostname=$(mise config get --file mise.local.toml env.GRAM_DEV_HOSTNAME 2>/dev/null || true)
-if [ -n "$dev_hostname" ]; then
+# hostname other machines can reach, and mise.local.toml carrying those overrides
+# was copied in from the main worktree above. Several of them are port-dependent,
+# so the remap just re-emitted mise.toml's own template over the top: e.g.
+# GRAM_IDP_BASE_URL, which the task writes with the hostname baked in literally,
+# is back to `{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2` and therefore back to
+# localhost -- which breaks login. Re-apply so the overrides land after the ports
+# they reference. No marker means remote access was never set up here; the task
+# is skipped and the worktree stays on localhost.
+if mise config get --file mise.local.toml env.GRAM_DEV_HOSTNAME > /dev/null 2>&1; then
   mise run zero:remap-hostname
 fi
 
@@ -72,10 +74,10 @@ fi
 # Best-effort: this is display metadata, and the script runs under `set -e` as a
 # blocking pre-start hook, so a failure here must not stop the worktree from
 # being set up. stderr is left alone so the reason is still visible.
+# The host half of that URL is the `devhost` var, which zero:remap-hostname owns
+# and sets for whichever worktree it runs in -- including the primary one, which
+# never runs this hook. `.config/wt.toml` falls back to localhost when it is unset.
 site_port=$(printf '%s\n' $remap | sed -n 's/^GRAM_SITE_PORT=//p')
 if [ -n "$site_port" ] && command -v wt &> /dev/null; then
   wt config state vars set "siteport=${site_port}" > /dev/null || true
-  # Pair the port with the host it's reachable on, so the URL column is
-  # clickable from a laptop and not just from this box.
-  wt config state vars set "devhost=${dev_hostname:-localhost}" > /dev/null || true
 fi

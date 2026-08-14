@@ -73,6 +73,35 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// authorizeEndpoint builds the browser-facing /authorize URL. It resolves the
+// path against the parsed base rather than concatenating, so a base carrying a
+// trailing slash, a path prefix, a query or a fragment cannot produce a
+// malformed endpoint — the value is operator-supplied via --browser-base-url,
+// and an unusable authorization endpoint would only show up as a broken login.
+// Falls back to the issuer when unset or unparseable, which is the ordinary
+// single-machine case.
+func (s *Server) authorizeEndpoint(issuer string) string {
+	if s.browserBaseURL == "" {
+		return strings.TrimRight(issuer, "/") + "/authorize"
+	}
+
+	base, err := url.Parse(s.browserBaseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		s.logger.Warn(
+			"browser base URL is not an absolute URL; falling back to the issuer",
+			slog.String("browser_base_url", s.browserBaseURL),
+		)
+		return strings.TrimRight(issuer, "/") + "/authorize"
+	}
+
+	// Drop anything that cannot survive being a base for a path join; the
+	// browser gets its own query string from the authorize request.
+	base.RawQuery = ""
+	base.Fragment = ""
+
+	return base.JoinPath("/authorize").String()
+}
+
 func (s *Server) discovery(w http.ResponseWriter, _ *http.Request) {
 	iss := s.provider.Issuer()
 
@@ -82,14 +111,11 @@ func (s *Server) discovery(w http.ResponseWriter, _ *http.Request) {
 	// matters, because OIDC clients require the discovered issuer to match the
 	// URL they fetched the document from, and it is also the `iss` they verify
 	// on the id_token.
-	browserBase := s.browserBaseURL
-	if browserBase == "" {
-		browserBase = iss
-	}
+	authorizeEndpoint := s.authorizeEndpoint(iss)
 
 	doc := map[string]any{
 		"issuer":                                iss,
-		"authorization_endpoint":                browserBase + "/authorize",
+		"authorization_endpoint":                authorizeEndpoint,
 		"token_endpoint":                        iss + "/token",
 		"userinfo_endpoint":                     iss + "/userinfo",
 		"jwks_uri":                              iss + "/jwks.json",

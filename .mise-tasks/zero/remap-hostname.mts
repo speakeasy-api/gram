@@ -9,67 +9,74 @@
 
 /**
  * Everything the dev stack hands a browser is an absolute URL built from
- * `GRAM_HOST` / `GRAM_ADMIN_HOST` (see mise.toml). On a devbox those default to
- * `localhost`, which is unreachable from anywhere else — so a laptop on the same
- * tailnet can open a TCP connection to the dev server and still get a login
- * redirect pointing at its own machine.
+ * `localhost` (see mise.toml), which is unreachable from anywhere else — so a
+ * second machine can open a TCP connection to the dev server and still get a
+ * login redirect pointing at itself.
  *
- * This task rewrites those hostnames in `mise.local.toml` and re-emits every env
- * var that derives from them. It is deliberately NOT a blanket find-and-replace
- * of `localhost`: some URLs are dialed by processes ON this box and must stay
- * local. The split that matters:
+ * This task overrides those URLs in `mise.local.toml`. It is deliberately NOT a
+ * blanket rewrite: plenty of URLs in mise.toml are dialed by processes ON this
+ * box, and moving those breaks the stack in ways that only surface later (a
+ * failing seed, a dev proxy that cannot reach its target, an OIDC discovery
+ * fetch that 404s).
  *
- *   opened by a browser (must be the remote hostname)
- *     GRAM_SITE_URL, GRAM_SERVER_URL, GRAM_API_URL — derived from GRAM_HOST
- *     GRAM_ADMIN_SERVER_URL, GRAM_ADMIN_ALLOWED_ORIGINS
- *                                 — derived from GRAM_ADMIN_HOST. The allowed
- *                                   origins have to name the browser's origin
- *                                   exactly or every admin write 403s.
- *     GRAM_IDP_BASE_URL           — the browser navigates to
- *                                   `${GRAM_IDP_BASE_URL}/authorize`
- *                                   (server/internal/auth/identity/identity.go)
- *     MOCK_OIDC_BROWSER_BASE_URL  — same idea for the admin dashboard's fake
- *                                   Google IdP; only its authorization_endpoint
- *                                   moves (mock-oidc/handlers.go)
+ * ## The allowlist is the whole design
  *
- *   dialed by a process on this box (must stay localhost)
- *     WORKOS_API_URL          — the server's REST endpoint for dev-idp's
- *                               mock-workos emulator (server/cmd/gram/deps.go)
- *     GRAM_SERVER_BACKEND_URL — the dashboard's vite dev proxy target
- *                               (client/dashboard/vite.config.ts)
- *     GRAM_ADMIN_BACKEND_URL  — the admin dashboard's vite dev proxy target.
- *                               Derived from GRAM_ADMIN_HOST, so the dependent
- *                               walk below rewrites it and PINNED_LOCAL puts it
- *                               back (client/admin/vite.config.ts).
- *     GRAM_DEVIDP_EXTERNAL_URL — WORKOS_API_URL is derived from it, so leaving
- *                               GRAM_DEVIDP_HOST alone keeps both local while
- *                               GRAM_IDP_BASE_URL moves on its own.
- *     GRAM_ADMIN_OIDC_EMULATOR_URL — the admin server fetches OIDC discovery
- *                               from here, and go-oidc requires the document's
- *                               issuer to match the URL it fetched from. So the
- *                               emulator keeps a localhost issuer and advertises
- *                               a remote authorization_endpoint instead, via
- *                               MOCK_OIDC_BROWSER_BASE_URL.
+ * `browserFacing()` below is an explicit list, and it is the ONLY thing that
+ * moves. Anything not named there keeps whatever mise.toml and the worktree's
+ * port remap give it. That default is the point: an env var added to mise.toml
+ * next year stays on localhost until somebody deliberately moves it, so the
+ * failure mode is "a link still says localhost" rather than "login breaks and
+ * nobody knows why".
  *
- * The OAuth callbacks need nothing: mock-oidc's client declares its redirect_uris
- * as ${GRAM_ADMIN_SERVER_URL}/admin/auth.callback and expands them at load
- * (mock-oidc/config.go), so they follow the browser-facing value already.
+ * An earlier version worked the other way round — rewrite `GRAM_HOST` and
+ * everything transitively derived from it, then pull individual vars back with a
+ * denylist. That is fail-open, and it silently mis-classified
+ * `GRAM_ADMIN_BACKEND_URL` (a dev-proxy target, dialed here) as browser-facing.
+ * Do not reintroduce it.
  *
- * The two-list split is load bearing, not merely tidy: under Tailscale's
- * userspace networking mode this box cannot route to its own tailnet address at
- * all, even though the name resolves. A blanket find-and-replace of `localhost`
- * breaks the stack in ways that only show up at login.
+ * ## Notes on specific entries
+ *
+ *   GRAM_SERVER_PUBLIC_URL   `GRAM_SERVER_URL` is genuinely dual-use: the
+ *                            dashboard bakes it in for operator-facing URLs, but
+ *                            `mise run seed`, the Gram CLI, `smoke:platform-mcp`
+ *                            and the local functions runner all dial it from
+ *                            this box. So GRAM_SERVER_URL stays local and the
+ *                            browser-facing half gets its own var, which
+ *                            client/dashboard/vite.config.ts prefers when set.
+ *
+ *   GRAM_ADMIN_ALLOWED_ORIGINS
+ *                            Lists BOTH origins. AdminOriginCheck 403s every
+ *                            unsafe method whose Origin is not named, so listing
+ *                            only the remote origin would stop admin writes
+ *                            working in a browser on this box.
+ *
+ *   GRAM_IDP_BASE_URL        The browser navigates to `${it}/authorize`
+ *                            (server/internal/auth/identity/identity.go). The
+ *                            code exchange goes to WORKOS_API_URL, which is not
+ *                            listed here and stays local.
+ *
+ *   MOCK_OIDC_BROWSER_BASE_URL
+ *                            The admin dashboard's fake Google IdP. Only its
+ *                            discovery `authorization_endpoint` moves:
+ *                            GRAM_ADMIN_OIDC_EMULATOR_URL is fetched by the
+ *                            admin server and go-oidc requires the document's
+ *                            issuer to match the URL it fetched from, so the
+ *                            issuer cannot move (mock-oidc/handlers.go).
+ *
+ *   VITE_DEV_HOSTNAMES       Only backs vite's HMR websocket. Vite skips its
+ *                            host-validation middleware entirely when the dev
+ *                            server is HTTPS, which this stack always is, so
+ *                            this does not gate who may load the app.
  *
  * TLS needs no special handling: zero:tls derives its mkcert SANs from
- * GRAM_SITE_URL / GRAM_SERVER_URL and regenerates on every `./zero`, so the
- * remote hostname joins localhost and host.docker.internal on the same cert.
+ * GRAM_SITE_URL and regenerates on every `./zero`, so the remote hostname joins
+ * localhost and host.docker.internal on one cert, covering every port.
  *
- * `GRAM_DEV_HOSTNAME` is written first as a marker recording the intent. Ports are
- * randomized per worktree, so `git:workinit` re-emits the port-dependent vars
- * (GRAM_SITE_URL among them) into mise.local.toml AFTER copying it from the main
- * worktree — which would clobber these overrides. workinit therefore re-runs this
- * task at the end when the marker is present, so the hostname overrides always
- * land last and every new worktree inherits remote access for free.
+ * `GRAM_DEV_HOSTNAME` is written first as a marker recording the intent. Ports
+ * are randomized per worktree, so `git:workinit` re-emits port-dependent vars
+ * into mise.local.toml AFTER copying it from the main worktree, which would
+ * clobber these overrides; workinit re-runs this task when the marker is present
+ * so they always land last.
  */
 
 import { execFileSync } from "node:child_process";
@@ -81,34 +88,52 @@ const LOCAL_FILE = "mise.local.toml";
 /** Records the operator's intent so `git:workinit` can re-apply after remapping ports. */
 const MARKER = "GRAM_DEV_HOSTNAME";
 
-/** Hostname vars rewritten to the remote host; dependents are re-emitted after each. */
-const HOST_VARS = ["GRAM_HOST", "GRAM_ADMIN_HOST"];
+/**
+ * The allowlist: every URL a BROWSER opens, and nothing else. Values are mise
+ * templates so they track whatever ports this worktree was assigned. See the
+ * header comment before adding an entry — the question to answer is "who dials
+ * this, a browser or a process on this box?", and anything dialed here must not
+ * be listed.
+ */
+function browserFacing(host: string): Record<string, string> {
+  return {
+    GRAM_SITE_URL: `https://${host}:{{env.GRAM_SITE_PORT}}`,
+    GRAM_SERVER_PUBLIC_URL: `https://${host}:{{env.GRAM_SERVER_PORT}}`,
+    GRAM_ADMIN_SERVER_URL: `https://${host}:{{env.GRAM_ADMIN_DASHBOARD_PORT}}`,
+    GRAM_ADMIN_ALLOWED_ORIGINS: `https://${host}:{{env.GRAM_ADMIN_DASHBOARD_PORT}},https://localhost:{{env.GRAM_ADMIN_DASHBOARD_PORT}}`,
+    GRAM_IDP_BASE_URL: `http://${host}:{{env.GRAM_DEVIDP_PORT}}/oauth2`,
+    MOCK_OIDC_BROWSER_BASE_URL: `http://${host}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}`,
+    VITE_DEV_HOSTNAMES: `localhost,devbox,${host}`,
+  };
+}
+
+/** Keys this task owns, for --reset and for clearing stale state before a re-run. */
+const OWNED = [MARKER, ...Object.keys(browserFacing("placeholder"))];
 
 /**
- * Vars that must keep pointing at this box even though the hostname moved. Values
- * are mise templates so they track whatever ports this worktree was assigned.
+ * Keys an earlier revision of this task wrote and this one must not leave behind.
+ * It rewrote `GRAM_HOST` / `GRAM_ADMIN_HOST` and let mise's own templating carry
+ * the change into everything derived from them; the allowlist above replaces
+ * that. A leftover `GRAM_HOST` override would silently drag GRAM_SERVER_URL and
+ * GRAM_API_URL remote behind the allowlist's back, breaking `mise run seed` and
+ * the CLI with no obvious cause. Only reachable on a checkout that ran the older
+ * revision, so this can go once that is safely in the past.
  */
-const PINNED_LOCAL: Record<string, string> = {
-  GRAM_SERVER_BACKEND_URL: "https://localhost:{{env.GRAM_SERVER_PORT}}",
-  // Derived from GRAM_ADMIN_HOST in mise.toml, so the dependent walk above
-  // rewrites it — but mise.toml is explicit that only the admin dashboard's dev
-  // proxy dials this and browsers never do, which makes it a devbox-local dial.
-  // Pinned back afterwards; PINNED_LOCAL is applied last for exactly this.
-  GRAM_ADMIN_BACKEND_URL: "https://localhost:{{env.GRAM_ADMIN_PORT}}",
-};
-
-/** Every var this task owns, for --reset and for clearing stale state before a re-run. */
-const OWNED = [
-  MARKER,
-  ...HOST_VARS,
-  "VITE_DEV_HOSTNAMES",
-  "GRAM_IDP_BASE_URL",
-  "MOCK_OIDC_BROWSER_BASE_URL",
-  ...Object.keys(PINNED_LOCAL),
+const LEGACY_KEYS = [
+  "GRAM_HOST",
+  "GRAM_ADMIN_HOST",
+  "GRAM_SERVER_URL",
+  "GRAM_API_URL",
+  "GRAM_ADMIN_BACKEND_URL",
 ];
 
 function mise(...args: string[]): string {
-  return execFileSync("mise", args, { encoding: "utf-8" });
+  // stderr is dropped: `mise unset` complains when mise.local.toml does not
+  // exist yet, and a wall of red before the success banner reads like failure.
+  return execFileSync("mise", args, {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
 }
 
 function unset(key: string): void {
@@ -130,32 +155,46 @@ function set(key: string, value: string): void {
   mise("set", "--file", LOCAL_FILE, `${key}=${value}`);
 }
 
-/** Reads the tailnet MagicDNS name from whichever tailscaled this user can talk to. */
+/**
+ * Reads the tailnet MagicDNS name from whichever tailscaled this user can talk
+ * to, most specific first: an explicitly configured socket, then a per-user
+ * daemon, then the system one.
+ *
+ * Order matters. A machine can have a system tailscaled installed but dormant —
+ * or still holding a stale identity from an earlier registration — alongside the
+ * userspace daemon the developer actually runs. Probing the system socket first
+ * picks up that stale name and points the whole stack at a host nobody can
+ * reach. `undefined` means "let the CLI use its default socket", so it belongs
+ * last and must not be conflated with an unset TAILSCALE_SOCKET.
+ */
 function detectHost(): string {
-  const sockets = [
-    process.env["TAILSCALE_SOCKET"],
+  const sockets: (string | undefined)[] = [
+    ...(process.env["TAILSCALE_SOCKET"]
+      ? [process.env["TAILSCALE_SOCKET"]]
+      : []),
     `${process.env["HOME"]}/.tailscale/tailscaled.sock`,
     undefined, // system daemon at its default path
   ];
 
   for (const socket of sockets) {
-    if (socket === null) continue;
     const args = socket
       ? ["--socket", socket, "status", "--json"]
       : ["status", "--json"];
-    let raw: string;
     try {
-      raw = execFileSync("tailscale", args, {
+      const raw = execFileSync("tailscale", args, {
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"],
       });
+      // Parsing stays inside the try: a daemon that exits 0 with something
+      // other than JSON must fall through to the next candidate, not abort.
+      const name = JSON.parse(raw)?.Self?.DNSName;
+      // MagicDNS names come back fully qualified with a trailing dot.
+      if (typeof name === "string" && name.length > 1) {
+        return name.replace(/\.$/, "");
+      }
     } catch {
       continue;
     }
-    const name = JSON.parse(raw)?.Self?.DNSName;
-    // MagicDNS names come back fully qualified with a trailing dot.
-    if (typeof name === "string" && name.length > 1)
-      return name.replace(/\.$/, "");
   }
 
   throw new Error(
@@ -163,23 +202,11 @@ function detectHost(): string {
   );
 }
 
-/**
- * Vars whose value references `varName`, transitively. Mirrors the walk in
- * zero:remap-ports — the same precedence trap applies to hostnames.
- */
-function findDependentEnvVars(
-  config: Record<string, string>,
-  varName: string,
-): [string, string][] {
-  const dependents: [string, string][] = [];
-  for (const [key, value] of Object.entries(config)) {
-    if (typeof value !== "string") continue;
-    if (value.includes(varName)) {
-      dependents.push([key, value]);
-      dependents.push(...findDependentEnvVars(config, key));
-    }
-  }
-  return dependents;
+function miseTomlEnv(): Record<string, string> {
+  const config = parseTOML(readFileSync("mise.toml", "utf-8")) as {
+    env: Record<string, string>;
+  };
+  return config.env;
 }
 
 function currentMarker(): string | undefined {
@@ -193,68 +220,87 @@ function currentMarker(): string | undefined {
   }
 }
 
+/**
+ * Records the hostname for `wt list`'s URL column. Best-effort display metadata:
+ * a worktree without `wt`, or outside one, must not fail the task.
+ */
+function setWorktreeVar(host: string): void {
+  try {
+    execFileSync("wt", ["config", "state", "vars", "set", `devhost=${host}`], {
+      stdio: "ignore",
+    });
+  } catch {
+    // No wt, or not inside a worktree — the URL column falls back to localhost.
+  }
+}
+
+/**
+ * Undoing an override is not the same as deleting the key. `zero:remap-ports`
+ * also emits several of these (they depend on a `_PORT`), and it emits them into
+ * mise.local.toml precisely because mise.toml's copy would resolve against
+ * mise.toml's DEFAULT ports, not this worktree's. Unsetting therefore does not
+ * restore the worktree's value — it silently points the key at the primary
+ * worktree's ports, so a worktree's admin proxy and dev-idp would address
+ * another worktree's stack, with its own database, and nothing would look wrong.
+ *
+ * Re-emitting mise.toml's own template instead resolves against the ports
+ * already declared above it in this file, which is the value the worktree
+ * should have had all along.
+ */
+function restore(key: string, miseTomlValue: string | undefined): void {
+  if (typeof miseTomlValue === "string") {
+    set(key, miseTomlValue);
+  } else {
+    unset(key);
+  }
+}
+
+function reset(): void {
+  const env = miseTomlEnv();
+  for (const key of [...LEGACY_KEYS, ...OWNED]) {
+    restore(key, env[key]);
+  }
+  setWorktreeVar("localhost");
+  console.log(
+    "✅ Reverted to localhost. Re-run `./zero` to regenerate certs and restart.",
+  );
+}
+
 function main(): void {
   if (process.env["usage_reset"] === "true") {
-    for (const key of OWNED) unset(key);
-    console.log(
-      "✅ Reverted to localhost. Re-run `./zero` to regenerate certs and restart.",
-    );
+    reset();
     return;
   }
 
   const flagHost = process.env["usage_host"]?.trim();
-  if (flagHost && process.env["usage_detect"] === "true") {
+  const detect = process.env["usage_detect"] === "true";
+  if (flagHost && detect) {
     throw new Error("Pass either --host or --detect, not both.");
   }
 
   // With no flags, re-apply whatever is already recorded. This is the path
   // `git:workinit` takes on a fresh worktree.
-  const host =
-    flagHost ||
-    (process.env["usage_detect"] === "true" ? detectHost() : currentMarker());
+  const host = flagHost || (detect ? detectHost() : currentMarker());
   if (!host) {
     throw new Error(
       "No hostname configured. Run with --detect (reads it from tailscale) or --host <name>.",
     );
   }
 
-  const config = parseTOML(readFileSync("mise.toml", "utf-8")) as {
-    env: Record<string, string>;
-  };
+  const env = miseTomlEnv();
 
-  // Clear everything first so a re-run with a different host cannot leave a
-  // stale override sitting after the vars it should have been replaced by.
+  // Clear first so a re-run with a different host cannot leave a stale override
+  // sitting after the vars that should have replaced it. The legacy keys are
+  // restored rather than unset, for the reason `restore` explains: several are
+  // port-dependent, and dropping them points this worktree at another one's.
+  for (const key of LEGACY_KEYS) restore(key, env[key]);
   for (const key of OWNED) unset(key);
 
   set(MARKER, host);
-
-  for (const hostVar of HOST_VARS) {
-    set(hostVar, host);
-    for (const [key, value] of findDependentEnvVars(config.env, hostVar)) {
-      set(key, value);
-    }
-  }
-
-  // Vite rejects unknown Host headers. "devbox" is already in the config's
-  // built-in allowlist; add the fully qualified name and keep localhost working
-  // for anything still dialing this box directly.
-  set("VITE_DEV_HOSTNAMES", `localhost,devbox,${host}`);
-
-  // Browser-facing half of the dev-idp split (see the header comment). The
-  // server-side half stays on localhost via GRAM_DEVIDP_HOST, untouched.
-  set("GRAM_IDP_BASE_URL", `http://${host}:{{env.GRAM_DEVIDP_PORT}}/oauth2`);
-
-  // Same split for the admin dashboard's fake Google IdP: only the endpoint the
-  // browser is redirected to moves. GRAM_ADMIN_OIDC_EMULATOR_URL — the discovery
-  // URL the admin server fetches, and the issuer it verifies — stays local.
-  set(
-    "MOCK_OIDC_BROWSER_BASE_URL",
-    `http://${host}:{{env.GRAM_ADMIN_OIDC_EMULATOR_PORT}}`,
-  );
-
-  for (const [key, value] of Object.entries(PINNED_LOCAL)) {
+  for (const [key, value] of Object.entries(browserFacing(host))) {
     set(key, value);
   }
+  setWorktreeVar(host);
 
   const sitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
 
@@ -284,10 +330,16 @@ function main(): void {
     "                -k /Library/Keychains/System.keychain rootCA.pem",
   );
   console.log();
-  console.log(`  3. From that same machine, check it:`);
+  console.log("  3. From that same machine, check it:");
   console.log(`       curl -k https://${host}:${sitePort}/`);
   console.log();
-  console.log("docs/remote-dev-access.md covers the rest.");
+  console.log(
+    "Opting in exposes this stack to everything that can route to this box —",
+  );
+  console.log(
+    "see the security note in docs/remote-dev-access.md before pointing a",
+  );
+  console.log("shared network at it.");
 }
 
 /** Path to the mkcert root CA, for the copy-it-over instruction. */

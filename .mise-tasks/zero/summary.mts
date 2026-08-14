@@ -157,9 +157,13 @@ async function pokeHTTPService(
 // Hostname the URLs in this summary should be *opened* on. With remote access
 // configured (`zero:remap-hostname`) that is a hostname reachable from other
 // machines, so the printed links work from a laptop and not just this box.
-// Health probes deliberately keep dialing localhost: under Tailscale's userspace
-// networking mode this box cannot reach its own tailnet name, so a probe sent
-// there would report every service as down.
+//
+// Health probes deliberately keep dialing localhost, even for services whose
+// link is remote. Reaching this box by its own remote name is not guaranteed —
+// it depends on the tunnel being up and on the host resolving and routing a
+// name that exists for other machines' benefit — and a probe that fails there
+// would report a healthy service as down. localhost is what "is it running"
+// actually means here.
 const displayHost = process.env["GRAM_DEV_HOSTNAME"] ?? "localhost";
 
 const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "8233";
@@ -190,12 +194,15 @@ await pokeHTTPService(
   `http://${displayHost}:${devIdpPort}`,
 );
 
+// Stays on localhost even under remote access: unlike the IdP server above,
+// this dashboard is a plain vite dev server that binds loopback only, so a
+// remote link here would be dead.
 const devIdpDashboardPort =
   process.env["GRAM_DEVIDP_DASHBOARD_PORT"] ?? "35293";
 await pokeHTTPService(
   "Mock IdP dashboard",
   `http://localhost:${devIdpDashboardPort}`,
-  `http://${displayHost}:${devIdpDashboardPort}`,
+  `http://localhost:${devIdpDashboardPort}`,
 );
 
 const gramControlPort = process.env["GRAM_CONTROL_PORT"] ?? "8081";
@@ -210,9 +217,14 @@ await pokeHTTPService(
 
 const gramHost = process.env["GRAM_HOST"] ?? "localhost";
 const gramSitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
+const gramScheme = process.env["GRAM_HTTP_SCHEME"] ?? "https";
 const gramDashboardURL =
   process.env["GRAM_SITE_URL"] ?? `https://${gramHost}:${gramSitePort}`;
-await pokeHTTPService("Gram dashboard", gramDashboardURL, gramDashboardURL);
+await pokeHTTPService(
+  "Gram dashboard",
+  `${gramScheme}://localhost:${gramSitePort}/`,
+  gramDashboardURL,
+);
 
 const adminHost = process.env["GRAM_ADMIN_HOST"] ?? "localhost";
 const adminControlPort = process.env["GRAM_ADMIN_CONTROL_PORT"] ?? "8084";
@@ -227,12 +239,13 @@ await pokeHTTPService(
 
 // GRAM_ADMIN_SERVER_URL names the browser-facing origin, which is this dev
 // server, not the admin API above.
+const adminDashboardPort = process.env["GRAM_ADMIN_DASHBOARD_PORT"] ?? "5174";
 const adminDashboardURL =
   process.env["GRAM_ADMIN_SERVER_URL"] ??
-  `https://${adminHost}:${process.env["GRAM_ADMIN_DASHBOARD_PORT"] ?? "5174"}`;
+  `https://${adminHost}:${adminDashboardPort}`;
 await pokeHTTPService(
   "Gram admin dashboard",
-  adminDashboardURL,
+  `${gramScheme}://localhost:${adminDashboardPort}/`,
   adminDashboardURL,
 );
 

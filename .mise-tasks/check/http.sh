@@ -20,8 +20,11 @@ if [[ -n "${NODE_EXTRA_CA_CERTS:-}" && -f "${NODE_EXTRA_CA_CERTS}" ]]; then
   cacert=(--cacert "${NODE_EXTRA_CA_CERTS}")
 fi
 
+# ${a[@]+"${a[@]}"} rather than "${a[@]}": expanding an empty array under `set -u`
+# is an error on bash 3.2, which is what /usr/bin/env bash finds on a stock macOS,
+# and the array is empty for every plain-http probe.
 status="$(curl --silent --show-error --output /dev/null \
-  --connect-timeout 2 --max-time 5 "${cacert[@]}" \
+  --connect-timeout 2 --max-time 5 ${cacert[@]+"${cacert[@]}"} \
   --write-out "%{http_code}" "$url")"
 
 if [[ "$status" != "200" ]]; then

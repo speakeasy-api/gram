@@ -22,4 +22,9 @@ provider:
       client_secret: GOCSPX-example_secret
       name: Gram (Google)
       redirect_uris:
+        # Both origins are registered so admin login works whether the browser is
+        # on this machine or on another one reaching it by hostname (see
+        # zero:remap-hostname). Without remote access the two are identical and
+        # the duplicate is harmless.
         - "${GRAM_ADMIN_SERVER_URL}/admin/auth.callback"
+        - "https://localhost:${GRAM_ADMIN_DASHBOARD_PORT}/admin/auth.callback"

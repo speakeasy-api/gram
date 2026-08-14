@@ -108,11 +108,19 @@ export default defineConfig(({ command }) => {
     throw new Error("GRAM_SITE_URL must be set in development");
   }
 
-  const serverUrl = process.env["GRAM_SERVER_URL"];
+  // GRAM_SERVER_URL is dual-use: it names the server for anything on the box
+  // that dials it (seed, the CLI, the local functions runner), and it is also
+  // what operator-facing URLs in the app are built from. Those two want
+  // different hosts when the browser is on another machine, so
+  // GRAM_SERVER_PUBLIC_URL overrides the browser-facing half when set — see
+  // zero:remap-hostname. Unset in the ordinary single-machine case.
+  const serverUrl =
+    process.env["GRAM_SERVER_PUBLIC_URL"] || process.env["GRAM_SERVER_URL"];
   if (isDev && !serverUrl) {
     throw new Error("GRAM_SERVER_URL must be set in development");
   }
-  const devProxyServerUrl = process.env["GRAM_SERVER_BACKEND_URL"] || serverUrl;
+  const devProxyServerUrl =
+    process.env["GRAM_SERVER_BACKEND_URL"] || process.env["GRAM_SERVER_URL"];
 
   const allowedHosts = new Set(["localhost", "127.0.0.1", "devbox"]);
   for (const hostname of (process.env["VITE_DEV_HOSTNAMES"] || "").split(",")) {
@@ -180,7 +188,13 @@ export default defineConfig(({ command }) => {
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
       // Default Gram API URL baked into the inlined elements code
       // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
-      __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
+      // Browser-facing, so it follows GRAM_SERVER_PUBLIC_URL for the same
+      // reason serverUrl above does.
+      __GRAM_API_URL__: JSON.stringify(
+        process.env["GRAM_SERVER_PUBLIC_URL"] ||
+          process.env["GRAM_API_URL"] ||
+          "",
+      ),
     },
     build: {
       sourcemap: true,
