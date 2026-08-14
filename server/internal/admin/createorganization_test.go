@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -52,6 +55,12 @@ type fakeWorkOSCreator struct {
 	// order, so a test can assert that a rejected request never reached WorkOS.
 	createdNames []string
 
+	// createdGramIDs records the third argument of every CreateOrganization
+	// call. The real client feeds that argument to BOTH external_id and the
+	// idempotency key, so what is passed here is load-bearing rather than
+	// incidental.
+	createdGramIDs []string
+
 	// externalIDs records the last external_id written per WorkOS organization.
 	externalIDs map[string]string
 }
@@ -63,11 +72,12 @@ func newFakeWorkOS(organizationID string) *fakeWorkOSCreator {
 		createErr:      nil,
 		updateErr:      nil,
 		createdNames:   nil,
+		createdGramIDs: nil,
 		externalIDs:    map[string]string{},
 	}
 }
 
-func (f *fakeWorkOSCreator) CreateOrganization(_ context.Context, name, _ string) (string, error) {
+func (f *fakeWorkOSCreator) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -76,6 +86,7 @@ func (f *fakeWorkOSCreator) CreateOrganization(_ context.Context, name, _ string
 	}
 
 	f.createdNames = append(f.createdNames, name)
+	f.createdGramIDs = append(f.createdGramIDs, gramOrgID)
 	return f.organizationID, nil
 }
 
@@ -96,6 +107,13 @@ func (f *fakeWorkOSCreator) names() []string {
 	defer f.mu.Unlock()
 
 	return append([]string(nil), f.createdNames...)
+}
+
+func (f *fakeWorkOSCreator) gramIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]string(nil), f.createdGramIDs...)
 }
 
 func (f *fakeWorkOSCreator) externalID(workosOrgID string) string {
@@ -180,6 +198,16 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.Equal(t, []string{"Acme Create Co"}, fake.names(), "WorkOS must be asked for exactly one organization")
 	require.Equal(t, res.ID, fake.externalID(workosOrgID),
 		"external_id must be back-filled with the Gram id, or the sync path resolves this organization by a different route")
+
+	// The create must carry no Gram id, because the real client feeds this
+	// argument to the idempotency key as well as to external_id. Anything
+	// derived from the name would make WorkOS answer a second create for a
+	// same-named organization with the first one, and the second Gram insert
+	// would then collide on the unique index over workos_id. The value cannot
+	// be filled in correctly here either: it is derived from the WorkOS id this
+	// call has not returned yet.
+	require.Equal(t, []string{""}, fake.gramIDs(),
+		"the create must send an empty external_id and idempotency key")
 
 	require.Equal(t, "Acme Create Co", res.Name)
 	require.Equal(t, "acme-create-co", res.Slug)
@@ -276,8 +304,12 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
 	// No external_id: at this instant the handler has not back-filled it yet,
-	// so the sync derives the id the handler is about to write under.
-	runOrganizationWebhook(t, ctx, conn, organizationEvent("event_01HZC", "organization.created", workosOrgID, "Race Co", ""))
+	// so the sync derives the id the handler is about to write under. The name
+	// differs from the one the operator types below on purpose: handing both
+	// writers the same name would make the name assertion pass whichever of
+	// them won, which is the half of this test that would otherwise only look
+	// like coverage.
+	runOrganizationWebhook(t, ctx, conn, organizationEvent("event_01HZC", "organization.created", workosOrgID, "Race Co From The Sync", ""))
 
 	derivedID := orgid.FromWorkOSID(workosOrgID)
 	seeded, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, derivedID)
@@ -289,6 +321,11 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID),
 		"the two writers must converge on one row")
 
+	// The operator typed this name second and it wins, which is the
+	// name = EXCLUDED.name arm of the upsert.
+	require.Equal(t, "Race Co", res.Name, "the operator's name must overwrite the one the sync wrote")
+	require.NotEqual(t, seeded.Name, res.Name)
+
 	// The slug is in the organization's URL. Re-deriving one here would find the
 	// base taken by this very row and write a suffixed variant over it.
 	require.Equal(t, seeded.Slug, res.Slug, "a create landing on an existing row must keep its slug")
@@ -297,6 +334,68 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	// Nothing in this handler may roll it back.
 	cursor := readWorkOSLastEventID(t, ctx, conn, derivedID)
 	require.Equal(t, "event_01HZC", cursor, "a create must not clear the webhook cursor")
+}
+
+// TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug is the
+// narrow version of the race above. There the sync had already committed before
+// the handler started; here it commits in the window between the handler's read
+// of the organization and the handler taking the slug lock, which is the window
+// READ COMMITTED leaves open and the reason the handler reads a second time
+// once it holds the lock. Deciding from the first read would hand back a
+// suffixed slug and the upsert would write it over a slug already in use.
+func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZLOCKRACE"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+
+	// The competing writer takes the slug lock first and holds it in its own
+	// transaction, exactly as the sync activity does. The handler will park on
+	// that lock until this transaction commits.
+	blocker, err := conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold an advisory lock the handler must wait on
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(ctx) }()
+
+	blockerQueries := orgrepo.New(blocker)
+	require.NoError(t, blockerQueries.LockOrganizationSlug(ctx, "lock-race-co"))
+
+	type outcome struct {
+		res *gen.AdminOrganization
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Lock Race Co", AdminSessionToken: nil})
+		done <- outcome{res: res, err: err}
+	}()
+
+	// The handler calls WorkOS before it opens its transaction, so a recorded
+	// name means it is at or past its first read of the organization and about
+	// to ask for the slug lock this test is holding. Committing earlier than
+	// that cannot fail the test, because the handler would then see the row in
+	// its first read and reach the same slug; it would only prove less.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, fake.names(), 1)
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = blockerQueries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgid.FromWorkOSID(workosOrgID),
+		Name:        "Lock Race Co From The Sync",
+		Slug:        "lock-race-co",
+		WorkosID:    conv.ToPGText(workosOrgID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, blocker.Commit(ctx))
+
+	got := <-done
+	require.NoError(t, got.err)
+
+	require.Equal(t, "lock-race-co", got.res.Slug,
+		"a row that appeared while the handler waited for the slug lock must keep its slug, not be given a suffixed one")
+	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID),
+		"the two writers must still converge on one row")
 }
 
 func readWorkOSLastEventID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string) string {
@@ -344,6 +443,46 @@ func TestCreateOrganization_ExternalIDBackFillFailureLeavesNoGramRow(t *testing.
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
 }
 
+// TestCreateOrganization_FailureAfterTheUpsertLeavesNothing is the only test
+// here that reaches the transaction. Every other rollback case above fails
+// before tx.Begin, so writing the organization row through the pool rather than
+// the transaction satisfies all of them, and the handler's headline promise
+// stays a comment.
+func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZROLLBACK"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+
+	// Break the table the last write in the transaction touches. Data cannot
+	// make that write fail: EnableFeature inserts ON CONFLICT DO NOTHING,
+	// organization_features carries no foreign key, and its only CHECK is on a
+	// feature name the handler supplies as a constant. Each test holds its own
+	// database clone, dropped when the test ends, so this reaches nothing else.
+	_, err := conn.Exec(ctx, "DROP TABLE organization_features;") //nolint:glint // no generated query can drop a table, and this database is a per-test clone
+	require.NoError(t, err)
+
+	_, err = svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Rolled Back Co", AdminSessionToken: nil})
+	require.Error(t, err, "a failure seeding default entitlements must fail the request")
+
+	require.Equal(t, []string{"Rolled Back Co"}, fake.names(),
+		"WorkOS accepted the organization, so the failure really did happen after the upsert")
+
+	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
+
+	grants, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: orgid.FromWorkOSID(workosOrgID),
+		PrincipalUrn:   "",
+	})
+	require.NoError(t, err)
+	require.Empty(t, grants, "the role grants seeded in the same transaction must be gone too")
+
+	list, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, list.Organizations, "a rolled-back create must leave nothing for an operator to find")
+}
+
 func TestCreateOrganization_WithoutWorkOSConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -355,7 +494,15 @@ func TestCreateOrganization_WithoutWorkOSConfiguration(t *testing.T) {
 	// Not a gateway error: nothing was asked of WorkOS and retrying will not
 	// help. The organization cannot be logged into, so reporting failure is the
 	// only honest answer.
-	requireOopsCode(t, err, oops.CodeInvariantViolation)
+	//
+	// The code matters beyond its name. server/design/shared/errors.go maps
+	// invalid to 422 and invariant_violation, which reads like the better fit,
+	// to 500; the admin app trusts a response body only below 500, so under
+	// invariant_violation the operator would see a bare server error instead of
+	// the sentence below.
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "WorkOS configuration",
+		"the operator must be told why, or an unconfigured deployment is indistinguishable from a broken one")
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
 
 	list, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
@@ -389,6 +536,24 @@ func TestCreateOrganization_RejectsUnusableNames(t *testing.T) {
 		{name: "at the limit", input: strings.Repeat("a", orgprovision.MaxNameLength)},
 		{name: "letters and punctuation", input: "Bob's Bakery, Inc."},
 		{name: "non-latin", input: "顶尖科技"},
+
+		// The three cases below write their lengths out instead of deriving
+		// them from the constants, which is the only way they can hold the
+		// constants still. Every case above moves with MaxNameLength and
+		// MaxRawNameBytes, so either limit can change by one and the whole
+		// table still passes.
+		//
+		// This one is 100 characters, so it pins MaxNameLength from below.
+		{name: "at the limit, written out", input: "Northwind Traders International Logistics and Freight Forwarding Company Ltd of Great Britain PLC Co"},
+		// 101, which pins it from above.
+		{name: "one rune past the limit, written out", input: "Northwind Traders International Logistics and Freight Forwarding Company Ltd of Great Britain PLC Co.", wantErr: true},
+		// 4000 bytes exactly, which is MaxRawNameBytes today. The padding is
+		// whitespace so the name normalizes to two characters and is accepted:
+		// an input of 4000 letters would be refused for its rune count and
+		// prove nothing about the byte ceiling. Accepting this pins both that
+		// the ceiling is 4000 rather than 3999 and that the comparison is >
+		// rather than >=.
+		{name: "exactly at the raw byte ceiling", input: "Ab" + strings.Repeat(" ", 3998)},
 	}
 
 	for i, tc := range cases {
@@ -433,6 +598,28 @@ func TestCreateOrganization_NormalizesTheName(t *testing.T) {
 	require.Equal(t, "Spaced Out", res.Name, "the stored name must be the normalized one")
 	require.Equal(t, []string{"Spaced Out"}, fake.names(), "WorkOS must be given the normalized name too, or the two systems disagree")
 	require.Equal(t, "spaced-out", res.Slug)
+}
+
+// TestCreateOrganization_NameWithNoLatinSlugFallsBackToTheWorkOSID pins
+// StableBase. A name that slugifies to nothing has to fall back to something,
+// and the fallback is the WorkOS organization id rather than randomness: two
+// attempts at one create then compete for a single advisory-lock key, and a
+// retry heads for the slug the first attempt was heading for.
+func TestCreateOrganization_NameWithNoLatinSlugFallsBackToTheWorkOSID(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZNOLATIN"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, _ := newTestAdminServiceWithWorkOS(t, fake)
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "顶尖科技", AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	// Written out rather than computed. Deriving the expectation from the same
+	// function under test would accept a random fallback just as happily.
+	require.Equal(t, "org-01hznolatin", res.Slug,
+		"a name with no slug of its own must fall back to the WorkOS organization id")
+	require.Equal(t, "顶尖科技", res.Name, "the fallback slug must not become the name")
 }
 
 func TestCreateOrganization_TwoOrganizationsCanShareAName(t *testing.T) {
