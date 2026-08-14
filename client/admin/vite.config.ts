@@ -54,7 +54,31 @@ export default defineConfig(({ command }) => {
     throw new Error("GRAM_ADMIN_BACKEND_URL must be set in development");
   }
 
+  // Baked in: a different origin, so there is no runtime way to learn it.
+  // Empty disables the link.
+  const appUrl = process.env["GRAM_APP_URL"] || "";
+  // An operator authenticates at this origin, so plaintext is a downgrade.
+  if (appUrl) {
+    let parsed: URL;
+    try {
+      parsed = new URL(appUrl);
+    } catch {
+      throw new Error(`GRAM_APP_URL must be an absolute URL, got "${appUrl}"`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(
+        `GRAM_APP_URL must use https, got "${parsed.protocol}//"`,
+      );
+    }
+    if (!parsed.hostname) {
+      throw new Error(`GRAM_APP_URL must name a host, got "${appUrl}"`);
+    }
+  }
+
   return {
+    define: {
+      __GRAM_APP_URL__: JSON.stringify(appUrl),
+    },
     plugins: [
       // The generator reads src/routes and writes src/routeTree.gen.ts. It has
       // to run before the react plugin, because the react plugin transforms the

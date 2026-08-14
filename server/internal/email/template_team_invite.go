@@ -17,8 +17,8 @@ type TeamInvite struct {
 	OrganizationName string
 }
 
-func (TeamInvite) TransactionalID() TransactionalID {
-	return transactionalIDTeamInvite
+func (TeamInvite) Key() TemplateKey {
+	return TemplateKeyTeamInvite
 }
 
 func (t TeamInvite) Variables() map[string]string {

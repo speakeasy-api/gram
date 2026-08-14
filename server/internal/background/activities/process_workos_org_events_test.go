@@ -886,7 +886,19 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 	})
 	require.NoError(t, err)
 
-	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, slug)
+	now := time.Now().UTC()
+	seededRole, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    externalID,
+		WorkosSlug:        slug,
+		WorkosName:        "Billing Manager",
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty("event_00SEED"),
+	})
+	require.NoError(t, err)
+	rolePrincipal, err := urn.ParsePrincipal(seededRole.RoleUrn)
+	require.NoError(t, err)
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: externalID,
 		PrincipalUrn:   rolePrincipal,

@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { adminSessionQuery, logout } from "@/lib/gramAdminApi";
+import { adminSessionQuery } from "@/lib/adminQueries";
+import { logout } from "@/lib/gramAdminApi";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,

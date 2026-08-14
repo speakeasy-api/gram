@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildLoginPayload builds the payload for the admin login endpoint from CLI
@@ -140,6 +142,68 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 	return v, nil
 }
 
+// BuildDisableOrganizationPayload builds the payload for the admin
+// disableOrganization endpoint from CLI flags.
+func BuildDisableOrganizationPayload(adminDisableOrganizationBody string, adminDisableOrganizationAdminSessionToken string) (*admin.DisableOrganizationPayload, error) {
+	var err error
+	var body DisableOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDisableOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDisableOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminDisableOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.DisableOrganizationPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildEnableOrganizationPayload builds the payload for the admin
+// enableOrganization endpoint from CLI flags.
+func BuildEnableOrganizationPayload(adminEnableOrganizationBody string, adminEnableOrganizationAdminSessionToken string) (*admin.EnableOrganizationPayload, error) {
+	var err error
+	var body EnableOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminEnableOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminEnableOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminEnableOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.EnableOrganizationPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetOrganizationPayload builds the payload for the admin getOrganization
 // endpoint from CLI flags.
 func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOrganizationAdminSessionToken string) (*admin.GetOrganizationPayload, error) {
@@ -202,7 +266,7 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -214,6 +278,33 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	{
 		if adminListOrganizationsAccountType != "" {
 			accountType = &adminListOrganizationsAccountType
+		}
+	}
+	var accountTypes []string
+	{
+		if adminListOrganizationsAccountTypes != "" {
+			err = json.Unmarshal([]byte(adminListOrganizationsAccountTypes), &accountTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for accountTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var trialStates []string
+	{
+		if adminListOrganizationsTrialStates != "" {
+			err = json.Unmarshal([]byte(adminListOrganizationsTrialStates), &trialStates)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for trialStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var disabledStates []string
+	{
+		if adminListOrganizationsDisabledStates != "" {
+			err = json.Unmarshal([]byte(adminListOrganizationsDisabledStates), &disabledStates)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
 		}
 	}
 	var includeDisabled *bool
@@ -245,6 +336,30 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
+	var sort *string
+	{
+		if adminListOrganizationsSort != "" {
+			sort = &adminListOrganizationsSort
+		}
+	}
+	var direction *string
+	{
+		if adminListOrganizationsDirection != "" {
+			direction = &adminListOrganizationsDirection
+		}
+	}
+	var page *int
+	{
+		if adminListOrganizationsPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListOrganizationsPage, 10, strconv.IntSize)
+			val := int(v)
+			page = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+		}
+	}
 	var adminSessionToken *string
 	{
 		if adminListOrganizationsAdminSessionToken != "" {
@@ -254,9 +369,84 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v := &admin.ListOrganizationsPayload{}
 	v.Q = q
 	v.AccountType = accountType
+	v.AccountTypes = accountTypes
+	v.TrialStates = trialStates
+	v.DisabledStates = disabledStates
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Sort = sort
+	v.Direction = direction
+	v.Page = page
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildExtendTrialPayload builds the payload for the admin extendTrial
+// endpoint from CLI flags.
+func BuildExtendTrialPayload(adminExtendTrialBody string, adminExtendTrialAdminSessionToken string) (*admin.ExtendTrialPayload, error) {
+	var err error
+	var body ExtendTrialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminExtendTrialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if body.Days < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 1, true))
+		}
+		if body.Days > 365 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 365, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminExtendTrialAdminSessionToken != "" {
+			adminSessionToken = &adminExtendTrialAdminSessionToken
+		}
+	}
+	v := &admin.ExtendTrialPayload{
+		ID:   body.ID,
+		Days: body.Days,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateOrganizationPayload builds the payload for the admin
+// createOrganization endpoint from CLI flags.
+func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCreateOrganizationAdminSessionToken string) (*admin.CreateOrganizationPayload, error) {
+	var err error
+	var body CreateOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminCreateOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.CreateOrganizationPayload{
+		Name: body.Name,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

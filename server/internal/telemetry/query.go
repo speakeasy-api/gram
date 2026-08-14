@@ -150,6 +150,8 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
 
 	params := repo.AttributeMetricsQueryParams{
 		ProjectIDs:      scope.projectIDs,
@@ -472,6 +474,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
+	filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
 
 	params := repo.ListSessionsParams{
 		ProjectIDs:       projectIDs,

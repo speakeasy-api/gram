@@ -221,6 +221,10 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	service.OrganizationSelectionHandler().ServeHTTP(selection, httptest.NewRequest(http.MethodGet, selectionURL.String(), nil))
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
+	require.Contains(t, selection.Body.String(), "Choose an organization")
+	require.Contains(t, selection.Body.String(), "auth-consent-container")
+	require.Contains(t, selection.Body.String(), "font-diatype-mono")
+	require.NotContains(t, selection.Body.String(), "fonts.googleapis.com")
 }
 
 func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {
@@ -278,6 +282,43 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	require.Equal(t, http.StatusOK, connect.Code)
 	require.Contains(t, connect.Body.String(), "test")
 	require.Contains(t, connect.Body.String(), "Organization one")
+	require.Contains(t, connect.Body.String(), "data-single-submit")
+	contentSecurityPolicy := connect.Header().Get("Content-Security-Policy")
+	_, noncePart, found := strings.Cut(contentSecurityPolicy, "script-src 'nonce-")
+	require.True(t, found)
+	scriptNonce, _, found := strings.Cut(noncePart, "'")
+	require.True(t, found)
+	require.NotEmpty(t, scriptNonce)
+	require.Contains(t, connect.Body.String(), `nonce="`+scriptNonce+`"`)
+	require.Contains(t, connect.Body.String(), `action.name = "action"`)
+	require.Contains(t, contentSecurityPolicy, "form-action 'self' http://127.0.0.1:3000")
+
+	approve := httptest.NewRecorder()
+	approveForm := url.Values{"state": {state}, "csrf_token": {csrf}, "action": {"approve"}}
+	approveRequest := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(approveForm.Encode()))
+	approveRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	service.ConnectHandler().ServeHTTP(approve, approveRequest)
+	require.Equal(t, http.StatusSeeOther, approve.Code)
+	redirect, err := url.Parse(approve.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:3000/callback", redirect.Scheme+"://"+redirect.Host+redirect.Path)
+	require.NotEmpty(t, redirect.Query().Get("code"))
+
+	replayed := httptest.NewRecorder()
+	service.ConnectHandler().ServeHTTP(replayed, approveRequest)
+	require.Equal(t, http.StatusUnauthorized, replayed.Code)
+}
+
+func TestOAuthPageContentSecurityPolicyOnlyAllowsHTTPRedirectOrigins(t *testing.T) {
+	t.Parallel()
+
+	policy := oauthPageContentSecurityPolicy("https://client.example/callback?next=unexpected", "nonce")
+	require.Contains(t, policy, "form-action 'self' https://client.example")
+	require.NotContains(t, policy, "/callback")
+	require.NotContains(t, policy, "?next")
+
+	policy = oauthPageContentSecurityPolicy("javascript:alert(1)", "nonce")
+	require.Contains(t, policy, "form-action 'self';")
 }
 
 func TestOAuthHTTPGateErrorsDistinguishUnavailableFromDenied(t *testing.T) {

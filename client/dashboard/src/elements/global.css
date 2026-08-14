@@ -31,6 +31,10 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-mention: var(--mention);
+  --color-mention-muted: var(--mention-muted);
+  --color-skill: var(--skill);
+  --color-skill-muted: var(--skill-muted);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -88,6 +92,14 @@
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
+  /* Tool mentions in the composer and their badges — sky blue, so an @tool
+     token reads as a live reference the way a handle does in a social feed. */
+  --mention: oklch(0.633 0.152 245.5);
+  --mention-muted: oklch(0.633 0.152 245.5 / 12%);
+  /* Skills get their own hue so a `/skill` reads as a different kind of
+     reference from an `@tool` at a glance. */
+  --skill: oklch(0.556 0.204 305);
+  --skill-muted: oklch(0.556 0.204 305 / 12%);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -124,6 +136,10 @@
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --mention: oklch(0.74 0.135 244);
+  --mention-muted: oklch(0.74 0.135 244 / 18%);
+  --skill: oklch(0.72 0.17 306);
+  --skill-muted: oklch(0.72 0.17 306 / 18%);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
@@ -144,6 +160,21 @@
 
 @layer base {
   .gram-elements {
+    /* The composer input is a contenteditable, not a textarea: it needs the
+       textarea's wrapping behavior and its own placeholder, since neither
+       comes for free on a div. */
+    .aui-composer-input {
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+
+    .aui-composer-input[data-empty="true"]::before {
+      content: attr(data-placeholder);
+      color: var(--muted-foreground);
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
     /* source("./") limits class detection to the elements sources. This file
        compiles inside the dashboard project, so without it Tailwind scans the
        whole dashboard and every dashboard-only utility ships (scoped under

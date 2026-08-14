@@ -28,6 +28,13 @@ type Service interface {
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Disables an organization, recording the moment of the action in disabled_at.
+	// Idempotent: disabling an already-disabled organization keeps the original
+	// timestamp.
+	DisableOrganization(context.Context, *DisableOrganizationPayload) (res *AdminOrganization, err error)
+	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
+	// organization that is already active is unaffected.
+	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
 	// Lists members of an organization (admin view, no auth scoping).
@@ -36,6 +43,16 @@ type Service interface {
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
+	// Extends a running enterprise trial by adding days to its current end date.
+	// Only a running trial can be extended: one that has converted, has been
+	// demoted, or has already expired is rejected rather than re-armed.
+	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
+	// Creates an organization in WorkOS and in Gram, so an operator does not have
+	// to leave the admin app for the WorkOS dashboard. The organization starts
+	// with no members, is not whitelisted, and gets no trial. Idempotent against
+	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
+	// so both writers converge on one row.
+	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -58,7 +75,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [13]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -79,8 +96,10 @@ type AdminListOrganizationProjectsResult struct {
 type AdminListOrganizationsResult struct {
 	// The page of organizations.
 	Organizations []*AdminOrganization
-	// Cursor for the next page; empty when exhausted.
+	// Cursor for the next page; empty when exhausted. Omitted in offset mode.
 	NextCursor *string
+	// Number of organizations matching the filters, before paging.
+	Total int64
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -104,6 +123,11 @@ type AdminOrganization struct {
 	FreeTrialStartedAt *string
 	// The time at which the free trial ends.
 	FreeTrialEndsAt *string
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The creation date of the organization.
@@ -194,6 +218,40 @@ type CallbackResult struct {
 	SessionID string
 }
 
+// CreateOrganizationPayload is the payload type of the admin service
+// createOrganization method.
+type CreateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Display name for the new organization.
+	Name string
+}
+
+// DisableOrganizationPayload is the payload type of the admin service
+// disableOrganization method.
+type DisableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// EnableOrganizationPayload is the payload type of the admin service
+// enableOrganization method.
+type EnableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// ExtendTrialPayload is the payload type of the admin service extendTrial
+// method.
+type ExtendTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days to add to the trial's current end date.
+	Days int
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -231,14 +289,41 @@ type ListOrganizationsPayload struct {
 	AdminSessionToken *string
 	// Search term applied to name and slug (case-insensitive substring).
 	Q *string
-	// Filter by gram_account_type (e.g. free, pro, enterprise).
+	// Filter by a single gram_account_type (e.g. free, pro, enterprise).
+	// Superseded by account_types, which it joins as one more member of the same
+	// set.
 	AccountType *string
-	// Include organizations with disabled_at set. Defaults to false.
+	// Match any of these gram_account_type values. Empty matches every account
+	// type. A value no organization carries matches nothing rather than failing
+	// the request.
+	AccountTypes []string
+	// Match any of running, ending_soon, expired, demoted, converted or none.
+	// Empty matches every trial state. An unrecognised value matches nothing
+	// rather than failing the request.
+	TrialStates []string
+	// Match any of active or disabled. Empty falls back to include_disabled. An
+	// unrecognised value matches nothing rather than failing the request.
+	DisabledStates []string
+	// Include organizations with disabled_at set. Defaults to false. Superseded by
+	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool
-	// Pagination cursor: id of the last item from the previous page.
+	// Pagination cursor: id of the last item from the previous page. Ignored when
+	// sort or page is supplied.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
+	// Column to sort by: name, slug, account_type, member_count, created_at,
+	// disabled_at or trial_ends_at. Any other value sorts by id. Supplying it
+	// selects offset paging.
+	Sort *string
+	// Sort direction, asc or desc, applied to the column named by sort. Any other
+	// value sorts ascending. On its own it does nothing: without sort there is no
+	// column to reverse, so it neither reorders the results nor selects offset
+	// paging.
+	Direction *string
+	// 1-based page number for offset paging (default 1). Supplying it selects
+	// offset paging.
+	Page *int
 }
 
 // LoginPayload is the payload type of the admin service login method.

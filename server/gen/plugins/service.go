@@ -260,7 +260,7 @@ type Plugin struct {
 type PluginAssignment struct {
 	// Unique assignment identifier.
 	ID string
-	// Principal URN (e.g. role:engineering, user:id, or *).
+	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string
 	CreatedAt    string
 }

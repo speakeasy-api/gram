@@ -9,8 +9,8 @@ import (
 
 type GetMCPReadinessToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit Gram project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
-	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to once per minute for this registration"`
+	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_platform_mcp_for_project; get_platform_mcp_onboarding_status also resolves the workflow-bound registration and returns its ID"`
+	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration"`
 }
 
 type GetMCPReadinessToolOutput struct {
@@ -26,7 +26,7 @@ type GetMCPReadinessToolOutput struct {
 
 type GetMCPRepairPlanToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit Gram project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
+	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_platform_mcp_for_project; get_platform_mcp_onboarding_status also resolves the workflow-bound registration and returns its ID"`
 }
 
 type GetMCPRepairPlanToolOutput struct {
@@ -41,7 +41,7 @@ func registerReadinessTools(server *mcp.Server, readiness *ReadinessService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Get MCP Readiness",
-		Description: "Return normalized authenticated readiness for one reviewed MCP registration. A forced probe is limited to once per minute for that registration.",
+		Description: "Return normalized authenticated readiness for one reviewed MCP registration when its registration ID is known. For guided onboarding, use get_platform_mcp_onboarding_status, which resolves the workflow-bound registration. A forced probe is limited to three per minute for that registration.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -55,16 +55,13 @@ func registerReadinessTools(server *mcp.Server, readiness *ReadinessService) {
 			}
 			return nil, GetMCPReadinessToolOutput{}, err
 		}
-		if !found {
-			return nil, GetMCPReadinessToolOutput{}, ErrReadinessInvalid
-		}
-		return nil, readinessToolOutput(project.Slug, input.RegistrationID, result, true), nil
+		return nil, readinessToolOutput(project.Slug, input.RegistrationID, normalizedReadiness(result, found), found), nil
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
 		Title:       "Get MCP Repair Plan",
-		Description: "Return safe, bounded next actions for one reviewed MCP registration from its latest authenticated readiness evidence.",
+		Description: "Return safe, bounded next actions for one reviewed MCP registration when its registration ID is known. For guided onboarding, use get_platform_mcp_onboarding_status to resolve the workflow-bound registration.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -78,6 +75,7 @@ func registerReadinessTools(server *mcp.Server, readiness *ReadinessService) {
 			}
 			return nil, GetMCPRepairPlanToolOutput{}, err
 		}
+		result = normalizedReadiness(result, found)
 		return nil, GetMCPRepairPlanToolOutput{
 			ProjectSlug:    project.Slug,
 			RegistrationID: input.RegistrationID,

@@ -46,6 +46,10 @@ type Descriptor struct {
 	// TestOnlyAllowedCIDRBlocks is a narrowly-scoped test-fixture escape hatch
 	// for a TLS server on loopback. Production composition must leave it empty.
 	TestOnlyAllowedCIDRBlocks []string
+	// TestOnlyReadinessLifetime extends local fixture evidence only so a human
+	// can complete the local OAuth and first-use walkthrough. Production
+	// composition must leave it zero, preserving the default lifetime.
+	TestOnlyReadinessLifetime time.Duration
 }
 
 // Adapter resolves one reviewed provider authorization and probes only its
@@ -184,7 +188,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 		descriptor.Resource,
 	)
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
-		return readinessResult(platformmcp.ReadinessNeedsConfiguration, "no_reviewed_client", request, remotesessions.ResolvedAuthorization{
+		return a.readinessResult(platformmcp.ReadinessNeedsConfiguration, "no_reviewed_client", request, remotesessions.ResolvedAuthorization{
 			AccessToken:            "",
 			RemoteSessionID:        uuid.Nil,
 			RemoteSessionUpdatedAt: time.Time{},
@@ -193,7 +197,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 		}, "no_client"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		return readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, remotesessions.ResolvedAuthorization{
+		return a.readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, remotesessions.ResolvedAuthorization{
 			AccessToken:            "",
 			RemoteSessionID:        uuid.Nil,
 			RemoteSessionUpdatedAt: time.Time{},
@@ -207,9 +211,9 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 
 	state, evidence := a.probe(ctx, descriptor, authorization.AccessToken)
 	if state != platformmcp.ReadinessReady {
-		return readinessResult(state, evidence, request, authorization, ""), nil
+		return a.readinessResult(state, evidence, request, authorization, ""), nil
 	}
-	return readinessResult(platformmcp.ReadinessReady, "tools_list_ok", request, authorization, ""), nil
+	return a.readinessResult(platformmcp.ReadinessReady, "tools_list_ok", request, authorization, ""), nil
 }
 
 func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string) (platformmcp.ReadinessState, string) {
@@ -228,7 +232,7 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	httpClient.Transport = authRT
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:       "gram-platform-mcp-readiness",
+		Name:       "speakeasy-aicp-platform-mcp-readiness",
 		Title:      "",
 		Version:    "1.0.0",
 		WebsiteURL: "",
@@ -251,8 +255,12 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	return platformmcp.ReadinessReady, "tools_list_ok"
 }
 
-func readinessResult(state platformmcp.ReadinessState, evidence string, request platformmcp.ProviderReadinessProbeRequest, authorization remotesessions.ResolvedAuthorization, absence string) platformmcp.ProviderReadinessProbeResult {
+func (a *Adapter) readinessResult(state platformmcp.ReadinessState, evidence string, request platformmcp.ProviderReadinessProbeRequest, authorization remotesessions.ResolvedAuthorization, absence string) platformmcp.ProviderReadinessProbeResult {
 	now := time.Now().UTC()
+	lifetime := readinessLifetime
+	if a != nil && a.descriptor.TestOnlyReadinessLifetime > 0 {
+		lifetime = a.descriptor.TestOnlyReadinessLifetime
+	}
 	return platformmcp.ProviderReadinessProbeResult{
 		AuthorizationIdentity: platformmcp.ProviderAuthorizationIdentity{
 			OrganizationID:         request.OrganizationID,
@@ -267,7 +275,7 @@ func readinessResult(state platformmcp.ReadinessState, evidence string, request 
 		State:        state,
 		EvidenceCode: evidence,
 		CheckedAt:    now,
-		ExpiresAt:    now.Add(readinessLifetime),
+		ExpiresAt:    now.Add(lifetime),
 	}
 }
 

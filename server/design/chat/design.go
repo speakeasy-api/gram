@@ -99,6 +99,42 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats", "type": "query"}`)
 	})
 
+	Method("getAssistantSessionSummary", func() {
+		Security(security.Session, security.ProjectSlug)
+		Description("Get assistant session activity totals for a time range.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("assistant_id", String, "The assistant whose activity to summarize", func() {
+				Format(FormatUUID)
+			})
+			Attribute("from", String, "Start of the activity range (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "End of the activity range (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Required("assistant_id", "from", "to")
+		})
+
+		Result(AssistantSessionSummary)
+
+		HTTP(func() {
+			GET("/rpc/chat.getAssistantSessionSummary")
+			Param("assistant_id")
+			Param("from")
+			Param("to")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAssistantSessionSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAssistantSessionSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AssistantSessionSummary", "type": "query"}`)
+	})
+
 	Method("getWorkUnitsTrend", func() {
 		Description("Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.")
 
@@ -451,6 +487,14 @@ var ListChatsResult = Type("ListChatsResult", func() {
 	Attribute("chats", ArrayOf(ChatOverview), "The list of chats")
 	Attribute("total", Int, "Total number of chats (before pagination)")
 	Required("chats", "total")
+})
+
+var AssistantSessionSummary = Type("AssistantSessionSummary", func() {
+	Attribute("sessions", Int64, "Number of sessions with activity in the range")
+	Attribute("messages", Int64, "Number of messages created in the range")
+	Attribute("total_tokens", Int64, "Tokens consumed in the range")
+	Attribute("total_cost", Float64, "Cost in USD incurred in the range")
+	Required("sessions", "messages", "total_tokens", "total_cost")
 })
 
 var SummarizeChatResult = Type("SummarizeChatResult", func() {
