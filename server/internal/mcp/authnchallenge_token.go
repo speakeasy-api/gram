@@ -70,16 +70,16 @@ type userSessionRefreshReplay struct {
 }
 
 type userSessionRefreshReplayPayload struct {
-	AccessExpiresAt        time.Time          `json:"access_expires_at"`
-	AudienceURN            string             `json:"audience_urn"`
-	AuthorizationExpiresAt time.Time          `json:"authorization_expires_at"`
-	ClientID               uuid.UUID          `json:"client_id"`
-	EndpointIssuer         string             `json:"endpoint_issuer"`
-	ErrorDescription       string             `json:"error_description"`
-	JTI                    string             `json:"jti"`
-	ReplayKey              string             `json:"replay_key"`
-	Response               tokenResponse      `json:"response"`
-	Subject                urn.SessionSubject `json:"subject"`
+	AccessExpiresAt        time.Time           `json:"access_expires_at"`
+	AudienceURN            string              `json:"audience_urn"`
+	AuthorizationExpiresAt time.Time           `json:"authorization_expires_at"`
+	ClientID               uuid.UUID           `json:"client_id"`
+	EndpointIssuer         string              `json:"endpoint_issuer"`
+	ErrorDescription       string              `json:"error_description"`
+	JTI                    string              `json:"jti"`
+	ReplayKey              string              `json:"replay_key"`
+	Response               tokenResponse       `json:"response"`
+	Subject                *urn.SessionSubject `json:"subject,omitempty"`
 }
 
 type mintSessionParams struct {
@@ -501,6 +501,9 @@ func (s *Service) writeRefreshTokenReplay(
 	if now := time.Now(); !payload.AccessExpiresAt.After(now) || !payload.AuthorizationExpiresAt.After(now) {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
 	}
+	if payload.Subject == nil {
+		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
+	}
 
 	endpointIssuer, err := endpoint.RootURL(baseURL)
 	if err != nil {
@@ -513,7 +516,7 @@ func (s *Service) writeRefreshTokenReplay(
 			ClientID:        clientRow.ClientID,
 			Issuer:          endpointIssuer,
 			JTI:             payload.JTI,
-			Subject:         payload.Subject,
+			Subject:         *payload.Subject,
 		})
 		if mintErr != nil {
 			return oops.E(oops.CodeUnexpected, mintErr, "mint refresh token replay jwt").LogError(ctx, logger)
@@ -559,7 +562,6 @@ func (s *Service) storeRefreshTokenReplayFailure(
 	logger *slog.Logger,
 ) {
 	var emptyResponse tokenResponse
-	var emptySubject urn.SessionSubject
 	if err := s.storeRefreshTokenReplay(ctx, replayKey, userSessionRefreshReplayPayload{
 		AccessExpiresAt:        time.Time{},
 		AudienceURN:            "",
@@ -570,7 +572,7 @@ func (s *Service) storeRefreshTokenReplayFailure(
 		JTI:                    "",
 		ReplayKey:              "",
 		Response:               emptyResponse,
-		Subject:                emptySubject,
+		Subject:                nil,
 	}); err != nil {
 		logger.WarnContext(ctx, "failed to cache refresh token replay rejection", attr.SlogError(err))
 	}
@@ -734,7 +736,7 @@ func (s *Service) mintSessionAndRespond(
 			JTI:                    jti,
 			ReplayKey:              "",
 			Response:               response,
-			Subject:                params.Subject,
+			Subject:                &params.Subject,
 		}); cacheErr != nil {
 			logger.WarnContext(ctx, "failed to cache refresh token replay response", attr.SlogError(cacheErr))
 		}

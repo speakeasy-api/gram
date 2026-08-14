@@ -83,6 +83,7 @@ func newRefreshTokenReplayTestFixture(
 		UpstreamResource:     "",
 		UserSessionIssuerID:  uuid.New(),
 	}
+	subject := urn.NewUserSubject("user-id")
 	payload := userSessionRefreshReplayPayload{
 		AccessExpiresAt:        expiresAt,
 		AudienceURN:            endpoint.AudienceURN,
@@ -99,7 +100,7 @@ func newRefreshTokenReplayTestFixture(
 			RefreshToken:           "refresh-token",
 			AuthorizationExpiresIn: 3600,
 		},
-		Subject: urn.NewUserSubject("user-id"),
+		Subject: &subject,
 	}
 	plaintext, err := json.Marshal(payload)
 	require.NoError(t, err)
