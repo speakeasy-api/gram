@@ -259,7 +259,7 @@ jobs:
           # keep this job's cache separate from the full-install caches.
           install_args: yq
           cache: true
-          cache_key_prefix: mise-yq-v1
+          cache_key_prefix: mise-yq-blacksmith-v1
           env: false
 
       - id: "auth"
@@ -296,6 +296,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -461,6 +462,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -606,6 +608,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -747,6 +750,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Run ClickHouse migrations with golang-migrate
@@ -779,6 +783,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       # The ordering check needs both the checked-out head and the base commit
@@ -846,6 +851,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Lint PostgreSQL migrations
@@ -993,6 +999,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Fetch main branch
@@ -1055,6 +1062,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1151,6 +1159,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1217,6 +1226,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1272,6 +1282,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1326,6 +1337,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1369,6 +1381,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1433,6 +1446,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1476,6 +1490,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1517,6 +1532,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1700,6 +1716,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1757,6 +1774,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1803,6 +1821,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1848,6 +1867,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1948,6 +1968,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -2094,6 +2115,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -2153,6 +2175,10 @@ jobs:
         with:
           install: true
           cache: true
+          # This job only needs npx; avoid restoring the full ~606 MiB toolchain
+          # into a job with a five-minute timeout.
+          install_args: node
+          cache_key_prefix: mise-node-blacksmith-v1
           env: false
 
       - name: Run impeccable

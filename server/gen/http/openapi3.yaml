@@ -818,6 +818,82 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organizations.bulkUpdateAccountType:
+        post:
+            tags:
+                - admin
+            summary: bulkUpdateAccountType admin
+            description: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.
+            operationId: adminBulkUpdateAccountType
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BulkUpdateAccountTypeRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminBulkUpdateAccountTypeResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organizations.list:
         get:
             description: Lists organizations for admin operations with optional search and filters.
@@ -982,6 +1058,76 @@ paths:
                 outputs:
                     nextCursor: $.next_cursor
                 type: cursor
+    /admin/organizations.stats:
+        get:
+            tags:
+                - admin
+            summary: getOrganizationStats admin
+            description: 'Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller''s list filters, so the strip does not move when an operator filters.'
+            operationId: adminGetOrganizationStats
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganizationStats'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/project.get:
         get:
             tags:
@@ -56478,6 +56624,23 @@ components:
             description: Result of a strictly additive tool metadata batch insert.
             required:
                 - tools
+        AdminBulkUpdateAccountTypeResult:
+            type: object
+            properties:
+                missing_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.
+                updated_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: 'IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.'
+            description: Outcome of a bulk account type change.
+            required:
+                - updated_ids
+                - missing_ids
         AdminListOrganizationMembersResult:
             type: object
             properties:
@@ -56666,6 +56829,36 @@ components:
                 - display_name
                 - created_at
                 - updated_at
+        AdminOrganizationStats:
+            type: object
+            properties:
+                created_last_7_days:
+                    type: integer
+                    description: Organizations created in the last 7 days, whatever their current status.
+                    format: int64
+                disabled:
+                    type: integer
+                    description: Organizations with disabled_at set.
+                    format: int64
+                disabled_last_7_days:
+                    type: integer
+                    description: Organizations disabled in the last 7 days.
+                    format: int64
+                total:
+                    type: integer
+                    description: Every organization on the platform, disabled ones included.
+                    format: int64
+                trials_ending_soon:
+                    type: integer
+                    description: Organizations whose trial_state is ending_soon.
+                    format: int64
+            description: Platform-wide organization counts surfaced above the admin organizations list.
+            required:
+                - total
+                - created_last_7_days
+                - trials_ending_soon
+                - disabled
+                - disabled_last_7_days
         AdminProject:
             type: object
             properties:
@@ -57766,6 +57959,27 @@ components:
                 - id
                 - reason
                 - description
+        BulkUpdateAccountTypeRequestBody:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: New gram_account_type for every listed organization.
+                    enum:
+                        - free
+                        - pro
+                        - enterprise
+                ids:
+                    type: array
+                    items:
+                        type: string
+                        minLength: 1
+                    description: Organization IDs to update.
+                    minItems: 1
+                    maxItems: 1000
+            required:
+                - ids
+                - account_type
         BusinessMemory:
             type: object
             properties:
@@ -77533,7 +77747,11 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: New gram_account_type (e.g. free, pro, enterprise).
+                    description: New gram_account_type.
+                    enum:
+                        - free
+                        - pro
+                        - enterprise
                 id:
                     type: string
                     description: Organization ID.

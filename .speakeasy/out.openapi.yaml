@@ -55828,6 +55828,23 @@ components:
       description: Result of a strictly additive tool metadata batch insert.
       required:
         - tools
+    AdminBulkUpdateAccountTypeResult:
+      type: object
+      properties:
+        missing_ids:
+          type: array
+          items:
+            type: string
+          description: IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.
+        updated_ids:
+          type: array
+          items:
+            type: string
+          description: 'IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.'
+      description: Outcome of a bulk account type change.
+      required:
+        - updated_ids
+        - missing_ids
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -56016,6 +56033,36 @@ components:
         - display_name
         - created_at
         - updated_at
+    AdminOrganizationStats:
+      type: object
+      properties:
+        created_last_7_days:
+          type: integer
+          description: Organizations created in the last 7 days, whatever their current status.
+          format: int64
+        disabled:
+          type: integer
+          description: Organizations with disabled_at set.
+          format: int64
+        disabled_last_7_days:
+          type: integer
+          description: Organizations disabled in the last 7 days.
+          format: int64
+        total:
+          type: integer
+          description: Every organization on the platform, disabled ones included.
+          format: int64
+        trials_ending_soon:
+          type: integer
+          description: Organizations whose trial_state is ending_soon.
+          format: int64
+      description: Platform-wide organization counts surfaced above the admin organizations list.
+      required:
+        - total
+        - created_last_7_days
+        - trials_ending_soon
+        - disabled
+        - disabled_last_7_days
     AdminProject:
       type: object
       properties:
@@ -57116,6 +57163,27 @@ components:
         - id
         - reason
         - description
+    BulkUpdateAccountTypeRequestBody:
+      type: object
+      properties:
+        account_type:
+          type: string
+          description: New gram_account_type for every listed organization.
+          enum:
+            - free
+            - pro
+            - enterprise
+        ids:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: Organization IDs to update.
+          minItems: 1
+          maxItems: 1000
+      required:
+        - ids
+        - account_type
     BusinessMemory:
       type: object
       properties:
@@ -76887,7 +76955,11 @@ components:
       properties:
         account_type:
           type: string
-          description: New gram_account_type (e.g. free, pro, enterprise).
+          description: New gram_account_type.
+          enum:
+            - free
+            - pro
+            - enterprise
         id:
           type: string
           description: Organization ID.

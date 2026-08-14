@@ -694,10 +694,18 @@ type codexCostPayload struct {
 }
 
 type codexCostIdentity struct {
-	UserID string   `json:"user_id"`
-	Email  string   `json:"email"`
-	Name   string   `json:"name"`
-	Groups []string `json:"groups"`
+	UserID string           `json:"user_id"`
+	Email  string           `json:"email"`
+	Name   string           `json:"name"`
+	Groups []codexCostGroup `json:"groups"`
+}
+
+// codexCostGroup is a workspace group attached to a compliance identity. The
+// feed sends objects, e.g. {"id":"<hex id>","name":"<group name>"}, so
+// decoding must not assume plain strings.
+type codexCostGroup struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type codexCostMeasures struct {
