@@ -470,7 +470,17 @@ export function OrganizationsList(): JSX.Element {
                                 key={row.id}
                                 row={row}
                                 ref={isPeeked ? peekedRow : undefined}
-                                className={cn(isPeeked && "bg-muted")}
+                                // The pinned cell inherits the row's colour and
+                                // paints it again, so a translucent row doubles
+                                // up and shows the scrolled columns through the
+                                // pin. Overriding the two half-alpha states is
+                                // a twMerge collapse, not a cascade win: the
+                                // emitted CSS puts the `/50` rule last at equal
+                                // specificity, so it wins any tie.
+                                className={cn(
+                                  "bg-background hover:bg-muted has-aria-expanded:bg-muted",
+                                  isPeeked && "bg-muted",
+                                )}
                                 onClick={openOrganization}
                                 onAltClick={togglePeek}
                               />

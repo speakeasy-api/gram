@@ -7,6 +7,7 @@ import {
 import {
   act,
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -1862,8 +1863,10 @@ describe("organizations list peek", () => {
   // gestures on the link this row carries. A handler that peeked on any
   // modifier rather than on Alt alone would eat all three.
   for (const modifier of ["ctrlKey", "metaKey", "shiftKey"] as const) {
-    it(`leaves a ${modifier} click of the row to the browser`, async () => {
-      await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    it(`neither peeks nor navigates on a ${modifier} click of the row`, async () => {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: "/organizations",
+      });
       const link = await screen.findByRole("link", { name: FIRST_ORG.name });
 
       fireEvent.click(cellUnder(rowFor(link), "Slug"), { [modifier]: true });
@@ -1871,6 +1874,53 @@ describe("organizations list peek", () => {
       expect(
         screen.queryByRole("complementary", { name: "Organization peek" }),
       ).toBeNull();
+      // Staying put is the whole gesture. A modified click that navigated in
+      // this tab would take the list out from under the tab the operator
+      // meant to open, and the peek assertion above passes either way.
+      await settle();
+      expect(router.state.location.pathname).toBe("/organizations");
+    });
+  }
+
+  it("cancels the name link's download and peeks when it is alt-clicked", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // Dispatched by hand, because the assertion is on the event rather than on
+    // the DOM: a browser reads Alt on an anchor as "save link", so the row has
+    // to cancel the anchor's own default or the gesture downloads the page.
+    const event = createEvent.click(link, { altKey: true });
+    fireEvent(link, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    await settle();
+    expect(router.state.location.pathname).toBe("/organizations");
+  });
+
+  // Alt plus a second modifier is a gesture nobody aimed at this row, but the
+  // anchor's default is still "save link". Cancelling has to survive the
+  // narrower peek test, or the operator downloads an HTML file.
+  for (const modifier of ["ctrlKey", "metaKey", "shiftKey"] as const) {
+    it(`cancels the download without peeking on an alt+${modifier} click of the name`, async () => {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: "/organizations",
+      });
+      const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+      const event = createEvent.click(link, { altKey: true, [modifier]: true });
+      fireEvent(link, event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(
+        screen.queryByRole("complementary", { name: "Organization peek" }),
+      ).toBeNull();
+      await settle();
+      expect(router.state.location.pathname).toBe("/organizations");
     });
   }
 
@@ -2621,7 +2671,7 @@ describe("organizations list actions column", () => {
     expect(headers()).not.toContain("Created");
   });
 
-  it("pins the column to the right edge rather than letting it scroll", async () => {
+  it("marks the actions column sticky at the right edge, above its neighbours and no wider than its contents", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await screen.findByRole("link", { name: FIRST_ORG.name });
 
@@ -2635,10 +2685,15 @@ describe("organizations list actions column", () => {
     ]) {
       expect(element.classList.contains("sticky")).toBe(true);
       expect(element.classList.contains("right-0")).toBe(true);
+      // Above the cells that scroll under it, below the sticky header row.
+      expect(element.classList.contains("z-1")).toBe(true);
+      // The table is `w-full`, so a column that did not shrink to its contents
+      // would take a share of the freed width and read as an empty gutter.
+      expect(element.classList.contains("w-px")).toBe(true);
     }
   });
 
-  it("gives the pinned cells a background the scrolled row cannot show through", async () => {
+  it("gives the pinned cells opaque colours rather than a transparent one", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
 
@@ -2673,7 +2728,7 @@ describe("organizations list actions column", () => {
     }
   });
 
-  it("hands the peeked row's own colour to the cell pinned over it", async () => {
+  it("leaves the peeked row one colour for the pinned cell to inherit", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
     await peekOn(FIRST_ORG.name);

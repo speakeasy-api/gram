@@ -32,13 +32,6 @@ import {
  */
 
 /**
- * The feature registry every admin table shares.
- *
- * Column visibility gates `row.getVisibleCells`, `column.getIsVisible` and
- * `column.getCanHide`, which this wrapper and its header both call. A table
- * with no Columns control still registers it for that reason.
- */
-/**
  * Per-column classes, carried on the column definition because the header and
  * the body cell are rendered here rather than by the page.
  */
@@ -47,6 +40,13 @@ export type DataTableColumnMeta = {
   cellClassName?: string;
 };
 
+/**
+ * The feature registry every admin table shares.
+ *
+ * Column visibility gates `row.getVisibleCells`, `column.getIsVisible` and
+ * `column.getCanHide`, which this wrapper and its header both call. A table
+ * with no Columns control still registers it for that reason.
+ */
 export const dataTableFeatures = tableFeatures({
   columnVisibilityFeature,
   columnMeta: metaHelper<DataTableColumnMeta>(),
@@ -147,22 +147,26 @@ function DataTableRow<T extends RowData>({
             "a,button,input,label",
           );
 
-          // Alt turns a link's default into "save link", never a navigation, so
-          // a row that wants the gesture may have it and cancels the download.
-          // The other three modifiers are the browser's open-in-tab and
-          // open-in-window, which stay the link's own.
-          if (
-            onAltClick &&
-            event.altKey &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            !event.shiftKey &&
-            (control === null || control.matches("a"))
-          ) {
-            event.preventDefault();
-            onAltClick(row.original, event);
+          const onRowOrLink = control === null || control.matches("a");
+
+          // Alt turns a link's default into "save link", never a navigation,
+          // so a row that claims the gesture cancels that download whatever
+          // else is held down. Peeking is the stricter case: Alt on its own,
+          // because Alt with a second modifier is a gesture nobody aimed here.
+          if (onAltClick && event.altKey) {
+            if (onRowOrLink) {
+              event.preventDefault();
+              if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                onAltClick(row.original, event);
+              }
+            }
             return;
           }
+
+          // Open-in-tab and open-in-window belong to the link in the name
+          // cell. Answering them anywhere else in the row would navigate this
+          // tab out from under the one the operator is opening.
+          if (event.ctrlKey || event.metaKey || event.shiftKey) return;
 
           if (!onClick || control) return;
           onClick(row.original, event);
@@ -172,15 +176,7 @@ function DataTableRow<T extends RowData>({
   return (
     <TableRow
       ref={ref}
-      // Every row state stays fully opaque, including the two the base row
-      // gives a half-alpha tint. A pinned cell inherits the colour and paints
-      // it a second time on its own layer, so a translucent one both doubles
-      // up and lets the scrolled row show through. A page's own colour wins.
-      className={cn(
-        "bg-background hover:bg-muted has-aria-expanded:bg-muted",
-        onClick && "cursor-pointer",
-        className,
-      )}
+      className={cn(onClick && "cursor-pointer", className)}
       onClick={handleClick}
     >
       {row.getVisibleCells().map((cell) => (
