@@ -277,7 +277,12 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 
 	written, dropped, err := src.processPage(ctx, logParams)
 	if err != nil {
-		return fmt.Errorf("insert codex cost telemetry logs: %w", err)
+		// Deliberately an oops boundary, unlike this file's content errors:
+		// the recorded poll error is shown to org members, and the cause here
+		// is raw infrastructure error text (ClickHouse driver detail) that
+		// must not reach tenants. Internal surfaces recover it via
+		// oops.Detail.
+		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
 	}
 	src.progress.CostEventsDeduped += dropped
 	src.progress.CostEventsWritten += written

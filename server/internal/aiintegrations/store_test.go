@@ -260,28 +260,110 @@ func TestRecordSchedulePollFailureBacksOffWithFailureStreak(t *testing.T) {
 	extOrgID := "org_ext_1"
 	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
 
-	base := time.Now().UTC()
 	interval := pollIntervalForSchedule(ScheduleAnthropicCompliance)
-	cause := errors.New("codex compliance log sha256 mismatch for eclf_1")
+	cause := errors.New("list anthropic compliance activities: 503 Service Unavailable")
 
 	// Failure k reschedules the next poll interval * 2^(k-1) out, capped at
 	// 2^pollFailureMaxBackoffDoublings: the first failure keeps the base
 	// cadence, each repeat doubles the delay, and a chronic failure settles
 	// at the cap instead of retrying at full cadence forever.
 	for k := 1; k <= pollFailureMaxBackoffDoublings+2; k++ {
-		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, base, cause, 0))
+		callTime := time.Now().UTC()
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, callTime, cause, 0))
 
-		expected := base.Add(interval * time.Duration(1<<min(k-1, pollFailureMaxBackoffDoublings)))
+		expected := callTime.Add(interval * time.Duration(1<<min(k-1, pollFailureMaxBackoffDoublings)))
 		state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
-		require.WithinDuration(t, expected, state.NextPollAfter, time.Second)
+		require.WithinDuration(t, expected, state.NextPollAfter, 5*time.Second)
 	}
 
 	// A success resets the streak, so the next failure is back to the base
 	// cadence.
-	require.NoError(t, store.RecordSchedulePollSuccess(ctx, created.Config.ID, ScheduleAnthropicCompliance, base))
-	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, base, cause, 0))
+	require.NoError(t, store.RecordSchedulePollSuccess(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now().UTC()))
+	callTime := time.Now().UTC()
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, callTime, cause, 0))
 	state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
-	require.WithinDuration(t, base.Add(interval), state.NextPollAfter, time.Second)
+	require.WithinDuration(t, callTime.Add(interval), state.NextPollAfter, 5*time.Second)
+}
+
+func TestRecordSchedulePollFailureBackoffRespectsCeilingAndNowAnchor(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("analytics export unavailable")
+
+	// The 4h analytics schedule hits the absolute ceiling on its second
+	// consecutive failure: doubling alone would reach 8h and, at the streak
+	// cap, over ten days.
+	interval := pollIntervalForSchedule(ScheduleAnthropicAnalyticsUsage)
+	require.Greater(t, 2*interval, pollFailureBackoffCeiling)
+
+	callTime := time.Now().UTC()
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicAnalyticsUsage, callTime, cause, 0))
+	state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicAnalyticsUsage)
+	require.WithinDuration(t, callTime.Add(interval), state.NextPollAfter, 5*time.Second)
+
+	callTime = time.Now().UTC()
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicAnalyticsUsage, callTime, cause, 0))
+	state = findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicAnalyticsUsage)
+	require.WithinDuration(t, callTime.Add(pollFailureBackoffCeiling), state.NextPollAfter, 5*time.Second)
+
+	// A poll whose endTime is far in the past (a long failing run) anchors
+	// on now instead, so the backoff is not erased by landing in the past.
+	stale := time.Now().UTC().Add(-2 * time.Hour)
+	callTime = time.Now().UTC()
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicAnalyticsUsage, stale, cause, 0))
+	state = findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicAnalyticsUsage)
+	require.WithinDuration(t, callTime.Add(pollFailureBackoffCeiling), state.NextPollAfter, 5*time.Second)
+}
+
+func TestClearSyncSchedulePausesMakesFailingSchedulesDue(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("compliance feed unavailable")
+	for range 3 {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now().UTC(), cause, 0))
+	}
+	backedOff := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
+	require.Greater(t, backedOff.NextPollAfter, time.Now().Add(2*pollIntervalForSchedule(ScheduleAnthropicCompliance)))
+
+	// A settings-only save clears the streak and must also pull the
+	// backed-off next poll in, or the just-fixed integration stays dark
+	// until the backed-off time arrives.
+	upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "", false, true, &extOrgID, nil)
+
+	state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
+	require.Equal(t, int32(0), state.ConsecutiveFailures)
+	require.LessOrEqual(t, state.NextPollAfter, time.Now().Add(time.Second))
+}
+
+func TestSetSyncScheduleDisabledReenableMakesFailingScheduleDue(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("compliance feed unavailable")
+	for range 3 {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now().UTC(), cause, 0))
+	}
+
+	setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, true)
+	reenabled := setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, false)
+
+	// Re-enabling a schedule with a failure streak pulls its backed-off next
+	// poll in so it is picked up on the next scheduler tick.
+	require.LessOrEqual(t, reenabled.NextPollAfter, time.Now().Add(time.Second))
 }
 
 func findSyncSchedule(t *testing.T, ctx context.Context, store *Store, configID uuid.UUID, schedule string) SyncSchedule {

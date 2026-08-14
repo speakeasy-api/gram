@@ -158,7 +158,8 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			// Provider rejections are permanent until the user fixes the
 			// integration, so after a few of them in a row the schedule is
 			// auto-paused instead of re-enqueued forever. Retryable failures
-			// never pause: they keep the schedule's normal cadence.
+			// never pause: the schedule keeps polling, at a cadence that
+			// backs off with the failure streak.
 			pauseAfter := conv.Ternary[int32](nonRetryable, aiintegrations.AutoPauseAfterRejectedPolls, 0)
 			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, err, pauseAfter); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
@@ -326,18 +327,12 @@ func newPollFailureError(configID uuid.UUID, provider string, attempt int32, non
 		}
 	}
 
-	// oops.ShareableError prints only its public message from Error(), which
-	// leaves worker logs and spans with the wrapper text ("sync codex cost
-	// data") and no underlying cause. Expand it so the message carries the
-	// stage failure and progress summary.
-	causeText := cause.Error()
-	var shareable *oops.ShareableError
-	if errors.As(cause, &shareable) {
-		causeText = shareable.String()
-	}
-
+	// oops errors print only their public message from Error(), which leaves
+	// worker logs and spans with the wrapper text ("sync codex cost data")
+	// and no underlying cause. This message is internal-only, so it renders
+	// the full chain, including causes hidden behind interior oops wraps.
 	message := fmt.Sprintf("poll ai integration usage: provider=%s config=%s attempt=%d/%d: %s",
-		provider, configID, attempt, PollUsageMaxAttempts, causeText)
+		provider, configID, attempt, PollUsageMaxAttempts, oops.Detail(cause))
 	return temporal.NewApplicationErrorWithOptions(message, ErrTypeAIUsagePollFailed, temporal.ApplicationErrorOptions{
 		NonRetryable: nonRetryable,
 		Cause:        cause,

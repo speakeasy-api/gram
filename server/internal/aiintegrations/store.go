@@ -862,6 +862,14 @@ const AutoPauseAfterRejectedPolls = 3
 // monitors. A poll success resets the streak, restoring the normal cadence.
 const pollFailureMaxBackoffDoublings = 6
 
+// pollFailureBackoffCeiling bounds the backed-off delay regardless of the
+// schedule's base interval. Doubling alone would park long-interval
+// schedules for days after a streak a bounded provider outage can produce —
+// 2^6 x the 4h analytics interval is over ten days — while a few hours is
+// already enough to quiet failure-burst monitors and keeps recovery
+// same-day.
+const pollFailureBackoffCeiling = 6 * time.Hour
+
 // RecordSchedulePollFailure records a final poll failure on a schedule. A
 // positive pauseAfter automatically pauses the schedule once its consecutive
 // failure count reaches that threshold; zero never pauses, for failures that
@@ -870,6 +878,10 @@ const pollFailureMaxBackoffDoublings = 6
 // schedule's base interval, so chronic failures decay to a slow cadence
 // instead of retrying at full speed indefinitely.
 func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error, pauseAfter int32) error {
+	// String(), not oops.Detail: the recorded error is shown to org members
+	// in the dashboard, so expansion stops at the outermost oops boundary
+	// and any interior oops wrap (e.g. around raw infrastructure errors)
+	// keeps its cause private.
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
@@ -882,20 +894,33 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 	// The streak before this failure decides the backoff; a lookup failure
 	// falls back to the base interval so the failure is still recorded.
 	backoffDoublings := 0
-	if schedules, err := s.ListSyncSchedules(ctx, configID); err == nil {
-		for _, state := range schedules {
-			if state.Schedule == schedule {
-				backoffDoublings = min(int(state.ConsecutiveFailures), pollFailureMaxBackoffDoublings)
-				break
-			}
+	schedules, err := s.ListSyncSchedules(ctx, configID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read failure streak for poll backoff", attr.SlogError(err))
+	}
+	for _, state := range schedules {
+		if state.Schedule == schedule {
+			backoffDoublings = min(int(state.ConsecutiveFailures), pollFailureMaxBackoffDoublings)
+			break
 		}
 	}
-	retryDelay := pollIntervalForSchedule(schedule) * time.Duration(1<<backoffDoublings)
+	// The ceiling never cuts below the base cadence: a failure must not make
+	// a schedule poll sooner than a success would.
+	baseInterval := pollIntervalForSchedule(schedule)
+	retryDelay := max(min(baseInterval*time.Duration(1<<backoffDoublings), pollFailureBackoffCeiling), baseInterval)
+
+	// Anchor on the later of the poll's end time and now: a failing run can
+	// finish long after its endTime, and an endTime-anchored delay would put
+	// the next poll in the past, erasing the early backoff rounds.
+	anchor := t.UTC()
+	if now := time.Now().UTC(); now.After(anchor) {
+		anchor = now
+	}
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(retryDelay)),
+		NextPollAfter:         conv.ToPGTimestamptz(anchor.Add(retryDelay)),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 		PauseAfter:            pauseAfter,
 	}); err != nil {
