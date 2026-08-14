@@ -699,6 +699,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
+			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 			var openRouter interface {
 				openrouter.Provisioner
 				openrouter.SpendClient
@@ -713,7 +714,7 @@ func newStartCommand() *cli.Command {
 					db,
 					c.String("environment"),
 					c.String("openrouter-provisioning-key"),
-					&background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv},
+					openRouterKeyRefresher,
 					productFeatures,
 					billingTracker,
 					encryptionClient,
@@ -1410,7 +1411,7 @@ func newStartCommand() *cli.Command {
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 

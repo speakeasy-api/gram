@@ -251,7 +251,7 @@ type Provisioner interface {
 }
 
 type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType) error
+	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType, limit *int) error
 }
 
 type OpenRouter struct {
@@ -479,7 +479,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	}
 
 	if o.refresher != nil {
-		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType); err != nil {
+		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType, nil); err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
 		}
 	}

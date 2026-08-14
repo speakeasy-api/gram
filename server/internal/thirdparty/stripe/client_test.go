@@ -80,11 +80,13 @@ func TestSDKPinsExpectedAPIVersion(t *testing.T) {
 }
 
 type fakeStripeAPI struct {
-	customerParams        *stripesdk.CustomerCreateParams
-	checkoutSessionParams *stripesdk.CheckoutSessionCreateParams
-	meterEventParams      *stripesdk.BillingMeterEventCreateParams
-	calls                 int
-	err                   error
+	customerParams         *stripesdk.CustomerCreateParams
+	checkoutSessionParams  *stripesdk.CheckoutSessionCreateParams
+	checkoutRetrieveParams *stripesdk.CheckoutSessionRetrieveParams
+	checkoutSession        *stripesdk.CheckoutSession
+	meterEventParams       *stripesdk.BillingMeterEventCreateParams
+	calls                  int
+	err                    error
 }
 
 func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error) {
@@ -97,6 +99,12 @@ func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripes
 	f.calls++
 	f.checkoutSessionParams = params
 	return &stripesdk.CheckoutSession{URL: "https://checkout.stripe.test/session"}, f.err
+}
+
+func (f *fakeStripeAPI) retrieveCheckoutSession(_ context.Context, _ string, params *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error) {
+	f.calls++
+	f.checkoutRetrieveParams = params
+	return f.checkoutSession, f.err
 }
 
 func (f *fakeStripeAPI) createMeterEvent(_ context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
@@ -200,6 +208,35 @@ func TestCreateCheckoutSessionRejectsMissingIdempotencyKey(t *testing.T) {
 	require.Zero(t, api.calls)
 }
 
+func TestGetCheckoutSessionExpandsSubscription(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Date(2026, time.August, 21, 9, 30, 0, 0, time.UTC)
+	api := &fakeStripeAPI{checkoutSession: &stripesdk.CheckoutSession{
+		ID:       "cs_test",
+		Status:   stripesdk.CheckoutSessionStatusComplete,
+		Customer: &stripesdk.Customer{ID: "cus_test"},
+		Subscription: &stripesdk.Subscription{
+			ID:                 "sub_test",
+			Customer:           &stripesdk.Customer{ID: "cus_test"},
+			Status:             stripesdk.SubscriptionStatusTrialing,
+			BillingCycleAnchor: anchor.Unix(),
+		},
+	}}
+
+	state, err := (&client{api: api}).GetCheckoutSession(t.Context(), "cs_test")
+	require.NoError(t, err)
+	require.Equal(t, "cs_test", state.ID)
+	require.Equal(t, "complete", state.Status)
+	require.Equal(t, "cus_test", state.CustomerID)
+	require.Equal(t, "sub_test", state.SubscriptionID)
+	require.Equal(t, "cus_test", state.SubscriptionCustomerID)
+	require.Equal(t, "trialing", state.SubscriptionStatus)
+	require.Equal(t, anchor, state.BillingCycleAnchor)
+	require.Len(t, api.checkoutRetrieveParams.Expand, 1)
+	require.Equal(t, "subscription", stripesdk.StringValue(api.checkoutRetrieveParams.Expand[0]))
+}
+
 func TestCreateMeterEventPropagatesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +316,7 @@ func TestVerifyWebhook(t *testing.T) {
 	require.Equal(t, created, event.Created)
 	require.Equal(t, "in_test", event.ObjectID)
 	require.Equal(t, "cus_test", event.CustomerID)
+	require.Empty(t, event.SubscriptionID)
 }
 
 func TestVerifyWebhookExtractsExpandedCustomer(t *testing.T) {
@@ -394,6 +432,24 @@ func TestVerifyWebhookExtractsCustomersForAcceptedEventTypes(t *testing.T) {
 		require.Equalf(t, "obj_test", event.ObjectID, "%s: object id", tt.name)
 		require.Equalf(t, tt.customerID, event.CustomerID, "%s: customer id", tt.name)
 	}
+}
+
+func TestVerifyWebhookExtractsCheckoutSubscription(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+		Payload: webhookPayloadForType(t, stripesdk.APIVersion, time.Now(), "checkout.session.completed", map[string]any{
+			"id":           "cs_test",
+			"customer":     "cus_test",
+			"subscription": "sub_test",
+		}),
+		Secret: secret,
+	})
+
+	event, err := (&client{webhookSecret: secret}).VerifyWebhook(signed.Payload, signed.Header)
+	require.NoError(t, err)
+	require.Equal(t, "sub_test", event.SubscriptionID)
 }
 
 func TestVerifyWebhookRejectsMalformedDataObject(t *testing.T) {

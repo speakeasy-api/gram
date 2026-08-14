@@ -205,6 +205,41 @@ func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID 
 	return nil
 }
 
+// SeedPaygEntitlementsTx grants PAYG capabilities only when an organization
+// has never configured them. A soft-deleted feature remains disabled. The
+// returned features are the rows this transaction inserted, so callers can
+// update caches after commit without exposing uncommitted state.
+func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID string) ([]Feature, error) {
+	q := repo.New(tx)
+	features := make([]Feature, 0, len(EnterpriseTrialBundle)+2)
+	features = append(features, FeaturePlatformMCP)
+	features = append(features, EnterpriseTrialBundle...)
+	features = append(features, FeatureSkills)
+
+	enabled := make([]Feature, 0, len(features))
+	for _, feature := range features {
+		inserted, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("enable new PAYG entitlement %s: %w", feature, err)
+		}
+		if inserted == 0 {
+			continue
+		}
+
+		if feature == FeatureSkills {
+			if err := provisionSkillsSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
+				return nil, fmt.Errorf("provision PAYG Skills grants: %w", err)
+			}
+		}
+		enabled = append(enabled, feature)
+	}
+
+	return enabled, nil
+}
+
 // EnableSkillsTx provisions the built-in Skills grants and enables the
 // org-level Skills feature in the caller's transaction. Existing grants and
 // exclusions are preserved.
