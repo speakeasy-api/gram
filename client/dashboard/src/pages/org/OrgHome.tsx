@@ -30,6 +30,7 @@ import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
+import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -281,6 +282,8 @@ function OrgHomeInner() {
   return (
     <>
       <div className="flex flex-col gap-6">
+        <OrgWelcomeBanner />
+
         <div className="flex items-center gap-2">
           <SearchBar
             value={search}

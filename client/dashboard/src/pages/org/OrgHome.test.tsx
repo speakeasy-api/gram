@@ -77,6 +77,8 @@ vi.mock("@/routes", () => ({
       Link: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
     team: { goTo: vi.fn() },
+    // Used by the welcome banner's third route card.
+    setup: { href: () => "/acme/setup" },
   }),
 }));
 
