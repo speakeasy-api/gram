@@ -21,7 +21,7 @@ func registerGetPlatformContextTool(server *mcp.Server) {
 		return nil, PlatformContext{
 			OrganizationID: principal.OrganizationID,
 			ConnectionID:   principal.ConnectionID,
-			ReadOnly:       true,
+			ReadOnly:       false,
 		}, nil
 	})
 }

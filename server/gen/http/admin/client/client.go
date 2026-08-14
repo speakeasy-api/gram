@@ -35,6 +35,14 @@ type Client struct {
 	// updateOrganization endpoint.
 	UpdateOrganizationDoer goahttp.Doer
 
+	// DisableOrganization Doer is the HTTP client used to make requests to the
+	// disableOrganization endpoint.
+	DisableOrganizationDoer goahttp.Doer
+
+	// EnableOrganization Doer is the HTTP client used to make requests to the
+	// enableOrganization endpoint.
+	EnableOrganizationDoer goahttp.Doer
+
 	// GetOrganization Doer is the HTTP client used to make requests to the
 	// getOrganization endpoint.
 	GetOrganizationDoer goahttp.Doer
@@ -50,6 +58,14 @@ type Client struct {
 	// ListOrganizations Doer is the HTTP client used to make requests to the
 	// listOrganizations endpoint.
 	ListOrganizationsDoer goahttp.Doer
+
+	// ExtendTrial Doer is the HTTP client used to make requests to the extendTrial
+	// endpoint.
+	ExtendTrialDoer goahttp.Doer
+
+	// CreateOrganization Doer is the HTTP client used to make requests to the
+	// createOrganization endpoint.
+	CreateOrganizationDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -76,10 +92,14 @@ func NewClient(
 		LogoutDoer:                   doer,
 		GetProjectDoer:               doer,
 		UpdateOrganizationDoer:       doer,
+		DisableOrganizationDoer:      doer,
+		EnableOrganizationDoer:       doer,
 		GetOrganizationDoer:          doer,
 		ListOrganizationMembersDoer:  doer,
 		ListOrganizationProjectsDoer: doer,
 		ListOrganizationsDoer:        doer,
+		ExtendTrialDoer:              doer,
+		CreateOrganizationDoer:       doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -208,6 +228,54 @@ func (c *Client) UpdateOrganization() goa.Endpoint {
 	}
 }
 
+// DisableOrganization returns an endpoint that makes HTTP requests to the
+// admin service disableOrganization server.
+func (c *Client) DisableOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableOrganizationRequest(c.encoder)
+		decodeResponse = DecodeDisableOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "disableOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableOrganization returns an endpoint that makes HTTP requests to the admin
+// service enableOrganization server.
+func (c *Client) EnableOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableOrganizationRequest(c.encoder)
+		decodeResponse = DecodeEnableOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "enableOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetOrganization returns an endpoint that makes HTTP requests to the admin
 // service getOrganization server.
 func (c *Client) GetOrganization() goa.Endpoint {
@@ -299,6 +367,54 @@ func (c *Client) ListOrganizations() goa.Endpoint {
 		resp, err := c.ListOrganizationsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "listOrganizations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ExtendTrial returns an endpoint that makes HTTP requests to the admin
+// service extendTrial server.
+func (c *Client) ExtendTrial() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExtendTrialRequest(c.encoder)
+		decodeResponse = DecodeExtendTrialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExtendTrialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExtendTrialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "extendTrial", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateOrganization returns an endpoint that makes HTTP requests to the admin
+// service createOrganization server.
+func (c *Client) CreateOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateOrganizationRequest(c.encoder)
+		decodeResponse = DecodeCreateOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createOrganization", err)
 		}
 		return decodeResponse(resp)
 	}

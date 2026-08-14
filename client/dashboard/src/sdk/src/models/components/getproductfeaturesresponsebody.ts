@@ -42,7 +42,7 @@ export type GetProductFeaturesResponseBody = {
    */
   logsEnabled: boolean;
   /**
-   * Whether the organization is eligible for the Gram Platform MCP capability
+   * Whether the organization can use the Gram Platform MCP capability
    */
   platformMcpEnabled: boolean;
   /**

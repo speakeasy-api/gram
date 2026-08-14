@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -647,6 +649,13 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		require.Equal(t, "Acme Inc", org.Name)
 		require.True(t, org.Whitelisted, "signup orgs match register and clear the demo gate")
 		require.Equal(t, "enterprise", org.GramAccountType)
+
+		platformMCPEnabled, err := featurerepo.New(instance.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: session.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeaturePlatformMCP),
+		})
+		require.NoError(t, err)
+		require.True(t, platformMCPEnabled)
 
 		trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, session.ActiveOrganizationID)
 		require.NoError(t, err)

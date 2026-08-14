@@ -52,6 +52,7 @@ interface DistributeServersStepProps {
   onComplete: () => void;
   onSkip: () => void;
   onBack: () => void;
+  onSetupPlatformMCP?: () => void;
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
@@ -65,6 +66,7 @@ export function DistributeServersStep({
   onComplete,
   onSkip,
   onBack,
+  onSetupPlatformMCP,
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
@@ -377,9 +379,31 @@ export function DistributeServersStep({
       onBack={onBack}
     >
       <div className="space-y-6">
+        {onSetupPlatformMCP && (
+          <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-foreground text-sm font-medium">
+                Set up with Platform MCP
+              </p>
+              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+                Connect your AI agent to Speakeasy AICP Platform MCP to explore
+                reviewed MCP servers before setting them up for distribution in
+                the browser.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              className="shrink-0"
+              onClick={onSetupPlatformMCP}
+            >
+              Set up with Platform MCP
+            </Button>
+          </div>
+        )}
+
         <div>
           <label className="text-foreground text-sm font-medium">
-            Select servers from the catalog
+            Set up in the browser
           </label>
           <div className="mt-3">
             <Input

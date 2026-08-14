@@ -15,6 +15,6 @@ export const COMPOSER_HOST_CLASS = "gram-elements-composer-host";
 export function focusChatComposer(root: HTMLElement | null): void {
   root
     ?.querySelector<HTMLElement>(`.${COMPOSER_HOST_CLASS}`)
-    ?.shadowRoot?.querySelector<HTMLTextAreaElement>("textarea")
+    ?.shadowRoot?.querySelector<HTMLElement>(".aui-composer-input")
     ?.focus();
 }

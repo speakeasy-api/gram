@@ -7,7 +7,13 @@ import {
   type KeyboardEvent,
   type ReactElement,
 } from "react";
-import { Link, Outlet, useNavigate, useParams } from "react-router";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
@@ -57,6 +63,8 @@ import {
 import { useChatLaunch } from "@/lib/chat-launch";
 import { cn } from "@/lib/utils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
 
 // Shared square icon button used by the page chrome (back affordances).
@@ -1058,6 +1066,14 @@ function ConversationSurface({
 }: {
   chatId: string | undefined;
 }): ReactElement {
+  const { pathname } = useLocation();
+  const threadTitle = useAuiState((s) => s.threadListItem.title);
+  // Recents would otherwise keep the section title ("Project Assistant") because
+  // the conversation is keyed by an opaque chat id.
+  useRecentLabelOverride(
+    pathname,
+    threadTitle?.trim() || (chatId === "new" ? FALLBACK_TITLE : undefined),
+  );
   const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
