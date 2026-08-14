@@ -204,6 +204,84 @@ func TestFetchPage_ExtractsReadableText(t *testing.T) {
 	require.NotContains(t, decoded, "truncated")
 }
 
+// The extractor's whole justification is surviving real-world markup, so the
+// cases here are the shapes that break naive extraction: tables whose cells
+// would otherwise concatenate, deep nesting, skipped subtrees nested inside
+// kept ones (and inside each other), entity-encoded text, and documents that
+// are simply broken mid-tag.
+func TestFetchPage_ExtractsStructuredAndMalformedHTML(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		body     string
+		contains []string
+		excludes []string
+	}{
+		{
+			name: "table cells stay separated",
+			body: `<table><caption>Pricing</caption>
+				<tr><th>Plan</th><th>Cost</th></tr>
+				<tr><td>Free</td><td>Zero</td></tr>
+				<tr><td>Team</td><td><ul><li>Seat billing</li><li>SSO included</li></ul></td></tr>
+			</table>`,
+			contains: []string{"Pricing", "Plan", "Cost", "Free", "Zero", "Seat billing", "SSO included"},
+			excludes: []string{"PlanCost", "FreeZero", "billingSSO"},
+		},
+		{
+			name: "deeply nested blocks keep their text",
+			body: `<div><section><article><div><div><blockquote><div>
+				<p>Buried statement.</p>
+				</div></blockquote></div></div></article></section></div>`,
+			contains: []string{"Buried statement."},
+		},
+		{
+			name: "skipped subtrees inside kept ones drop cleanly",
+			body: `<div>Before diagram.
+				<svg><title>chart title</title><svg><text>inner svg text</text></svg><text>outer svg text</text></svg>
+				<template><p>template body</p></template>
+				After diagram.</div>`,
+			contains: []string{"Before diagram.", "After diagram."},
+			excludes: []string{"chart title", "inner svg text", "outer svg text", "template body"},
+		},
+		{
+			name:     "entities decode",
+			body:     `<p>Fetch &amp; extract &lt;safely&gt; &quot;quoted&quot;</p>`,
+			contains: []string{`Fetch & extract <safely> "quoted"`},
+		},
+		{
+			name:     "unclosed tags degrade to the text already seen",
+			body:     `<div><p>Readable up to the break.<li>Also readable.<table><tr><td>Last cell`,
+			contains: []string{"Readable up to the break.", "Also readable.", "Last cell"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = w.Write([]byte(`<html><body>` + tt.body + `</body></html>`))
+			}))
+			t.Cleanup(server.Close)
+
+			tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+			decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
+			require.NoError(t, err)
+
+			content, ok := decoded["content"].(string)
+			require.True(t, ok)
+			for _, want := range tt.contains {
+				require.Contains(t, content, want)
+			}
+			for _, unwanted := range tt.excludes {
+				require.NotContains(t, content, unwanted)
+			}
+		})
+	}
+}
+
 func TestFetchPage_TruncatesLongPages(t *testing.T) {
 	t.Parallel()
 

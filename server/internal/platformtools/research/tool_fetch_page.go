@@ -252,7 +252,8 @@ var skippedElements = map[string]bool{
 var blockElements = map[string]bool{
 	"p": true, "div": true, "section": true, "article": true, "header": true,
 	"footer": true, "li": true, "ul": true, "ol": true, "table": true,
-	"tr": true, "br": true, "hr": true, "blockquote": true, "pre": true,
+	"tr": true, "td": true, "th": true, "caption": true, "br": true,
+	"hr": true, "blockquote": true, "pre": true,
 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 }
 
