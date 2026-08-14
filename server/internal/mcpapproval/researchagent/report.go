@@ -9,9 +9,10 @@ import (
 )
 
 // ReportVersion is the shape version of the report document this package
-// produces. It is stored on every report row, so bump it when Document's
-// shape changes.
-const ReportVersion = 2
+// produces. It is stored on every report row. Bump it only when a shape
+// change would break a reader of the other version — adding an optional
+// field whose absence readers already accept is not a new shape.
+const ReportVersion = 1
 
 // Claim provenance tiers. The separation is the report's core honesty
 // property: an admin must always be able to tell what a third party wrote
