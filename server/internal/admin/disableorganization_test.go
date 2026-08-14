@@ -50,15 +50,36 @@ func TestDisableOrganization_SetsDisabledAt(t *testing.T) {
 	ctx, svc, conn := newTestAdminService(t)
 
 	seedOrg(t, ctx, conn, orgFixture{id: "org_dis", name: "Dis Co", slug: "dis-co", whitelisted: true})
+	seeded := readOrgState(t, ctx, conn, "org_dis")
 
 	before := time.Now().UTC()
 	res, err := svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: "org_dis"})
 	require.NoError(t, err)
 	require.NotNil(t, res.DisabledAt, "the response must report the organization as disabled")
 
-	stamped := readDisabledAt(t, ctx, conn, "org_dis")
-	require.NotNil(t, stamped)
-	require.WithinDuration(t, before, *stamped, time.Minute, "disabled_at records the moment of the action")
+	after := readOrgState(t, ctx, conn, "org_dis")
+	require.True(t, after.DisabledAt.Valid)
+	stamped := after.DisabledAt.Time
+
+	// disabled_at must be the moment of the action, not the row's creation time
+	// and not an arbitrary offset from it. AGE-3187 counts organizations
+	// disabled in a window off this column, so a stamp that is merely "close to
+	// now" is not enough.
+	//
+	// The tight bounds compare two values written by the same statement, so
+	// they stay inside the database clock. `before` comes from the test host
+	// and the database runs in a container, and the two clocks can drift, so
+	// the cross-clock bound below is deliberately left loose.
+	require.True(t, stamped.After(seeded.CreatedAt.Time),
+		"disabled_at must be stamped at the disable, not carried from created_at: created %s, stamped %s", seeded.CreatedAt.Time, stamped)
+	require.WithinDuration(t, after.UpdatedAt.Time, stamped, time.Second,
+		"disabled_at and updated_at are stamped by one statement, so they must agree: updated %s, stamped %s", after.UpdatedAt.Time, stamped)
+	require.WithinDuration(t, before, stamped, time.Minute, "disabled_at must land near wall-clock now")
+
+	// updated_at is rendered to the operator by both the list and the get
+	// endpoints, so a write that left it behind is user-visible.
+	require.True(t, after.UpdatedAt.Time.After(seeded.UpdatedAt.Time),
+		"disable must move updated_at: was %s, now %s", seeded.UpdatedAt.Time, after.UpdatedAt.Time)
 
 	// The detail endpoint agrees with the write.
 	detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_dis"})
@@ -109,11 +130,16 @@ func TestEnableOrganization_ClearsDisabledAt(t *testing.T) {
 
 	disabledAt := time.Now().UTC().Add(-24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_en", name: "En Co", slug: "en-co", whitelisted: true, disabledAt: &disabledAt})
+	seeded := readOrgState(t, ctx, conn, "org_en")
 
 	res, err := svc.EnableOrganization(ctx, &gen.EnableOrganizationPayload{ID: "org_en"})
 	require.NoError(t, err)
 	require.Nil(t, res.DisabledAt, "the response must report the organization as active")
-	require.Nil(t, readDisabledAt(t, ctx, conn, "org_en"))
+
+	after := readOrgState(t, ctx, conn, "org_en")
+	require.False(t, after.DisabledAt.Valid)
+	require.True(t, after.UpdatedAt.Time.After(seeded.UpdatedAt.Time),
+		"enable must move updated_at: was %s, now %s", seeded.UpdatedAt.Time, after.UpdatedAt.Time)
 }
 
 func TestEnableOrganization_NeverDisabled(t *testing.T) {
@@ -189,17 +215,53 @@ func TestDisableOrganization_LeavesWhitelistAlone(t *testing.T) {
 	ctx, svc, conn := newTestAdminService(t)
 
 	// Whitelisting is the not-yet-approved gate, a separate concept from being
-	// disabled. Neither direction may move it.
-	seedOrg(t, ctx, conn, orgFixture{id: "org_wl_on", name: "WL On", slug: "wl-on", whitelisted: true})
-	seedOrg(t, ctx, conn, orgFixture{id: "org_wl_off", name: "WL Off", slug: "wl-off", whitelisted: false})
+	// disabled. Neither direction may move it, in either polarity.
+	//
+	// A boolean column has four mutations, not two, and seeding only
+	// whitelisted organizations makes half of them unreachable: "disable must
+	// not GRANT the whitelist" cannot fail if every organization under test is
+	// already whitelisted. That half is the dangerous half. A disable that
+	// silently set the flag would push a not-yet-approved organization straight
+	// through the approval gate the moment an operator re-enabled it.
+	//
+	// So all four arms are seeded explicitly, and each asserts the column
+	// rather than the response, which keeps the read-after-write path out of
+	// the assertion.
+	seededDisabledAt := time.Now().UTC().Add(-time.Hour)
 
-	disabled, err := svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: "org_wl_on"})
-	require.NoError(t, err)
-	require.True(t, disabled.Whitelisted, "disabling must not revoke the whitelist")
+	cases := []struct {
+		id          string
+		slug        string
+		whitelisted bool
+		enable      bool
+	}{
+		{id: "org_wl_dis_on", slug: "wl-dis-on", whitelisted: true},
+		{id: "org_wl_dis_off", slug: "wl-dis-off", whitelisted: false},
+		{id: "org_wl_en_on", slug: "wl-en-on", whitelisted: true, enable: true},
+		{id: "org_wl_en_off", slug: "wl-en-off", whitelisted: false, enable: true},
+	}
 
-	enabled, err := svc.EnableOrganization(ctx, &gen.EnableOrganizationPayload{ID: "org_wl_off"})
-	require.NoError(t, err)
-	require.False(t, enabled.Whitelisted, "enabling must not grant the whitelist")
+	for _, tc := range cases {
+		fixture := orgFixture{id: tc.id, name: tc.id, slug: tc.slug, whitelisted: tc.whitelisted}
+		action := "disable"
+		if tc.enable {
+			action = "enable"
+			fixture.disabledAt = &seededDisabledAt
+		}
+		seedOrg(t, ctx, conn, fixture)
+
+		var err error
+		if tc.enable {
+			_, err = svc.EnableOrganization(ctx, &gen.EnableOrganizationPayload{ID: tc.id})
+		} else {
+			_, err = svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: tc.id})
+		}
+		require.NoError(t, err)
+
+		state := readOrgState(t, ctx, conn, tc.id)
+		require.Equal(t, tc.enable, !state.DisabledAt.Valid, "%s must have taken effect on %s, or the whitelist assertion proves nothing", action, tc.id)
+		require.Equal(t, tc.whitelisted, state.Whitelisted, "%s must leave whitelisted at %v on %s", action, tc.whitelisted, tc.id)
+	}
 }
 
 func TestDisableOrganization_AgreesWithListGate(t *testing.T) {
@@ -251,6 +313,11 @@ func TestDisableOrganization_EmptyID(t *testing.T) {
 
 	seedOrg(t, ctx, conn, orgFixture{id: "org_bystander", name: "Bystander", slug: "bystander", whitelisted: true})
 
+	// An empty id is rejected as a 400 at the HTTP boundary by MinLength(1) in
+	// the design. That validation is generated into the request decoder, which
+	// a direct service call does not run, so the service-level contract is
+	// still not-found. Both layers matter: this one is what protects the
+	// database if a future caller reaches the service another way.
 	_, err := svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: ""})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -267,11 +334,55 @@ func TestDisableOrganization_DoesNotMatchOnSlug(t *testing.T) {
 
 	seedOrg(t, ctx, conn, orgFixture{id: "org_slug_only", name: "Slug Only", slug: "slug-only", whitelisted: true})
 
-	// The read path resolves id-or-slug; the write path is id-only. Passing a
-	// slug must fail rather than report a success the database never saw.
+	// This test pins the write side on its own: addressing a write by slug must
+	// change nothing and must not report success.
+	//
+	// It used to be the only test that killed deleting the `rows == 0` guard in
+	// both handlers, back when the read-after-write still resolved slugs: the
+	// read would find the row the write had missed and return 200. Now that the
+	// read is keyed on id alone it has the same predicate as the write, so
+	// deleting the guard is behaviour-preserving and no test can kill it. The
+	// guard stays because it makes the not-found contract a property of the
+	// handler rather than a consequence of the read, which is what stops the
+	// 200-on-an-untouched-row bug from returning if the read is ever widened
+	// again.
 	_, err := svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: "slug-only"})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	require.Nil(t, readDisabledAt(t, ctx, conn, "org_slug_only"))
+}
+
+func TestAdminOrganizationWrites_ReturnTheOrganizationWritten(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// id and slug are both bare TEXT, so nothing stops one organization's slug
+	// from equalling another's id. Every admin write is keyed on id, so a
+	// read-after-write that also resolved slugs could return the bystander:
+	// the operator gets a 200 describing an organization that is still active
+	// and concludes the disable failed.
+	seedOrg(t, ctx, conn, orgFixture{id: "org_collide", name: "Target", slug: "target-co", whitelisted: true})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_shadow", name: "Shadow", slug: "org_collide", whitelisted: true})
+
+	disabled, err := svc.DisableOrganization(ctx, &gen.DisableOrganizationPayload{ID: "org_collide"})
+	require.NoError(t, err)
+	require.Equal(t, "org_collide", disabled.ID, "the response must describe the organization that was written")
+	require.NotNil(t, disabled.DisabledAt, "the response must show the write that just happened")
+	require.Nil(t, readDisabledAt(t, ctx, conn, "org_shadow"), "the write must not land on the organization whose slug collides")
+
+	enabled, err := svc.EnableOrganization(ctx, &gen.EnableOrganizationPayload{ID: "org_collide"})
+	require.NoError(t, err)
+	require.Equal(t, "org_collide", enabled.ID)
+	require.Nil(t, enabled.DisabledAt)
+
+	// The same helper serves UpdateOrganization, whose write has always been
+	// id-only.
+	whitelisted := false
+	updated, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: "org_collide", Whitelisted: &whitelisted})
+	require.NoError(t, err)
+	require.Equal(t, "org_collide", updated.ID)
+	require.False(t, updated.Whitelisted)
+	require.True(t, readOrgState(t, ctx, conn, "org_shadow").Whitelisted, "the update must not land on the organization whose slug collides")
 }
 
 func TestDisableOrganization_TouchesOnlyTheTargetRow(t *testing.T) {

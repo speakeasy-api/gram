@@ -200,8 +200,11 @@ WHERE id = @id;
 -- and did not touch. disabled_at comes back at full precision: the admin API
 -- renders it as a second-resolution RFC3339 string, which hides a timestamp
 -- that moved by microseconds. workos_last_event_id is the WorkOS webhook
--- cursor, which only the webhook path may write.
-SELECT disabled_at, workos_last_event_id, whitelisted
+-- cursor, which only the webhook path may write. created_at and updated_at are
+-- the reference points for "did this write stamp the moment of the action":
+-- comparing a stamp against them keeps the comparison inside the database
+-- clock, which the test host's clock can drift from.
+SELECT disabled_at, workos_last_event_id, whitelisted, created_at, updated_at
 FROM organization_metadata
 WHERE id = @id;
 

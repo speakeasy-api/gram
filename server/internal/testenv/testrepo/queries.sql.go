@@ -396,7 +396,7 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 }
 
 const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
-SELECT disabled_at, workos_last_event_id, whitelisted
+SELECT disabled_at, workos_last_event_id, whitelisted, created_at, updated_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -405,17 +405,28 @@ type GetOrganizationMetadataStateFixtureRow struct {
 	DisabledAt        pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
 	Whitelisted       bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 // Test-only fixture for asserting what a write to organization_metadata did
 // and did not touch. disabled_at comes back at full precision: the admin API
 // renders it as a second-resolution RFC3339 string, which hides a timestamp
 // that moved by microseconds. workos_last_event_id is the WorkOS webhook
-// cursor, which only the webhook path may write.
+// cursor, which only the webhook path may write. created_at and updated_at are
+// the reference points for "did this write stamp the moment of the action":
+// comparing a stamp against them keeps the comparison inside the database
+// clock, which the test host's clock can drift from.
 func (q *Queries) GetOrganizationMetadataStateFixture(ctx context.Context, id string) (GetOrganizationMetadataStateFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizationMetadataStateFixture, id)
 	var i GetOrganizationMetadataStateFixtureRow
-	err := row.Scan(&i.DisabledAt, &i.WorkosLastEventID, &i.Whitelisted)
+	err := row.Scan(
+		&i.DisabledAt,
+		&i.WorkosLastEventID,
+		&i.Whitelisted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 
