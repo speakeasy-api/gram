@@ -18,6 +18,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -46,16 +49,16 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 		code int
 		err  error
 	}
-	performRefresh := func(clientID string) refreshResult {
+	performRefresh := func(mcpSlug, clientID, token string) refreshResult {
 		form := url.Values{
 			"grant_type":    {"refresh_token"},
-			"refresh_token": {refreshToken},
+			"refresh_token": {token},
 			"client_id":     {clientID},
 		}
-		req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug+"/token", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		routeCtx := chi.NewRouteContext()
-		routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		routeCtx.URLParams.Add("mcpSlug", mcpSlug)
 		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
 
 		w := httptest.NewRecorder()
@@ -70,7 +73,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	for range requestCount {
 		requests.Go(func() {
 			<-start
-			results <- performRefresh(client.ClientID)
+			results <- performRefresh(toolset.McpSlug.String, client.ClientID, refreshToken)
 		})
 	}
 	close(start)
@@ -92,6 +95,38 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NotEmpty(t, response["access_token"])
 	require.NotEmpty(t, response["refresh_token"])
 
+	otherSlug := "refresh-replay-other-" + uuid.NewString()[:8]
+	otherToolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         toolset.OrganizationID,
+		ProjectID:              toolset.ProjectID,
+		Name:                   "Refresh replay alternate endpoint",
+		Slug:                   otherSlug,
+		Description:            conv.ToPGText("Alternate OAuth endpoint surface"),
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                conv.ToPGText(otherSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	otherToolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                otherToolset.Slug,
+		ProjectID:           otherToolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
+	require.NoError(t, otherEndpoint.err)
+	require.Equal(t, http.StatusOK, otherEndpoint.code, otherEndpoint.body)
+	var otherResponse struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(otherEndpoint.body), &otherResponse))
+	require.Equal(t, response["refresh_token"], otherResponse.RefreshToken)
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(otherResponse.AccessToken, urn.NewToolset(otherToolset.ID).String())
+	require.NoError(t, err)
+	require.Equal(t, ti.serverURL.JoinPath("mcp", otherSlug).String(), claims.Issuer)
+
 	activeSessions, err := usersessions_repo.New(ti.conn).ListUserSessionsByProjectID(ctx, usersessions_repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           issuer.ProjectID,
 		Status:              pgtype.Text{String: "active", Valid: true},
@@ -104,6 +139,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.Len(t, activeSessions, 1)
+	require.Equal(t, activeSessions[0].Jti, claims.ID)
 
 	otherClient, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
 		UserSessionIssuerID: issuer.ID,
@@ -113,8 +149,18 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	wrongClient := performRefresh(otherClient.ClientID)
+	wrongClient := performRefresh(toolset.McpSlug.String, otherClient.ClientID, refreshToken)
 	require.NoError(t, wrongClient.err)
 	require.Equal(t, http.StatusBadRequest, wrongClient.code)
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token was issued to a different client"}`, wrongClient.body)
+
+	unknownToken := "unknown-" + uuid.NewString()
+	firstUnknown := performRefresh(toolset.McpSlug.String, client.ClientID, unknownToken)
+	require.NoError(t, firstUnknown.err)
+	require.Equal(t, http.StatusBadRequest, firstUnknown.code)
+	started := time.Now()
+	secondUnknown := performRefresh(toolset.McpSlug.String, client.ClientID, unknownToken)
+	require.NoError(t, secondUnknown.err)
+	require.Equal(t, http.StatusBadRequest, secondUnknown.code)
+	require.Less(t, time.Since(started), 3*time.Second, "cached terminal refresh failures must not wait for the replay grace period")
 }
