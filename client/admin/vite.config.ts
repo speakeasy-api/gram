@@ -59,6 +59,26 @@ export default defineConfig(({ command }) => {
   // has to be baked in. Empty is tolerated: impersonationUrl() returns
   // undefined and callers drop the action rather than ship a dead link.
   const appUrl = process.env["GRAM_APP_URL"] || "";
+  // Parsed, not prefix-matched. A build sends an operator to this origin to
+  // authenticate, so a plaintext value would put a login flow on the wire
+  // unprotected, and a bare `https://` passes a prefix test while naming no
+  // host. Failing here beats shipping a bundle that carries the bad origin.
+  if (appUrl) {
+    let parsed: URL;
+    try {
+      parsed = new URL(appUrl);
+    } catch {
+      throw new Error(`GRAM_APP_URL must be an absolute URL, got "${appUrl}"`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(
+        `GRAM_APP_URL must use https, got "${parsed.protocol}//"`,
+      );
+    }
+    if (!parsed.hostname) {
+      throw new Error(`GRAM_APP_URL must name a host, got "${appUrl}"`);
+    }
+  }
 
   return {
     define: {
