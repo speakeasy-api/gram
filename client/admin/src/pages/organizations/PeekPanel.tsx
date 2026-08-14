@@ -16,6 +16,8 @@ import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { cn, fmtDateShort } from "@/lib/utils";
 
+import { OrganizationActions } from "./OrganizationActions";
+
 const COPY_CONFIRM_MS = 1500;
 
 // One panel is on the page at a time, so a constant is enough and the row's
@@ -162,8 +164,12 @@ export function PeekPanel({
       </div>
 
       <Separator />
-      {/* Empty on purpose: reserved so later actions do not move the grid. */}
-      <div className="flex min-h-8 items-center gap-2 p-4" />
+      {/* Plain buttons, not a menu: this footer sits inside the subtree the
+          list watches for Escape and the arrow keys, and a menu would answer
+          Escape before the panel it is drawn in. */}
+      <div className="flex min-h-8 items-center gap-2 p-4">
+        <OrganizationActions org={org} layout="footer" />
+      </div>
     </aside>
   );
 }

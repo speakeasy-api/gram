@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ORG_COLUMNS } from "./columns";
+import { WriteReportProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
 import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
 import { useOpenOrganization } from "./rowActions";
@@ -106,9 +107,24 @@ export function OrganizationsList(): JSX.Element {
   // that follows the peek to the next row's control.
   const [peekTookTheKeyboard, setPeekTookTheKeyboard] = useState(false);
 
+  // A write that failed with no dialog of its own to report in. Re-enable is
+  // the only one, and without this the whole account of it on the page is a
+  // sentence inside `sr-only`: the row is unchanged, the banner above covers
+  // the list query alone, and a sighted operator presses Re-enable, sees
+  // nothing happen and is told nothing about why.
+  const [writeFailure, setWriteFailure] = useState<string | null>(null);
+
   const announce = useCallback((text: string): void => {
     setAnnouncement((previous) => ({ text, count: previous.count + 1 }));
   }, []);
+
+  // One object, memoised: it is a context value, and a fresh one on every
+  // render would re-render every row's actions on every keystroke in the
+  // filter box.
+  const writeReporter = useMemo(
+    () => ({ announce, showFailure: setWriteFailure }),
+    [announce],
+  );
 
   // One object is the source of both the request and the signature below. Two
   // hand-written lists drift: a slice that adds a filter to the request would
@@ -363,11 +379,35 @@ export function OrganizationsList(): JSX.Element {
           </div>
         )}
 
+        {/* A write that has no dialog to fail in reports here, where it can be
+            read as well as heard, and stays until it is dismissed or a later
+            write succeeds. */}
+        {writeFailure && (
+          <div
+            role="alert"
+            className="mb-2 flex items-start justify-between gap-2 rounded-md border border-destructive/40 px-3 py-2 text-destructive text-sm"
+          >
+            <span>{writeFailure}</span>
+            <Button
+              variant="ghost"
+              size="xs"
+              aria-label="Dismiss the failure"
+              onClick={() => setWriteFailure(null)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
+
         {/* The only thing that speaks when the arrow keys swap the record under
             a panel that already holds the focus.
 
-            `aria-live` is written out as well as implied by the role: a few
-            screen readers only honour the attribute. The zero-width space
+            `aria-live` is written out as well as implied by the role, and it is
+            load-bearing rather than belt and braces: an open Radix modal hides
+            the rest of the page with `aria-hidden`, and the one exemption that
+            package makes is for elements carrying this attribute by name.
+            Without it the region goes down with the app container and a write
+            that fails behind a dialog is announced to nobody. The zero-width
             alternates with the count so that a sentence set twice running
             still reaches the accessibility tree as a change. It is not
             announced, and it is not rendered anywhere a sighted operator
@@ -377,93 +417,101 @@ export function OrganizationsList(): JSX.Element {
           {announcement.count % 2 === 1 ? ZERO_WIDTH_SPACE : ""}
         </div>
 
-        <PeekProvider value={peekControls}>
-          {/* Stretch, so the panel takes its height from the row. */}
-          <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
-                <TableActionBar
-                  table={table}
-                  onColumnToggled={handleColumnToggled}
-                />
+        {/* Both providers wrap the panel as well as the table: the row menu and
+            the panel footer are the same actions, and they report through the
+            one region above. */}
+        <WriteReportProvider value={writeReporter}>
+          <PeekProvider value={peekControls}>
+            {/* Stretch, so the panel takes its height from the row. */}
+            <div
+              className="flex min-h-0 flex-1 gap-4"
+              onKeyDown={handleKeyDown}
+            >
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
+                  <TableActionBar
+                    table={table}
+                    onColumnToggled={handleColumnToggled}
+                  />
 
-                <div
-                  ref={scrollBox}
-                  // Named, because this is where the keyboard lands when the
-                  // peeked record leaves the list with the panel holding the
-                  // focus. An unnamed div would put the operator somewhere
-                  // their screen reader cannot describe.
-                  role="region"
-                  aria-label="Organizations table"
-                  // Programmatic only: -1 takes the box out of the tab order
-                  // and still lets that rescue focus it. The focus ring stays,
-                  // because nothing else on screen moves when focus arrives
-                  // here and the ring is the only sign that it did.
-                  tabIndex={-1}
-                  className={cn(
-                    "min-h-0 flex-1 overflow-auto",
-                    isPlaceholderData && "opacity-60",
-                  )}
-                >
-                  <Table>
-                    <Table.Header table={table} />
-                    <Table.Body>
-                      {rows.length === 0 ? (
-                        <Table.NoResultsMessage>
-                          <span className="text-muted-foreground text-sm">
-                            {emptyStateMessage(isLoading, isError)}
-                          </span>
-                        </Table.NoResultsMessage>
-                      ) : (
-                        rows.map((row) => {
-                          const isPeeked = row.id === peekedId;
-                          return (
-                            <Table.Row
-                              key={row.id}
-                              row={row}
-                              ref={isPeeked ? peekedRow : undefined}
-                              className={cn(isPeeked && "bg-muted")}
-                              onClick={openOrganization}
-                            />
-                          );
-                        })
-                      )}
-                    </Table.Body>
-                  </Table>
+                  <div
+                    ref={scrollBox}
+                    // Named, because this is where the keyboard lands when the
+                    // peeked record leaves the list with the panel holding the
+                    // focus. An unnamed div would put the operator somewhere
+                    // their screen reader cannot describe.
+                    role="region"
+                    aria-label="Organizations table"
+                    // Programmatic only: -1 takes the box out of the tab order
+                    // and still lets that rescue focus it. The focus ring stays,
+                    // because nothing else on screen moves when focus arrives
+                    // here and the ring is the only sign that it did.
+                    tabIndex={-1}
+                    className={cn(
+                      "min-h-0 flex-1 overflow-auto",
+                      isPlaceholderData && "opacity-60",
+                    )}
+                  >
+                    <Table>
+                      <Table.Header table={table} />
+                      <Table.Body>
+                        {rows.length === 0 ? (
+                          <Table.NoResultsMessage>
+                            <span className="text-muted-foreground text-sm">
+                              {emptyStateMessage(isLoading, isError)}
+                            </span>
+                          </Table.NoResultsMessage>
+                        ) : (
+                          rows.map((row) => {
+                            const isPeeked = row.id === peekedId;
+                            return (
+                              <Table.Row
+                                key={row.id}
+                                row={row}
+                                ref={isPeeked ? peekedRow : undefined}
+                                className={cn(isPeeked && "bg-muted")}
+                                onClick={openOrganization}
+                              />
+                            );
+                          })
+                        )}
+                      </Table.Body>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Inside the table's column, so it does not run under the panel. */}
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={isPlaceholderData || pager.stack.length === 0}
+                    onClick={goPrev}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={isPlaceholderData || !data?.next_cursor}
+                    onClick={goNext}
+                  >
+                    Next
+                  </Button>
                 </div>
               </div>
 
-              {/* Inside the table's column, so it does not run under the panel. */}
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={isPlaceholderData || pager.stack.length === 0}
-                  onClick={goPrev}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={isPlaceholderData || !data?.next_cursor}
-                  onClick={goNext}
-                >
-                  Next
-                </Button>
-              </div>
+              {peeked ? (
+                <PeekPanel
+                  ref={peekPanel}
+                  org={peeked.original}
+                  onClose={closePeek}
+                  className="w-100 shrink-0"
+                />
+              ) : null}
             </div>
-
-            {peeked ? (
-              <PeekPanel
-                ref={peekPanel}
-                org={peeked.original}
-                onClose={closePeek}
-                className="w-100 shrink-0"
-              />
-            ) : null}
-          </div>
-        </PeekProvider>
+          </PeekProvider>
+        </WriteReportProvider>
       </section>
     </div>
   );

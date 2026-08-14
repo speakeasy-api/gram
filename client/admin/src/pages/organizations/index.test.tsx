@@ -23,10 +23,11 @@ import {
   type Mock,
 } from "vitest";
 
-import type {
-  AdminOrganization,
-  ListOrganizationsParams,
-  ListOrganizationsResult,
+import {
+  GramAdminError,
+  type AdminOrganization,
+  type ListOrganizationsParams,
+  type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
 import { useState, type JSX } from "react";
 
@@ -50,6 +51,12 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  disableOrganization:
+    vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
+  enableOrganization:
+    vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
+  extendTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
 }));
 
 // Only the endpoints this page's route tree reaches are replaced. The rest of
@@ -65,6 +72,9 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    disableOrganization: mocks.disableOrganization,
+    enableOrganization: mocks.enableOrganization,
+    extendTrial: mocks.extendTrial,
   };
 });
 
@@ -106,6 +116,21 @@ const ORGS: AdminOrganization[] = [
     created_at: "2026-06-08T00:00:00Z",
     updated_at: "2026-06-09T00:00:00Z",
   },
+  // Live, and mid-trial. Extend trial is offered on this row and on no other:
+  // the first row's trial is running too, but the organization is disabled and
+  // a disabled organization is not offered more of a trial nobody can use.
+  {
+    id: "org_placeholder_four",
+    name: "Placeholder Four",
+    slug: "placeholder-four",
+    account_type: "enterprise",
+    whitelisted: false,
+    trial_state: "ending_soon",
+    trial_ends_at: "2026-05-06T00:00:00Z",
+    member_count: 5,
+    created_at: "2026-04-02T00:00:00Z",
+    updated_at: "2026-04-07T00:00:00Z",
+  },
 ];
 
 // A page the cursor leads to. Nothing it holds appears on the first page, so a
@@ -121,8 +146,28 @@ const NEXT_PAGE_ORG: AdminOrganization = {
   updated_at: "2026-07-11T00:00:00Z",
 };
 
-const [FIRST_ORG, SECOND_ORG] = ORGS;
-if (!FIRST_ORG || !SECOND_ORG) throw new Error("ORGS needs two rows");
+const [FIRST_ORG, SECOND_ORG, TRIALLING_ORG] = ORGS;
+if (!FIRST_ORG || !SECOND_ORG || !TRIALLING_ORG) {
+  throw new Error("ORGS needs three rows");
+}
+
+// The first row is disabled and its trial is running; the second is live and
+// never trialled. Between them every action has a row that offers it and a row
+// that does not.
+if (!FIRST_ORG.disabled_at || SECOND_ORG.disabled_at) {
+  throw new Error("the fixture needs one disabled row and one live row");
+}
+
+// What each write answers with, dated apart from anything the fixture already
+// carries so a row that failed to repaint cannot read as one that did.
+const DISABLED_AT = "2026-08-01T00:00:00Z";
+const EXTENDED_TRIAL_END = "2026-05-20T00:00:00Z";
+
+function orgByID(id: string): AdminOrganization {
+  const org = ORGS.find((row) => row.id === id);
+  if (!org) throw new Error(`no fixture organization with id ${id}`);
+  return org;
+}
 
 // The columns render a date through toLocaleDateString, so the expected text
 // has to come out of the same formatter. Reading the field off the fixture is
@@ -268,6 +313,21 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  // Each write answers with the record in its new state, which is what the
+  // list repaints from. Answered off the id in the request, so a test can act
+  // on either row and still be given that row back.
+  mocks.disableOrganization.mockReset();
+  mocks.disableOrganization.mockImplementation(({ id }) =>
+    Promise.resolve({ ...orgByID(id), disabled_at: DISABLED_AT }),
+  );
+  mocks.enableOrganization.mockReset();
+  mocks.enableOrganization.mockImplementation(({ id }) =>
+    Promise.resolve({ ...orgByID(id), disabled_at: undefined }),
+  );
+  mocks.extendTrial.mockReset();
+  mocks.extendTrial.mockImplementation(({ id }) =>
+    Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
+  );
 });
 
 afterEach(cleanup);
@@ -532,6 +592,7 @@ describe("organizations list", () => {
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
       "Peek",
+      "Actions",
       "Name",
       "Slug",
       "Type",
@@ -547,6 +608,8 @@ describe("organizations list", () => {
         .map((cell) => cell.textContent),
     ).toEqual([
       // The peek control carries an icon and its name is on the button.
+      "",
+      // So does the row menu, for the same reason.
       "",
       FIRST_ORG.name,
       FIRST_ORG.slug,
@@ -608,10 +671,11 @@ describe("organizations list", () => {
     });
 
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-    // Past the peek control and the name link, so the click lands on the row
-    // body rather than on something that handles it first.
-    const [, , slugCell] = within(rowFor(link)).getAllByRole("cell");
-    if (!slugCell) throw new Error("the row needs a third cell");
+    // Past the two controls and the name link, so the click lands on the row
+    // body rather than on something that handles it first. Named by its header
+    // rather than counted, because a control column added beside the others
+    // would otherwise slide this onto a cell that answers the click itself.
+    const slugCell = cellUnder(rowFor(link), "Slug");
 
     fireEvent.click(slugCell);
 
@@ -689,7 +753,7 @@ describe("organizations list peek", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Peek", "Name", "Slug", "Type"]);
+    ).toEqual(["Peek", "Actions", "Name", "Slug", "Type"]);
   });
 
   it("takes the trial column down with the rest while it is open", async () => {
@@ -739,9 +803,16 @@ describe("organizations list peek", () => {
     );
     expect(isPeeked(first)).toBe(false);
 
+    // On to the last row, and then nowhere: paging replaces the row nodes the
+    // anchor depends on, so the walk stops rather than following the pager.
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
     expect(
-      within(peekPanel()).getByRole("heading", { name: SECOND_ORG.name }),
+      within(peekPanel()).getByRole("heading", { name: TRIALLING_ORG.name }),
+    ).toBeTruthy();
+
+    fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
+    expect(
+      within(peekPanel()).getByRole("heading", { name: TRIALLING_ORG.name }),
     ).toBeTruthy();
   });
 
@@ -811,7 +882,7 @@ describe("organizations list peek", () => {
     await peekOn(FIRST_ORG.name);
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Peek", "Name", "Type"]);
+    ).toEqual(["Peek", "Actions", "Name", "Type"]);
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
@@ -819,6 +890,7 @@ describe("organizations list peek", () => {
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
       "Peek",
+      "Actions",
       "Name",
       "Type",
       "Members",
@@ -845,7 +917,7 @@ describe("organizations list peek", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Peek", "Name", "Slug", "Type"]);
+    ).toEqual(["Peek", "Actions", "Name", "Slug", "Type"]);
     expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
@@ -910,6 +982,7 @@ describe("organizations list peek", () => {
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
       "Peek",
+      "Actions",
       "Name",
       "Slug",
       "Type",
@@ -1407,8 +1480,7 @@ describe("organizations list peek", () => {
     });
 
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
-    const [, , slugCell] = within(rowFor(link)).getAllByRole("cell");
-    if (!slugCell) throw new Error("the row needs a third cell");
+    const slugCell = cellUnder(rowFor(link), "Slug");
 
     // The gesture is gone: browsers read Alt-click on an anchor as "save
     // link", and the row's own handler carries no branch for it any more.
@@ -1688,22 +1760,455 @@ describe("organizations list peek", () => {
   });
 });
 
+describe("organizations list write actions", () => {
+  // The second row: live, so it is the one that offers Disable, and it is not
+  // the row the detail mocks answer for.
+  const LIVE = SECOND_ORG;
+
+  async function openRowMenu(name: string): Promise<HTMLElement> {
+    const trigger = await screen.findByRole("button", {
+      name: `Actions for ${name}`,
+    });
+    openOn(trigger);
+    return trigger;
+  }
+
+  async function confirmDisable(): Promise<void> {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    });
+  }
+
+  it("repaints the row out of the answer rather than asking for the list again", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: LIVE.name });
+    expect(cellUnder(rowFor(link), "Disabled").textContent).toBe("-");
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(cellUnder(rowFor(link), "Disabled").textContent).toBe(
+        shortDate(DISABLED_AT),
+      );
+    });
+    // One request, the one that drew the page. The answer already carries the
+    // record in its new state, so a refetch behind it is a second round trip
+    // for a row that is already right, and the list flickers through the
+    // loading state on the way.
+    expect(mocks.listOrganizations).toHaveBeenCalledTimes(1);
+    // The row that was written, and no other. A cache update keyed on the
+    // wrong thing repaints every row with one record.
+    const other = screen.getByRole("link", { name: FIRST_ORG.name });
+    expect(cellUnder(rowFor(other), "Disabled").textContent).toBe(
+      shortDate(FIRST_ORG.disabled_at ?? ""),
+    );
+  });
+
+  it("stays on the list while the operator works the menu it opened from a row", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    await openRowMenu(LIVE.name);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // The row opens the organization when it is clicked, and both of these are
+    // drawn in a portal at the end of the document: nowhere near the row in the
+    // DOM, and directly under it in the React tree the click travels up. The
+    // operator reading a confirmation has not asked to leave the list, and
+    // leaving would take the confirmation with it.
+    fireEvent.click(within(dialog).getByText(`Disable ${LIVE.name}?`));
+    const backdrop = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!backdrop) throw new Error("the dialog has no backdrop");
+    fireEvent.click(backdrop);
+
+    expect(router.state.location.pathname).toBe("/organizations");
+    expect(mocks.disableOrganization).not.toHaveBeenCalled();
+  });
+
+  it("offers the opposite action after each write, twice running", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    // The row now carries a disabled record, so the menu has to have swapped
+    // the two entries. Twice, because the state the second write leaves is the
+    // state the first one started from: a menu that reads its answer from the
+    // record the page loaded with, rather than from the row it is drawn on,
+    // passes this once and fails on the way back.
+    await openRowMenu(LIVE.name);
+    expect(screen.queryByRole("menuitem", { name: "Disable" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+
+    await openRowMenu(LIVE.name);
+    expect(screen.queryByRole("menuitem", { name: "Re-enable" })).toBeNull();
+    await confirmDisable();
+
+    expect(mocks.disableOrganization).toHaveBeenCalledTimes(2);
+    expect(mocks.enableOrganization).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the row as it was when the server refuses the write", async () => {
+    mocks.disableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is already disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    // The dialog is still up, holding the reason, and the operator is the one
+    // who decides when to leave it.
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    // The row is drawn from the answer, and there was no answer. A row that
+    // repaints off the request instead shows the operator a state the server
+    // never reached, and the list is the only place they would notice.
+    const link = screen.getByRole("link", { name: LIVE.name });
+    expect(cellUnder(rowFor(link), "Disabled").textContent).toBe("-");
+    expect(announcement()).toBe(
+      `Could not disable ${LIVE.name}: organization is already disabled`,
+    );
+  });
+
+  it("reports the write through the one region the list already speaks from", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    // The same polite region the peek announces through, rather than a second
+    // one shipped with the row menu. A row menu is not a surface an operator
+    // can read a result off: the dialog closes and the cell that changed is
+    // eight columns away.
+    await waitFor(() => {
+      expect(announcement()).toBe(`${LIVE.name} is disabled.`);
+    });
+  });
+
+  it("shows a re-enable that failed, and not only to a screen reader", async () => {
+    mocks.enableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is not disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(FIRST_ORG.name);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+
+    // Re-enable is the one action with no dialog, so without this the whole
+    // account of the failure on the page is a sentence inside sr-only: the row
+    // does not change, and the banner above it covers the list query alone. A
+    // sighted operator presses Re-enable, sees nothing happen, and is told
+    // nothing about why.
+    const failure = `Could not re-enable ${FIRST_ORG.name}: organization is not disabled`;
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain(failure);
+    expect(banner.className).not.toContain("sr-only");
+    expect(announcement()).toBe(failure);
+
+    // Dismissible, because it is the operator's page and this is not a modal.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss the failure" }),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("takes the failure down when the next write succeeds", async () => {
+    mocks.enableOrganization.mockRejectedValueOnce(
+      new GramAdminError(404, null, "gram admin 404 Not Found"),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(FIRST_ORG.name);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+
+    await openRowMenu(FIRST_ORG.name);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Re-enable" }));
+    });
+
+    // The operator has just been told the current state of this record, so a
+    // banner about the attempt before it is describing a page that has moved
+    // on.
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+
+  it("keeps the live region reachable while a dialog is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await openRowMenu(LIVE.name);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    await screen.findByRole("dialog");
+
+    // An open Radix modal hides the rest of the page with aria-hidden, and the
+    // one exemption that package makes is for elements carrying aria-live by
+    // name. Everything else goes, which is what this asserts against: the
+    // table is gone from the tree and the region is not.
+    expect(liveRegion()).toBeTruthy();
+    expect(screen.queryByRole("link", { name: LIVE.name })).toBeNull();
+  });
+
+  it("speaks the same refusal twice when the operator presses through it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await openRowMenu(TRIALLING_ORG.name);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Extend trial" }));
+    await screen.findByRole("dialog");
+
+    const days = screen.getByLabelText("Days");
+    fireEvent.change(days, { target: { value: "0" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+    const first = liveRegion().textContent;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+
+    // Word for word the same sentence, and the region still changed: the
+    // zero-width space alternates, so the second refusal reaches the
+    // accessibility tree as a change rather than as silence. Nothing on screen
+    // moves on that press, which is the whole reason this path announces.
+    expect(announcement()).toContain("between 1 and 365");
+    expect(liveRegion().textContent).not.toBe(first);
+    expect(mocks.extendTrial).not.toHaveBeenCalled();
+  });
+
+  it("will not let the Columns menu take the row menu away", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    openOn(screen.getByRole("button", { name: "Columns" }));
+    const item = screen.getByRole("menuitemcheckbox", { name: "Actions" });
+    fireEvent.click(item);
+
+    // Hiding this column puts disable, re-enable and extend out of reach for
+    // every row at once, and the operator has no route back except the column
+    // they just hid.
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.keyDown(item, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("columnheader", { name: "Actions" }),
+      ).toBeTruthy();
+    });
+    expect(
+      await screen.findByRole("button", { name: `Actions for ${LIVE.name}` }),
+    ).toBeTruthy();
+  });
+
+  it("keeps the actions column while the peek is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    // Peek takes five columns down to make room for the panel. This one stays:
+    // the panel covers one record, and the reason to reach for another row's
+    // menu does not go away because a panel is open beside it.
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: `Actions for ${LIVE.name}` }),
+    ).toBeTruthy();
+  });
+
+  it("extends the trial from the panel and repaints the panel with the answer", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(TRIALLING_ORG.name);
+
+    fireEvent.click(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${TRIALLING_ORG.name}`,
+      }),
+    );
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // The default day count, sent without the operator typing anything.
+    expect(mocks.extendTrial).toHaveBeenCalledWith({
+      id: TRIALLING_ORG.id,
+      days: 14,
+    });
+    // The panel is drawn from the row it is peeking at, so it repaints from the
+    // same cache write the row does. Reading the old date here is the operator
+    // being shown the trial they just extended, unextended.
+    expect(peekPanel().textContent).toContain(shortDate(EXTENDED_TRIAL_END));
+    expect(announcement()).toBe(
+      `${TRIALLING_ORG.name} trial extended by 14 days.`,
+    );
+  });
+
+  it("re-enables from the panel without a dialog in the way", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+    const panel = within(peekPanel());
+
+    await act(async () => {
+      fireEvent.click(
+        panel.getByRole("button", { name: `Re-enable ${FIRST_ORG.name}` }),
+      );
+    });
+
+    expect(mocks.enableOrganization).toHaveBeenCalledWith({
+      id: FIRST_ORG.id,
+    });
+    // Named for the record it acts on, and it is the record that changed
+    // rather than the panel: the panel's own name is a constant, and it swaps
+    // records under itself on the arrow keys.
+    expect(
+      within(peekPanel()).getByRole("button", {
+        name: `Disable ${FIRST_ORG.name}`,
+      }),
+    ).toBeTruthy();
+    // The panel stays. Nothing about the record left the list, and closing it
+    // would take the operator off the row they are working.
+    expect(peekPanel()).toBeTruthy();
+  });
+
+  it("gives the keyboard back to the panel control the dialog opened from", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(TRIALLING_ORG.name);
+    const extend = within(peekPanel()).getByRole("button", {
+      name: `Extend trial for ${TRIALLING_ORG.name}`,
+    });
+
+    fireEvent.click(extend);
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // The same node, through the write: the record changed underneath it and
+    // React kept the element. Radix would have focused a DialogTrigger that
+    // does not exist here and left the keyboard on the document body, at the
+    // top of the page, with the panel still open beside it.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(extend);
+    });
+  });
+
+  it("leaves the arrow keys to the day count typed inside the peek", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const peeked = await screen.findByRole("link", {
+      name: TRIALLING_ORG.name,
+    });
+    await peekOn(TRIALLING_ORG.name);
+
+    fireEvent.click(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${TRIALLING_ORG.name}`,
+      }),
+    );
+    await screen.findByRole("dialog");
+
+    // A spinner, which is the premise of everything below: the arrow keys have
+    // something to do inside this field only because it steps its own value,
+    // and the bounds are on the control as well as in the check behind it.
+    // happy-dom does not step a number input on ArrowUp or ArrowDown, so the
+    // attributes are assertable here and the stepping is not.
+    const days = screen.getByLabelText("Days");
+    expect(days.getAttribute("type")).toBe("number");
+    expect(days.getAttribute("min")).toBe("1");
+    expect(days.getAttribute("max")).toBe("365");
+    expect(days.getAttribute("step")).toBe("1");
+
+    // The dialog is drawn in a portal and rendered inside the panel's subtree,
+    // so its keys reach the list's handler through React even though the node
+    // is outside the panel. An operator holding ArrowUp to reach 30 days is not
+    // asking the list to walk the peek down the page underneath them.
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    days.dispatchEvent(event);
+
+    // Read off the row rather than through a role query: an open modal takes
+    // the table out of the accessibility tree.
+    expect(isPeeked(peeked)).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("closes the dialog on Escape and leaves the peek open behind it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(TRIALLING_ORG.name);
+
+    fireEvent.click(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${TRIALLING_ORG.name}`,
+      }),
+    );
+    await screen.findByRole("dialog");
+
+    fireEvent.keyDown(screen.getByLabelText("Days"), { key: "Escape" });
+
+    // One surface per press. Escape inside the panel body closes the peek, and
+    // this key is inside the panel's React subtree, so two separate things
+    // keep the panel: the dialog answers the key first and marks it, and the
+    // panel reads containment off the DOM, where the portal is nowhere near
+    // it. Losing either one alone is survivable; losing both closes the panel
+    // out from under a dialog the operator was reading.
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(peekPanel()).toBeTruthy();
+    expect(mocks.extendTrial).not.toHaveBeenCalled();
+  });
+});
+
 // The bar takes a table, so the last-column case is reachable here by handing
 // it a two column table rather than by clicking seven items shut through a
 // menu that closes each time.
 describe("TableActionBar", () => {
-  // Sliced, so the array carries the element type useTable asks for. Two data
-  // columns for the cases about the bar's own two rules, and the peek column
-  // beside one of them for the case where an unhideable column is in the count.
-  const MENU_COLUMNS = ORG_COLUMNS.slice(1, 3);
-  const WITH_PEEK_COLUMN = ORG_COLUMNS.slice(0, 2);
-
-  // Destructured off the tuple rather than off the slice, which widens each
+  // Destructured off the tuple rather than off a slice, which widens each
   // element back to a bare column definition.
-  const [PEEK, FIRST, SECOND, THIRD] = ORG_COLUMNS;
-  if (!PEEK || !FIRST || !SECOND || !THIRD) {
-    throw new Error("ORG_COLUMNS needs four columns");
+  const [PEEK, ACTIONS, FIRST, SECOND, THIRD] = ORG_COLUMNS;
+  if (!PEEK || !ACTIONS || !FIRST || !SECOND || !THIRD) {
+    throw new Error("ORG_COLUMNS needs five columns");
   }
+
+  // Sliced, so the array carries the element type useTable asks for. Two data
+  // columns for the cases about the bar's own two rules, and each control
+  // column beside one of them for the cases where a column that cannot be
+  // hidden is in the count.
+  const MENU_COLUMNS = ORG_COLUMNS.slice(2, 4);
+  const WITH_PEEK_COLUMN: typeof MENU_COLUMNS = [PEEK, FIRST];
+  const WITH_ACTIONS_COLUMN: typeof MENU_COLUMNS = [ACTIONS, FIRST];
 
   // An accessor column takes its id from its key unless it names one, and that
   // id is what the visibility state is keyed by.
@@ -1868,6 +2373,21 @@ describe("TableActionBar", () => {
     // The peek column is locked too, by its own opt-out rather than by this
     // rule, so the operator cannot reach the same state from the other side.
     expect(itemFor(PEEK.header).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("stops the operator hiding the last data column beside the row menu", () => {
+    // The same case as above, from the column that arrived after the rule. A
+    // second column that opts out of hiding is a second way to make the count
+    // wrong, and a guard that counts every visible column instead of every
+    // hideable one now needs two data columns before it lets go of one.
+    const { onVisibilityChange } = openColumnsMenu({}, WITH_ACTIONS_COLUMN);
+
+    const item = itemFor(FIRST.header);
+    fireEvent.click(item);
+
+    expect(onVisibilityChange).not.toHaveBeenCalled();
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(itemFor(ACTIONS.header).getAttribute("aria-disabled")).toBe("true");
   });
 
   it("locks a column that opts out of hiding", () => {
