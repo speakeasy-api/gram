@@ -1256,11 +1256,53 @@ existing trial row, so `trial_ends_at` is set wherever extend is offered. It is
 still typed optional on the client: if it is missing, keep the current day-count
 input rather than guessing an anchor.
 
-**Use a native `<input type="date">`.** Do **not** add `react-day-picker` or a
-shadcn `<Calendar>`. Adding any dependency to `client/admin` re-resolves the root
-lockfile and breaks the `@gram-ai/functions` workspace link. The native control
-gives a real calendar popup, keyboard and screen-reader support, and `min`/`max`
-for free.
+**Use shadcn's date picker**, which is `Calendar` inside a `Popover`. Walker
+asked for it by name and linked
+`https://ui.shadcn.com/docs/components/base/date-picker` on 2026-08-14, after
+this task originally specified a native `<input type="date">`.
+
+This is the one place the plan knowingly breaks a global constraint, so the
+checks below are not optional.
+
+**Add exactly one dependency, `react-day-picker`.** The docs name three, and the
+dry run agrees, but two of them are not real here:
+
+- `radix-ui` is already installed. The CLI writes no `package.json` entry for it.
+- `date-fns` is used only by the docs' example, to format the trigger's label.
+  `calendar.tsx` itself imports nothing but `react-day-picker` (verified with
+  `--view`). This repo formats dates through `fmtDateShort`, and a global
+  constraint requires it. **Do not add `date-fns`.**
+
+Add it through the `admin-shadcn` skill: `aube dlx shadcn@latest add calendar -c client/admin`.
+Check `pnpm-workspace.yaml` for a `catalog:` entry first and use `catalog:` if
+one exists.
+
+- [ ] **Step 0: The two checks that make the dependency safe**
+
+**`ui/button.tsx` will be overwritten.** That is expected and harmless here: a
+`--diff` shows the change is formatting only, and `oxfmt` restores the house
+style. Confirm that yourself with `git diff client/admin/src/components/ui/button.tsx`
+after the add. If it is anything but whitespace, quotes and semicolons, stop and
+revert.
+
+**The lockfile has bitten this app before**, by re-resolving the root lock,
+breaking the `@gram-ai/functions` workspace link and downgrading admin's
+`radix-ui`. Both are observable, so look rather than hope:
+
+```bash
+git diff pnpm-lock.yaml | grep -E '@gram-ai/functions|radix-ui' | head -40
+```
+
+Expected: `react-day-picker` added, and **no** change to the `@gram-ai/functions`
+link and **no** `radix-ui` version move. If either appears, revert the lockfile
+and the `package.json`, report it, and stop. Do not hand-edit the lockfile to
+paper over it.
+
+**Restarting the dev server is the managing session's job, not yours.** An
+install replaces `node_modules` underneath the vite server running on port 5174,
+which Walker is using in a browser right now. Do not stop it, do not restart it,
+and say in your report that the install happened so the managing session can
+restart it.
 
 **This reaches past the record page.** `OrganizationActions` is also rendered by
 the organizations row menu and the peek panel, which pass no `actions` prop. The
@@ -1271,27 +1313,37 @@ if one needs editing, say so in the report and explain why.
 
 - Modify: `client/admin/src/pages/organizations/OrganizationActions.tsx`, `OrganizationActions.test.tsx`
 
-- [ ] **Step 1: Bound the input instead of validating after the fact**
+- [ ] **Step 1: Bound the calendar instead of validating after the fact**
 
-The existing bounds map exactly onto the input's own attributes, so an
-out-of-range date becomes unpickable rather than a rejection the operator reads
-after pressing Save:
+The existing bounds map onto the calendar's own range, so an out-of-range day is
+unpickable rather than a rejection the operator reads after pressing Save:
 
 ```
-min = trial_ends_at + MIN_TRIAL_EXTENSION_DAYS days   // 1
-max = trial_ends_at + MAX_TRIAL_EXTENSION_DAYS days   // 365
+earliest = trial_ends_at + MIN_TRIAL_EXTENSION_DAYS days   // 1
+latest   = trial_ends_at + MAX_TRIAL_EXTENSION_DAYS days   // 365
 ```
 
-Default the field to `trial_ends_at + DEFAULT_EXTENSION_DAYS` (14), which is what
-the day-count field defaults to today.
+Use `disabled`, and set `startMonth`/`endMonth` so the operator cannot page into
+years of dead months. Open on `trial_ends_at + DEFAULT_EXTENSION_DAYS` (14),
+which is what the day-count field defaults to today, and make that the selected
+day so Save works without touching the calendar.
 
-- [ ] **Step 2: Keep the guard, do not trust the attributes**
+Render the trigger's label with `fmtDateShort`, never `date-fns` and never
+`toLocaleDateString`.
 
-`min`/`max` are not enforced for a typed value in every browser, and the field can
-be cleared. Keep the existing bounds check and its `announce` path, converting
-first and then applying the same `MIN`/`MAX` test to the resulting day count. The
-existing comment explaining why the live region alternates a zero-width space
-still applies and must stay.
+- [ ] **Step 2: Keep the guard, do not trust the calendar**
+
+A disabled day is not an enforced value: the selection can still be empty when
+Save is pressed. Keep the existing bounds check and its `announce` path,
+converting first and then applying the same `MIN`/`MAX` test to the resulting day
+count. The existing comment explaining why the live region alternates a
+zero-width space still applies and must stay.
+
+A `Popover` inside a `Dialog` is the composition most likely to misbehave. Check
+by hand that the calendar opens above the dialog, that Escape closes the calendar
+without closing the dialog, and that focus returns to the trigger. If it cannot
+be made to behave, say so in the report rather than shipping a dialog that traps
+or dismisses wrongly.
 
 Compute whole days in UTC. A local-midnight subtraction across a daylight-saving
 boundary yields 13.958 days and floors to the wrong answer.
