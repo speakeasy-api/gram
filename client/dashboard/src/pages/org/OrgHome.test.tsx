@@ -106,6 +106,8 @@ vi.mock("react-router", () => ({
     <a {...props}>{children}</a>
   ),
   useNavigate: () => vi.fn(),
+  // Org root path, so the welcome banner's route check passes.
+  useLocation: () => ({ pathname: "/acme" }),
 }));
 vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <>{children}</>,

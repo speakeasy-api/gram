@@ -4,6 +4,7 @@ import {
 } from "@/components/brand-mesh";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
@@ -16,26 +17,20 @@ type RouteCard = {
   cta: string;
   meta: string;
   to: string;
-  /** Draws the brand gradient edge and the "Recommended" tag. */
   recommended?: boolean;
 };
 
 /**
- * Zero-data welcome banner for org home: one hero and three mutually exclusive
- * first moves (demo org / start in a project / org setup wizard).
- *
- * Renders unconditionally for now — the visibility rule (which orgs count as
- * "new", and how the banner is dismissed) is still open, so nothing here reads
- * onboarding state yet.
+ * Zero-data welcome banner for org home: a hero over three first moves — demo
+ * org, start in a project, org setup wizard.
  */
-export function OrgWelcomeBanner(): JSX.Element {
+export function OrgWelcomeBanner(): JSX.Element | null {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const orgRoutes = useOrgRoutes();
+  const { visible } = useOrgWelcomeBanner();
 
-  // Same preference order as the overview prefetch below it on org home: last
-  // visited, else `default`, else whatever exists. A brand-new org always has
-  // `default`; the org-home fallback only covers the degenerate no-project case.
+  // Same preference order as the overview prefetch on org home.
   const startProject =
     getPreferredProject(organization.projects) ??
     organization.projects.find((project) => project.slug === "default") ??
@@ -71,10 +66,11 @@ export function OrgWelcomeBanner(): JSX.Element {
     },
   ];
 
+  if (!visible) return null;
+
   return (
     <section className="border-border border">
-      {/* Deep bottom padding leaves room for the cards to pull up into the
-          hero — the overlap is the point, so the mesh reads behind them. */}
+      {/* Deep bottom padding leaves room for the cards to overlap the hero. */}
       <div
         className={cn(
           BRAND_MESH_SURFACE_CLASS,
@@ -106,8 +102,6 @@ function RouteCardLink({ card }: { card: RouteCard }): JSX.Element {
       className="group bg-card border-border hover:border-foreground relative flex min-h-[250px] flex-col gap-3 border px-6.5 pt-7.5 pb-6.5 no-underline transition-colors hover:no-underline"
     >
       {card.recommended && (
-        // Pulled a pixel past each edge so the strip covers the card border
-        // rather than sitting inside it.
         <span
           aria-hidden="true"
           className="bg-gradient-primary absolute -top-px -right-px -left-px h-[3px]"
