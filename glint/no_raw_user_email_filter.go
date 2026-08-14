@@ -60,7 +60,15 @@ func runNoRawUserEmailFilter(pass *analysis.Pass) (any, error) {
 		switch n := node.(type) {
 		case *ast.CallExpr:
 			if isSquirrelFilterCall(pass, n) || isSquirrelExprCall(pass, n) {
-				for _, arg := range n.Args {
+				// Only the predicate/SQL arguments carry column expressions.
+				// For Where/Having/JoinClause/Expr that is the first argument;
+				// the rest are bound values — data that may legitimately
+				// contain "user_email". GroupBy is variadic SQL throughout.
+				args := n.Args
+				if !isGroupByCall(n) && len(args) > 1 {
+					args = args[:1]
+				}
+				for _, arg := range args {
 					reportRawUserEmailLiterals(pass, arg, reported)
 				}
 			}
@@ -79,6 +87,11 @@ func runNoRawUserEmailFilter(pass *analysis.Pass) (any, error) {
 	})
 
 	return nil, nil
+}
+
+func isGroupByCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "GroupBy"
 }
 
 // isSquirrelFilterCall reports whether call is a matching/bucketing method on

@@ -29,6 +29,10 @@ func allowed() {
 	sb = sb.Where(squirrel.Eq{"user_id": "u"})
 	// Map VALUES are filter data, not column expressions.
 	sb = sb.Where(squirrel.Eq{"dimension": "user_email"})
+	// Bound values after the predicate argument are data too.
+	sb = sb.Where("dimension = ?", "user_email")
+	sb = sb.Having("countIf(dim = ?) > 0", "user_email")
+	_ = squirrel.Expr("dimension = ?", "user_email")
 	sb = sb.GroupBy("hook_hostname")
 	_ = squirrel.Expr("joinGet('identity_map', 'canonical_user_id', 'org', lower(user_email))")
 	_ = sb
