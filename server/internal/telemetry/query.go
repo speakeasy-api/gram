@@ -112,9 +112,11 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 	return scope, nil
 }
 
-// Query is a generic, org-scoped analytics query. Existing dimensions read the
-// pre-aggregated attribute_metrics_summaries view; skill_version queries use
-// session-level raw telemetry joined to asynchronously reconciled mappings.
+// Query is a generic, org-scoped analytics query. Everything except
+// skill_version is served through the semantic layer (which routes to the
+// pre-aggregated attribute_metrics_summaries view and compiles the same SQL
+// the legacy repo path produced); skill_version queries use session-level raw
+// telemetry joined to asynchronously reconciled mappings.
 func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
 	if err != nil {
@@ -175,39 +177,39 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		return nil, oops.E(oops.CodeBadRequest, nil, "group_by %q is not supported with skill_version because it can vary within a session", groupBy)
 	}
 
-	// The grouped table and the per-group timeseries are independent reads of
-	// the same aggregate — run them concurrently.
 	var (
 		tableRows []repo.AttributeMetricsRow
 		tsRows    []repo.AttributeMetricsTimePoint
 	)
-	eg, egCtx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		var egErr error
-		if useSkillVersions {
+	if useSkillVersions {
+		// skill_version stays on the legacy raw+mappings path; the grouped
+		// table and the per-group timeseries are independent reads — run
+		// them concurrently.
+		eg, egCtx := errgroup.WithContext(ctx)
+		eg.Go(func() error {
+			var egErr error
 			tableRows, egErr = s.chRepo.QuerySkillVersionMetricsTable(egCtx, params)
-		} else {
-			tableRows, egErr = s.chRepo.QueryAttributeMetricsTable(egCtx, params)
-		}
-		if egErr != nil {
-			return fmt.Errorf("analytics table query: %w", egErr)
-		}
-		return nil
-	})
-	eg.Go(func() error {
-		var egErr error
-		if useSkillVersions {
+			if egErr != nil {
+				return fmt.Errorf("analytics table query: %w", egErr)
+			}
+			return nil
+		})
+		eg.Go(func() error {
+			var egErr error
 			tsRows, egErr = s.chRepo.QuerySkillVersionMetricsTimeseries(egCtx, params)
-		} else {
-			tsRows, egErr = s.chRepo.QueryAttributeMetricsTimeseries(egCtx, params)
+			if egErr != nil {
+				return fmt.Errorf("analytics timeseries query: %w", egErr)
+			}
+			return nil
+		})
+		if err := eg.Wait(); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
 		}
-		if egErr != nil {
-			return fmt.Errorf("analytics timeseries query: %w", egErr)
+	} else {
+		tableRows, tsRows, err = s.queryAttributeMetricsSemantic(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
 		}
-		return nil
-	})
-	if err := eg.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
