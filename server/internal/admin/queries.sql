@@ -158,6 +158,27 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: AdminDisableOrganization :execrows
+-- Operator-initiated disable. Keyed on the Gram organization id rather than
+-- workos_id so an organization that was never linked to WorkOS can still be
+-- disabled. Deliberately leaves workos_last_event_id alone: that column is the
+-- WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
+-- misrecord which event was last applied. Idempotent — the COALESCE keeps the
+-- original timestamp when the organization is already disabled.
+UPDATE organization_metadata
+SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: AdminEnableOrganization :execrows
+-- Undo of AdminDisableOrganization, and likewise blind to workos_last_event_id.
+-- Idempotent — enabling an already-active organization is a no-op beyond
+-- updated_at.
+UPDATE organization_metadata
+SET disabled_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: AdminListProjectsForOrganization :many
 SELECT id, slug, name, created_at, updated_at
 FROM projects

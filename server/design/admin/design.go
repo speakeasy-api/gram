@@ -266,6 +266,46 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminUpdateOrganization")
 	})
 
+	Method("disableOrganization", func() {
+		Description("Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+
+			Attribute("id", String, "Organization ID.")
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/organization.disable")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminDisableOrganization")
+	})
+
+	Method("enableOrganization", func() {
+		Description("Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+
+			Attribute("id", String, "Organization ID.")
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/organization.enable")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminEnableOrganization")
+	})
+
 	Method("getOrganization", func() {
 		Description("Returns full admin details for a single organization by id or slug.")
 

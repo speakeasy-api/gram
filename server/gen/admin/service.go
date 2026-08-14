@@ -28,6 +28,13 @@ type Service interface {
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Disables an organization, recording the moment of the action in disabled_at.
+	// Idempotent: disabling an already-disabled organization keeps the original
+	// timestamp.
+	DisableOrganization(context.Context, *DisableOrganizationPayload) (res *AdminOrganization, err error)
+	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
+	// organization that is already active is unaffected.
+	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
 	// Lists members of an organization (admin view, no auth scoping).
@@ -58,7 +65,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [11]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -199,6 +206,22 @@ type CallbackResult struct {
 	Location string
 	// The admin session cookie value
 	SessionID string
+}
+
+// DisableOrganizationPayload is the payload type of the admin service
+// disableOrganization method.
+type DisableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// EnableOrganizationPayload is the payload type of the admin service
+// enableOrganization method.
+type EnableOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
 }
 
 // GetOrganizationPayload is the payload type of the admin service

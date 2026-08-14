@@ -504,12 +504,40 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization").LogError(ctx, s.logger)
 	}
 
-	row, err := queries.AdminGetOrganizationByIDOrSlug(ctx, payload.ID)
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")
+}
+
+func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
+	rows, err := repo.New(s.db).AdminDisableOrganization(ctx, payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "disable organization").LogError(ctx, s.logger)
+	}
+	if rows == 0 {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after disable")
+}
+
+func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrganizationPayload) (*gen.AdminOrganization, error) {
+	rows, err := repo.New(s.db).AdminEnableOrganization(ctx, payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enable organization").LogError(ctx, s.logger)
+	}
+	if rows == 0 {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+}
+
+func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, errMsg string) (*gen.AdminOrganization, error) {
+	row, err := repo.New(s.db).AdminGetOrganizationByIDOrSlug(ctx, id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch organization after update").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
 	return adminOrganizationFromGetRow(row), nil

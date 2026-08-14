@@ -32,6 +32,16 @@ func UpdateOrganizationAdminPath() string {
 	return "/admin/organization.update"
 }
 
+// DisableOrganizationAdminPath returns the URL path to the admin service disableOrganization HTTP endpoint.
+func DisableOrganizationAdminPath() string {
+	return "/admin/organization.disable"
+}
+
+// EnableOrganizationAdminPath returns the URL path to the admin service enableOrganization HTTP endpoint.
+func EnableOrganizationAdminPath() string {
+	return "/admin/organization.enable"
+}
+
 // GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
 func GetOrganizationAdminPath() string {
 	return "/admin/organization.get"

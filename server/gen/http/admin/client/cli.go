@@ -140,6 +140,56 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 	return v, nil
 }
 
+// BuildDisableOrganizationPayload builds the payload for the admin
+// disableOrganization endpoint from CLI flags.
+func BuildDisableOrganizationPayload(adminDisableOrganizationBody string, adminDisableOrganizationAdminSessionToken string) (*admin.DisableOrganizationPayload, error) {
+	var err error
+	var body DisableOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDisableOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDisableOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminDisableOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.DisableOrganizationPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildEnableOrganizationPayload builds the payload for the admin
+// enableOrganization endpoint from CLI flags.
+func BuildEnableOrganizationPayload(adminEnableOrganizationBody string, adminEnableOrganizationAdminSessionToken string) (*admin.EnableOrganizationPayload, error) {
+	var err error
+	var body EnableOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminEnableOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminEnableOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminEnableOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.EnableOrganizationPayload{
+		ID: body.ID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetOrganizationPayload builds the payload for the admin getOrganization
 // endpoint from CLI flags.
 func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOrganizationAdminSessionToken string) (*admin.GetOrganizationPayload, error) {

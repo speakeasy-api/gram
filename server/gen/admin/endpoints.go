@@ -21,6 +21,8 @@ type Endpoints struct {
 	Logout                   goa.Endpoint
 	GetProject               goa.Endpoint
 	UpdateOrganization       goa.Endpoint
+	DisableOrganization      goa.Endpoint
+	EnableOrganization       goa.Endpoint
 	GetOrganization          goa.Endpoint
 	ListOrganizationMembers  goa.Endpoint
 	ListOrganizationProjects goa.Endpoint
@@ -37,6 +39,8 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:                   NewLogoutEndpoint(s),
 		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
 		UpdateOrganization:       NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		DisableOrganization:      NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
+		EnableOrganization:       NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
 		GetOrganization:          NewGetOrganizationEndpoint(s, a.APIKeyAuth),
 		ListOrganizationMembers:  NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationProjects: NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
@@ -51,6 +55,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetProject = m(e.GetProject)
 	e.UpdateOrganization = m(e.UpdateOrganization)
+	e.DisableOrganization = m(e.DisableOrganization)
+	e.EnableOrganization = m(e.EnableOrganization)
 	e.GetOrganization = m(e.GetOrganization)
 	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
@@ -127,6 +133,52 @@ func NewUpdateOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.UpdateOrganization(ctx, p)
+	}
+}
+
+// NewDisableOrganizationEndpoint returns an endpoint function that calls the
+// method "disableOrganization" of service "admin".
+func NewDisableOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableOrganizationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DisableOrganization(ctx, p)
+	}
+}
+
+// NewEnableOrganizationEndpoint returns an endpoint function that calls the
+// method "enableOrganization" of service "admin".
+func NewEnableOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableOrganizationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnableOrganization(ctx, p)
 	}
 }
 
