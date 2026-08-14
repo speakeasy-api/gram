@@ -691,15 +691,10 @@ function PolicyCenterContent() {
 
   const confirmDisableInstead = () => {
     if (!policyToDelete) return;
+    const row = policyToDelete;
+    setPolicyToDelete(null);
     toggleEnabledMutation.mutate(
-      togglePolicyEnabledVariables(
-        policyToDelete.policy.id,
-        policyToDelete.policy.name,
-        false,
-      ),
-      {
-        onSuccess: () => setPolicyToDelete(null),
-      },
+      togglePolicyEnabledVariables(row.policy.id, row.policy.name, false),
     );
   };
 
