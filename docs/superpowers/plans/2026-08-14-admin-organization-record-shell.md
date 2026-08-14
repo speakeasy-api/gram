@@ -921,6 +921,89 @@ PATH="/Users/walker/.local/bin:$PATH" git commit -m "feat(admin): build the brea
 
 ---
 
+## Task 6b: The callout drops its buttons, the header drops its dash
+
+Two corrections Walker made on 2026-08-14, reading the Task 5 screenshot. Task 5 built both files and Task 6 was told to leave them alone, so they land here.
+
+**Files:**
+
+- Modify: `client/admin/src/pages/organization/TrialCallout.tsx`, `TrialCallout.test.tsx`
+- Modify: `client/admin/src/pages/organization/RecordHeader.tsx`, `RecordHeader.test.tsx`
+
+**Interfaces:**
+
+- Consumes: `OrganizationActions` (`buttons` layout), `Trial`
+- Produces: a header that is the single action bar, and a trial mark that appears only when there is a trial
+
+- [ ] **Step 1: Write the failing tests first**
+
+In `TrialCallout.test.tsx`, for a `running` trial:
+
+```tsx
+it("carries no actions of its own", () => {
+  renderWithApp(<TrialCallout org={orgFixture({ trial_state: "running" })} />);
+  const callout = screen.getByRole("status");
+  expect(within(callout).queryAllByRole("button")).toHaveLength(0);
+  expect(within(callout).queryAllByRole("menuitem")).toHaveLength(0);
+});
+```
+
+In `RecordHeader.test.tsx`, both directions. The second case is the one that matters, and it is why this is not a one-line change:
+
+```tsx
+it("shows no trial mark on a record with no trial", () => {
+  renderWithApp(<RecordHeader org={orgFixture({ trial_state: "none" })} />);
+  expect(screen.queryByText("-")).toBeNull();
+});
+
+it("still shows the dash when the server sends a state the client does not know", () => {
+  // `Trial` renders the same bare dash for `none` and for an unrecognised
+  // value. Only `none` is "no trial"; an unrecognised state is a signal that
+  // the client is behind the server, and hiding it would hide that.
+  renderWithApp(
+    <RecordHeader org={orgFixture({ trial_state: "invented_state" })} />,
+  );
+  expect(screen.getByText("Trial state not recognised")).toBeTruthy();
+});
+```
+
+Run: `aube run -F admin test "TrialCallout|RecordHeader"`
+Expected: the first and second FAIL, the third passes already.
+
+- [ ] **Step 2: Delete the callout's action bar**
+
+Remove the `OrganizationActions` element, its wrapping `div` and the now-unused import from `TrialCallout.tsx`. Remove the comment above it, which explains a decision the file no longer makes.
+
+The callout becomes information only. `RecordHeader` keeps one action bar for every record whatever its trial state, so Disable stays reachable on a record that has no trial and therefore no callout. The two were drawing Disable and Extend trial about 90 pixels apart.
+
+`RecordHeader` is then the only caller of `layout="buttons"`. That is fine and does not justify undoing Task 1's rename: the name describes what the layout draws, not how many callers it has.
+
+- [ ] **Step 3: Gate the trial mark in the header**
+
+```tsx
+{
+  org.trial_state && org.trial_state !== "none" && <Trial org={org} />;
+}
+```
+
+Key on `none` explicitly, never on "would `Trial` render a dash". Those are different questions and Step 1's third test holds the line between them.
+
+- [ ] **Step 4: Verify, including the path you left alone**
+
+Run: `aube run -F admin test`
+Expected: all pass.
+
+`Trial` is also rendered by the organizations **list**, where a dash in a table cell is correct and column alignment depends on it. Confirm you changed no file under `pages/organizations/` and that `Trial.tsx` itself is untouched: `git diff --name-only`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add client/admin/src
+PATH="/Users/walker/.local/bin:$PATH" git commit -m "fix(admin): give the organization record one action bar"
+```
+
+---
+
 ## Task 7: Mutation sweep and gates
 
 The plan's test list is a floor, not coverage. This task is where the tests get attacked.
@@ -951,7 +1034,9 @@ Do not work from a supplied list. For each behaviour this slice claims, ask what
 - The header moved inside `Overview.tsx`. Only the Task 5 Step 8 test catches this.
 - `useMatchRoute` given `fuzzy: false`. The record nav then appears on the index view and vanishes on `/members`.
 - The breadcrumb's last segment rendered as a `BreadcrumbLink` rather than a `BreadcrumbPage`.
-- `canExtendTrial` inlined into the callout as `trial_state === "running"`. The `ending_soon` case must catch it.
+- `canExtendTrial` inlined as `trial_state === "running"`. The `ending_soon` case must catch it. **Apply this in `RecordHeader`, not the callout**: Task 6b removed the callout's buttons, so the callout no longer asks the question.
+- The header's trial gate widened from `!== "none"` to "anything `Trial` would not draw a dash for". Task 6b's unrecognised-state test must catch it.
+- `LIVE_TRIAL_STATES` widened to include `expired`, kept rather than reverted after Step 1. Step 1 already proves a test dies here, so use this one to confirm you restored the line.
 
 Every mutation that survives is a missing test. Write it, then re-run the mutation to confirm it now dies.
 
