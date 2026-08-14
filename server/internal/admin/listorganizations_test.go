@@ -336,8 +336,6 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 	demotedAt := now.Add(-72 * time.Hour)
 	convertedAt := now.Add(-96 * time.Hour)
 
-	// Margins are deliberately far from the seven-day boundary and from now(),
-	// so test runtime cannot flip a predicate.
 	for _, id := range []string{
 		"org_trial_none",
 		"org_trial_running",
@@ -354,13 +352,8 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_running", endsAt: now.Add(30 * 24 * time.Hour)})
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_ending_soon", endsAt: now.Add(24 * time.Hour)})
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_expired", endsAt: now.Add(-24 * time.Hour)})
-	// A future ends_at catches a CASE that reads the dates before converted_at
-	// and demoted_at and so reports these as running or ending_soon.
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_demoted", endsAt: now.Add(12 * 24 * time.Hour), demotedAt: &demotedAt})
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_converted", endsAt: now.Add(18 * 24 * time.Hour), convertedAt: &convertedAt})
-	// A past ends_at is the shape the sweeper actually writes, since it demotes
-	// only trials that already ended. It catches the same misordering reporting
-	// them as expired.
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_demoted_past", endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt})
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_trial_converted_past", endsAt: now.Add(-10 * 24 * time.Hour), convertedAt: &convertedAt})
 
@@ -391,8 +384,6 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 		require.NotNil(t, org.TrialState, "organization %s has no trial state", id)
 		require.Equal(t, want, *org.TrialState, "list trial state for %s", id)
 
-		// The detail path must join trials the same way, or an operator sees a
-		// different state depending on which page they opened.
 		detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: id})
 		require.NoError(t, err)
 		require.NotNil(t, detail.TrialState)
@@ -408,7 +399,7 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 		require.NotNil(t, byID[id].TrialEndsAt, "organization %s should report its trial end date", id)
 	}
 
-	// This slice expands only: the vestigial free trial fields stay on the API.
+	// Expand only: the old free trial fields stay on the API.
 	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
 	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }

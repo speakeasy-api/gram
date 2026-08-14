@@ -23,8 +23,7 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
-    -- Kept identical to AdminListOrganizations so the detail page and the list
-    -- row can never disagree about an organization's trial state.
+    -- Must stay identical to AdminListOrganizations.
     CASE
         WHEN t.organization_id IS NULL THEN 'none'
         WHEN t.converted_at IS NOT NULL THEN 'converted'
@@ -271,11 +270,8 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
-    -- A converted or demoted trial keeps a future ends_at, so both are tested
-    -- ahead of the dates. now() is the transaction timestamp, so every row in
-    -- one response is classified against the same instant; clock_timestamp()
-    -- advances mid-scan and could split the seven-day boundary. The joined
-    -- trials table is keyed by organization_id, so it cannot multiply rows.
+    -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+    -- now(), not clock_timestamp(): one instant classifies every row in the response.
     CASE
         WHEN t.organization_id IS NULL THEN 'none'
         WHEN t.converted_at IS NOT NULL THEN 'converted'
