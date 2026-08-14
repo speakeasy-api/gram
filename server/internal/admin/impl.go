@@ -411,8 +411,14 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	accountTypes, disabledStates := listOrganizationsFilters(payload)
 
+	// Trimmed once for both queries. A pasted id commonly arrives with the
+	// newline that ended the line it was copied from, and no arm matches through
+	// it; the id arms because they compare exactly, the name and slug arms
+	// because the whitespace lands inside the pattern.
+	searchTerm := conv.PtrToPGTextTrimmed(payload.Q)
+
 	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
-		Q:              conv.PtrToPGText(payload.Q),
+		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
@@ -430,7 +436,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// a count, and in cursor mode the page query has already discarded everything
 	// before the cursor.
 	total, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{
-		Q:              conv.PtrToPGText(payload.Q),
+		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
