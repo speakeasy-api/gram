@@ -23,7 +23,10 @@ shorten it. A count outside 1 to 365 is refused in the dialog, with the reason,
 before a request the server would reject leaves the browser.
 
 The list repaints from what the write answered, with no second request behind
-it, so the row and the panel show the new state as soon as it lands.
+it, so the row and the panel show the new state as soon as it lands. A read
+already in flight when the operator acts is dropped rather than left to finish,
+because it answers with the row as it was and would put that back over the
+write.
 
 A write that failed says why. A write made from a dialog reports inside that
 dialog. Re-enable has no dialog, so its failure raises a message above the list

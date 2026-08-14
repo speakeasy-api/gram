@@ -7,6 +7,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import {
+  cancelOrganizationFetches,
   organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
@@ -76,10 +77,15 @@ type OrganizationWrite<TVariables> = UseMutationResult<
 // All three writes answer with the organization in its new state and all three
 // put it in the cache the same way, so the list and the peek repaint from the
 // response with no refetch behind them.
+//
+// All three drop the reads already in flight first. React Query awaits
+// `onMutate` before it sends the request, so the stale fetch is cancelled
+// before the write leaves rather than racing it home.
 export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => disableOrganization({ id }),
+    onMutate: (id) => cancelOrganizationFetches(qc, id),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
   });
 }
@@ -88,6 +94,7 @@ export function useEnableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => enableOrganization({ id }),
+    onMutate: (id) => cancelOrganizationFetches(qc, id),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
   });
 }
@@ -98,6 +105,7 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
     // Wrapped, so the body is the only argument the client is handed: the
     // mutation passes its own context as a second one.
     mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
+    onMutate: (body) => cancelOrganizationFetches(qc, body.id),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
   });
 }

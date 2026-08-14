@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import {
+  cancelOrganizationFetches,
   organizationQuery,
   organizationsListQuery,
   writeOrganizationToCache,
@@ -148,5 +149,34 @@ describe("writeOrganizationToCache", () => {
     // or rebuilt from rows that had not changed; what it rules out is a write
     // that lands on a page the record is not on.
     expect(qc.getQueryData(page.queryKey)).toBe(before);
+  });
+
+  // The write is only as good as the reads it outlives. A list fetch that was
+  // already open when the operator acted answers with the row as it was, and
+  // React Query commits that answer whenever it arrives, so without the cancel
+  // it lands on top of the write and the organization reads as though nothing
+  // happened.
+  it("survives a read that was already in flight when it landed", async () => {
+    const qc = new QueryClient();
+    const page = organizationsListQuery();
+    qc.setQueryData(page.queryKey, { organizations: [LIVE] });
+
+    let land: (result: ListOrganizationsResult) => void = () => {};
+    const stale = new Promise<ListOrganizationsResult>((resolve) => {
+      land = resolve;
+    });
+
+    // Asked before the write, and still open when the write comes back.
+    const inFlight = qc.prefetchQuery({ ...page, queryFn: () => stale });
+
+    await cancelOrganizationFetches(qc, DISABLED.id);
+    writeOrganizationToCache(qc, DISABLED);
+
+    // The stale answer arrives late, carrying the row in its pre-write state.
+    land({ organizations: [LIVE] });
+    await inFlight;
+
+    const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);
+    expect(after?.organizations[0]).toEqual(DISABLED);
   });
 });

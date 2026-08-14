@@ -93,6 +93,29 @@ export function organizationMembersQuery(
   });
 }
 
+// Called before a write goes out, because a read already in flight outlives it.
+// React Query commits whatever a request answers whenever it lands, so a list
+// fetch that started before the write returns the row in its old state
+// afterwards and undoes what the write just put in the cache. The row then
+// reads as though the write never happened, until something fetches that page
+// again.
+//
+// That window is ordinary rather than exotic: the list query sets no staleTime,
+// so returning to the tab starts a refetch, and the operator's next press lands
+// while it is still open.
+//
+// Cancelling rather than awaiting, because the answer is already stale: it was
+// asked before the write the operator just made.
+export function cancelOrganizationFetches(
+  qc: QueryClient,
+  id: string,
+): Promise<void> {
+  return Promise.all([
+    qc.cancelQueries({ queryKey: organizationsListQuery().queryKey }),
+    qc.cancelQueries({ queryKey: organizationQuery(id).queryKey }),
+  ]).then(() => undefined);
+}
+
 // Every admin write answers with the organization in its new state, so the
 // caches that hold that record are written from the response. A refetch would
 // be the alternative, and the list is cursor-paged and filtered: refetching it
