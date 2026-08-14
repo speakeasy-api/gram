@@ -13,36 +13,14 @@ import { PeekTrigger } from "./PeekTrigger";
 
 const column = createColumnHelper<DataTableFeatures, AdminOrganization>();
 
+// `w-px` shrinks the column to its content, so the pin does not read as a
+// gutter. The header row is already `z-10`, so this stays under it.
+const PINNED_RIGHT = "sticky right-0 z-1 w-px";
+
 // Module scope gives the array one identity for the life of the tab, so the
 // table does not rebuild its column model on every render. The header of each
 // column doubles as its label in the Columns control.
 export const ORG_COLUMNS = column.columns([
-  // First, not last: peek hides five columns while it is open, so a trailing
-  // control would slide sideways at the moment the operator is using it.
-  column.display({
-    id: "peek",
-    // A plain string, so the Columns control lists it as "Peek" rather than
-    // falling back to the column id.
-    header: "Peek",
-    // Hiding the control would put peek back out of reach of the keyboard.
-    enableHiding: false,
-    cell: ({ row }) => <PeekTrigger org={row.original} />,
-  }),
-  // Beside peek rather than trailing the row, for the reason above: the row
-  // menu is the control an operator reaches for while peek is open, and it is
-  // the five hidden columns' width away from where it was if it sits last.
-  //
-  // Deliberately in neither PEEK_HIDDEN_COLUMNS nor PEEK_COLUMN_OVERRIDES: an
-  // open peek is no reason to take the other rows' actions away, and hiding a
-  // control the Columns menu cannot bring back would strand it.
-  column.display({
-    id: "actions",
-    header: "Actions",
-    // Hiding the menu would put disable, re-enable and extend out of reach for
-    // the whole list, and the peek panel's copy of them covers one record.
-    enableHiding: false,
-    cell: ({ row }) => <OrganizationActions org={row.original} layout="menu" />,
-  }),
   column.accessor("name", {
     header: "Name",
     // The link, not the row, carries the keyboard path and the accessible
@@ -115,6 +93,27 @@ export const ORG_COLUMNS = column.columns([
     header: "Created",
     cell: ({ row }) => (
       <span className="text-sm">{fmtDateShort(row.original.created_at)}</span>
+    ),
+  }),
+  // Pinned, not merely last: the list is wider than most windows, so a column
+  // that scrolled would start life off the right edge, out of reach until the
+  // operator scrolled sideways to find it.
+  column.display({
+    id: "actions",
+    header: "Actions",
+    // Hiding it would put peek and every write out of reach of the whole list.
+    enableHiding: false,
+    meta: {
+      headClassName: cn(PINNED_RIGHT, "bg-muted"),
+      // Inherited, so the pinned cell repaints with the row rather than reading
+      // as a flat stripe over the peeked row's own colour.
+      cellClassName: cn(PINNED_RIGHT, "bg-inherit"),
+    },
+    cell: ({ row }) => (
+      <div className="flex items-center gap-1">
+        <PeekTrigger org={row.original} />
+        <OrganizationActions org={row.original} layout="menu" />
+      </div>
     ),
   }),
 ]);
