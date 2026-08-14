@@ -318,10 +318,11 @@ jobs:
 
       # hk.pkl amends a pkl package hosted on github.com, so evaluating the
       # config is a network call on every run. Cache it against a blip there.
+      # Namespaced by runner provider, as the other cache families are.
       - name: Cache pkl packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: pkl-1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
+          key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
           path: ~/.pkl/cache
 
       - name: Check formatting
