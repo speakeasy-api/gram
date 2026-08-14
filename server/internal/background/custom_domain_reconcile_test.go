@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
@@ -172,4 +173,43 @@ func TestCustomDomainRegistrationWorkflowUsesReconcileBridgeBudget(t *testing.T)
 	require.Equal(t, signalCustomDomainReconcileActivityMaximumAttempts, bridgeAttempts)
 	require.Greater(t, bridgeTimeout, 11*time.Minute)
 	require.LessOrEqual(t, bridgeTimeout, signalCustomDomainReconcileStartToCloseTimeout)
+}
+
+func TestCustomDomainRegistrationWorkflow_DNSNotFoundIsBenign(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(
+		func(context.Context, activities.VerifyCustomDomainArgs) error {
+			return temporal.NewApplicationErrorWithOptions(
+				"DNS record not found for missing.example.com",
+				activities.ErrTypeDNSNotFound,
+				temporal.ApplicationErrorOptions{
+					NonRetryable: true,
+					Category:     temporal.ApplicationErrorCategoryBenign,
+				},
+			)
+		},
+		activity.RegisterOptions{Name: "VerifyCustomDomain"},
+	)
+
+	env.ExecuteWorkflow(CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
+		OrgID:           "test-organization",
+		Domain:          "missing.example.com",
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: k8s.ProvisionerKindIngress,
+		IPAllowlist:     nil,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
+	require.True(t, appErr.NonRetryable())
+	require.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
 }

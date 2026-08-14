@@ -435,6 +435,8 @@ func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndA(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
 	require.True(t, appErr.NonRetryable(), "DNS-not-found should be non-retryable")
+	require.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
+	require.True(t, activities.IsDNSNotFound(err))
 	require.Contains(t, err.Error(), domain)
 }
 
@@ -464,6 +466,8 @@ func TestVerifyCustomDomain_NXDOMAINOnTXT(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
 	require.True(t, appErr.NonRetryable(), "DNS-not-found should be non-retryable")
+	require.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
+	require.True(t, activities.IsDNSNotFound(err))
 	require.Contains(t, err.Error(), txtName)
 }
 

@@ -193,6 +193,10 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 		},
 	).Get(ctx, nil)
 	if err != nil {
+		if activities.IsDNSNotFound(err) {
+			logger.Info("custom domain DNS not found, skipping verification retries", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
+			return asBenignWorkflowError(err)
+		}
 		logger.Error("failed to verify custom domain", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
 		return fmt.Errorf("failed to verify custom domain: %w", err)
 	}

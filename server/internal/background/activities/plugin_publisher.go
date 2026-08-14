@@ -106,7 +106,11 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 			if se, ok := err.(interface{ String() string }); ok {
 				detail = se.String()
 			}
-			return nil, temporal.NewNonRetryableApplicationError(detail, ErrTypeGitHubRepoConflict, err)
+			return nil, temporal.NewApplicationErrorWithOptions(detail, ErrTypeGitHubRepoConflict, temporal.ApplicationErrorOptions{
+				NonRetryable: true,
+				Category:     temporal.ApplicationErrorCategoryBenign,
+				Cause:        err,
+			})
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}

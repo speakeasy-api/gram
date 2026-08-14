@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
@@ -305,6 +306,41 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.ElementsMatch(t, candidateSyncIDs(candidates), synced)
+}
+
+func TestAIUsagePollerWorkflow_NonRetryablePollIsBenign(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	syncID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	env.RegisterWorkflow(AIUsagePollerWorkflow)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ string) error {
+			return temporal.NewApplicationErrorWithOptions(
+				"cursor rejected the configured api key",
+				activities.ErrTypeAIUsagePollFailed,
+				temporal.ApplicationErrorOptions{
+					NonRetryable: true,
+					Category:     temporal.ApplicationErrorCategoryBenign,
+				},
+			)
+		},
+		activity.RegisterOptions{Name: "PollAIData"},
+	)
+
+	env.ExecuteWorkflow(AIUsagePollerWorkflow, syncID.String())
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, activities.ErrTypeAIUsagePollFailed, appErr.Type())
+	require.True(t, appErr.NonRetryable())
+	require.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
 }
 
 func candidateSyncIDs(candidates []aiintegrations.UsagePollCandidate) []string {
