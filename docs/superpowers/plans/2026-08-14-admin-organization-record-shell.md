@@ -1273,9 +1273,32 @@ dry run agrees, but two of them are not real here:
   `--view`). This repo formats dates through `fmtDateShort`, and a global
   constraint requires it. **Do not add `date-fns`.**
 
-Add it through the `admin-shadcn` skill: `aube dlx shadcn@latest add calendar -c client/admin`.
+**Add the dependency with pnpm, not with aube.** `packageManager` is
+`pnpm@11.19.0` and `mise.toml` pins a real pnpm on PATH, so pnpm is what writes
+this lockfile, and every clean dependency add in the repo's history is pnpm's.
+`aube add` and `aube install` re-resolve the whole tree on write: 1456 lines of
+churn, admin's `radix-ui` pushed from 1.6.7 down to 1.6.0, and the
+`@gram-ai/functions` workspace link broken. That is an aube-only fault, and it is
+why this task looked blocked for most of a day.
+
 Check `pnpm-workspace.yaml` for a `catalog:` entry first and use `catalog:` if
-one exists.
+one exists. Otherwise run exactly this, verified end to end on 2026-08-14:
+
+```bash
+cd client/admin && CI=true mise exec -- pnpm add react-day-picker --lockfile-only
+cd ../.. && aube install --frozen-lockfile
+```
+
+`--lockfile-only` keeps pnpm away from the aube-shaped `node_modules`, and
+`aube install --frozen-lockfile` then materialises the package and leaves the
+lockfile byte-identical. Measured result: 43 insertions, 16 deletions,
+`@gram-ai/functions` untouched, no `radix-ui` move, 391 tests still passing.
+
+`shadcn add` cannot install anything here. It shells out to bare `pnpm add`,
+which dies on the aube-shaped `node_modules` with `ERR_PNPM_HOIST_PATTERN_DIFF`,
+and it has no flag to change that. With the dependency already present its file
+write proceeds normally, so run the two commands above **first**, then
+`aube dlx shadcn@latest add calendar -c client/admin`.
 
 - [ ] **Step 0: The two checks that make the dependency safe**
 
