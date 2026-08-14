@@ -389,6 +389,25 @@ func TestSetSyncScheduleDisabledReenableMakesFailingScheduleDue(t *testing.T) {
 	require.LessOrEqual(t, reenabled.NextPollAfter, time.Now().Add(time.Second))
 }
 
+func TestSetSyncScheduleDisabledAlreadyEnabledKeepsFailureBackoff(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("compliance feed unavailable")
+	for range 3 {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now().UTC(), cause, 0))
+	}
+	backedOff := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
+
+	stillEnabled := setScheduleDisabled(t, ctx, conn, store, created.Config.ID, ScheduleAnthropicCompliance, false)
+
+	require.Equal(t, backedOff.NextPollAfter, stillEnabled.NextPollAfter)
+}
+
 func findSyncSchedule(t *testing.T, ctx context.Context, store *Store, configID uuid.UUID, schedule string) SyncSchedule {
 	t.Helper()
 
