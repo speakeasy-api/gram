@@ -436,8 +436,8 @@ var _ = Service("admin", func() {
 	// The one positional effect that is real is the one disableOrganization
 	// above documents: the OpenAPI emitter deduplicates structurally identical
 	// request bodies and names the shared schema after whichever method it met
-	// first. This payload's {id, days} shape is unique, so it needs no
-	// openapi:typename.
+	// first. rearmTrial below shares this {id, days} shape and carries the
+	// explicit typename, so this one keeps the generated name.
 	Method("extendTrial", func() {
 		Description("Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.")
 
@@ -500,6 +500,7 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminCreateOrganization")
 	})
 
+	// Appended, not inserted: see the note above extendTrial. New methods go last.
 	Method("rearmTrial", func() {
 		Description("Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.")
 
@@ -507,18 +508,13 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("id", "days")
 
-			// Structurally identical to extendTrial's body, and the OpenAPI
-			// emitter deduplicates request bodies by shape and keeps the first
-			// name it registered. Without this the schema would come out named
-			// after extend, so an operator reading the spec would see re-arm
-			// documented as an extension.
+			// Shares extendTrial's body shape, and the OpenAPI emitter names a
+			// deduplicated schema after the first method it met.
 			Meta("openapi:typename", "RearmTrialRequestBody")
 
 			Attribute("id", String, "Organization ID.", func() {
 				MinLength(1)
 			})
-			// Counted from now rather than added to the trial's current end
-			// date, which is always in the past on a demoted trial.
 			Attribute("days", Int, "Number of days the re-armed trial runs for, counted from now.", func() {
 				Minimum(constants.MinTrialRearmDays)
 				Maximum(constants.MaxTrialRearmDays)

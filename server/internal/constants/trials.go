@@ -10,11 +10,8 @@ const MinTrialExtensionDays = 1
 // keeps the ends_at arithmetic far away from what timestamptz can hold.
 const MaxTrialExtensionDays = 365
 
-// MinTrialRearmDays and MaxTrialRearmDays bound the runway a re-arm grants. A
-// re-arm counts its days from now rather than from the trial's old end date, so
-// the two operations bound different arithmetic, but the reasons for both ends
-// of the range are the extension's reasons unchanged. They are written as
-// aliases so a future divergence is a deliberate edit rather than a silent one.
+// MinTrialRearmDays and MaxTrialRearmDays bound the runway a re-arm grants.
+// Aliases, so a divergence from the extension bounds has to be a deliberate edit.
 const (
 	MinTrialRearmDays = MinTrialExtensionDays
 	MaxTrialRearmDays = MaxTrialExtensionDays

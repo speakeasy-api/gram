@@ -181,12 +181,9 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: false,
 		},
-		// The three below are the server's own flags under the server's own
-		// names and environment variables, so a deployment that already runs
-		// gram-server needs no new secrets to re-arm a trial. The encryption
-		// key is the application-wide one, not admin-encryption-key: that key
-		// wraps admin session tokens, and openrouter_api_keys rows are sealed
-		// with this one.
+		// The server's own flag names and environment variables, so a deployment
+		// already running gram-server needs no new secrets. The encryption key
+		// is the application-wide one, not admin-encryption-key.
 		&cli.StringFlag{
 			Name:     "encryption-key",
 			Usage:    "Key for App level AES encryption/decryption",

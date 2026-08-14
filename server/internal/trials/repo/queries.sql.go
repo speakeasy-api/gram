@@ -102,23 +102,11 @@ type ExtendTrialParams struct {
 //   - converted_at IS NULL is load-bearing. A mid-trial conversion leaves ends_at
 //     in the future, so nothing else would reject it.
 //   - ends_at > clock_timestamp() is load-bearing. It is the ordinary case.
-//   - demoted_at IS NULL is not load-bearing. It is defence in depth, and
-//     AGE-3208 did not change that. No writer produces a row where demoted_at is
-//     set and ends_at is in the future, so the ends_at condition already rejects
-//     every demoted row this query can meet. MarkTrialDemoted only demotes an
-//     already-expired trial; this query cannot move a demoted row forward
-//     because it excludes one; the arming path inserts a null stamp; and
-//     RearmTrial below clears demoted_at and moves ends_at in the same UPDATE,
-//     so it never leaves the two disagreeing either. Only InsertTrialFixture can
-//     build that row, which is why the tests walk the state space rather than
-//     trusting the reachable half of it.
+//   - demoted_at IS NULL is defence in depth: no writer leaves demoted_at set
+//     with ends_at in the future.
 //
-// Extending a demoted trial is deliberately not the same as re-arming it. A
-// re-arm has to revive the organization's model provider keys and restore the
-// account type and whitelist flag that demotion overwrote, all of which
-// RearmTrial and its handler do and none of which belong in a query that moves
-// an end date. Clearing demoted_at here alone would advertise a running trial
-// whose keys stay dead (AGE-3208).
+// Extending a demoted trial is not re-arming it: a re-arm also revives the
+// model provider keys and restores the account type. See RearmTrial.
 //
 // Two things this query deliberately does not check:
 //
@@ -229,9 +217,7 @@ type InsertTrialFixtureParams struct {
 	DemotedAt      pgtype.Timestamptz
 }
 
-// Test-only fixture for exercising active trial lifecycle states. tier is a
-// parameter rather than the literal enterprise it once was, so a test can pin
-// that a re-arm restores the tier the trial grants rather than a hardcoded one.
+// Test-only fixture for exercising active trial lifecycle states.
 func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertTrialFixture,
 		arg.OrganizationID,
@@ -340,58 +326,14 @@ type RearmTrialRow struct {
 }
 
 // Operator-initiated reinstatement of a demoted trial. Returns the tier the
-// trial grants, which the handler writes back onto the organization. The
-// demotion's audit entry does record the account type it overwrote, in its
-// previous_account_type metadata, but that is a fact about one past moment
-// rather than a statement of what the organization is owed: other paths write
-// gram_account_type between the demotion and the re-arm, mv.DescribeOrganization
-// on every auth with a Polar customer tier for one, and none of them revise that
-// entry. Reading it back would also mean finding the right entry in the whole
-// feed and parsing its metadata. The trial's own tier is the durable answer, and
-// it moves when the trial's terms move.
+// trial grants, which the handler writes back onto the organization.
 //
-// The new end date comes back with the tier so the audit entry records the date
-// the database actually wrote rather than one recomputed from a second clock.
+// ends_at moves to a window measured from now, not left where it is:
+// MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
+// alone leaves a row the next sweep demotes again.
 //
-// ends_at moves to a fresh window measured from now rather than being left
-// where it was. Leaving it alone is not an option: MarkTrialDemoted only ever
-// demotes a trial whose ends_at is already in the past, so a re-arm that
-// cleared demoted_at and nothing else would put the row straight back into
-// ListExpiredTrials, and the next sweep would demote it and take the keys down
-// again. Nor could the operator rescue it with ExtendTrial afterwards, because
-// that query requires ends_at > clock_timestamp(), which such a row fails.
-// Adding to the old ends_at has the same defect: it is in the past by an
-// unknown amount, so the sum can still land in the past.
-//
-// Only a demoted trial can be re-armed, and the conditions are here rather than
-// in the handler for ExtendTrial's reason: the database enforces them. The two
-// are not equally load-bearing:
-//
-//   - demoted_at IS NOT NULL decides every outcome this query has today. It is
-//     what rejects a running trial, and so what keeps this from being a second,
-//     weaker extend that ignores the bounds on the current end date.
-//   - converted_at IS NULL protects nothing today, because nothing sets the
-//     column. MarkTrialConverted has no production caller; only tests and
-//     InsertTrialFixture write converted_at, so no reachable row can be both
-//     demoted and converted. The condition is written for the conversion path
-//     that will call it, and it is not implied by the other one: a trial can
-//     convert after it was demoted, and on that day this is what stops a signed
-//     customer being dragged back onto a trial. Until then it is a stated
-//     intention, not a guard.
-//
-// Nothing checks tier, for the reason ExtendTrial gives, and nothing checks
-// organization_metadata.disabled_at, also for the reason ExtendTrial gives.
-//
-// A re-arm and a concurrent sweep cannot both take effect, and no lock ordering
-// is involved. The two statements have disjoint predicates on demoted_at, each
-// re-evaluated against the snapshot its own statement takes: while this
-// transaction is open and uncommitted, MarkTrialDemoted still sees the old row
-// version with demoted_at set, fails its demoted_at IS NULL condition and
-// updates nothing, so it never waits on the row this holds. Afterwards the
-// moved ends_at is what protects the re-arm: a sweep arriving once this commits
-// passes demoted_at IS NULL but fails ends_at < clock_timestamp(). That is a
-// second reason ends_at has to move, on top of the sweep that would otherwise
-// fire on the very next tick.
+// converted_at IS NULL guards nothing today, because MarkTrialConverted has no
+// production caller. It is written for the conversion path that will (AGE-3218).
 func (q *Queries) RearmTrial(ctx context.Context, arg RearmTrialParams) (RearmTrialRow, error) {
 	row := q.db.QueryRow(ctx, rearmTrial, arg.RearmForDays, arg.OrganizationID)
 	var i RearmTrialRow
@@ -418,15 +360,9 @@ type RestoreOrganizationFromTrialRow struct {
 	Slug string
 }
 
-// Undoes DemoteOrganizationToFree's two writes. whitelisted is restored
-// unconditionally rather than left alone, because demotion cleared it and the
-// signup arming path never sets it: that path runs on an organization that was
-// whitelisted already, so replaying it would leave a re-armed organization on
-// the enterprise tier and still behind the book-a-demo gate.
-//
-// The account type is a parameter rather than a literal so it comes from the
-// trial's tier. A literal would be right only for as long as enterprise is the
-// only tier written, and schema.sql already anticipates others.
+// Undoes DemoteOrganizationToFree's two writes. whitelisted is set
+// unconditionally because demotion cleared it and the signup arming path never
+// writes it, so replaying that path would leave the book-a-demo gate up.
 func (q *Queries) RestoreOrganizationFromTrial(ctx context.Context, arg RestoreOrganizationFromTrialParams) (RestoreOrganizationFromTrialRow, error) {
 	row := q.db.QueryRow(ctx, restoreOrganizationFromTrial, arg.AccountType, arg.OrganizationID)
 	var i RestoreOrganizationFromTrialRow

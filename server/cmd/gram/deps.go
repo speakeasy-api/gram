@@ -647,17 +647,11 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 	}
 }
 
-// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm calls
-// to bring an organization's platform keys back up.
+// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm needs.
+// It degrades rather than refusing to boot, because every other admin endpoint
+// works without OpenRouter; the unavailable case is logged at Error on startup.
 //
-// It degrades rather than refusing to boot: every other admin endpoint works
-// without OpenRouter, and an admin server that will not start takes all of them
-// down over one unset secret. The condition is logged at Error on startup,
-// which is what makes it visible before an operator goes looking.
-//
-// openrouter.New ignores the tracer provider and the billing tracker it is
-// handed, and RefreshAPIKeyLimit never reaches the key refresher, so the nil
-// refresher here is the nil the streams process already passes.
+// The nil arguments are a billing tracker and a key refresher, neither reached.
 func newAdminTrialKeyReviver(
 	ctx context.Context,
 	logger *slog.Logger,

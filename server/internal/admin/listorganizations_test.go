@@ -327,9 +327,7 @@ func TestListOrganizations_FullPageWithFilterEndsTheWalk(t *testing.T) {
 
 type trialFixture struct {
 	orgID string
-	// tier defaults to enterprise, which is the only tier the application
-	// writes today. The re-arm tests set it to something else to pin that the
-	// restored account type is read from the row rather than hardcoded.
+	// tier defaults to enterprise, the only tier the application writes today.
 	tier        string
 	endsAt      time.Time
 	convertedAt *time.Time
