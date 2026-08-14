@@ -5,10 +5,21 @@
 ## Both the Gram server and dashboard (client) are accessed on
 ## https://app.getgram.ai.
 GRAM_SERVER_URL = false
-## The admin dashboard is served from its own origin, so unlike the dashboard
-## it cannot fall back to window.location.origin. One image serves every
-## deployed environment, so this names production.
-GRAM_APP_URL = "https://app.getgram.ai"
+## Deliberately unset, which disables the impersonation link in every deployed
+## environment. impersonationUrl() returns undefined and its callers drop the
+## action, so no operator is offered a link that lies about where it goes.
+##
+## The admin dashboard cannot fall back to window.location.origin the way the
+## dashboard does, because it is served from its own origin. One image serves
+## every deployed environment, so a value here would name production and the
+## dev admin dashboard would send an operator into production data while they
+## believed they were in dev.
+##
+## The slice that adds the row action decides the per-environment channel. The
+## admin image has no envsubst pass today: `client/admin/Dockerfile` says it
+## needs none, because it otherwise talks to its API same-origin. This would be
+## the first cross-origin URL baked into the bundle.
+GRAM_APP_URL = false
 ## GRAM_API_URL is used primarily during local development. That may change in
 ## the future when we create separate builds per environment but until then we
 ## should unset it so it is not baked into bundles built with vite.
