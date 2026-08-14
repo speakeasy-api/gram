@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useId,
+  useRef,
   useState,
   type FormEvent,
   type JSX,
@@ -46,26 +47,42 @@ const DEFAULT_EXTENSION_DAYS = 14;
 const BOUNDS_HINT = `Enter a whole number of days between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}.`;
 
 /**
- * The list owns the only live region on the page, and these controls are drawn
- * inside table cells the list cannot pass props to, so the announcer reaches
- * them through context the way the peek controls do.
+ * How these controls report a write.
+ *
+ * The list owns both surfaces a write can report on, the live region and the
+ * failure banner, and these controls are drawn inside table cells the list
+ * cannot pass props to, so they reach them through context the way the peek
+ * controls do.
  *
  * The default is a no-op rather than a throw: the peek panel renders these
  * actions too and it is mounted on its own in tests.
  */
-const AnnounceContext = createContext<(text: string) => void>(() => {});
+export type WriteReporter = {
+  // Speaks. Every write ends in one of these, whether it succeeded or not.
+  announce: (text: string) => void;
+  // Shows, and only for a failure with no dialog of its own to report in.
+  // `null` clears whatever is showing.
+  showFailure: (text: string | null) => void;
+};
 
-export function AnnounceProvider({
+const NO_REPORTER: WriteReporter = {
+  announce: () => {},
+  showFailure: () => {},
+};
+
+const WriteReportContext = createContext<WriteReporter>(NO_REPORTER);
+
+export function WriteReportProvider({
   value,
   children,
 }: {
-  value: (text: string) => void;
+  value: WriteReporter;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <AnnounceContext.Provider value={value}>
+    <WriteReportContext.Provider value={value}>
       {children}
-    </AnnounceContext.Provider>
+    </WriteReportContext.Provider>
   );
 }
 
@@ -85,7 +102,7 @@ export function OrganizationActions({
   org: AdminOrganization;
   layout: "menu" | "footer";
 }): JSX.Element {
-  const announce = useContext(AnnounceContext);
+  const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
 
   // Held here rather than in the dialogs. A dialog unmounts as it closes, and
@@ -97,7 +114,20 @@ export function OrganizationActions({
   const isDisabled = Boolean(org.disabled_at);
   const busy = disable.isPending || enable.isPending || extend.isPending;
 
-  const openDialog = (dialog: OpenDialog): void => {
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+
+  // Where the keyboard goes when a dialog closes. Radix restores focus to a
+  // `DialogTrigger`, and these dialogs have none: its `onCloseAutoFocus`
+  // cancels FocusScope's own restore and then focuses `triggerRef.current`,
+  // which is null here, so without this every close drops the keyboard onto
+  // `document.body`. The control that opened the dialog is still mounted on
+  // all six exit paths, the peek footer button being the same node after the
+  // write it started, so one handler covers success, Escape, Cancel, the
+  // backdrop and the X.
+  const openedFrom = useRef<HTMLElement | null>(null);
+
+  const openDialog = (dialog: OpenDialog, from: HTMLElement | null): void => {
+    openedFrom.current = from;
     // A failure the operator cancelled out of is not one the next attempt
     // should open holding.
     disable.reset();
@@ -105,10 +135,20 @@ export function OrganizationActions({
     setOpen(dialog);
   };
 
+  const restoreFocus = (event: Event): void => {
+    const control = openedFrom.current;
+    // A control that has left the page is not somewhere to put the keyboard.
+    // Radix's own restore is no better in that case, so this leaves it alone.
+    if (!control?.isConnected) return;
+    event.preventDefault();
+    control.focus();
+  };
+
   const runDisable = (): void => {
     disable.mutate(org.id, {
       onSuccess: () => {
         setOpen(undefined);
+        showFailure(null);
         announce(`${org.name} is disabled.`);
       },
       // The dialog stays open and carries the same failure, because that is
@@ -120,9 +160,18 @@ export function OrganizationActions({
 
   const runEnable = (): void => {
     enable.mutate(org.id, {
-      onSuccess: () => announce(`${org.name} is enabled.`),
-      onError: (error) =>
-        announce(`Could not re-enable ${org.name}: ${errorMessage(error)}`),
+      onSuccess: () => {
+        showFailure(null);
+        announce(`${org.name} is enabled.`);
+      },
+      // The one write with no dialog, so its failure is shown as well as
+      // spoken. Without the banner the only account of it on the page is
+      // inside a region no sighted operator reads.
+      onError: (error) => {
+        const text = `Could not re-enable ${org.name}: ${errorMessage(error)}`;
+        announce(text);
+        showFailure(text);
+      },
     });
   };
 
@@ -132,6 +181,7 @@ export function OrganizationActions({
       {
         onSuccess: () => {
           setOpen(undefined);
+          showFailure(null);
           announce(`${org.name} trial extended by ${dayCount(days)}.`);
         },
         onError: (error) =>
@@ -150,6 +200,7 @@ export function OrganizationActions({
           pending={disable.isPending}
           failure={disable.error}
           onCancel={() => setOpen(undefined)}
+          onCloseAutoFocus={restoreFocus}
           onConfirm={runDisable}
         />
       )}
@@ -159,6 +210,7 @@ export function OrganizationActions({
           pending={extend.isPending}
           failure={extend.error}
           onCancel={() => setOpen(undefined)}
+          onCloseAutoFocus={restoreFocus}
           onSubmit={runExtend}
         />
       )}
@@ -180,7 +232,12 @@ export function OrganizationActions({
   if (layout === "footer") {
     return contain(
       <>
-        {/* Live while a write is in flight, and marked busy instead. Disabling
+        {/* Named for the record, the same way the row menu trigger is. The
+            panel's own name is the constant "Organization peek" and it swaps
+            records under itself, so a bare "Disable" reaches a screen reader
+            with nothing saying which organization it acts on.
+
+            Live while a write is in flight, and marked busy instead. Disabling
             the control the operator just pressed drops the keyboard onto the
             body, and re-enabling is idempotent, so a second press costs a
             request and nothing else. */}
@@ -188,6 +245,7 @@ export function OrganizationActions({
           <Button
             variant="outline"
             size="xs"
+            aria-label={`Re-enable ${org.name}`}
             aria-busy={busy}
             onClick={runEnable}
           >
@@ -197,8 +255,9 @@ export function OrganizationActions({
           <Button
             variant="outline"
             size="xs"
+            aria-label={`Disable ${org.name}`}
             aria-busy={busy}
-            onClick={() => openDialog("disable")}
+            onClick={(event) => openDialog("disable", event.currentTarget)}
           >
             Disable
           </Button>
@@ -207,8 +266,9 @@ export function OrganizationActions({
           <Button
             variant="outline"
             size="xs"
+            aria-label={`Extend trial for ${org.name}`}
             aria-busy={busy}
-            onClick={() => openDialog("extend")}
+            onClick={(event) => openDialog("extend", event.currentTarget)}
           >
             Extend trial
           </Button>
@@ -225,6 +285,7 @@ export function OrganizationActions({
           {/* Named for the record, because a table full of identical "Actions"
               buttons tells a screen reader nothing about which row it is on. */}
           <Button
+            ref={menuTrigger}
             variant="ghost"
             size="icon-xs"
             aria-label={`Actions for ${org.name}`}
@@ -242,13 +303,20 @@ export function OrganizationActions({
               // Opens the confirmation. The write waits for it: disabling cuts
               // a customer off, and this menu sits one row away from four
               // others.
-              onSelect={() => openDialog("disable")}
+              //
+              // The trigger, not the item this fires on: the menu closes with
+              // the dialog opening and takes the item down with it, and the
+              // dialog has to give the keyboard back to something still on the
+              // page.
+              onSelect={() => openDialog("disable", menuTrigger.current)}
             >
               Disable
             </DropdownMenuItem>
           )}
           {canExtendTrial(org) && (
-            <DropdownMenuItem onSelect={() => openDialog("extend")}>
+            <DropdownMenuItem
+              onSelect={() => openDialog("extend", menuTrigger.current)}
+            >
               Extend trial
             </DropdownMenuItem>
           )}
@@ -265,9 +333,15 @@ function dayCount(days: number): string {
 
 // A modal takes the rest of the page out of the accessibility tree, the live
 // region included, so a failure the operator is looking at needs its own.
-function Failure({ children }: { children: ReactNode }): JSX.Element {
+function Failure({
+  id,
+  children,
+}: {
+  id?: string;
+  children: ReactNode;
+}): JSX.Element {
   return (
-    <p role="alert" className="text-destructive text-sm">
+    <p id={id} role="alert" className="text-destructive text-sm">
       {children}
     </p>
   );
@@ -278,12 +352,14 @@ function ConfirmDisable({
   pending,
   failure,
   onCancel,
+  onCloseAutoFocus,
   onConfirm,
 }: {
   org: AdminOrganization;
   pending: boolean;
   failure: Error | null;
   onCancel: () => void;
+  onCloseAutoFocus: (event: Event) => void;
   onConfirm: () => void;
 }): JSX.Element {
   return (
@@ -296,7 +372,7 @@ function ConfirmDisable({
         if (!next && !pending) onCancel();
       }}
     >
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Disable {org.name}?</DialogTitle>
           <DialogDescription>
@@ -333,17 +409,21 @@ function ExtendTrial({
   pending,
   failure,
   onCancel,
+  onCloseAutoFocus,
   onSubmit,
 }: {
   org: AdminOrganization;
   pending: boolean;
   failure: Error | null;
   onCancel: () => void;
+  onCloseAutoFocus: (event: Event) => void;
   onSubmit: (days: number) => void;
 }): JSX.Element {
+  const { announce } = useContext(WriteReportContext);
   const [days, setDays] = useState(String(DEFAULT_EXTENSION_DAYS));
   const [rejected, setRejected] = useState(false);
   const fieldID = useId();
+  const messageID = useId();
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
@@ -357,6 +437,12 @@ function ExtendTrial({
       parsed > MAX_TRIAL_EXTENSION_DAYS
     ) {
       setRejected(true);
+      // Spoken as well as shown, because showing it a second time shows
+      // nothing: the state and the text are both unchanged, so the same press
+      // repeated leaves the DOM untouched and a `role="alert"` announces only
+      // what is inserted or changed. The live region alternates a zero-width
+      // space, so it speaks every time.
+      announce(`Could not extend the trial for ${org.name}: ${BOUNDS_HINT}`);
       return;
     }
     setRejected(false);
@@ -370,7 +456,7 @@ function ExtendTrial({
         if (!next && !pending) onCancel();
       }}
     >
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         {/* noValidate, so a day count outside the bounds is refused in one
             place and reported in one voice. The browser's own bubble says
             something different in every browser, disappears on the next key
@@ -399,13 +485,24 @@ function ExtendTrial({
               value={days}
               disabled={pending}
               aria-invalid={rejected}
+              // Pointed at whichever message is under the field. Without it a
+              // user who tabs back to the input is told it is invalid and not
+              // what would make it valid: the bounds are in the dialog
+              // description and in the alert, and neither is the field's.
+              aria-describedby={rejected || failure ? messageID : undefined}
               onChange={(event) => setDays(event.target.value)}
               className="w-24"
             />
           </div>
 
-          {rejected && <Failure>{BOUNDS_HINT}</Failure>}
-          {!rejected && failure && <Failure>{errorMessage(failure)}</Failure>}
+          {/* One at a time. The bounds refusal is the newer of the two and it
+              is about the value now in the field, so a stale server failure
+              underneath it would give the operator two reasons and no way to
+              tell which one the next press answers. */}
+          {rejected && <Failure id={messageID}>{BOUNDS_HINT}</Failure>}
+          {!rejected && failure && (
+            <Failure id={messageID}>{errorMessage(failure)}</Failure>
+          )}
 
           <DialogFooter>
             <Button

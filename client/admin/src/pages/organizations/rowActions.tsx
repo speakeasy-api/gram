@@ -53,8 +53,15 @@ const EXTENDABLE_TRIAL_STATES: ReadonlySet<TrialState> = new Set([
   "ending_soon",
 ]);
 
+// Not for a disabled organization, whatever its trial says. The server would
+// take the request: nothing there reads disabled_at, and the trial goes on
+// running while every member is locked out. That is the reason to leave the
+// action off. Buying more of a trial nobody can use is an offer the product
+// cannot honour, and re-enabling is one press away for an operator who means
+// to make it real.
 export function canExtendTrial(org: AdminOrganization): boolean {
   return (
+    !org.disabled_at &&
     org.trial_state !== undefined &&
     EXTENDABLE_TRIAL_STATES.has(org.trial_state)
   );
