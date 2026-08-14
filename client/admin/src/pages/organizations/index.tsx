@@ -421,7 +421,7 @@ export function OrganizationsList(): JSX.Element {
               while the operator scrolls the rows they lead to. */}
           <StatStrip />
 
-          <Toolbar searchCleared={searchCleared} />
+          <Toolbar searchCleared={searchCleared} reporter={writeReporter} />
         </FiltersApplied.Provider>
 
         {/* A failed refetch keeps the previous rows, so the failure has to show

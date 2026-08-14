@@ -27,7 +27,9 @@ import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
 import { useApplyFilters } from "./applyFilters";
+import { CreateOrganization } from "./CreateOrganization";
 import { FilterSheet } from "./FilterSheet";
+import type { WriteReporter } from "./OrganizationActions";
 
 const ROUTE_ID = "/organizations/";
 const SEARCH_DEBOUNCE_MS = 300;
@@ -38,9 +40,16 @@ type ToolbarProps = {
    * the debounce reached no URL, so the box has nothing else to notice by.
    */
   searchCleared: number;
+  // Passed straight through to the create control. This row sits outside the
+  // provider the row menu reads, and the live region it speaks through belongs
+  // to the page.
+  reporter: WriteReporter;
 };
 
-export function Toolbar({ searchCleared }: ToolbarProps): JSX.Element {
+export function Toolbar({
+  searchCleared,
+  reporter,
+}: ToolbarProps): JSX.Element {
   const search = useSearch({ from: ROUTE_ID });
   const navigate = useNavigate({ from: ROUTE_ID });
 
@@ -168,6 +177,11 @@ export function Toolbar({ searchCleared }: ToolbarProps): JSX.Element {
           if (group) triggers.current[group]?.focus();
         }}
       />
+
+      {/* Last in the row and the only filled control in it, so it reads as the
+          page's primary action rather than another way to narrow the list. */}
+      <span className="min-w-0 flex-1" />
+      <CreateOrganization reporter={reporter} />
     </div>
   );
 }
