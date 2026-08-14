@@ -46,6 +46,13 @@ function CopyValue({
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  // Peek swaps rows under the same element, so the confirmation would otherwise
+  // stand against an id it was never given.
+  useEffect(() => {
+    clearTimeout(timer.current);
+    setCopied(false);
+  }, [value]);
+
   return (
     <span className="flex items-center gap-1">
       <span className="truncate font-mono text-xs">{value}</span>
@@ -54,6 +61,8 @@ function CopyValue({
         size="icon-xs"
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
         onClick={() => {
+          // Undefined outside a secure context, where the call would throw.
+          if (!navigator.clipboard?.writeText) return;
           // A check over a failed write sends the operator off with the wrong id.
           void navigator.clipboard.writeText(value).then(() => {
             setCopied(true);

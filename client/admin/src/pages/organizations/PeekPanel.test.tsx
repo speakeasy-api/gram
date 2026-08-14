@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, screen } from "@testing-library/react";
-import { act } from "react";
+import { act, useState, type JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminOrganization } from "@/lib/gramAdminApi";
@@ -132,6 +132,59 @@ describe("PeekPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy Org id" }));
 
     expect(writeText).toHaveBeenCalledWith(ORG.id);
+  });
+
+  it("drops the confirmation when peek moves to another record", async () => {
+    const OTHER: AdminOrganization = {
+      ...ORG,
+      id: "org_placeholder_two",
+      name: "Placeholder Two",
+    };
+
+    // Peek swaps the record under a mounted panel, so the test does too rather
+    // than re-rendering, which would reset the state under test on its own.
+    function Peeking(): JSX.Element {
+      const [org, setOrg] = useState(ORG);
+      return (
+        <>
+          <button onClick={() => setOrg(OTHER)}>next record</button>
+          <PeekPanel org={org} onClose={noop} />
+        </>
+      );
+    }
+
+    await renderWithApp(<Peeking />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Org id" }));
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Org id copied" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "next record" }));
+
+    const control = screen.getByRole("button", { name: "Copy Org id" });
+    expect(iconOf(control).classList.contains("lucide-copy")).toBe(true);
+  });
+
+  it("leaves the control inert where the browser gives no clipboard", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+    await renderWithApp(<PeekPanel org={ORG} onClose={noop} />);
+
+    // React reports a throw from a handler as an uncaught error rather than
+    // letting fireEvent raise it, so the listener is what the assertion reads.
+    const uncaught = vi.fn<(event: ErrorEvent) => void>();
+    window.addEventListener("error", uncaught);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Copy Org id" }));
+    } finally {
+      window.removeEventListener("error", uncaught);
+    }
+
+    expect(uncaught).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Copy Org id" })).toBeTruthy();
   });
 
   it("takes focus when it opens, so the keyboard reaches it", async () => {
