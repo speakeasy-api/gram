@@ -218,6 +218,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
+		nil,
 	)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
