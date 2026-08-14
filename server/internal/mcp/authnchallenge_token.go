@@ -242,7 +242,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		d := time.Duration(grant.DesiredSessionDurationHours) * time.Hour
 		desiredSessionDuration = &d
 	}
-	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, desiredSessionDuration, nil, baseURL, logger); err != nil {
+	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, desiredSessionDuration, nil, "", baseURL, logger); err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
 		// lookup, session_duration validation, signing, or persisting the
 		// user_sessions row — so no token reached the client and failed is
@@ -261,16 +261,20 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	return nil
 }
 
-// handleTokenRefreshTokenGrant implements RFC 6749 §6 (and OAuth 2.1's
-// refresh-token rotation guidance). Hashes the supplied refresh token,
-// atomically soft-deletes the matching user_sessions row (single-use:
-// concurrent refreshes race for the slot), pushes the old access token's
-// JTI into the revocation cache, then mints a new session via
-// mintSessionAndRespond.
+// handleTokenRefreshTokenGrant implements RFC 6749 §6. Hashes the supplied
+// refresh token, loads the matching user_sessions row, pushes the old
+// access token's JTI into the revocation cache, then slides a new access
+// token onto the same row via mintSessionAndRespond.
 //
-// Client binding: the soft-deleted row's user_session_client_id MUST match
-// the authenticated client. This blocks Client B from refreshing tokens
-// issued to Client A even if B somehow obtains the opaque refresh token.
+// The refresh token is not rotated. MCP clients retry /token and share one
+// credential store across processes; consuming the refresh token on first
+// use is what surfaces as daily invalid_grant / "already used" failures
+// when the client presents the same token again. Authorization lifetime
+// still ends at refresh_expires_at, and /revoke still soft-deletes the row.
+//
+// Client binding: the row's user_session_client_id MUST match the
+// authenticated client. A mismatch soft-deletes the row so a leaking
+// client cannot keep probing another client's refresh token.
 func (s *Service) handleTokenRefreshTokenGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -288,26 +292,27 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	// Soft-delete by hash claims the single-use slot atomically. If the row
-	// is already gone (unknown / replayed / revoked), pgx.ErrNoRows surfaces
-	// here as invalid_grant.
-	oldSession, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+	queries := usersessions_repo.New(s.db)
+	refreshHash := sha256Hex(req.RefreshToken)
+	oldSession, err := queries.GetUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		RefreshTokenHash:    sha256Hex(req.RefreshToken),
+		RefreshTokenHash:    refreshHash,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_revoked")
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or revoked")
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup refresh token").LogError(ctx, logger)
 	}
 
-	// Client binding: refuse if the original session was minted for a
-	// different client. We've already soft-deleted the row -- that's
-	// intentional, the alternative would let a leaking client poke at others'
-	// refresh tokens without invalidating them.
 	if !oldSession.UserSessionClientID.Valid || oldSession.UserSessionClientID.UUID != clientRow.ID {
+		if _, revokeErr := queries.RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			RefreshTokenHash:    refreshHash,
+		}); revokeErr != nil && !errors.Is(revokeErr, pgx.ErrNoRows) {
+			logger.WarnContext(ctx, "failed to revoke refresh token after client mismatch", attr.SlogError(revokeErr))
+		}
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
@@ -324,11 +329,11 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		logger.WarnContext(ctx, "failed to revoke old access token jti on refresh", attr.SlogError(err))
 	}
 
-	// Session length is an absolute authorization lifetime. Rotation carries
+	// Session length is an absolute authorization lifetime. Refresh carries
 	// that deadline forward verbatim; it never opens a fresh authorization
 	// window merely because the client exchanged its refresh token.
 	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
-	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, nil, &authorizationExpiresAt, baseURL, logger)
+	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, nil, &authorizationExpiresAt, req.RefreshToken, baseURL, logger)
 }
 
 // accessTokenLifetime is the wall-clock validity of a minted access-token
@@ -337,16 +342,16 @@ func (s *Service) handleTokenRefreshTokenGrant(
 // authorization lifetime.
 const accessTokenLifetime = 1 * time.Hour
 
-// mintSessionAndRespond mints a new access-token JWT (HS256) and an opaque
-// refresh token, persists a fresh user_sessions row, and writes the RFC
-// 6749 §5.1 response. Shared by the authorization_code and refresh_token
-// grant handlers since both produce identical token responses.
+// mintSessionAndRespond mints a new access-token JWT (HS256) and writes
+// the RFC 6749 §5.1 response. Shared by the authorization_code and
+// refresh_token grant handlers.
 //
 // Lifetimes:
 //   - authorization: the subject's consent choice, capped by the issuer's
 //     session_duration, and fixed for the lifetime of the grant.
 //   - refresh token: the remaining authorization lifetime. Gram does not
-//     impose a separate refresh-token idle timeout.
+//     impose a separate refresh-token idle timeout, and does not rotate
+//     the refresh token on reuse.
 //   - access token: min(accessTokenLifetime, remaining authorization).
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
@@ -356,8 +361,12 @@ const accessTokenLifetime = 1 * time.Hour
 // projects — prevents cross-project replay.
 // desiredSessionDuration is used only for an initial authorization: nil means
 // "no explicit choice", falling back to the issuer's session_duration.
-// authorizationExpiresAt is used only for rotation and is carried from the
+// authorizationExpiresAt is used only for refresh and is carried from the
 // prior row. Exactly one is normally non-nil.
+// reuseRefreshToken is the refresh token presented on a refresh_token
+// grant. Empty means mint a new refresh token and insert a session row
+// (authorization_code). Non-empty slides a new access token onto the
+// existing row and returns the same refresh token.
 func (s *Service) mintSessionAndRespond(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -366,6 +375,7 @@ func (s *Service) mintSessionAndRespond(
 	subject urn.SessionSubject,
 	desiredSessionDuration *time.Duration,
 	authorizationExpiresAt *time.Time,
+	reuseRefreshToken string,
 	baseURL string,
 	logger *slog.Logger,
 ) error {
@@ -430,21 +440,34 @@ func (s *Service) mintSessionAndRespond(
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)
 	}
 
-	refreshTokenRaw, err := generateOpaqueToken()
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
-	}
-
-	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
-		SubjectUrn:          subject,
+	refreshTokenRaw := reuseRefreshToken
+	if refreshTokenRaw == "" {
+		generated, err := generateOpaqueToken()
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
+		}
+		refreshTokenRaw = generated
+		if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
+			SubjectUrn:          subject,
+			Jti:                 jti,
+			RefreshTokenHash:    sha256Hex(refreshTokenRaw),
+			ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
+			RefreshExpiresAt:    pgtype.Timestamptz{Time: *authorizationExpiresAt, InfinityModifier: 0, Valid: true},
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
+		}
+	} else if _, err := usersessions_repo.New(s.db).RefreshUserSessionAccessToken(ctx, usersessions_repo.RefreshUserSessionAccessTokenParams{
 		Jti:                 jti,
-		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
 		ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: *authorizationExpiresAt, InfinityModifier: 0, Valid: true},
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or revoked")
+		}
+		return oops.E(oops.CodeUnexpected, err, "slide user session access token").LogError(ctx, logger)
 	}
 
 	body, err := json.Marshal(tokenResponse{

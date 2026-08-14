@@ -549,6 +549,25 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: RefreshUserSessionAccessToken :one
+-- Slides the access-token half of a user session after a refresh_token
+-- grant. The refresh token itself is not rotated: MCP clients retry
+-- /token and share one credential store across processes, so consuming
+-- the refresh token on first use forces a re-login the next time the
+-- same token is presented. Authorization lifetime (refresh_expires_at)
+-- is unchanged. Scoped by issuer_id because the public MCP /token
+-- surface has no project in request context — same as
+-- GetUserSessionByRefreshTokenHash / RevokeUserSessionByRefreshTokenHash.
+UPDATE user_sessions
+SET
+    jti = @jti,
+    expires_at = @expires_at,
+    updated_at = clock_timestamp()
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND refresh_token_hash = @refresh_token_hash
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: CreateUserSession :one
 -- user_session_client_id binds the session to the DCR client that minted it.
 -- The /token refresh path requires the same client to refresh; see

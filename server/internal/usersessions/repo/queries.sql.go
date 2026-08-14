@@ -1351,6 +1351,60 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, id uuid.U
 	return i, err
 }
 
+const refreshUserSessionAccessToken = `-- name: RefreshUserSessionAccessToken :one
+UPDATE user_sessions
+SET
+    jti = $1,
+    expires_at = $2,
+    updated_at = clock_timestamp()
+WHERE user_session_issuer_id = $3
+  AND refresh_token_hash = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, created_at, updated_at, deleted_at, deleted
+`
+
+type RefreshUserSessionAccessTokenParams struct {
+	Jti                 string
+	ExpiresAt           pgtype.Timestamptz
+	UserSessionIssuerID uuid.UUID
+	RefreshTokenHash    string
+}
+
+// Slides the access-token half of a user session after a refresh_token
+// grant. The refresh token itself is not rotated: MCP clients retry
+// /token and share one credential store across processes, so consuming
+// the refresh token on first use forces a re-login the next time the
+// same token is presented. Authorization lifetime (refresh_expires_at)
+// is unchanged. Scoped by issuer_id because the public MCP /token
+// surface has no project in request context — same as
+// GetUserSessionByRefreshTokenHash / RevokeUserSessionByRefreshTokenHash.
+func (q *Queries) RefreshUserSessionAccessToken(ctx context.Context, arg RefreshUserSessionAccessTokenParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, refreshUserSessionAccessToken,
+		arg.Jti,
+		arg.ExpiresAt,
+		arg.UserSessionIssuerID,
+		arg.RefreshTokenHash,
+	)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.SubjectUrn,
+		&i.Jti,
+		&i.RefreshTokenHash,
+		&i.RefreshExpiresAt,
+		&i.ExpiresAt,
+		&i.ToolSelection,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const revokeUserSession = `-- name: RevokeUserSession :one
 UPDATE user_sessions AS s
 SET deleted_at = clock_timestamp()
