@@ -32,7 +32,15 @@ import { FilterSheet } from "./FilterSheet";
 const ROUTE_ID = "/organizations/";
 const SEARCH_DEBOUNCE_MS = 300;
 
-export function Toolbar(): JSX.Element {
+type ToolbarProps = {
+  /**
+   * Changes whenever a control cleared the search term. A draft still inside
+   * the debounce reached no URL, so the box has nothing else to notice by.
+   */
+  searchCleared: number;
+};
+
+export function Toolbar({ searchCleared }: ToolbarProps): JSX.Element {
   const search = useSearch({ from: ROUTE_ID });
   const navigate = useNavigate({ from: ROUTE_ID });
 
@@ -53,6 +61,14 @@ export function Toolbar(): JSX.Element {
     // operator just typed. `lastCommitted` still moves either way, or this
     // block runs on every render.
     if (draft.trim() !== committed) setDraft(committed);
+  }
+
+  const [lastCleared, setLastCleared] = useState(searchCleared);
+  if (searchCleared !== lastCleared) {
+    setLastCleared(searchCleared);
+    // Dropping the draft drops the commit it had pending with it: the effect
+    // below is keyed on the draft, so its cleanup clears the timer.
+    if (draft !== "") setDraft("");
   }
 
   useEffect(() => {

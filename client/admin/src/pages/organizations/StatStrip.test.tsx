@@ -1,5 +1,6 @@
 import type { AnyRouter } from "@tanstack/react-router";
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -77,6 +78,10 @@ const ACTION: Record<string, string> = {
   "Trials ending in 7 days": "Show the trials ending in 7 days",
   Disabled: "Show the disabled organizations",
 };
+
+// Written out rather than imported from the toolbar, so a shortened debounce
+// cannot move the assertions along with it.
+const DEBOUNCE_MS = 300;
 
 function figure(value: number): string {
   return value.toLocaleString();
@@ -344,6 +349,36 @@ describe("organizations stat strip navigation", () => {
           .value,
       ).toBe("");
     });
+  });
+
+  it("drops a term the operator typed and had not committed yet", async () => {
+    const router = await renderList();
+    const input = screen.getByLabelText("Search organizations");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(input, { target: { value: "acme" } });
+      // Still inside the debounce, so the term is on screen and nowhere else.
+      // The URL never held it, so clearing `q` moves nothing the box watches.
+      await act(async () => {
+        vi.advanceTimersByTime(DEBOUNCE_MS - 1);
+      });
+
+      fireEvent.click(cell("Disabled"));
+
+      await act(async () => {
+        vi.advanceTimersByTime(DEBOUNCE_MS * 2);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(currentSearch(router)).not.toContain("q=");
+    await waitFor(() => {
+      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+    });
+    expect(lastListParams().q).toBeUndefined();
+    expect((input as HTMLInputElement).value).toBe("");
   });
 
   it("returns to the first page even where the filters do not change", async () => {

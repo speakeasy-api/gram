@@ -26,7 +26,7 @@ import { ORG_COLUMNS } from "./columns";
 import { WriteReportProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
 import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
-import { FiltersApplied } from "./applyFilters";
+import { FiltersApplied, type ApplyOptions } from "./applyFilters";
 import { useOpenOrganization } from "./rowActions";
 import { StatStrip } from "./StatStrip";
 import { TableActionBar, Toolbar } from "./Toolbar";
@@ -161,10 +161,17 @@ export function OrganizationsList(): JSX.Element {
     placeholderData: keepPreviousData,
   });
 
+  // A token, read only when it changes: the search box drops the draft it is
+  // holding whenever a control clears the term.
+  const [searchCleared, setSearchCleared] = useState(0);
+
   // Applying a set the list already carries leaves the signature above
   // untouched, so the control that applies says so itself.
-  const resetPager = useCallback(() => {
+  const onFiltersApplied = useCallback((options: ApplyOptions) => {
     setPager((prev) => ({ ...prev, cursor: undefined, stack: [] }));
+    // A term still inside the debounce is in no URL, so clearing `q` is a
+    // no-op the box cannot see, and it would commit the term afterwards.
+    if (options.clearSearch) setSearchCleared((token) => token + 1);
   }, []);
 
   const goNext = () => {
@@ -378,12 +385,12 @@ export function OrganizationsList(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <section className="flex min-h-0 flex-1 flex-col">
-        <FiltersApplied.Provider value={resetPager}>
+        <FiltersApplied.Provider value={onFiltersApplied}>
           {/* Outside the table's scroll box, so the figures stay on screen
               while the operator scrolls the rows they lead to. */}
           <StatStrip />
 
-          <Toolbar />
+          <Toolbar searchCleared={searchCleared} />
         </FiltersApplied.Provider>
 
         {/* A failed refetch keeps the previous rows, so the failure has to show

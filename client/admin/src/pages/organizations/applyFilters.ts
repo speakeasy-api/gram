@@ -9,10 +9,6 @@ import type { OrganizationsSearch } from "@/routes/organizations.index";
 
 const ROUTE_ID = "/organizations/";
 
-// The cursor is component state rather than a search param, so applying the
-// set that is already applied changes nothing the pager watches. It is told.
-export const FiltersApplied = createContext<() => void>(() => {});
-
 export type ApplyOptions = {
   /**
    * Drops the search term too. A stat figure counts rows no term narrowed, so
@@ -20,6 +16,14 @@ export type ApplyOptions = {
    */
   clearSearch?: boolean;
 };
+
+// What applying leaves for the page to do itself. Two things it cannot read
+// off the URL: the cursor is component state, so applying the set already
+// applied moves nothing it watches, and a search term the box has not
+// committed yet is in no URL at all.
+export const FiltersApplied = createContext<(options: ApplyOptions) => void>(
+  () => {},
+);
 
 /**
  * Writes a chosen set to the URL. All three params come from the set, so a
@@ -36,7 +40,7 @@ export function useApplyFilters(): (
     (next: FilterSelection, options: ApplyOptions = {}): void => {
       // Page 1. The rows a page-two cursor points at were counted under the
       // filters that minted it.
-      onApplied();
+      onApplied(options);
       void navigate({
         search: (prev: OrganizationsSearch) => ({
           ...prev,
