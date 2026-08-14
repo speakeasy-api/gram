@@ -45,7 +45,7 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
-  const isAdmin = useIsPlatformAdmin();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   // Enterprise contracts bill on tokens under management, so enterprise orgs
   // see the TUM view instead of the self-serve usage meters.
@@ -53,7 +53,7 @@ function BillingInner() {
     return (
       <>
         <TumUsageSection />
-        {isAdmin && <TumAdminSection />}
+        {isPlatformAdmin && <TumAdminSection />}
       </>
     );
   }

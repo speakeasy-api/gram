@@ -14,8 +14,8 @@ export function PlatformAdminOnlyPanel({
 }: {
   children: ReactNode;
 }): JSX.Element | null {
-  const isAdmin = useIsPlatformAdmin();
-  if (!isAdmin) {
+  const isPlatformAdmin = useIsPlatformAdmin();
+  if (!isPlatformAdmin) {
     return null;
   }
 
