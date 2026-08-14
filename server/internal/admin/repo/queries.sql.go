@@ -271,7 +271,6 @@ SELECT
     om.free_trial_started_at,
     om.free_trial_ends_at,
     -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
-    -- now(), not clock_timestamp(): one instant classifies every row in the response.
     CASE
         WHEN t.organization_id IS NULL THEN 'none'
         WHEN t.converted_at IS NOT NULL THEN 'converted'
