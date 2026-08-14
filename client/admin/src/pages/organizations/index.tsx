@@ -39,8 +39,9 @@ const PEEK_HIDDEN_COLUMNS: ColumnVisibilityState = {
   created_at: false,
 };
 
-// Mac reports "Mac" here and labels the key Option; every other platform calls
-// it Alt. Naming the wrong one makes the hint worse than no hint.
+const PEEK_KEPT_COLUMNS = ["name", "slug", "account_type"] as const;
+
+// Mac labels this key Option; everything else calls it Alt.
 const PEEK_KEY = navigator.userAgent.includes("Mac") ? "\u2325 Option" : "Alt";
 
 function PeekHint(): JSX.Element {
@@ -138,13 +139,16 @@ export function OrganizationsList(): JSX.Element {
 
   const orgs = data?.organizations ?? NO_ORGS;
 
-  const effectiveVisibility = useMemo(
-    () =>
-      peekedId
-        ? { ...columnVisibility, ...PEEK_HIDDEN_COLUMNS }
-        : columnVisibility,
-    [peekedId, columnVisibility],
-  );
+  // The lock only sees the operator's own hides, so peek could empty the table.
+  const effectiveVisibility = useMemo(() => {
+    if (!peekedId) return columnVisibility;
+    const anyKept = PEEK_KEPT_COLUMNS.some(
+      (id) => columnVisibility[id] !== false,
+    );
+    return anyKept
+      ? { ...columnVisibility, ...PEEK_HIDDEN_COLUMNS }
+      : columnVisibility;
+  }, [peekedId, columnVisibility]);
 
   const table = useTable({
     features: dataTableFeatures,
@@ -221,8 +225,7 @@ export function OrganizationsList(): JSX.Element {
           </div>
         )}
 
-        {/* Stretch, not items-start: the panel takes its height from the row so
-            it lines up with the table without naming a height of its own. */}
+        {/* Stretch, so the panel takes its height from the row. */}
         <div className="flex min-h-0 flex-1 gap-4" onKeyDown={handleKeyDown}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
@@ -262,8 +265,7 @@ export function OrganizationsList(): JSX.Element {
               </div>
             </div>
 
-            {/* Inside the table's column, not beside it: the pager moves the
-                list, and the panel holds one record the list may not carry. */}
+            {/* Inside the table's column, so it does not run under the panel. */}
             <div className="mt-3 flex items-center justify-end gap-2">
               <Button
                 variant="ghost"

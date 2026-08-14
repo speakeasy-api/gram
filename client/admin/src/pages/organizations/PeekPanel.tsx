@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 
 const COPY_CONFIRM_MS = 1500;
 
+function noop(): void {}
+
 function fmtDateShort(iso?: string): string {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -52,10 +54,12 @@ function CopyValue({
         size="icon-xs"
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
         onClick={() => {
-          void navigator.clipboard.writeText(value);
-          setCopied(true);
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => setCopied(false), COPY_CONFIRM_MS);
+          // A check over a failed write sends the operator off with the wrong id.
+          void navigator.clipboard.writeText(value).then(() => {
+            setCopied(true);
+            clearTimeout(timer.current);
+            timer.current = setTimeout(() => setCopied(false), COPY_CONFIRM_MS);
+          }, noop);
         }}
       >
         {copied ? <CheckIcon /> : <CopyIcon />}
@@ -101,7 +105,7 @@ export function PeekPanel({
         </Button>
       </div>
 
-      {/* min-h-0 or the fields refuse to shrink and push the actions off. */}
+      {/* min-h-0 or the fields push the actions off the bottom. */}
       <div className="min-h-0 flex-1 overflow-auto px-4">
         <dl className="grid grid-cols-[5.5rem_1fr] items-baseline gap-x-3 gap-y-1.5">
           <Field label="Type">

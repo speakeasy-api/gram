@@ -105,6 +105,10 @@ describe("PeekPanel", () => {
 
       expect(writeText).toHaveBeenCalledWith(workosID);
 
+      // The confirmation waits on the clipboard promise, so flush microtasks.
+      // Fake timers do not stub those.
+      await act(async () => {});
+
       const confirmed = screen.getByRole("button", {
         name: "WorkOS id copied",
       });
