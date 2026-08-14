@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -7,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { organizationQuery } from "@/lib/adminQueries";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization, aProject } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -153,6 +155,56 @@ describe("Projects", () => {
     });
   });
 
+  it("re-addresses its links when the operator moves to another record", async () => {
+    const other = anOrganization({
+      id: "org_2",
+      name: "Second Org",
+      slug: "second-org",
+    });
+    const otherProject = aProject({
+      id: "proj_2",
+      name: "Second Project",
+      slug: "second-project",
+    });
+    mocks.getOrganization.mockImplementation((idOrSlug: string) =>
+      Promise.resolve(idOrSlug === other.slug ? other : ORG),
+    );
+    mocks.listOrganizationProjects.mockImplementation(
+      (organizationID: string) =>
+        Promise.resolve({
+          projects: organizationID === other.id ? [otherProject] : [PROJECT],
+        }),
+    );
+    // Both records in the cache, as `useOpenOrganization` leaves them. Without
+    // that the second arrives pending, the layout drops its outlet for a beat,
+    // and this table is rebuilt from scratch rather than carried over.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    for (const org of [ORG, other]) {
+      qc.setQueryData(organizationQuery(org.slug).queryKey, org);
+    }
+
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+      queryClient: qc,
+    });
+    await screen.findByRole("link", { name: PROJECT.name });
+
+    // The same view, kept mounted, showing another record: what the back
+    // button does between two records' project lists. Columns built once
+    // address the record the operator has left.
+    await router.navigate({
+      to: "/organizations/$idOrSlug/projects",
+      params: { idOrSlug: other.slug },
+    });
+
+    const link = await screen.findByRole("link", { name: otherProject.name });
+    expect(link.getAttribute("href")).toBe(
+      `/organizations/${other.slug}/projects/${otherProject.slug}`,
+    );
+  });
+
   it("renders the project under the record it belongs to", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/projects/${PROJECT.slug}`,
@@ -178,5 +230,20 @@ describe("Projects", () => {
     expect(
       await screen.findByText("No projects in this organization"),
     ).toBeTruthy();
+  });
+
+  it("says the projects could not be read rather than that there are none", async () => {
+    mocks.listOrganizationProjects.mockRejectedValue(
+      new Error("projects read failed"),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+
+    expect(await screen.findByText("Unable to load projects")).toBeTruthy();
+    // One branch apart in the same cell, and the wrong one states a fact about
+    // the customer that a failed read never established.
+    expect(screen.queryByText("No projects in this organization")).toBeNull();
   });
 });

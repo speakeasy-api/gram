@@ -1,5 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationQuery } from "@/lib/adminQueries";
@@ -11,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
+  updateOrganization: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -20,6 +27,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getSession: mocks.getSession,
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
+    updateOrganization: mocks.updateOrganization,
   };
 });
 
@@ -64,6 +72,7 @@ beforeEach(() => {
   // view. Unmocked it reaches the real fetch and the suite waits on a socket.
   mocks.listOrganizationProjects.mockReset();
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
+  mocks.updateOrganization.mockReset();
 });
 
 afterEach(() => {
@@ -123,7 +132,14 @@ describe("Overview", () => {
 
     // Early in the UTC day, which is where the fault shows.
     const created = "2026-01-16T03:00:00Z";
-    mocks.getOrganization.mockResolvedValue({ ...ORG, created_at: created });
+    const updated = "2026-03-04T02:00:00Z";
+    const disabled = "2026-04-09T01:00:00Z";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      created_at: created,
+      updated_at: updated,
+      disabled_at: disabled,
+    });
 
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
@@ -132,7 +148,59 @@ describe("Overview", () => {
     await screen.findByText("Created");
     // The zone really moved, and in it this instant is the 15th locally.
     expect(new Date(created).getDate()).toBe(15);
+    // Every date the view renders, not one of them: each row is a separate
+    // call and the rule holds for all of them or for none.
     expect(valueBeside("Created").textContent).toBe(shortDate(created));
+    expect(valueBeside("Updated").textContent).toBe(shortDate(updated));
+    expect(valueBeside("Disabled at").textContent).toBe(shortDate(disabled));
+  });
+
+  it("shows the account type the operator picked, not the saved one", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const select = await screen.findByRole("combobox");
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+
+    // A control that keeps reading the record shows the old value while Save
+    // offers to write the new one, so the operator saves a change the page
+    // never showed them.
+    expect(select.textContent).toBe("enterprise");
+    expect(ORG.account_type).not.toBe("enterprise");
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+  });
+
+  it("shows a saved change on a record the operator reached by id", async () => {
+    const saved = { ...ORG, account_type: "enterprise" };
+    mocks.updateOrganization.mockResolvedValue(saved);
+
+    // By id, which is how the list opens a record whose slug it has not got.
+    // The record is written back under one address only, so the other one keeps
+    // serving the record as it was before the write.
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.id}`,
+    });
+
+    const select = await screen.findByRole("combobox");
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    // Waited out rather than asserted straight away: while the write is in
+    // flight the draft is still what the control reads, so it says "enterprise"
+    // either way. Save leaving is the record answering for itself again.
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    });
+    // An operator who watched the save land and then reads the old value back
+    // has no way to tell a stale page from a write that did not happen.
+    expect(screen.getByRole("combobox").textContent).toBe("enterprise");
+    expect(ORG.account_type).not.toBe("enterprise");
   });
 
   it("does not carry an unsaved draft to the next record", async () => {

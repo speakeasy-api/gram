@@ -149,6 +149,27 @@ describe("AppSidebar", () => {
     ).toBeNull();
   });
 
+  it("asks for no record at all while the operator is off one", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: ORG.name });
+
+    // A query left enabled here asks for the organization named by an empty
+    // string on every page the operator visits. Nothing on screen says so: a
+    // rejected read and a disabled one both draw the global nav.
+    expect(mocks.getOrganization).not.toHaveBeenCalled();
+  });
+
+  it("keeps the global nav's section lit while the operator is inside it", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/projects/${PROJECT.slug}`,
+    });
+    await screen.findByRole("link", { name: "Organizations" });
+
+    // A project outside any record is still the Projects section. Matching the
+    // address exactly unlights the nav the moment anything in it is opened.
+    expect(isActive("Projects")).toBe(true);
+  });
+
   it("renders the record nav inside a record", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

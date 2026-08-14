@@ -109,6 +109,22 @@ describe("Members", () => {
     expect(cellsOf(row)[3]).toBe("-");
   });
 
+  it("says the members could not be read rather than that there are none", async () => {
+    mocks.listOrganizationMembers.mockRejectedValue(
+      new Error("members read failed"),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+
+    expect(await screen.findByText("Unable to load members")).toBeTruthy();
+    // The two messages sit in the same table cell, one branch apart. An
+    // operator told an organization has no members after a failed read
+    // believes a fact about the customer that the page never established.
+    expect(screen.queryByText("No members in this organization")).toBeNull();
+  });
+
   it("is not on the overview, so the record's views stay separate", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

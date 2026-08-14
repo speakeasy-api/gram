@@ -107,6 +107,25 @@ describe("RecordLayout", () => {
     },
   );
 
+  it("draws the callout under the record's title, not above it", async () => {
+    mocks.getOrganization.mockResolvedValue(TRIALLING);
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${TRIALLING.slug}`,
+    });
+
+    const heading = await screen.findByRole("heading", {
+      name: TRIALLING.name,
+    });
+    const callout = await screen.findByRole("status");
+    // The drawing puts the trial badge in the title and the warning beneath
+    // it. Both present in either order passes every other test here.
+    expect(
+      heading.compareDocumentPosition(callout) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("speaks the result of a write started from the record chrome", async () => {
     // The actions report through context whose default is silent, so a record
     // page with no reporter of its own announces nothing at all.
@@ -132,6 +151,31 @@ describe("RecordLayout", () => {
     // Heard and not read. Without the class every write result is printed into
     // the record as body text, between the callout and the view.
     expect(liveRegion().className.split(" ")).toContain("sr-only");
+  });
+
+  it("shows a failed re-enable, and does not only speak it", async () => {
+    const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
+    mocks.getOrganization.mockResolvedValue(disabled);
+    mocks.enableOrganization.mockRejectedValue(
+      new GramAdminError(500, { message: "enable failed" }, "500"),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${disabled.slug}`,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: `Re-enable ${disabled.name}` }),
+    );
+
+    // Re-enable is the one write with no dialog of its own to report in, so
+    // without this banner a sighted operator presses the button, watches the
+    // record stay disabled and is told nothing about why. The live region
+    // carries the same sentence and is skipped: it is heard, not read.
+    const banner = await screen.findByText(/Could not re-enable/, {
+      ignore: "[aria-live]",
+    });
+    expect(banner.className.split(" ")).toContain("text-destructive");
   });
 
   it("speaks a failure again when the same one comes back", async () => {

@@ -1,6 +1,7 @@
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { badgeTone } from "@/lib/badgeTone";
 import type { TrialState } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { fmtDateShort } from "@/lib/utils";
@@ -60,6 +61,18 @@ describe("RecordHeader", () => {
     expect(link.getAttribute("href")).toBe(APP_LINK);
   });
 
+  it("leaves the record open behind Open in Gram, and names no referrer", async () => {
+    await renderWithApp(<RecordHeader org={anOrganization()} />);
+
+    const link = screen.getByRole("link", { name: /Open in Gram/ });
+    // The operator is reading a record and following a link out of it. Taking
+    // the tab loses the record they are working through.
+    expect(link.getAttribute("target")).toBe("_blank");
+    // The admin address carries the organization the operator is looking at.
+    // `noopener` is implied for `_blank`; suppressing the referrer is not.
+    expect(link.getAttribute("rel")).toContain("noreferrer");
+  });
+
   it("impersonates through the record's slug, not its id", async () => {
     // The server reads the first path segment of `redirect` back as the
     // organization, so an id there lands the operator nowhere.
@@ -79,6 +92,36 @@ describe("RecordHeader", () => {
     const meta = screen.getByText(/Created/).closest("p");
     expect(meta?.textContent).toContain("enterprise");
     expect(meta?.textContent).toContain(fmtDateShort(org.created_at));
+  });
+
+  it("ends the account type with the separator, so a wrapped line never opens with one", async () => {
+    const org = anOrganization({ account_type: "enterprise" });
+    await renderWithApp(<RecordHeader org={org} />);
+
+    const fact = screen.getByText(/Created/).closest("p")?.firstElementChild;
+    expect(fact?.textContent).toBe("enterprise");
+    // Inside the fact it follows, not between the two: the line wraps, and a
+    // separator that starts the next fact would open the second line with it.
+    expect(fact?.querySelector('[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it("draws the account type in the neutral tone", async () => {
+    // No trial, so the only badge beside the name is this one.
+    const org = anOrganization({
+      account_type: "enterprise",
+      trial_state: "none",
+    });
+    await renderWithApp(<RecordHeader org={org} />);
+
+    const badge = screen
+      .getByRole("heading", { name: org.name })
+      .parentElement?.querySelector('[data-slot="badge"]');
+    expect(badge?.textContent).toBe("enterprise");
+    // happy-dom lays nothing out, so the class list is the whole account of a
+    // colour a unit test can read. `Trial.test.tsx` reads a tone the same way.
+    // Without it the account type can take the failure tone and say the record
+    // is in trouble when it is not.
+    expect(badge?.className).toContain(badgeTone.neutral);
   });
 
   it("names the record and its trial state", async () => {
