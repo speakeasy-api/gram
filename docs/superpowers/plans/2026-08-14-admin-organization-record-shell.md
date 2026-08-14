@@ -145,7 +145,7 @@ Invoke the `admin-shadcn` skill and follow it to add the `breadcrumb` component 
 - [ ] **Step 2: Verify it added no dependency**
 
 Run: `git status --short`
-Expected: `client/admin/src/components/ui/breadcrumb.tsx` only. If `pnpm-lock.yaml` or any `package.json` changed, stop and revert. The breadcrumb primitive needs only `lucide-react` and `@radix-ui/react-slot`, both already present.
+Expected: `client/admin/src/components/ui/breadcrumb.tsx` only. If `pnpm-lock.yaml` or any `package.json` changed, stop and revert. The primitive imports `lucide-react` and `{ Slot } from "radix-ui"`, the unified package, already at `^1.6.0` in `client/admin/package.json`. The shadcn dry run lists `radix-ui` under its dependencies, which reads alarming against the never-add-a-dependency trap; because it is already installed, the CLI writes no `package.json` and runs no install.
 
 - [ ] **Step 3: Type-check**
 
@@ -779,9 +779,20 @@ import { routeTree } from "@/routeTree.gen";
 import { renderRouteTree } from "@/test/harness";
 
 function crumbs(): string[] {
+  // BreadcrumbSeparator is role="presentation", so the list items are the
+  // crumbs and nothing else.
   return screen
     .getAllByRole("listitem")
     .map((item) => item.textContent?.trim() ?? "");
+}
+
+function seeded(): QueryClient {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  qc.setQueryData(organizationQuery("test-org").queryKey, ORG);
+  qc.setQueryData(projectQuery("first-project").queryKey, PROJECT);
+  return qc;
 }
 
 it("ends in the project name, not Projects, on the single-project view", async () => {
@@ -790,35 +801,74 @@ it("ends in the project name, not Projects, on the single-project view", async (
   // crumb has to be the project's name.
   await renderRouteTree(routeTree, {
     initialPath: "/organizations/test-org/projects/first-project",
-    // Seed organizationQuery and projectQuery so both crumb functions resolve.
+    queryClient: seeded(),
   });
 
   expect(crumbs()).toEqual(["Organizations", "Test Org", "First Project"]);
 });
 
 it("reads Organizations on the list", async () => {
-  // initialPath: "/organizations" -> ["Organizations"]
+  await renderRouteTree(routeTree, {
+    initialPath: "/organizations",
+    queryClient: seeded(),
+  });
+
+  expect(crumbs()).toEqual(["Organizations"]);
 });
 
 it("reads Organizations / Test Org / Overview on the record index", async () => {
-  // initialPath: "/organizations/test-org"
+  await renderRouteTree(routeTree, {
+    initialPath: "/organizations/test-org",
+    queryClient: seeded(),
+  });
+
+  expect(crumbs()).toEqual(["Organizations", "Test Org", "Overview"]);
 });
 
 it("reads Organizations / Test Org / Members on the members view", async () => {
-  // initialPath: "/organizations/test-org/members"
+  await renderRouteTree(routeTree, {
+    initialPath: "/organizations/test-org/members",
+    queryClient: seeded(),
+  });
+
+  expect(crumbs()).toEqual(["Organizations", "Test Org", "Members"]);
 });
 
-it("gives only the last segment medium weight", async () => {
-  // The last crumb is a BreadcrumbPage, the rest are BreadcrumbLink. Assert on
-  // the roles: the last is not a link, the others are.
+it("marks only the last crumb as the current page", async () => {
+  // Do NOT assert on role here. Task 2 vendored the stock primitive, and its
+  // BreadcrumbPage carries role="link" aria-disabled="true" aria-current="page",
+  // so getAllByRole("link") returns the trailing crumb too. `ui/` may not be
+  // edited to change that, so aria-current is the only honest discriminator.
+  await renderRouteTree(routeTree, {
+    initialPath: "/organizations/test-org/members",
+    queryClient: seeded(),
+  });
+
+  const current = screen
+    .getAllByRole("listitem")
+    .filter((item) => item.querySelector("[aria-current='page']") !== null);
+
+  expect(current).toHaveLength(1);
+  expect(current[0]?.textContent?.trim()).toBe("Members");
 });
 
 it("drops a crumb whose record has not loaded yet", async () => {
   // Seed nothing. The record crumb resolves to undefined and is dropped, so
   // the bar reads ["Organizations", "Members"] rather than showing a
   // placeholder where the name will go.
+  await renderRouteTree(routeTree, {
+    initialPath: "/organizations/test-org/members",
+    queryClient: new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    }),
+  });
+
+  expect(crumbs()).toEqual(["Organizations", "Members"]);
 });
 ```
+
+`ORG` and `PROJECT` are the fixtures the file already builds for its other
+tests. Invent the names; never use a real organization or project.
 
 `renderRouteTree` needs the same seeded-`queryClient` option added in Task 4. If Task 4 added it, use it here.
 
