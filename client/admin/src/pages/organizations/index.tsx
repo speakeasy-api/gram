@@ -1,6 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { useTable, type ColumnVisibilityState } from "@tanstack/react-table";
+import {
+  useTable,
+  type ColumnVisibilityState,
+  type RowSelectionState,
+} from "@tanstack/react-table";
 import {
   useCallback,
   useEffect,
@@ -22,6 +26,7 @@ import {
 } from "@/lib/gramAdminApi";
 import { cn } from "@/lib/utils";
 
+import { BulkAccountType } from "./BulkAccountType";
 import { ORG_COLUMNS } from "./columns";
 import { WriteReportProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
@@ -150,6 +155,19 @@ export function OrganizationsList(): JSX.Element {
     setPager({ filters, stack: [] });
   }
 
+  // Cleared whenever the operator changes the view: a selection carried across
+  // a page, a sort or a filter is how an account type gets set on a record
+  // nobody looked at. The whole search, because the sort is in the URL and it
+  // reorders the page. A refetch that changes rows under a still view keeps the
+  // selection, and the row model is what stops a dropped row being written to.
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const viewKey = `${JSON.stringify(search)}|${pager.cursor ?? ""}`;
+  const [selectionView, setSelectionView] = useState(viewKey);
+  if (selectionView !== viewKey) {
+    setSelectionView(viewKey);
+    setRowSelection({});
+  }
+
   const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
     ...organizationsListQuery({
       ...listParams,
@@ -213,11 +231,18 @@ export function OrganizationsList(): JSX.Element {
     // Without this a row is keyed by its index, and React reuses those keys
     // across a page change and across a filter change.
     getRowId: (org) => org.id,
-    state: { columnVisibility: effectiveVisibility },
+    state: { columnVisibility: effectiveVisibility, rowSelection },
     onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
   });
 
   const rows = table.getRowModel().rows;
+
+  // The rows themselves, not the ids: the bulk action names the organizations
+  // the server could not find, and only the ticked rows carry those names.
+  const selectedOrgs = table
+    .getSelectedRowModel()
+    .rows.map((row) => row.original);
 
   // findIndex, not table.getRow: getRow throws once a page change drops the id.
   const peekedIndex = peekedId ? rows.findIndex((r) => r.id === peekedId) : -1;
@@ -260,6 +285,12 @@ export function OrganizationsList(): JSX.Element {
       ?.querySelector<HTMLElement>(PEEK_TRIGGER_SELECTOR)
       ?.focus();
   }, [peekTookTheKeyboard]);
+
+  // The same landing place the peek rescue above uses, handed to the bulk
+  // dialog because its own trigger leaves the page with the selection.
+  const focusList = useCallback((): void => {
+    scrollBox.current?.focus();
+  }, []);
 
   const closePeek = useCallback((): void => {
     const trigger = peekedRow.current?.querySelector<HTMLElement>(
@@ -454,6 +485,14 @@ export function OrganizationsList(): JSX.Element {
                   <TableActionBar
                     table={table}
                     onColumnToggled={handleColumnToggled}
+                    bulkActions={
+                      <BulkAccountType
+                        selected={selectedOrgs}
+                        reporter={writeReporter}
+                        onDone={() => setRowSelection({})}
+                        rescueFocus={focusList}
+                      />
+                    }
                   />
 
                   <div

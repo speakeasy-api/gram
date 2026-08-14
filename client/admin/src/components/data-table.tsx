@@ -1,9 +1,12 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import {
   columnVisibilityFeature,
+  createColumnHelper,
   FlexRender,
   metaHelper,
+  rowSelectionFeature,
   tableFeatures,
+  type DisplayColumnDef,
   type ReactTable,
   type Row,
   type RowData,
@@ -11,6 +14,7 @@ import {
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -32,12 +36,14 @@ import {
  */
 
 /**
- * Per-column classes, carried on the column definition because the header and
- * the body cell are rendered here rather than by the page.
+ * Per-column classes, because the header and the body cell are rendered here
+ * rather than by the page, and the name a column lists itself under when its
+ * header is not a string.
  */
 export type DataTableColumnMeta = {
   headClassName?: string;
   cellClassName?: string;
+  label?: string;
 };
 
 /**
@@ -46,9 +52,13 @@ export type DataTableColumnMeta = {
  * Column visibility gates `row.getVisibleCells`, `column.getIsVisible` and
  * `column.getCanHide`, which this wrapper and its header both call. A table
  * with no Columns control still registers it for that reason.
+ *
+ * Row selection is registered here and drawn nowhere: it adds no column and no
+ * state until a table asks for one by putting `selectColumn` in its columns.
  */
 export const dataTableFeatures = tableFeatures({
   columnVisibilityFeature,
+  rowSelectionFeature,
   columnMeta: metaHelper<DataTableColumnMeta>(),
 });
 
@@ -58,6 +68,76 @@ export type DataTableInstance<T extends RowData> = ReactTable<
   DataTableFeatures,
   T
 >;
+
+const SELECT_COLUMN_ID = "select";
+
+// Mirrors the pin a page puts on a trailing actions column. `w-px` shrinks the
+// column to the checkbox, so the pin does not read as a gutter, and the header
+// row is already `z-10`, so this stays under it.
+const PINNED_LEFT = "sticky left-0 z-1 w-px";
+
+/**
+ * The opt-in select column: a checkbox per row and one in the header that ticks
+ * and unticks the rows the table is currently holding.
+ *
+ * Opt in by putting it first in a page's columns. A page that leaves it out
+ * gets no checkbox anywhere, which is why this is a column rather than
+ * something the wrapper draws on its own.
+ *
+ * Both labels are the caller's, because a checkbox has no text of its own and
+ * "Select row" repeated down a table tells a screen reader nothing about which
+ * record it is on.
+ */
+export function selectColumn<T extends RowData>({
+  allLabel,
+  rowLabel,
+}: {
+  allLabel: string;
+  rowLabel: (row: T) => string;
+}): DisplayColumnDef<DataTableFeatures, T, unknown> {
+  const column = createColumnHelper<DataTableFeatures, T>();
+  return column.display({
+    id: SELECT_COLUMN_ID,
+    meta: {
+      label: "Select",
+      // Pinned, because an admin list is wider than the window: measured at
+      // 1440 down to 768, the checkbox scrolls off the left edge while a pinned
+      // actions column keeps its place. A table whose purpose is picking rows
+      // cannot let the control that picks them leave the screen.
+      headClassName: cn(PINNED_LEFT, "bg-muted"),
+      // Inherited, so the pinned cell repaints with the row rather than reading
+      // as a flat stripe over a highlighted row's own colour.
+      cellClassName: cn(PINNED_LEFT, "bg-inherit"),
+    },
+    // Hiding it would strand a selection the operator could no longer see or
+    // undo, the same reason the row controls opt out.
+    enableHiding: false,
+    header: ({ table }) => (
+      <Checkbox
+        aria-label={allLabel}
+        // Mixed rather than unchecked while only some rows are ticked. It is
+        // the state ARIA has for this, and the next press clears rather than
+        // extends, which an unchecked box would misstate.
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(checked) => {
+          table.toggleAllPageRowsSelected(checked === true);
+        }}
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        aria-label={rowLabel(row.original)}
+        checked={row.getIsSelected()}
+        onCheckedChange={(checked) => {
+          row.toggleSelected(checked === true);
+        }}
+      />
+    ),
+  });
+}
 
 export type TableCellPadding = "condensed" | "normal" | "spacious";
 
