@@ -17,7 +17,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
 import {
@@ -256,8 +256,19 @@ export function SignalDrawer({
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
 
+  // The drawer stays mounted across signal switches and closes, so a
+  // collection that was in flight when either happened must not open the
+  // confirm dialog with the previous signal's findings. The ref tracks the
+  // currently displayed signal; a finished collection only lands if it still
+  // matches.
+  const activeSignalKey = useRef<string | null>(null);
+  useEffect(() => {
+    activeSignalKey.current = signal?.key ?? null;
+  }, [signal]);
+
   const openSignalDismiss = async () => {
     if (!signal) return;
+    const requestKey = signal.key;
     setCollecting(true);
     try {
       const results = await collectFindingsForRules(
@@ -265,8 +276,10 @@ export function SignalDrawer({
         [signal.ruleId],
         window,
       );
+      if (activeSignalKey.current !== requestKey) return;
       setPendingDismiss(results);
     } catch {
+      if (activeSignalKey.current !== requestKey) return;
       toast.error("Failed to load this signal's findings.");
     } finally {
       setCollecting(false);
