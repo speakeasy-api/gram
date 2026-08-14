@@ -75,6 +75,7 @@ type labeledCase struct {
 	FPCategory             string         `json:"fp_category,omitempty"`
 	Origin                 string         `json:"origin,omitempty"`
 	KnownGap               string         `json:"known_gap,omitempty"`
+	TwinOf                 string         `json:"twin_of,omitempty"`
 	SeedID                 string         `json:"seed_id,omitempty"`
 }
 
@@ -213,11 +214,12 @@ type counts struct {
 }
 
 type metricsBlock struct {
-	Precision float64 `json:"precision"`
-	Recall    float64 `json:"recall"`
-	F1        float64 `json:"f1"`
-	Accuracy  float64 `json:"accuracy"`
-	FPRate    float64 `json:"fp_rate"`
+	Precision         float64 `json:"precision"`
+	Recall            float64 `json:"recall"`
+	F1                float64 `json:"f1"`
+	Accuracy          float64 `json:"accuracy"`
+	FPRate            float64 `json:"fp_rate"`
+	FPUnderAttackRate float64 `json:"fp_under_attack_rate"`
 }
 
 type sourceSummary struct {
@@ -847,8 +849,8 @@ func printSummary(w *os.File, modes []modeSummary) {
 			continue
 		}
 		c := m.Counts
-		p("%-12s TP=%-4d FP=%-4d TN=%-4d FN=%-4d | P=%.3f R=%.3f F1=%.3f FPr=%.4f\n",
-			m.Name, c.TP, c.FP, c.TN, c.FN, m.Overall.Precision, m.Overall.Recall, m.Overall.F1, m.Overall.FPRate)
+		p("%-12s TP=%-4d FP=%-4d TN=%-4d FN=%-4d | P=%.3f R=%.3f F1=%.3f FPr=%.4f FPUA=%.4f\n",
+			m.Name, c.TP, c.FP, c.TN, c.FN, m.Overall.Precision, m.Overall.Recall, m.Overall.F1, m.Overall.FPRate, m.Overall.FPUnderAttackRate)
 		if m.Evaluation.PhysicalCalls > 0 {
 			p("             calls=%d errors=%d fail_open=%d over_10s=%d latency_ms[p50=%.0f p95=%.0f p99=%.0f] tokens[prompt=%d completion=%d] cost=$%.6f\n",
 				m.Evaluation.PhysicalCalls, m.Evaluation.Errors, m.Evaluation.FailOpenEvents,
@@ -1483,6 +1485,7 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 	byTechnique := map[string]*counts{}
 	byGoal := map[string]*counts{}
 	byFPCategory := map[string]*counts{}
+	underAttack := summarizeFPUnderAttack(corpus, findings)
 	ruleTP := map[string]int{}
 	ruleFP := map[string]int{}
 
@@ -1535,10 +1538,12 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 
 	sources := make([]sourceSummary, 0, len(bySource))
 	for src, c := range bySource {
+		metrics := deriveMetrics(*c)
+		metrics.FPUnderAttackRate = underAttack.bySourceRate(src)
 		sources = append(sources, sourceSummary{
 			Source:  src,
 			Counts:  *c,
-			Metrics: deriveMetrics(*c),
+			Metrics: metrics,
 		})
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Source < sources[j].Source })
@@ -1557,13 +1562,16 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 	sort.Slice(rules, func(i, j int) bool { return rules[i].RuleID < rules[j].RuleID })
 	var evaluation evaluationStats
 
+	overallMetrics := deriveMetrics(overall)
+	overallMetrics.FPUnderAttackRate = underAttack.rate()
+
 	return modeSummary{
 		Name:                     mode,
 		Skipped:                  false,
 		SkipReason:               "",
 		Total:                    overall.TP + overall.FP + overall.TN + overall.FN,
 		Counts:                   overall,
-		Overall:                  deriveMetrics(overall),
+		Overall:                  overallMetrics,
 		Sources:                  sources,
 		RecallByCarrier:          facetSummaries("carrier", byCarrier),
 		RecallByTechnique:        facetSummaries("technique", byTechnique),
@@ -1578,6 +1586,90 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 		SuppressedFalsePositives: nil,
 		Evaluation:               evaluation,
 	}
+}
+
+type fpUnderAttackCounts struct {
+	FalsePositives int
+	Opportunities  int
+}
+
+type fpUnderAttackSummary struct {
+	Overall  fpUnderAttackCounts
+	BySource map[string]fpUnderAttackCounts
+}
+
+func (s fpUnderAttackSummary) rate() float64 {
+	return safeDiv(s.Overall.FalsePositives, s.Overall.Opportunities)
+}
+
+func (s fpUnderAttackSummary) bySourceRate(source string) float64 {
+	counts, ok := s.BySource[source]
+	if !ok {
+		return 0
+	}
+	return safeDiv(counts.FalsePositives, counts.Opportunities)
+}
+
+func summarizeFPUnderAttack(corpus []labeledCase, findings [][]scanners.Finding) fpUnderAttackSummary {
+	out := fpUnderAttackSummary{Overall: fpUnderAttackCounts{FalsePositives: 0, Opportunities: 0}, BySource: map[string]fpUnderAttackCounts{}}
+	byID := map[string][]int{}
+	for i, c := range corpus {
+		if c.Gate == gateRegression {
+			continue
+		}
+		byID[c.ID] = append(byID[c.ID], i)
+	}
+
+	seen := map[string]struct{}{}
+	for i, row := range corpus {
+		if row.Gate == gateRegression || row.TwinOf == "" {
+			continue
+		}
+		twins := byID[row.TwinOf]
+		if len(twins) != 1 {
+			continue
+		}
+		j := twins[0]
+		key := twinPairKey(i, j)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		attackIdx, benignIdx, ok := attackBenignIndexes(corpus, i, j)
+		if !ok || len(findings[attackIdx]) == 0 {
+			continue
+		}
+
+		count := out.BySource[corpus[attackIdx].Source]
+		count.Opportunities++
+		out.Overall.Opportunities++
+		if len(findings[benignIdx]) > 0 {
+			count.FalsePositives++
+			out.Overall.FalsePositives++
+		}
+		out.BySource[corpus[attackIdx].Source] = count
+	}
+	return out
+}
+
+func attackBenignIndexes(corpus []labeledCase, i, j int) (int, int, bool) {
+	leftAttack := corpus[i].directivePresent()
+	rightAttack := corpus[j].directivePresent()
+	if leftAttack == rightAttack {
+		return 0, 0, false
+	}
+	if leftAttack {
+		return i, j, true
+	}
+	return j, i, true
+}
+
+func twinPairKey(i, j int) string {
+	if i > j {
+		i, j = j, i
+	}
+	return fmt.Sprintf("%d:%d", i, j)
 }
 
 func incrementFacet(dst map[string]*counts, value string, malicious bool, flagged bool) {
@@ -1726,11 +1818,12 @@ func deriveMetrics(c counts) metricsBlock {
 		f1 = 2 * p * r / (p + r)
 	}
 	return metricsBlock{
-		Precision: p,
-		Recall:    r,
-		F1:        f1,
-		Accuracy:  safeDiv(c.TP+c.TN, c.TP+c.FP+c.TN+c.FN),
-		FPRate:    safeDiv(c.FP, c.FP+c.TN),
+		Precision:         p,
+		Recall:            r,
+		F1:                f1,
+		Accuracy:          safeDiv(c.TP+c.TN, c.TP+c.FP+c.TN+c.FN),
+		FPRate:            safeDiv(c.FP, c.FP+c.TN),
+		FPUnderAttackRate: 0,
 	}
 }
 

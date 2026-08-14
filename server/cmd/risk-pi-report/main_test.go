@@ -60,6 +60,28 @@ func TestSummariesCaptureStabilityAndDistributions(t *testing.T) {
 	require.InDelta(t, 0.816496, dist.StdDev, 0.0001)
 }
 
+func TestSummarizeFindingsReportsFPUnderAttack(t *testing.T) {
+	t.Parallel()
+
+	yes := true
+	no := false
+	positive := []scanners.Finding{{RuleID: "pi"}}
+	corpus := []labeledCase{
+		{ID: "benign-fp", Source: "trajectory_twins", Gate: gateRecall, DirectivePresent: &no},
+		{ID: "attack-hit", Source: "trajectory_twins", Gate: gateRecall, DirectivePresent: &yes, TwinOf: "benign-fp"},
+		{ID: "benign-clean", Source: "trajectory_twins", Gate: gateRecall, DirectivePresent: &no},
+		{ID: "attack-hit-clean", Source: "trajectory_twins", Gate: gateRecall, DirectivePresent: &yes, TwinOf: "benign-clean"},
+		{ID: "benign-flagged-missed", Source: "trajectory_twins", Gate: gateRecall, DirectivePresent: &no},
+		{ID: "attack-missed", Source: "trajectory_twins", Gate: gateRecall, DirectivePresent: &yes, TwinOf: "benign-flagged-missed"},
+	}
+	findings := [][]scanners.Finding{positive, positive, nil, positive, positive, nil}
+
+	got := summarizeFindings("l0_default", corpus, findings)
+	require.InDelta(t, 0.5, got.Overall.FPUnderAttackRate, 0.0001)
+	require.Len(t, got.Sources, 1)
+	require.InDelta(t, 0.5, got.Sources[0].Metrics.FPUnderAttackRate, 0.0001)
+}
+
 func TestRecallGateExcludesKnownGapsAndOutOfTaxonomyRows(t *testing.T) {
 	t.Parallel()
 
@@ -96,7 +118,7 @@ func TestRecallFloorsUseEveryRunAndSource(t *testing.T) {
 		Scope: "test", Counts: counts{TP: 9, FP: 0, TN: 0, FN: 1}, Recall: 0.9,
 		BySource: []sourceSummary{{
 			Source: "trajectory_twins", Counts: counts{TP: 8, FP: 0, TN: 0, FN: 2},
-			Metrics: metricsBlock{Precision: 1, Recall: 0.8, F1: 0.888, Accuracy: 0.8, FPRate: 0},
+			Metrics: metricsBlock{Precision: 1, Recall: 0.8, F1: 0.888, Accuracy: 0.8, FPRate: 0, FPUnderAttackRate: 0},
 		}},
 		Excluded: 0,
 	}
@@ -109,7 +131,7 @@ func TestRecallFloorsUseEveryRunAndSource(t *testing.T) {
 	failingSource := passing
 	failingSource.BySource = []sourceSummary{{
 		Source: "trajectory_twins", Counts: counts{TP: 7, FP: 0, TN: 0, FN: 3},
-		Metrics: metricsBlock{Precision: 1, Recall: 0.7, F1: 0.824, Accuracy: 0.7, FPRate: 0},
+		Metrics: metricsBlock{Precision: 1, Recall: 0.7, F1: 0.824, Accuracy: 0.7, FPRate: 0, FPUnderAttackRate: 0},
 	}}
 	require.ErrorContains(t, checkFloors(fl, []recallGateSummary{failingSource}, nil), "trajectory_twins")
 

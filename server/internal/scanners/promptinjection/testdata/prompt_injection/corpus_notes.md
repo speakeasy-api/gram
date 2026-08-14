@@ -44,7 +44,7 @@ Headline recall uses reviewed `gate=recall` rows where `directive_present=true`,
 Headline false-positive rate uses reviewed `gate=fp` rows where `directive_present=false`, excluding pending-review imports.
 `gate=regression` rows are reported separately and never enter headline recall or FPR.
 
-Facet reports break recall down by `carrier`, `technique`, and `goal`, and FPR by `fp_category`.
+Facet reports break recall down by `carrier`, `technique`, and `goal`, and FPR by `fp_category`. The report also emits ungated `fp_under_attack_rate` overall and per source for twin-linked rows: the denominator is caught malicious twins, and the numerator is flagged benign twins from those same pairs.
 
 ## External sources
 

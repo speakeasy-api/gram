@@ -79,6 +79,10 @@ Added 24 explicit twin rows to `trajectory_twins.jsonl`, one for each previously
 
 `trajectory_twins.jsonl` now has 98 rows.
 
+## Follow-up: FPR Under Attack
+
+Added ungated `fp_under_attack_rate` reporting for twin-linked pairs. A pair contributes an opportunity only when the malicious twin is correctly detected; it contributes a false positive under attack when the benign twin is also flagged. The metric is emitted overall and per source next to recall and plain FPR, but it is not used by enforced floors.
+
 ## Remaining Work
 
 - Human curation of `llmail_hard.jsonl` and AgentDojo imports.

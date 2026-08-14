@@ -117,6 +117,7 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
                 "f1",
                 "accuracy",
                 "fp_rate",
+                "fp_under_attack",
             ],
             mode_rows(modes),
         )
@@ -142,7 +143,7 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
 
         print("By source:")
         print_table(
-            ["mode", "source", "tp", "fp", "tn", "fn", "recall", "fp_rate"],
+            ["mode", "source", "tp", "fp", "tn", "fn", "recall", "fp_rate", "fp_under_attack"],
             source_rows(modes),
         )
         print()
@@ -177,7 +178,7 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
 
     print("By source:")
     print_table(
-        ["source", "tp", "fp", "tn", "fn", "recall", "fp_rate"],
+        ["source", "tp", "fp", "tn", "fn", "recall", "fp_rate", "fp_under_attack"],
         [
             [
                 item["source"],
@@ -187,6 +188,7 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
                 item["counts"]["fn"],
                 fmt(item["metrics"].get("recall")),
                 fmt(item["metrics"].get("fp_rate")),
+                fmt(item["metrics"].get("fp_under_attack_rate")),
             ]
             for item in summary.get("by_source", [])
         ],
@@ -266,6 +268,7 @@ def print_counts(summary: dict[str, Any]) -> None:
     print(f"f1:        {fmt(overall.get('f1'))}")
     print(f"accuracy:  {fmt(overall.get('accuracy'))}")
     print(f"fp_rate:   {fmt(overall.get('fp_rate'))}")
+    print(f"fp_under_attack: {fmt(overall.get('fp_under_attack_rate'))}")
 
 
 def print_gate_counts(gate: dict[str, Any], metric: str) -> None:
@@ -320,6 +323,7 @@ def mode_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
                     "-",
                     "-",
                     "-",
+                    "-",
                 ]
             )
             continue
@@ -340,6 +344,7 @@ def mode_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
                 fmt(overall.get("f1")),
                 fmt(overall.get("accuracy")),
                 fmt(overall.get("fp_rate")),
+                fmt(overall.get("fp_under_attack_rate")),
             ]
         )
     return rows
@@ -371,6 +376,7 @@ def source_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
                     counts["fn"],
                     fmt(metrics.get("recall")),
                     fmt(metrics.get("fp_rate")),
+                    fmt(metrics.get("fp_under_attack_rate")),
                 ]
             )
     return rows
@@ -419,6 +425,13 @@ def delta_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
         [
             "fp_rate",
             signed_percentage_points(l1_overall["fp_rate"] - l0_overall["fp_rate"]),
+        ],
+        [
+            "fp_under_attack",
+            signed_percentage_points(
+                l1_overall.get("fp_under_attack_rate", 0)
+                - l0_overall.get("fp_under_attack_rate", 0)
+            ),
         ],
     ]
 
