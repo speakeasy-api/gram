@@ -4,4 +4,5 @@ import { OverviewRoute } from "@/pages/organization/Overview";
 
 export const Route = createFileRoute("/organizations/$idOrSlug/")({
   component: OverviewRoute,
+  staticData: { crumb: "Overview" },
 });

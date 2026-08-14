@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationQuery } from "@/lib/adminQueries";
@@ -79,21 +79,30 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+// The breadcrumb names the same views the nav does, so every link query here
+// has to say which of the two it means.
+function sidebar(): HTMLElement {
+  const found = document.querySelector("[data-slot='sidebar']");
+  if (!(found instanceof HTMLElement)) throw new Error("no sidebar on screen");
+  return found;
+}
+
 function hrefs(): (string | null)[] {
-  return screen.getAllByRole("link").map((link) => link.getAttribute("href"));
+  return within(sidebar())
+    .getAllByRole("link")
+    .map((link) => link.getAttribute("href"));
 }
 
 // The record name is on the page as well as in the nav, so a name has to be
 // looked for in one of them and not the other.
 function inTheNav(text: string): boolean {
-  const sidebar = document.querySelector("[data-slot='sidebar']");
-  return sidebar?.textContent?.includes(text) ?? false;
+  return sidebar().textContent?.includes(text) ?? false;
 }
 
 // The count is a `SidebarMenuBadge`, a sibling of the link rather than part of
 // it, so the item is what carries label and count together.
 function navItem(label: string): HTMLElement {
-  const item = screen
+  const item = within(sidebar())
     .getByRole("link", { name: label })
     .closest("[data-slot='sidebar-menu-item']");
   if (!(item instanceof HTMLElement)) {
@@ -104,7 +113,9 @@ function navItem(label: string): HTMLElement {
 
 function isActive(name: string): boolean {
   return (
-    screen.getByRole("link", { name }).getAttribute("data-active") === "true"
+    within(sidebar())
+      .getByRole("link", { name })
+      .getAttribute("data-active") === "true"
   );
 }
 
@@ -218,7 +229,9 @@ describe("AppSidebar", () => {
     // Handing the nav the record's slug instead of the address it was reached
     // by makes every item a redirect to a second cache entry for one record.
     expect(
-      screen.getByRole("link", { name: "Members" }).getAttribute("href"),
+      within(sidebar())
+        .getByRole("link", { name: "Members" })
+        .getAttribute("href"),
     ).toBe(`/organizations/${ORG.id}/members`);
   });
 
