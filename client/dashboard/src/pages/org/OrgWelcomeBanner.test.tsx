@@ -50,14 +50,14 @@ describe("OrgWelcomeBanner", () => {
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha");
-    expect(hrefFor("Start setup wizard")).toBe("/acme/setup");
+    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
   });
 
   it("drops the setup card when the org cannot run the wizard", () => {
     setupEligible.current = false;
     render(<OrgWelcomeBanner />);
 
-    expect(screen.queryByText("Start setup wizard")).toBeNull();
+    expect(screen.queryByText("Begin rollout")).toBeNull();
     expect(screen.getByText("Enter demo org")).toBeTruthy();
   });
 

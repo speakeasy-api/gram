@@ -68,9 +68,9 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   if (canSetUpOrg) {
     cards.push({
       index: "03",
-      title: "Set up the organization",
+      title: "Start enterprise rollout",
       body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
-      cta: "Start setup wizard",
+      cta: "Begin rollout",
       meta: "5 steps · resumable",
       to: orgRoutes.setup.href(),
     });
