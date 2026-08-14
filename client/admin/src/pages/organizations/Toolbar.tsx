@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useState, type JSX, type ReactNode } from "react";
+import { useEffect, useState, type JSX } from "react";
 
 import type {
   DataTableFeatures,
@@ -92,7 +92,7 @@ export function Toolbar(): JSX.Element {
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2" />
         <Input
           aria-label="Search organizations"
-          placeholder="Search by name or slug..."
+          placeholder="Search by name, slug or id..."
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className="w-full py-1.5 pr-2 pl-8"
@@ -139,20 +139,24 @@ export function Toolbar(): JSX.Element {
  */
 export function TableActionBar<T extends RowData>({
   table,
-  hint,
 }: {
   table: DataTableInstance<T>;
-  hint?: ReactNode;
 }): JSX.Element {
   // Read off the table rather than walked a second time here, so the menu
   // cannot disagree with the table about how many columns are left.
-  const visibleCount = table.getVisibleLeafColumns().length;
+  //
+  // Only the hideable ones count. A column that opts out of hiding is visible
+  // whatever the operator does, so counting it holds this total off the floor
+  // and the guard below never fires: the operator can then hide every column
+  // that carries data and be left with a table of controls and no records.
+  const visibleCount = table
+    .getVisibleLeafColumns()
+    .filter((column) => column.getCanHide()).length;
 
   return (
     <div className="flex items-center gap-3 border-b px-3 py-2">
       <span className="text-muted-foreground text-xs">Nothing selected</span>
       <span className="flex-1" />
-      {hint}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="xs">
