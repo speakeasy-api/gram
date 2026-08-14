@@ -574,6 +574,7 @@ chat_activity AS (
   -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
+    cc.created_at,
     COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
   CROSS JOIN LATERAL (
@@ -584,8 +585,11 @@ chat_activity AS (
 )
 SELECT COUNT(*) AS total
 FROM chat_activity ca
+-- Interval overlap, mirroring ListChats: last activity after the range opens,
+-- created before it closes. Bounding last_message_timestamp above would evict
+-- an actively-writing chat as soon as a message lands past the caller's @to.
 WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_time)
-  AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
+  AND (@to_time::timestamptz IS NULL OR ca.created_at <= @to_time);
 
 -- name: ListChats :many
 -- Returns the page plus the pre-LIMIT total (total_count window column), so the
@@ -734,8 +738,14 @@ filtered_chats AS (
     cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
+  -- The range test is interval overlap: the chat was active after the range
+  -- opened (last message >= @from_time) and existed before it closed
+  -- (created_at <= @to_time). Bounding last_message_timestamp above instead
+  -- would evict an actively-writing chat the moment a new message lands past
+  -- the caller's @to — the dashboard freezes @to when a range is picked, so
+  -- running sessions would flicker out of the list until the next reload.
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
-    AND (@to_time::timestamptz IS NULL OR cs.last_message_timestamp <= @to_time)
+    AND (@to_time::timestamptz IS NULL OR cc.created_at <= @to_time)
 ),
 limited_chats AS (
   SELECT
