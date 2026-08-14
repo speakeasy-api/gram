@@ -118,6 +118,12 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Contains(t, appErr.Message(), "provider=anthropic_compliance")
 	require.Contains(t, appErr.Message(), fmt.Sprintf("attempt=5/%d", PollUsageMaxAttempts))
 
+	// The message expands the oops wrapper's cause chain: on their own,
+	// oops errors stringify to just their public text, which used to leave
+	// worker logs and spans without the underlying failure or progress.
+	require.Contains(t, appErr.Message(), "[discover_activities] list anthropic compliance activities: 503 Service Unavailable")
+	require.Contains(t, appErr.Message(), "(progress:")
+
 	require.True(t, appErr.HasDetails())
 	var details aiUsagePollFailureDetails
 	require.NoError(t, appErr.Details(&details))

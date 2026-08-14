@@ -252,6 +252,52 @@ func TestRecordSchedulePollFailureWithoutPauseThresholdNeverPauses(t *testing.T)
 	require.Contains(t, listCandidateSchedules(t, ctx, store), ScheduleAnthropicCompliance)
 }
 
+func TestRecordSchedulePollFailureBacksOffWithFailureStreak(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	base := time.Now().UTC()
+	interval := pollIntervalForSchedule(ScheduleAnthropicCompliance)
+	cause := errors.New("codex compliance log sha256 mismatch for eclf_1")
+
+	// Failure k reschedules the next poll interval * 2^(k-1) out, capped at
+	// 2^pollFailureMaxBackoffDoublings: the first failure keeps the base
+	// cadence, each repeat doubles the delay, and a chronic failure settles
+	// at the cap instead of retrying at full cadence forever.
+	for k := 1; k <= pollFailureMaxBackoffDoublings+2; k++ {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, base, cause, 0))
+
+		expected := base.Add(interval * time.Duration(1<<min(k-1, pollFailureMaxBackoffDoublings)))
+		state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
+		require.WithinDuration(t, expected, state.NextPollAfter, time.Second)
+	}
+
+	// A success resets the streak, so the next failure is back to the base
+	// cadence.
+	require.NoError(t, store.RecordSchedulePollSuccess(ctx, created.Config.ID, ScheduleAnthropicCompliance, base))
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, base, cause, 0))
+	state := findSyncSchedule(t, ctx, store, created.Config.ID, ScheduleAnthropicCompliance)
+	require.WithinDuration(t, base.Add(interval), state.NextPollAfter, time.Second)
+}
+
+func findSyncSchedule(t *testing.T, ctx context.Context, store *Store, configID uuid.UUID, schedule string) SyncSchedule {
+	t.Helper()
+
+	schedules, err := store.ListSyncSchedules(ctx, configID)
+	require.NoError(t, err)
+	for _, state := range schedules {
+		if state.Schedule == schedule {
+			return state
+		}
+	}
+	t.Fatalf("schedule %s not found on config %s", schedule, configID)
+	panic("unreachable")
+}
+
 func TestUpsertWithTxClearsAutoPause(t *testing.T) {
 	t.Parallel()
 

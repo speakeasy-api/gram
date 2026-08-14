@@ -260,6 +260,31 @@ func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing event_id")
+	// The message names the log file so a poisoned file in a multi-file
+	// window is identifiable from the stored poll error alone.
+	require.Contains(t, err.Error(), "eclf_123")
+}
+
+func TestBuildCodexCostLogParamsDecodeErrorNamesLogAndCause(t *testing.T) {
+	t.Parallel()
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_bad",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 16, 0, 27, 13, 340496000, time.UTC),
+		FileName:   "COSTS_2026-07-16T00:27:13.340496+00:00.jsonl",
+		FileSize:   0,
+		FileSHA256: "",
+	}
+
+	_, err := buildCodexCostLogParams(cfg, file, []byte("\x1f\x8b not json"))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode codex compliance cost log eclf_bad")
+	// The json cause survives the wrap so last_poll_error shows what was
+	// actually wrong with the bytes.
+	require.Contains(t, err.Error(), "invalid character")
 }
 
 // Pagination edge cases (empty windows, non-advancing last_end_time, window

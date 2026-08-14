@@ -854,10 +854,21 @@ func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUI
 // integration clears the pause and the failure streak.
 const AutoPauseAfterRejectedPolls = 3
 
+// pollFailureMaxBackoffDoublings caps the exponential backoff applied to a
+// schedule's next poll after consecutive final failures. A schedule that
+// fails deterministically every run (e.g. a poisoned compliance log file)
+// settles at 2^6 = 64x its base interval — about 5.3h for a 5m schedule —
+// instead of retrying at full cadence forever and tripping failure-burst
+// monitors. A poll success resets the streak, restoring the normal cadence.
+const pollFailureMaxBackoffDoublings = 6
+
 // RecordSchedulePollFailure records a final poll failure on a schedule. A
 // positive pauseAfter automatically pauses the schedule once its consecutive
 // failure count reaches that threshold; zero never pauses, for failures that
-// retrying at the normal cadence can plausibly fix.
+// retrying can plausibly fix. Every recorded failure doubles the delay until
+// the next poll, capped at 2^pollFailureMaxBackoffDoublings times the
+// schedule's base interval, so chronic failures decay to a slow cadence
+// instead of retrying at full speed indefinitely.
 func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error, pauseAfter int32) error {
 	var errStr string
 	if cause != nil {
@@ -868,10 +879,23 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 		}
 	}
 
+	// The streak before this failure decides the backoff; a lookup failure
+	// falls back to the base interval so the failure is still recorded.
+	backoffDoublings := 0
+	if schedules, err := s.ListSyncSchedules(ctx, configID); err == nil {
+		for _, state := range schedules {
+			if state.Schedule == schedule {
+				backoffDoublings = min(int(state.ConsecutiveFailures), pollFailureMaxBackoffDoublings)
+				break
+			}
+		}
+	}
+	retryDelay := pollIntervalForSchedule(schedule) * time.Duration(1<<backoffDoublings)
+
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		Schedule:              schedule,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(retryDelay)),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 		PauseAfter:            pauseAfter,
 	}); err != nil {

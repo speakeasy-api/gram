@@ -277,7 +277,7 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 
 	written, dropped, err := src.processPage(ctx, logParams)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
+		return fmt.Errorf("insert codex cost telemetry logs: %w", err)
 	}
 	src.progress.CostEventsDeduped += dropped
 	src.progress.CostEventsWritten += written
@@ -307,7 +307,7 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 		sum := sha256.Sum256(body)
 		actual := hex.EncodeToString(sum[:])
 		if !strings.EqualFold(actual, file.FileSHA256) {
-			return nil, oops.E(oops.CodeUnexpected, nil, "codex compliance log sha256 mismatch for %s", file.ID)
+			return nil, fmt.Errorf("codex compliance log sha256 mismatch for %s", file.ID)
 		}
 	}
 
@@ -320,7 +320,7 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 		case errors.Is(err, io.EOF):
 			return logParams, nil
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "decode codex compliance cost log")
+			return nil, fmt.Errorf("decode codex compliance cost log %s: %w", file.ID, err)
 		case event.Type != codexComplianceCostsEventType:
 			continue
 		}
@@ -338,12 +338,12 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexCostEvent) (telemetry.LogParams, bool, error) {
 	eventID := strings.TrimSpace(event.EventID)
 	if eventID == "" {
-		return telemetry.LogParams{}, false, oops.E(oops.CodeUnexpected, nil, "codex compliance cost event missing event_id")
+		return telemetry.LogParams{}, false, fmt.Errorf("codex compliance cost event missing event_id in log %s", file.ID)
 	}
 
 	timestamp, err := event.TimestampTime()
 	if err != nil {
-		return telemetry.LogParams{}, false, oops.E(oops.CodeUnexpected, err, "parse codex compliance cost timestamp")
+		return telemetry.LogParams{}, false, fmt.Errorf("parse codex compliance cost timestamp in log %s: %w", file.ID, err)
 	}
 	if timestamp.IsZero() {
 		timestamp = codexCostBucketTime(event.Payload)

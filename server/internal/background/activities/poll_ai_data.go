@@ -326,8 +326,18 @@ func newPollFailureError(configID uuid.UUID, provider string, attempt int32, non
 		}
 	}
 
+	// oops.ShareableError prints only its public message from Error(), which
+	// leaves worker logs and spans with the wrapper text ("sync codex cost
+	// data") and no underlying cause. Expand it so the message carries the
+	// stage failure and progress summary.
+	causeText := cause.Error()
+	var shareable *oops.ShareableError
+	if errors.As(cause, &shareable) {
+		causeText = shareable.String()
+	}
+
 	message := fmt.Sprintf("poll ai integration usage: provider=%s config=%s attempt=%d/%d: %s",
-		provider, configID, attempt, PollUsageMaxAttempts, cause)
+		provider, configID, attempt, PollUsageMaxAttempts, causeText)
 	return temporal.NewApplicationErrorWithOptions(message, ErrTypeAIUsagePollFailed, temporal.ApplicationErrorOptions{
 		NonRetryable: nonRetryable,
 		Cause:        cause,
