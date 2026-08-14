@@ -106,6 +106,6 @@ func deploymentLimitForTier(tier billing.Tier) (deploymentTierLimit, bool) {
 	case billing.TierEnterprise:
 		return deploymentTierLimit{displayName: "Enterprise", maxFunctionAssets: 25}, true
 	default:
-		return deploymentTierLimit{}, false
+		return deploymentTierLimit{displayName: "", maxFunctionAssets: 0}, false
 	}
 }
