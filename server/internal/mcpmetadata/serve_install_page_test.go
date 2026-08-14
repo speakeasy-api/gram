@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -974,6 +975,29 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
 }
 
+// installTargetTemplateHTML returns the inner HTML of the named
+// install-target <template>. The page also embeds mcp-remote in the Claude
+// Desktop modal and the raw-config snippet, so assertions that a client does
+// not use that workaround have to look at this section only.
+func installTargetTemplateHTML(t *testing.T, body, target string) string {
+	t.Helper()
+	marker := `data-install-target="` + target + `"`
+	searchFrom := 0
+	for {
+		rel := strings.Index(body[searchFrom:], marker)
+		require.GreaterOrEqual(t, rel, 0, "install target %s not found", target)
+		abs := searchFrom + rel
+		templateStart := strings.LastIndex(body[:abs], "<template")
+		require.GreaterOrEqual(t, templateStart, 0, "install target %s is not inside a template", target)
+		if strings.Contains(body[templateStart:abs], `class="install-target-template"`) {
+			endRel := strings.Index(body[abs:], "</template>")
+			require.GreaterOrEqual(t, endRel, 0, "install target %s template is unclosed", target)
+			return body[templateStart : abs+endRel]
+		}
+		searchFrom = abs + len(marker)
+	}
+}
+
 // TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs verifies that a public
 // MCP server renders the ChatGPT Desktop custom-connector flow, including the
 // Business & Enterprise admin note and the None-auth instruction.
@@ -1018,13 +1042,15 @@ func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
 	body := rr.Body.String()
 	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
 	assert.Contains(t, body, "ChatGPT Desktop", "should label the ChatGPT Desktop install target")
-	assert.Contains(t, body, "Developer mode", "should tell users to enable Developer mode")
-	assert.Contains(t, body, "Add custom connector", "should render the custom connector step")
-	assert.Contains(t, body, "Leave authentication as <strong>None</strong>", "public servers should use None auth")
-	assert.Contains(t, body, "For Business &amp; Enterprise", "should render the Business & Enterprise admin note")
-	assert.NotContains(t, body, "Set authentication to <strong>Token</strong>", "public servers should not ask for Token auth")
-	assert.NotContains(t, body, "Set authentication to <strong>OAuth</strong>", "public servers should not ask for OAuth")
-	assert.NotContains(t, body, "mcp-remote", "ChatGPT Desktop cannot run local MCP proxies")
+
+	section := installTargetTemplateHTML(t, body, "chatgpt-desktop")
+	assert.Contains(t, section, "Developer mode", "should tell users to enable Developer mode")
+	assert.Contains(t, section, "Add custom connector", "should render the custom connector step")
+	assert.Contains(t, section, "Leave authentication as <strong>None</strong>", "public servers should use None auth")
+	assert.Contains(t, section, "For Business &amp; Enterprise", "should render the Business & Enterprise admin note")
+	assert.NotContains(t, section, "Set authentication to <strong>Token</strong>", "public servers should not ask for Token auth")
+	assert.NotContains(t, section, "Set authentication to <strong>OAuth</strong>", "public servers should not ask for OAuth")
+	assert.NotContains(t, section, "mcp-remote", "ChatGPT Desktop cannot run local MCP proxies")
 }
 
 // TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs verifies that a
@@ -1063,13 +1089,15 @@ func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 
 	body := rr.Body.String()
 	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
-	assert.Contains(t, body, "Set authentication to <strong>Token</strong>", "private servers should use Token auth")
-	assert.Contains(t, body, "Authorization: Bearer", "should explain how ChatGPT sends the token")
-	assert.Contains(t, body, "cannot set additional custom HTTP headers", "should explain the header limitation")
-	assert.Contains(t, body, "For Business &amp; Enterprise", "should still render the Business & Enterprise admin note")
-	assert.NotContains(t, body, "Leave authentication as <strong>None</strong>", "private servers should not suggest None auth")
-	assert.NotContains(t, body, "Set authentication to <strong>OAuth</strong>", "gram-key servers should not suggest OAuth")
-	assert.NotContains(t, body, "mcp-remote", "ChatGPT Desktop cannot run local MCP proxies")
+
+	section := installTargetTemplateHTML(t, body, "chatgpt-desktop")
+	assert.Contains(t, section, "Set authentication to <strong>Token</strong>", "private servers should use Token auth")
+	assert.Contains(t, section, "Authorization: Bearer", "should explain how ChatGPT sends the token")
+	assert.Contains(t, section, "additional custom HTTP headers", "should explain the header limitation")
+	assert.Contains(t, section, "For Business &amp; Enterprise", "should still render the Business & Enterprise admin note")
+	assert.NotContains(t, section, "Leave authentication as <strong>None</strong>", "private servers should not suggest None auth")
+	assert.NotContains(t, section, "Set authentication to <strong>OAuth</strong>", "gram-key servers should not suggest OAuth")
+	assert.NotContains(t, section, "mcp-remote", "ChatGPT Desktop cannot run local MCP proxies")
 }
 
 // TestServeInstallPage_ChatGPTDesktop_OAuth verifies that an OAuth-gated
@@ -1116,10 +1144,12 @@ func TestServeInstallPage_ChatGPTDesktop_OAuth(t *testing.T) {
 
 	body := rr.Body.String()
 	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
-	assert.Contains(t, body, "Set authentication to <strong>OAuth</strong>", "OAuth-gated servers should use OAuth")
-	assert.NotContains(t, body, "Set authentication to <strong>Token</strong>", "OAuth-gated servers should not ask for Token auth")
-	assert.NotContains(t, body, "Leave authentication as <strong>None</strong>", "OAuth-gated servers should not suggest None auth")
-	assert.NotContains(t, body, "GRAM_KEY", "OAuth-gated install must not ask for a Gram key")
+
+	section := installTargetTemplateHTML(t, body, "chatgpt-desktop")
+	assert.Contains(t, section, "Set authentication to <strong>OAuth</strong>", "OAuth-gated servers should use OAuth")
+	assert.NotContains(t, section, "Set authentication to <strong>Token</strong>", "OAuth-gated servers should not ask for Token auth")
+	assert.NotContains(t, section, "Leave authentication as <strong>None</strong>", "OAuth-gated servers should not suggest None auth")
+	assert.NotContains(t, section, "GRAM_KEY", "OAuth-gated install must not ask for a Gram key")
 }
 
 // TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
