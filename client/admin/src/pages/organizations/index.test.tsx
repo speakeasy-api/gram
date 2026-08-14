@@ -7,6 +7,7 @@ import {
 import {
   act,
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -207,6 +208,17 @@ async function withFakeTimers(
   }
 }
 
+// One turn of the macrotask queue, flushed through act. An assertion that
+// something did *not* navigate has to give the navigation a chance to happen
+// first, or it passes against a router that simply had not got there yet.
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  });
+}
+
 // The router JSON-encodes and then percent-encodes an array, so decoding once
 // lets an assertion name the value the way the schema declares it.
 function currentSearch(router: AnyRouter): string {
@@ -307,8 +319,12 @@ function liveRegion(): HTMLElement {
 // sentence repeated word for word still changes the text node. Stripped here:
 // these assertions are about what is announced, not about the marker that
 // makes an unchanged sentence announceable.
+// The marker the region alternates. Written out rather than imported, so a
+// change to the page's own constant has to be made here as well.
+const ZERO_WIDTH_SPACE = "\u200b";
+
 function announcement(): string {
-  return (liveRegion().textContent ?? "").replaceAll("\u200b", "");
+  return (liveRegion().textContent ?? "").replaceAll(ZERO_WIDTH_SPACE, "");
 }
 
 function isPeeked(link: HTMLElement): boolean {
@@ -902,8 +918,6 @@ describe("organizations list", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
-      "Peek",
-      "Actions",
       "Name",
       "Slug",
       "Type",
@@ -912,16 +926,13 @@ describe("organizations list", () => {
       "Disabled",
       "Trial",
       "Created",
+      "Actions",
     ]);
     expect(
       within(rowFor(link))
         .getAllByRole("cell")
         .map((cell) => cell.textContent),
     ).toEqual([
-      // The peek control carries an icon and its name is on the button.
-      "",
-      // So does the row menu, for the same reason.
-      "",
       FIRST_ORG.name,
       FIRST_ORG.slug,
       FIRST_ORG.account_type,
@@ -936,6 +947,8 @@ describe("organizations list", () => {
       // here on the date alone.
       `Running ends ${shortDate(trialEndsAt)}`,
       shortDate(FIRST_ORG.created_at),
+      // Both controls carry an icon and their names are on the buttons.
+      "",
     ]);
   });
 
@@ -1011,11 +1024,7 @@ describe("organizations list", () => {
     // The browser opens the link in a background tab and the row handler has to
     // stay out of it. Without the guard the list the operator meant to keep
     // navigates away underneath the new tab.
-    await act(async () => {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
-      });
-    });
+    await settle();
     expect(router.state.location.pathname).toBe("/organizations");
   });
 
@@ -1064,7 +1073,7 @@ describe("organizations list peek", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Peek", "Actions", "Name", "Slug", "Type"]);
+    ).toEqual(["Name", "Slug", "Type", "Actions"]);
   });
 
   it("takes the trial column down with the rest while it is open", async () => {
@@ -1193,15 +1202,13 @@ describe("organizations list peek", () => {
     await peekOn(FIRST_ORG.name);
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Peek", "Actions", "Name", "Type"]);
+    ).toEqual(["Name", "Type", "Actions"]);
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
-      "Peek",
-      "Actions",
       "Name",
       "Type",
       "Members",
@@ -1209,6 +1216,7 @@ describe("organizations list peek", () => {
       "Disabled",
       "Trial",
       "Created",
+      "Actions",
     ]);
   });
 
@@ -1228,7 +1236,7 @@ describe("organizations list peek", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Peek", "Actions", "Name", "Slug", "Type"]);
+    ).toEqual(["Name", "Slug", "Type", "Actions"]);
     expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
@@ -1292,8 +1300,6 @@ describe("organizations list peek", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
-      "Peek",
-      "Actions",
       "Name",
       "Slug",
       "Type",
@@ -1302,6 +1308,7 @@ describe("organizations list peek", () => {
       "Disabled",
       "Trial",
       "Created",
+      "Actions",
     ]);
   });
 
@@ -1785,7 +1792,7 @@ describe("organizations list peek", () => {
     expect(announcement()).toBe(`Peeking at ${FIRST_ORG.name}.`);
   });
 
-  it("opens the organization on an alt-click rather than peeking at it", async () => {
+  it("peeks on an alt-click of the row rather than opening the organization", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
@@ -1793,9 +1800,54 @@ describe("organizations list peek", () => {
     const link = await screen.findByRole("link", { name: FIRST_ORG.name });
     const slugCell = cellUnder(rowFor(link), "Slug");
 
-    // The gesture is gone: browsers read Alt-click on an anchor as "save
-    // link", and the row's own handler carries no branch for it any more.
     fireEvent.click(slugCell, { altKey: true });
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    // The half that is not changing, and the half a careless fix breaks: the
+    // gesture peeks instead of navigating, not as well as navigating.
+    await settle();
+    expect(router.state.location.pathname).toBe("/organizations");
+  });
+
+  it("announces an alt-click peek the same way the control does", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const region = await screen.findByRole("status");
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    fireEvent.click(cellUnder(rowFor(link), "Slug"), { altKey: true });
+
+    // The same node and the same sentence. A second path into peek that
+    // announced differently, or into a region of its own, would reach a
+    // screen reader as a different feature.
+    expect(liveRegion()).toBe(region);
+    expect(announcement()).toBe(`Peeking at ${FIRST_ORG.name}.`);
+  });
+
+  it("closes the peek when the same row is alt-clicked again", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const slugCell = cellUnder(rowFor(link), "Slug");
+
+    fireEvent.click(slugCell, { altKey: true });
+    expect(peekPanel()).toBeTruthy();
+
+    // The gesture toggles, the same way the control it stands in for does.
+    fireEvent.click(cellUnder(rowFor(link), "Slug"), { altKey: true });
+
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+  });
+
+  it("opens the organization on a plain click of the same cell", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    fireEvent.click(cellUnder(rowFor(link), "Slug"));
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe(
@@ -1807,12 +1859,98 @@ describe("organizations list peek", () => {
     ).toBeNull();
   });
 
+  // Ctrl, Meta and Shift are the browser's open-in-tab and open-in-window
+  // gestures on the link this row carries. A handler that peeked on any
+  // modifier rather than on Alt alone would eat all three.
+  for (const modifier of ["ctrlKey", "metaKey", "shiftKey"] as const) {
+    it(`neither peeks nor navigates on a ${modifier} click of the row`, async () => {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: "/organizations",
+      });
+      const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+      fireEvent.click(cellUnder(rowFor(link), "Slug"), { [modifier]: true });
+
+      expect(
+        screen.queryByRole("complementary", { name: "Organization peek" }),
+      ).toBeNull();
+      // Staying put is the whole gesture. A modified click that navigated in
+      // this tab would take the list out from under the tab the operator
+      // meant to open, and the peek assertion above passes either way.
+      await settle();
+      expect(router.state.location.pathname).toBe("/organizations");
+    });
+  }
+
+  it("cancels the name link's download and peeks when it is alt-clicked", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // Dispatched by hand, because the assertion is on the event rather than on
+    // the DOM: a browser reads Alt on an anchor as "save link", so the row has
+    // to cancel the anchor's own default or the gesture downloads the page.
+    const event = createEvent.click(link, { altKey: true });
+    fireEvent(link, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    await settle();
+    expect(router.state.location.pathname).toBe("/organizations");
+  });
+
+  // Alt plus a second modifier is a gesture nobody aimed at this row, but the
+  // anchor's default is still "save link". Cancelling has to survive the
+  // narrower peek test, or the operator downloads an HTML file.
+  for (const modifier of ["ctrlKey", "metaKey", "shiftKey"] as const) {
+    it(`cancels the download without peeking on an alt+${modifier} click of the name`, async () => {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: "/organizations",
+      });
+      const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+      const event = createEvent.click(link, { altKey: true, [modifier]: true });
+      fireEvent(link, event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(
+        screen.queryByRole("complementary", { name: "Organization peek" }),
+      ).toBeNull();
+      await settle();
+      expect(router.state.location.pathname).toBe("/organizations");
+    });
+  }
+
+  it("opens the peek once when the control itself is alt-clicked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const trigger = await peekTrigger(FIRST_ORG.name);
+
+    // The control sits in the row the gesture is also bound to, so the click
+    // reaches both. Only the control may answer it.
+    fireEvent.click(trigger, { altKey: true });
+
+    expect(
+      within(peekPanel()).getByRole("heading", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
+    // Raw, marker included, because the count is the only trace a second
+    // answer leaves: both handlers read the same peeked id and both open the
+    // same record, so the panel looks right and the region has spoken twice.
+    // The zero-width space alternates to make a repeated sentence announceable
+    // at all, and a gesture answered twice quietly spends that guarantee.
+    expect(liveRegion().textContent).toBe(
+      `Peeking at ${FIRST_ORG.name}.` + ZERO_WIDTH_SPACE,
+    );
+  });
+
   it("will not let the Columns menu hide the control", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await screen.findByRole("link", { name: FIRST_ORG.name });
 
     openOn(screen.getByRole("button", { name: "Columns" }));
-    const item = screen.getByRole("menuitemcheckbox", { name: "Peek" });
+    const item = screen.getByRole("menuitemcheckbox", { name: "Actions" });
     fireEvent.click(item);
 
     expect(item.getAttribute("aria-disabled")).toBe("true");
@@ -1823,7 +1961,9 @@ describe("organizations list peek", () => {
     fireEvent.keyDown(item, { key: "Escape" });
 
     await waitFor(() => {
-      expect(screen.getByRole("columnheader", { name: "Peek" })).toBeTruthy();
+      expect(
+        screen.getByRole("columnheader", { name: "Actions" }),
+      ).toBeTruthy();
     });
     expect(await peekTrigger(FIRST_ORG.name)).toBeTruthy();
   });
@@ -2502,24 +2642,170 @@ describe("organizations list write actions", () => {
   });
 });
 
+describe("organizations list actions column", () => {
+  function headers(): string[] {
+    return screen
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent ?? "");
+  }
+
+  function actionsCell(name: string): HTMLElement {
+    return cellUnder(rowFor(screen.getByRole("link", { name })), "Actions");
+  }
+
+  function menuTrigger(name: string): HTMLElement {
+    return screen.getByRole("button", { name: `Actions for ${name}` });
+  }
+
+  it("puts the column last and leaves it there when peek opens", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    expect(headers().at(-1)).toBe("Actions");
+
+    await peekOn(FIRST_ORG.name);
+
+    // Peek takes five columns down. The controls are the ones the operator is
+    // reaching for at that moment, so they have to be where they were.
+    expect(headers().at(-1)).toBe("Actions");
+    expect(headers()).not.toContain("Created");
+  });
+
+  it("marks the actions column sticky at the right edge, above its neighbours and no wider than its contents", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // Both halves of the column, because a pin on the header alone leaves the
+    // cells sliding under a header that stayed put. happy-dom lays nothing
+    // out, so these read the classes that carry the pin; the measurement that
+    // proves the column holds its x is in the browser.
+    for (const element of [
+      screen.getByRole("columnheader", { name: "Actions" }),
+      actionsCell(FIRST_ORG.name),
+    ]) {
+      expect(element.classList.contains("sticky")).toBe(true);
+      expect(element.classList.contains("right-0")).toBe(true);
+      // Above the cells that scroll under it, below the sticky header row.
+      expect(element.classList.contains("z-1")).toBe(true);
+      // The table is `w-full`, so a column that did not shrink to its contents
+      // would take a share of the freed width and read as an empty gutter.
+      expect(element.classList.contains("w-px")).toBe(true);
+    }
+  });
+
+  it("gives the pinned cells opaque colours rather than a transparent one", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // The header's own colour, not the header row's: the pinned cell paints
+    // above its neighbours, so it needs one of its own to cover their text.
+    expect(
+      screen
+        .getByRole("columnheader", { name: "Actions" })
+        .classList.contains("bg-muted"),
+    ).toBe(true);
+
+    // The body cell takes the row's colour instead of a flat one, so it does
+    // not read as a stripe over the peeked row.
+    expect(actionsCell(FIRST_ORG.name).classList.contains("bg-inherit")).toBe(
+      true,
+    );
+    // Which is only opaque if the row it inherits from carries a colour.
+    expect(rowFor(link).classList.contains("bg-background")).toBe(true);
+  });
+
+  it("keeps the row's hover and expanded colours free of an alpha", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const classes = [...rowFor(link).classList];
+
+    // The base row tints these two states at half alpha. Inherited, that alpha
+    // is painted twice and the scrolled row shows through the pinned cell, so
+    // each has to survive as its opaque form and neither may be left behind.
+    for (const state of ["hover", "has-aria-expanded"]) {
+      expect(classes).toContain(`${state}:bg-muted`);
+      expect(classes).not.toContain(`${state}:bg-muted/50`);
+    }
+  });
+
+  it("leaves the peeked row one colour for the pinned cell to inherit", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    await peekOn(FIRST_ORG.name);
+
+    // One colour on the row, not two. Both classes present would leave the
+    // stylesheet's order to decide which the pinned cell inherits.
+    expect(rowFor(link).classList.contains("bg-muted")).toBe(true);
+    expect(rowFor(link).classList.contains("bg-background")).toBe(false);
+  });
+
+  it("holds both controls in the one cell, the peek trigger first", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // Peek is the read action and the more frequent one; the menu holds the
+    // writes. Read by accessible name, which is what a screen reader
+    // announces and what an operator hears in this order.
+    expect(
+      within(actionsCell(FIRST_ORG.name))
+        .getAllByRole("button")
+        .map((control) => control.getAttribute("aria-label")),
+    ).toEqual([`Peek at ${FIRST_ORG.name}`, `Actions for ${FIRST_ORG.name}`]);
+  });
+
+  it("keeps both controls on the keyboard, peek before the menu", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // Adjacent stops in the sequential order Tab walks, which is also the
+    // assertion that neither one dropped out of it.
+    expect(tabStopBefore(menuTrigger(FIRST_ORG.name))).toBe(
+      await peekTrigger(FIRST_ORG.name),
+    );
+  });
+
+  it("keeps both controls reachable while the peek is open", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(FIRST_ORG.name);
+
+    // The panel covers one record. The reason to reach another row's controls
+    // does not go away because it is open beside them.
+    expect(tabStopBefore(menuTrigger(SECOND_ORG.name))).toBe(
+      await peekTrigger(SECOND_ORG.name),
+    );
+    expect(
+      within(actionsCell(SECOND_ORG.name)).getAllByRole("button"),
+    ).toHaveLength(2);
+  });
+});
+
 // The bar takes a table, so the last-column case is reachable here by handing
 // it a two column table rather than by clicking seven items shut through a
 // menu that closes each time.
 describe("TableActionBar", () => {
   // Destructured off the tuple rather than off a slice, which widens each
   // element back to a bare column definition.
-  const [PEEK, ACTIONS, FIRST, SECOND, THIRD] = ORG_COLUMNS;
-  if (!PEEK || !ACTIONS || !FIRST || !SECOND || !THIRD) {
-    throw new Error("ORG_COLUMNS needs five columns");
+  const [FIRST, SECOND, THIRD] = ORG_COLUMNS;
+  // Found by id rather than by position, so a column added after it does not
+  // quietly become the one these cases are about.
+  const ACTIONS = ORG_COLUMNS.find((definition) => definition.id === "actions");
+  if (!FIRST || !SECOND || !THIRD || !ACTIONS) {
+    throw new Error("ORG_COLUMNS needs three data columns and an actions one");
   }
 
   // Sliced, so the array carries the element type useTable asks for. Two data
-  // columns for the cases about the bar's own two rules, and each control
+  // columns for the cases about the bar's own two rules, and the control
   // column beside one of them for the cases where a column that cannot be
   // hidden is in the count.
-  const MENU_COLUMNS = ORG_COLUMNS.slice(2, 4);
-  const WITH_PEEK_COLUMN: typeof MENU_COLUMNS = [PEEK, FIRST];
+  const MENU_COLUMNS = ORG_COLUMNS.slice(0, 2);
   const WITH_ACTIONS_COLUMN: typeof MENU_COLUMNS = [ACTIONS, FIRST];
+  // A second opt-out column, so the rule still has to count hideable columns
+  // rather than visible ones when more than one of them cannot be hidden.
+  const WITH_TWO_LOCKED_COLUMNS: typeof MENU_COLUMNS = [
+    ACTIONS,
+    { ...SECOND, enableHiding: false },
+    FIRST,
+  ];
 
   // An accessor column takes its id from its key unless it names one, and that
   // id is what the visibility state is keyed by.
@@ -2670,27 +2956,11 @@ describe("TableActionBar", () => {
   });
 
   it("stops the operator hiding the last column that carries data", () => {
-    // Peek and Name, both visible. Peek opts out of hiding, so it is on screen
-    // whatever the operator does and it is not the column that keeps the table
-    // readable. Counting it would leave Name free to go, and the table behind
-    // this menu would be a strip of controls above rows holding no record.
-    const { onVisibilityChange } = openColumnsMenu({}, WITH_PEEK_COLUMN);
-
-    const item = itemFor(FIRST.header);
-    fireEvent.click(item);
-
-    expect(onVisibilityChange).not.toHaveBeenCalled();
-    expect(item.getAttribute("aria-disabled")).toBe("true");
-    // The peek column is locked too, by its own opt-out rather than by this
-    // rule, so the operator cannot reach the same state from the other side.
-    expect(itemFor(PEEK.header).getAttribute("aria-disabled")).toBe("true");
-  });
-
-  it("stops the operator hiding the last data column beside the row menu", () => {
-    // The same case as above, from the column that arrived after the rule. A
-    // second column that opts out of hiding is a second way to make the count
-    // wrong, and a guard that counts every visible column instead of every
-    // hideable one now needs two data columns before it lets go of one.
+    // Actions and Name, both visible. Actions opts out of hiding, so it is on
+    // screen whatever the operator does and it is not the column that keeps
+    // the table readable. Counting it would leave Name free to go, and the
+    // table behind this menu would be a strip of controls above rows holding
+    // no record.
     const { onVisibilityChange } = openColumnsMenu({}, WITH_ACTIONS_COLUMN);
 
     const item = itemFor(FIRST.header);
@@ -2698,7 +2968,24 @@ describe("TableActionBar", () => {
 
     expect(onVisibilityChange).not.toHaveBeenCalled();
     expect(item.getAttribute("aria-disabled")).toBe("true");
+    // The actions column is locked too, by its own opt-out rather than by this
+    // rule, so the operator cannot reach the same state from the other side.
     expect(itemFor(ACTIONS.header).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("stops the operator hiding the last data column beside two locked ones", () => {
+    // Every extra column that opts out of hiding is another way to make the
+    // count wrong: a guard counting every visible column instead of every
+    // hideable one now needs three columns on screen before it lets go of one.
+    const { onVisibilityChange } = openColumnsMenu({}, WITH_TWO_LOCKED_COLUMNS);
+
+    const item = itemFor(FIRST.header);
+    fireEvent.click(item);
+
+    expect(onVisibilityChange).not.toHaveBeenCalled();
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(itemFor(ACTIONS.header).getAttribute("aria-disabled")).toBe("true");
+    expect(itemFor(SECOND.header).getAttribute("aria-disabled")).toBe("true");
   });
 
   it("locks a column that opts out of hiding", () => {

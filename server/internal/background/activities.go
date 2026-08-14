@@ -104,6 +104,7 @@ type Activities struct {
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
+	syncIdentityMap                 *activities.SyncIdentityMap
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
 	generateChatTitle               *activities.GenerateChatTitle
@@ -258,6 +259,13 @@ func NewActivities(
 
 	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
+	// Directory changes tighten identity-map staleness via an immediate sync
+	// trigger; workers without a Temporal env fall back to the schedule alone.
+	var identityMapRefresh activities.IdentityMapRefreshSignaler
+	if temporalEnv != nil {
+		identityMapRefresh = NewIdentityMapRefreshSignaler(temporalEnv, logger)
+	}
+
 	// The chat analysis judge roster. Adding a new session analysis is
 	// registering its judge here; enabling it per organization is a
 	// chat_analysis_settings row.
@@ -322,6 +330,7 @@ func NewActivities(
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
+		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
@@ -362,7 +371,7 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
@@ -597,6 +606,10 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 
 func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
 	return a.correlateClaudePrompts.Do(ctx, input)
+}
+
+func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdentityMapResult, error) {
+	return a.syncIdentityMap.Do(ctx)
 }
 
 func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activities.PromoteStagedTelemetryArgs) (*activities.PromoteStagedTelemetryResult, error) {

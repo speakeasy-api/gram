@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
+UPDATE organization_metadata
+SET
+    gram_account_type = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = ANY($2::text[])
+RETURNING id
+`
+
+type AdminBulkUpdateAccountTypeParams struct {
+	AccountType string
+	Ids         []string
+}
+
+// One statement rather than a loop, so every id is matched against one snapshot.
+// RETURNING is how the caller learns which of its ids matched nothing.
+func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkUpdateAccountTypeParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, adminBulkUpdateAccountType, arg.AccountType, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
 WITH search AS (
     -- Identical to AdminListOrganizations, escaping included: a pasted id that
@@ -208,6 +244,61 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
+	)
+	return i, err
+}
+
+const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
+WITH orgs AS (
+    SELECT
+        om.created_at,
+        om.disabled_at,
+        -- Must stay identical to AdminListOrganizations: a figure counted from a
+        -- shortened predicate would disagree with the rows clicking it lands on.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+)
+SELECT
+    count(*)::bigint AS total,
+    count(*) FILTER (WHERE created_at > now() - INTERVAL '7 days')::bigint AS created_last_7_days,
+    count(*) FILTER (WHERE trial_state = 'ending_soon')::bigint AS trials_ending_soon,
+    count(*) FILTER (WHERE disabled_at IS NOT NULL)::bigint AS disabled,
+    count(*) FILTER (WHERE disabled_at > now() - INTERVAL '7 days')::bigint AS disabled_last_7_days
+FROM orgs
+`
+
+type AdminGetOrganizationStatsRow struct {
+	Total             int64
+	CreatedLast7Days  int64
+	TrialsEndingSoon  int64
+	Disabled          int64
+	DisabledLast7Days int64
+}
+
+// Blind to the list's filters by design: these figures must not move when an
+// operator filters. total and both 7-day windows count disabled organizations
+// too, so the strip reports the real platform size rather than the list's
+// default active-only view.
+//
+// The join stays count-safe because organization_id is the trials primary key.
+// Both 7-day windows exclude their boundary: exactly seven days old is outside.
+func (q *Queries) AdminGetOrganizationStats(ctx context.Context) (AdminGetOrganizationStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationStats)
+	var i AdminGetOrganizationStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.CreatedLast7Days,
+		&i.TrialsEndingSoon,
+		&i.Disabled,
+		&i.DisabledLast7Days,
 	)
 	return i, err
 }
