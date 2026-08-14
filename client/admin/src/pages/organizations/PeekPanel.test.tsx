@@ -46,9 +46,9 @@ function Peeking(): JSX.Element {
   );
 }
 
-// UTC, because the panel reads these dates in UTC. See `utils.test.ts`: an
-// API date is midnight UTC, and rendering it in the reader's own zone names the
-// day before west of Greenwich.
+// UTC, because the panel reads these dates in UTC. See `utils.test.ts`: an API
+// date is a real instant, and rendering it in the reader's own zone can name
+// the day before west of Greenwich.
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }

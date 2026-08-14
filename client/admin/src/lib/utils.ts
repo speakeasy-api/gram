@@ -9,18 +9,19 @@ export function cn(...inputs: ClassValue[]): string {
 // a panel reads it this way, so the same field cannot come out two ways on two
 // pages.
 //
-// The zone is the whole point. A trial ends at a UTC midnight, and rendering
-// that instant in the reader's own zone names the day before it everywhere west
-// of UTC: a trial ending 2026-05-06 reads as 5/5/2026 in California. An
-// operator who acts a day early demotes an account that still had a day.
-// Dropping the clock means the zone cannot be dropped too.
+// The zone is the whole point. `trial_ends_at` is a real instant, armed as the
+// signup moment plus the trial length, and the sweeper that demotes the account
+// compares it against server time. Rendered in the reader's own zone that
+// instant can name a different day than the one the server acts on: a trial
+// ending 2026-05-06T03:00Z reads as 5/5/2026 in California. An operator who
+// acts on that day demotes an account that still had a day. Dropping the clock
+// means the zone cannot be dropped too.
 //
-// This also moves the other fields formatted here, `created_at` and
-// `disabled_at`, which are real moments rather than UTC midnights. Their
-// rendered day now follows the server rather than the reader's clock, and can
-// differ by one near midnight. That is the right frame for an admin tool: two
-// operators in two zones read one organization the same way, and the day they
-// read is the day the database records.
+// The other fields formatted here, `created_at` and `disabled_at`, move with
+// it. Their rendered day now follows the server rather than the reader's clock,
+// and can differ by one near midnight. That is the right frame for an admin
+// tool: two operators in two zones read one organization the same way, and the
+// day they read is the day the database records.
 export function fmtDateShort(iso?: string): string {
   if (!iso) return "-";
   const d = new Date(iso);

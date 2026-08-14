@@ -23,9 +23,10 @@ afterEach(() => {
 });
 
 describe("fmtDateShort", () => {
-  it("reads a UTC midnight as that day, not the day before", () => {
-    // A trial end as the API sends it: midnight UTC.
-    const iso = "2026-05-06T00:00:00Z";
+  it("reads a trial end as the server's day, not the reader's", () => {
+    // A trial end as the server stores it: the signup moment plus the trial
+    // length, in UTC. Early in the UTC day, which is where the fault shows.
+    const iso = "2026-05-06T03:00:00Z";
 
     inZone("America/Los_Angeles", () => {
       // The zone really moved, and in it this instant is the 5th locally.
@@ -45,7 +46,7 @@ describe("fmtDateShort", () => {
   });
 
   it("reads the same instant the same way in every zone", () => {
-    const iso = "2026-05-06T00:00:00Z";
+    const iso = "2026-05-06T03:00:00Z";
     const zones = ["UTC", "America/Los_Angeles", "Asia/Tokyo", "Pacific/Apia"];
 
     const rendered = new Set(
