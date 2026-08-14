@@ -67211,14 +67211,14 @@ components:
           format: int64
         credits:
           type: integer
-          description: The number of credits used
+          description: The number of credits used. Only populated for platform admins.
           format: int64
         has_active_subscription:
           type: boolean
           description: Whether the project has an active subscription
         included_credits:
           type: integer
-          description: The number of credits included in the tier
+          description: The number of credits included in the tier. Only populated for platform admins.
           format: int64
         included_servers:
           type: integer
@@ -67242,8 +67242,6 @@ components:
         - servers
         - included_servers
         - actual_enabled_server_count
-        - credits
-        - included_credits
         - has_active_subscription
     PlatformMCPOnboardingSetupHandoff:
       type: object

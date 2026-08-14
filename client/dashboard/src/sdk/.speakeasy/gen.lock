@@ -5113,7 +5113,7 @@ examples:
     speakeasy-default-get-period-usage:
       responses:
         "200":
-          application/json: {"actual_enabled_server_count": 754388, "credits": 298053, "has_active_subscription": true, "included_credits": 709134, "included_servers": 639183, "included_tool_calls": 793269, "servers": 254263, "tool_calls": 672011}
+          application/json: {"actual_enabled_server_count": 754388, "has_active_subscription": true, "included_servers": 639183, "included_tool_calls": 793269, "servers": 254263, "tool_calls": 672011}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

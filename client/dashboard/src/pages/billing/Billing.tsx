@@ -143,16 +143,18 @@ const UsageSection = () => {
                 overageIncrement={1}
                 noMax={productTier === "enterprise"}
               />
-              {isAdmin && (
-                <UsageItem
-                  label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
-                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                  value={periodUsage.credits}
-                  included={periodUsage.includedCredits}
-                  overageIncrement={periodUsage.includedCredits}
-                  noMax={productTier === "enterprise"}
-                />
-              )}
+              {isAdmin &&
+                periodUsage.credits != null &&
+                periodUsage.includedCredits != null && (
+                  <UsageItem
+                    label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
+                    tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                    value={periodUsage.credits}
+                    included={periodUsage.includedCredits}
+                    overageIncrement={periodUsage.includedCredits}
+                    noMax={productTier === "enterprise"}
+                  />
+                )}
             </>
           ) : (
             <>
