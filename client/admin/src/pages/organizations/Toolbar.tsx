@@ -139,8 +139,12 @@ export function Toolbar(): JSX.Element {
  */
 export function TableActionBar<T extends RowData>({
   table,
+  onColumnToggled,
 }: {
   table: DataTableInstance<T>;
+  // Told after a toggle lands, so a page that overrides what this menu writes
+  // can answer a request the menu cannot satisfy on its own.
+  onColumnToggled?: (columnId: string, label: string) => void;
 }): JSX.Element {
   // Read off the table rather than walked a second time here, so the menu
   // cannot disagree with the table about how many columns are left.
@@ -186,7 +190,9 @@ export function TableActionBar<T extends RowData>({
                   if (locked) event.preventDefault();
                 }}
                 onCheckedChange={() => {
-                  if (!locked) column.toggleVisibility();
+                  if (locked) return;
+                  column.toggleVisibility();
+                  onColumnToggled?.(column.id, columnLabel(column));
                 }}
               >
                 {columnLabel(column)}
