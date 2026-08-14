@@ -55540,6 +55540,20 @@ components:
                 slug:
                     type: string
                     description: The slug of the organization
+                trial_ends_at:
+                    type: string
+                    description: The time at which the enterprise trial ends. Absent when the organization never trialled.
+                    format: date-time
+                trial_state:
+                    type: string
+                    description: Lifecycle state of the organization's enterprise trial.
+                    enum:
+                        - none
+                        - running
+                        - ending_soon
+                        - expired
+                        - demoted
+                        - converted
                 updated_at:
                     type: string
                     description: The last update date of the organization.

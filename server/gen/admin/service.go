@@ -104,6 +104,11 @@ type AdminOrganization struct {
 	FreeTrialStartedAt *string
 	// The time at which the free trial ends.
 	FreeTrialEndsAt *string
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The creation date of the organization.

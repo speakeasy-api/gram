@@ -61,6 +61,16 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
+    -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+    CASE
+        WHEN t.organization_id IS NULL THEN 'none'
+        WHEN t.converted_at IS NOT NULL THEN 'converted'
+        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+        WHEN t.ends_at <= now() THEN 'expired'
+        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+        ELSE 'running'
+    END::text AS trial_state,
+    t.ends_at AS trial_ends_at,
     om.created_at,
     om.updated_at,
     (
@@ -70,6 +80,7 @@ SELECT
           AND our.deleted IS FALSE
     )::bigint AS member_count
 FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
 WHERE
     (sqlc.narg('q')::text IS NULL OR om.name ILIKE '%' || sqlc.narg('q')::text || '%' OR om.slug ILIKE '%' || sqlc.narg('q')::text || '%')
     AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
@@ -122,6 +133,16 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
+    -- Must stay identical to AdminListOrganizations.
+    CASE
+        WHEN t.organization_id IS NULL THEN 'none'
+        WHEN t.converted_at IS NOT NULL THEN 'converted'
+        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+        WHEN t.ends_at <= now() THEN 'expired'
+        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+        ELSE 'running'
+    END::text AS trial_state,
+    t.ends_at AS trial_ends_at,
     om.created_at,
     om.updated_at,
     (
@@ -131,6 +152,7 @@ SELECT
           AND our.deleted IS FALSE
     )::bigint AS member_count
 FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = sqlc.arg('id_or_slug')::text
    OR om.slug = sqlc.arg('id_or_slug')::text
 LIMIT 1;

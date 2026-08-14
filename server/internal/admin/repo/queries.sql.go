@@ -23,6 +23,16 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
+    -- Must stay identical to AdminListOrganizations.
+    CASE
+        WHEN t.organization_id IS NULL THEN 'none'
+        WHEN t.converted_at IS NOT NULL THEN 'converted'
+        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+        WHEN t.ends_at <= now() THEN 'expired'
+        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+        ELSE 'running'
+    END::text AS trial_state,
+    t.ends_at AS trial_ends_at,
     om.created_at,
     om.updated_at,
     (
@@ -32,6 +42,7 @@ SELECT
           AND our.deleted IS FALSE
     )::bigint AS member_count
 FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
 WHERE om.id = $1::text
    OR om.slug = $1::text
 LIMIT 1
@@ -47,6 +58,8 @@ type AdminGetOrganizationByIDOrSlugRow struct {
 	DisabledAt         pgtype.Timestamptz
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
+	TrialState         string
+	TrialEndsAt        pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	MemberCount        int64
@@ -65,6 +78,8 @@ func (q *Queries) AdminGetOrganizationByIDOrSlug(ctx context.Context, idOrSlug s
 		&i.DisabledAt,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.TrialState,
+		&i.TrialEndsAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
@@ -255,6 +270,16 @@ SELECT
     om.disabled_at,
     om.free_trial_started_at,
     om.free_trial_ends_at,
+    -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+    CASE
+        WHEN t.organization_id IS NULL THEN 'none'
+        WHEN t.converted_at IS NOT NULL THEN 'converted'
+        WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+        WHEN t.ends_at <= now() THEN 'expired'
+        WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+        ELSE 'running'
+    END::text AS trial_state,
+    t.ends_at AS trial_ends_at,
     om.created_at,
     om.updated_at,
     (
@@ -264,6 +289,7 @@ SELECT
           AND our.deleted IS FALSE
     )::bigint AS member_count
 FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
 WHERE
     ($1::text IS NULL OR om.name ILIKE '%' || $1::text || '%' OR om.slug ILIKE '%' || $1::text || '%')
     AND ($2::text IS NULL OR om.gram_account_type = $2::text)
@@ -291,6 +317,8 @@ type AdminListOrganizationsRow struct {
 	DisabledAt         pgtype.Timestamptz
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
+	TrialState         string
+	TrialEndsAt        pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	MemberCount        int64
@@ -321,6 +349,8 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.DisabledAt,
 			&i.FreeTrialStartedAt,
 			&i.FreeTrialEndsAt,
+			&i.TrialState,
+			&i.TrialEndsAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.MemberCount,
