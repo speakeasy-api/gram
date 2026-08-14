@@ -14,7 +14,7 @@ import { Download, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-export type PlatformMCPInstallClient = {
+type PlatformMCPInstallClient = {
   id: ClientFamily;
   label: string;
   description: string;
