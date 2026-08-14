@@ -523,6 +523,23 @@ func listOrganizationsOffset(page *int, limit int32) int64 {
 	return (n - 1) * int64(limit)
 }
 
+// GetOrganizationStats counts the whole platform. It takes no filters, so the
+// figures stay put while an operator narrows the list below them.
+func (s *Service) GetOrganizationStats(ctx context.Context, payload *gen.GetOrganizationStatsPayload) (*gen.AdminOrganizationStats, error) {
+	row, err := repo.New(s.db).AdminGetOrganizationStats(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "organization stats").LogError(ctx, s.logger)
+	}
+
+	return &gen.AdminOrganizationStats{
+		Total:             row.Total,
+		CreatedLast7Days:  row.CreatedLast7Days,
+		TrialsEndingSoon:  row.TrialsEndingSoon,
+		Disabled:          row.Disabled,
+		DisabledLast7Days: row.DisabledLast7Days,
+	}, nil
+}
+
 func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {
 	rows, err := repo.New(s.db).AdminListOrganizationMembers(ctx, payload.OrganizationID)
 	if err != nil {

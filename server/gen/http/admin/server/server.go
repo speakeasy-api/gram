@@ -33,6 +33,7 @@ type Server struct {
 	ExtendTrial              http.Handler
 	CreateOrganization       http.Handler
 	RearmTrial               http.Handler
+	GetOrganizationStats     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -76,6 +77,7 @@ func New(
 			{"ExtendTrial", "POST", "/admin/trial.extend"},
 			{"CreateOrganization", "POST", "/admin/organization.create"},
 			{"RearmTrial", "POST", "/admin/trial.rearm"},
+			{"GetOrganizationStats", "GET", "/admin/organizations.stats"},
 		},
 		Login:                    NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                 NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -91,6 +93,7 @@ func New(
 		ExtendTrial:              NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
 		CreateOrganization:       NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
 		RearmTrial:               NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationStats:     NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -113,6 +116,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ExtendTrial = m(s.ExtendTrial)
 	s.CreateOrganization = m(s.CreateOrganization)
 	s.RearmTrial = m(s.RearmTrial)
+	s.GetOrganizationStats = m(s.GetOrganizationStats)
 }
 
 // MethodNames returns the methods served.
@@ -134,6 +138,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountExtendTrialHandler(mux, h.ExtendTrial)
 	MountCreateOrganizationHandler(mux, h.CreateOrganization)
 	MountRearmTrialHandler(mux, h.RearmTrial)
+	MountGetOrganizationStatsHandler(mux, h.GetOrganizationStats)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -862,6 +867,59 @@ func NewRearmTrialHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "rearmTrial")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationStatsHandler configures the mux to serve the "admin"
+// service "getOrganizationStats" endpoint.
+func MountGetOrganizationStatsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organizations.stats", f)
+}
+
+// NewGetOrganizationStatsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getOrganizationStats" endpoint.
+func NewGetOrganizationStatsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationStatsRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationStatsResponse(encoder)
+		encodeError    = EncodeGetOrganizationStatsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationStats")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
