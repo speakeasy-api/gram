@@ -39,6 +39,7 @@ export function BulkAccountType({
   selected,
   reporter,
   onDone,
+  rescueFocus,
 }: {
   selected: AdminOrganization[];
   // Handed down rather than taken from context: this control is drawn by the
@@ -47,6 +48,9 @@ export function BulkAccountType({
   // Called after a write lands, so the page drops a selection that has already
   // been acted on.
   onDone: () => void;
+  // Where the keyboard goes when that dropped selection has taken this control
+  // off the page with it.
+  rescueFocus: () => void;
 }): JSX.Element {
   const { announce, showFailure } = reporter;
   // The type the operator picked, and the whole of what the dialog is open
@@ -64,15 +68,18 @@ export function BulkAccountType({
         onSuccess: (result) => {
           setPending(undefined);
           // Named from the ticked rows, because the answer carries ids and the
-          // operator picked names. An id the selection cannot name is reported
-          // as itself rather than dropped.
+          // operator picked names. The fallback is cheap defence only: the ids
+          // that come back are a subset of the ones the selection sent.
           const names = new Map(selected.map((org) => [org.id, org.name]));
           const missing = result.missing_ids.map((id) => names.get(id) ?? id);
           const done = `${organizationCount(result.updated_ids.length)} set to ${accountType}.`;
           // A bulk write that quietly did less than it said is worse than one
           // that failed, so what was not written is shown as well as spoken.
+          //
+          // "stayed unchanged" rather than "were left unchanged", so the verb
+          // reads at one organization as well as at many.
           const report = missing.length
-            ? `${done} ${organizationCount(missing.length)} matched nothing and were left unchanged: ${missing.join(", ")}.`
+            ? `${done} ${organizationCount(missing.length)} matched nothing and stayed unchanged: ${missing.join(", ")}.`
             : null;
           showFailure(report);
           announce(report ?? done);
@@ -120,13 +127,15 @@ export function BulkAccountType({
           }}
         >
           <DialogContent
+            showCloseButton={!bulk.isPending}
             onCloseAutoFocus={(event) => {
-              // The control is gone once a write has cleared the selection, and
-              // there is nowhere better to put the keyboard then.
-              const control = trigger.current;
-              if (!control?.isConnected) return;
               event.preventDefault();
-              control.focus();
+              // The trigger goes off the page with the selection a landed write
+              // clears, and Radix hands focus to the body then. The list is the
+              // one thing still under the operator's hand.
+              const control = trigger.current;
+              if (control) control.focus();
+              else rescueFocus();
             }}
           >
             <DialogHeader>

@@ -406,8 +406,10 @@ beforeEach(() => {
   mocks.extendTrial.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
   );
-  // Everything the request asked for, and nothing missing. A test about the
-  // ids the server could not find says so itself.
+  // Everything the request asked for, and nothing missing. The reversal guards
+  // nothing on its own, because only the length of this array is ever read;
+  // "names the organizations the server could not find" is the test that holds
+  // the reporting, by answering a different set from the one it was sent.
   mocks.bulkUpdateAccountType.mockReset();
   mocks.bulkUpdateAccountType.mockImplementation(({ ids }) =>
     Promise.resolve({ updated_ids: [...ids].reverse(), missing_ids: [] }),
@@ -3100,25 +3102,28 @@ describe("organizations list bulk account type", () => {
     // right. A table whose purpose is picking rows cannot hide the control that
     // picks them. happy-dom lays nothing out, so these read the classes that
     // carry the pin; the measurement is in the browser.
-    for (const control of [
-      screen.getByRole("checkbox", {
+    const head = screen
+      .getByRole("checkbox", {
         name: "Select every organization on this page",
-      }),
-      rowCheckbox(FIRST_ORG.name),
-    ]) {
-      const pinned = control.closest("th,td");
+      })
+      .closest("th");
+    const cell = rowCheckbox(FIRST_ORG.name).closest("td");
+
+    for (const pinned of [head, cell]) {
       expect(pinned?.classList.contains("sticky")).toBe(true);
       expect(pinned?.classList.contains("left-0")).toBe(true);
       expect(pinned?.classList.contains("z-1")).toBe(true);
       // The table is `w-full`, so a column that did not shrink to the checkbox
       // would take a share of the freed width and read as an empty gutter.
       expect(pinned?.classList.contains("w-px")).toBe(true);
-      // Opaque, or the cells sliding under it show through.
-      expect(
-        pinned?.classList.contains("bg-muted") ||
-          pinned?.classList.contains("bg-inherit"),
-      ).toBe(true);
     }
+
+    // Each element's own colour, and not the other's. The header's grey painted
+    // down the column would cover the rows sliding under it and stop the hover
+    // and peek highlight dead at the checkbox.
+    expect(head?.classList.contains("bg-muted")).toBe(true);
+    expect(cell?.classList.contains("bg-inherit")).toBe(true);
+    expect(cell?.classList.contains("bg-muted")).toBe(false);
   });
 
   it("leaves the row's own controls alone when a checkbox is ticked", async () => {
@@ -3394,10 +3399,36 @@ describe("organizations list bulk account type", () => {
     // than off what was asked for.
     const banner = await screen.findByRole("alert");
     expect(banner.textContent).toContain("1 organization set to enterprise.");
+    // The verb has to agree at one as well as at many, and the noun is already
+    // counted, so the sentence cannot branch on the count twice.
     expect(banner.textContent).toContain(
-      `1 organization matched nothing and were left unchanged: ${SECOND_ORG.name}.`,
+      `1 organization matched nothing and stayed unchanged: ${SECOND_ORG.name}.`,
     );
     expect(announcement()).toBe(banner.textContent?.replace("Dismiss", ""));
+  });
+
+  it("names every organization the server could not find, not just the first", async () => {
+    mocks.bulkUpdateAccountType.mockImplementation(() =>
+      Promise.resolve({
+        updated_ids: [],
+        missing_ids: [SECOND_ORG.id, FIRST_ORG.id],
+      }),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(SECOND_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+
+    // The same sentence at two, so the wording cannot be fixed at one count by
+    // breaking it at the other. The order is the answer's, not the selection's.
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain("0 organizations set to enterprise.");
+    expect(banner.textContent).toContain(
+      `2 organizations matched nothing and stayed unchanged: ${SECOND_ORG.name}, ${FIRST_ORG.name}.`,
+    );
   });
 
   it("reports nothing missing when every id landed", async () => {
@@ -3432,10 +3463,13 @@ describe("organizations list bulk account type", () => {
     await screen.findByRole("dialog");
     await confirm("enterprise");
 
+    // As an alert, not merely as text: the modal takes the page's live region
+    // out of the accessibility tree, so this role is the only thing that speaks
+    // the refusal to an operator who cannot see it.
     const dialog = screen.getByRole("dialog");
-    expect(
-      within(dialog).getByText("account_type is not allowed"),
-    ).toBeTruthy();
+    expect(within(dialog).getByRole("alert").textContent).toBe(
+      "account_type is not allowed",
+    );
     // Nothing was written, so the selection the operator would retry with is
     // still there.
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -3485,6 +3519,80 @@ describe("organizations list bulk account type", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
     expect(document.activeElement).toBe(bulkTrigger());
+  });
+
+  it("puts the keyboard on the list when the write takes that control away", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    // A landed write clears the selection, which takes the trigger the dialog
+    // opened from off the page. Dropped on the body instead, the next Tab
+    // restarts at the top of the document, nowhere near the rows just written.
+    expect(
+      screen.queryByRole("button", { name: "Set account type" }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("region", { name: "Organizations table" }),
+    );
+  });
+
+  it("shuts the dialog's own controls while the write is in flight", async () => {
+    let land = (): void => {};
+    mocks.bulkUpdateAccountType.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          land = () =>
+            resolve({ updated_ids: [FIRST_ORG.id], missing_ids: [] });
+        }),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    // Held open on purpose: every other test resolves the write inside the same
+    // act, so nothing else ever observes this state.
+    await confirm("enterprise");
+
+    const dialog = screen.getByRole("dialog");
+    const setting = await within(dialog).findByRole("button", {
+      name: "Setting...",
+    });
+    expect(setting.hasAttribute("disabled")).toBe(true);
+    // Cancel too: a write already sent cannot be called back by closing the
+    // dialog it was sent from.
+    expect(
+      within(dialog)
+        .getByRole("button", { name: "Cancel" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    // The close control goes rather than sitting there live beside a greyed
+    // Cancel, doing nothing when it is pressed.
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
+
+    // A press and an Escape a macrotask later, which is as fast as an operator
+    // can be. Neither may reach the endpoint or take the dialog down.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(setting);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(mocks.bulkUpdateAccountType.mock.calls).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    await act(async () => {
+      land();
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
   });
 
   it("lets the operator pick a different type after cancelling", async () => {

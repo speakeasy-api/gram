@@ -15,8 +15,8 @@ as missing while the row it names sat on screen.
 
 An id the server matched no organization to is named on screen after the write,
 by the organization the operator ticked, rather than being counted silently as
-done. The selection is dropped whenever the rows change under it, so an account
-type cannot be set on a record that scrolled out of view.
+done. The selection is dropped whenever the operator pages, sorts or filters, so
+an account type cannot be set on a record that scrolled out of view.
 
 Row selection is opt-in for the shared admin table. A page that does not ask for
 it renders exactly as before. The checkbox column is pinned to the left edge, the

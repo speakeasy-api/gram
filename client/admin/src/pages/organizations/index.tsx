@@ -155,9 +155,11 @@ export function OrganizationsList(): JSX.Element {
     setPager({ filters, stack: [] });
   }
 
-  // Cleared whenever the rows change under it: a selection the operator can no
-  // longer see is how an account type gets set on a record nobody looked at.
-  // The whole search, because the sort is in the URL and it reorders the page.
+  // Cleared whenever the operator changes the view: a selection carried across
+  // a page, a sort or a filter is how an account type gets set on a record
+  // nobody looked at. The whole search, because the sort is in the URL and it
+  // reorders the page. A refetch that changes rows under a still view keeps the
+  // selection, and the row model is what stops a dropped row being written to.
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const viewKey = `${JSON.stringify(search)}|${pager.cursor ?? ""}`;
   const [selectionView, setSelectionView] = useState(viewKey);
@@ -283,6 +285,12 @@ export function OrganizationsList(): JSX.Element {
       ?.querySelector<HTMLElement>(PEEK_TRIGGER_SELECTOR)
       ?.focus();
   }, [peekTookTheKeyboard]);
+
+  // The same landing place the peek rescue above uses, handed to the bulk
+  // dialog because its own trigger leaves the page with the selection.
+  const focusList = useCallback((): void => {
+    scrollBox.current?.focus();
+  }, []);
 
   const closePeek = useCallback((): void => {
     const trigger = peekedRow.current?.querySelector<HTMLElement>(
@@ -482,6 +490,7 @@ export function OrganizationsList(): JSX.Element {
                         selected={selectedOrgs}
                         reporter={writeReporter}
                         onDone={() => setRowSelection({})}
+                        rescueFocus={focusList}
                       />
                     }
                   />

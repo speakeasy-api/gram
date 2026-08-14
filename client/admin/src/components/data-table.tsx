@@ -69,7 +69,7 @@ export type DataTableInstance<T extends RowData> = ReactTable<
   T
 >;
 
-export const SELECT_COLUMN_ID = "select";
+const SELECT_COLUMN_ID = "select";
 
 // Mirrors the pin a page puts on a trailing actions column. `w-px` shrinks the
 // column to the checkbox, so the pin does not read as a gutter, and the header
