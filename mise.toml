@@ -31,7 +31,13 @@ melange = "0.56.5"
 # mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
 aube = "1.38.1"
-# Kept for `changeset publish` only, which shells out to a package manager by
+# Writes pnpm-lock.yaml, via `mise run install:lock`. aube installs from that
+# lockfile but must never write it: aube 1.38.1 and 1.40.0 both reorder every
+# peer suffix (~1400 lines of churn on any dependency change) and resolve
+# `workspace:` specifiers to registry versions, silently unlinking local
+# packages. `mise run check:lockfile` guards the second one.
+#
+# Also required by `changeset publish`, which shells out to a package manager by
 # name and has no aube branch — it picks between pnpm, yarn and npm. Both
 # versions resolve to pnpm here, off different inputs: 2.31.0 (what we pin)
 # asks package-manager-detector, which answers pnpm because pnpm-lock.yaml is

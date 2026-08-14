@@ -69,6 +69,13 @@ jobs:
           fi
           echo "✅ No tracked files match .gitignore patterns."
 
+      # `aube install --frozen-lockfile` cannot catch an aube-written lockfile:
+      # it is self-consistent with every package.json even where aube has
+      # replaced a workspace link with a registry version.
+      - name: Check workspace links in the lockfile
+        shell: bash
+        run: bash .mise-tasks/check/lockfile.sh
+
       - name: Detect changed files
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: filter

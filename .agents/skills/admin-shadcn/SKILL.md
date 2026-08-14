@@ -31,6 +31,23 @@ Do not use `npx`, `npm`, `yarn`, or `pnpm dlx`. This repo uses `aube`.
 
 Read `docs <name>` before you decide that a variant or a sub-component is missing.
 
+### Components that need a new dependency
+
+`add <name>` cannot install one. It shells out to a bare `pnpm add`, and this
+tree's `node_modules` is aube-shaped, so it dies with
+`ERR_PNPM_HOIST_PATTERN_DIFF` before writing any file — including the component.
+It leaves `node_modules` intact.
+
+Install the dependency first, then re-run `add <name>`:
+
+```sh
+mise run install:lock -F admin react-day-picker
+aube dlx shadcn@latest add calendar
+```
+
+`add <name> --view` prints a component's source without installing anything, if
+you only need to read it.
+
 ## After you add a component
 
 Run these three commands, in this order:

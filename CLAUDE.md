@@ -84,6 +84,14 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 </commands>
 
+### Changing NPM dependencies
+
+Use `mise run install:lock` — `mise run install:lock -F admin react-day-picker`,
+or with no arguments after hand-editing a `package.json`. `aube` installs from
+`pnpm-lock.yaml` but must never write it; `aube add` and `aube install
+--fix-lockfile` rewrite ~1400 lines and unlink workspace packages. Never run
+bare `pnpm`: without a TTY it deletes `node_modules`.
+
 ### Dashboard browser automation
 
 Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, installs Chromium when missing, and writes ignored artifacts to `.playwright-cli/`.
