@@ -251,7 +251,10 @@ type ListOrganizationsPayload struct {
 	// disabled_at or trial_ends_at. Any other value sorts by id. Supplying it
 	// selects offset paging.
 	Sort *string
-	// Sort direction, asc or desc. Any other value sorts ascending.
+	// Sort direction, asc or desc, applied to the column named by sort. Any other
+	// value sorts ascending. On its own it does nothing: without sort there is no
+	// column to reverse, so it neither reorders the results nor selects offset
+	// paging.
 	Direction *string
 	// 1-based page number for offset paging (default 1). Supplying it selects
 	// offset paging.
