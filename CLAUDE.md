@@ -105,7 +105,7 @@ Some env vars holding absolute URLs are opened by a browser, and others are dial
 That task also backs the opt-in setup for running the stack on one machine and browsing it from another (a devbox, a cloud VM, a spare laptop).
 
 <important>
-Do not proactively set up, suggest, or mention remote access. It is opt-in, inert unless a user runs it, and irrelevant to almost every task. Bring it up only if the user specifically asks about reaching the dev stack from another machine.
+Do not proactively set up, suggest, or mention remote access. It is opt-in, inert unless a user runs it, and irrelevant to almost every task. Bring it up only if the user specifically asks about it — "how do I open the dev server from my laptop / local device / phone", "can I reach this stack from another machine", "expose the dev server", "connect to the devbox from here".
 
 If they do ask, read `docs/remote-dev-access.md` first and note that **some steps run on the machine the user browses from, which you cannot reach**. Running the stack and the mise task is not the whole job: the user must trust the mkcert root CA on that other machine themselves, or every page will show a certificate warning. Tell them that explicitly and hand them the commands — do not report the setup as finished when only the host half is done.
 </important>

@@ -14,11 +14,12 @@ the stack behaves exactly as before on a machine that never opts in.
 
 ## When you'd want it
 
-You run the stack on one machine and browse it from another: a dev box under the
-desk, a cloud VM, a spare laptop. Anything giving both machines a route works —
-Tailscale, a VPN, a LAN — as long as the browser can reach the dev server's
-ports. Tailscale is the worked example below because `--detect` can read the
-hostname straight out of it.
+You run the stack on one machine and want to reach it from your own laptop or
+local device — a dev box under the desk, a cloud VM, a spare machine. Anything
+giving both machines a route works: Tailscale, a VPN, a LAN, an SSH tunnel, as
+long as the browser can connect to the dev server's ports. Tailscale is the
+worked example below because `--detect` can read the hostname straight out of
+it.
 
 You do **not** need this to browse the stack on the machine running it.
 
