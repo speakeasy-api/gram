@@ -1276,10 +1276,11 @@ dry run agrees, but two of them are not real here:
 **Add the dependency with pnpm, not with aube.** `packageManager` is
 `pnpm@11.19.0` and `mise.toml` pins a real pnpm on PATH, so pnpm is what writes
 this lockfile, and every clean dependency add in the repo's history is pnpm's.
-`aube add` and `aube install` re-resolve the whole tree on write: 1456 lines of
-churn, admin's `radix-ui` pushed from 1.6.7 down to 1.6.0, and the
-`@gram-ai/functions` workspace link broken. That is an aube-only fault, and it is
-why this task looked blocked for most of a day.
+aube writes it differently: ~1400 lines of reordered peer suffixes, and, the one
+defect that matters, **every `workspace:` specifier resolved to a published
+registry version**, so `ts-framework/create-function` picks up `@gram-ai/functions`
+from the registry instead of the local package. That is silent, and
+`--frozen-lockfile` cannot catch it. Diagnosed and fixed in PR #5350.
 
 Check `pnpm-workspace.yaml` for a `catalog:` entry first and use `catalog:` if
 one exists. Otherwise run exactly this, verified end to end on 2026-08-14:
@@ -1292,7 +1293,12 @@ cd ../.. && aube install --frozen-lockfile
 `--lockfile-only` keeps pnpm away from the aube-shaped `node_modules`, and
 `aube install --frozen-lockfile` then materialises the package and leaves the
 lockfile byte-identical. Measured result: 43 insertions, 16 deletions,
-`@gram-ai/functions` untouched, no `radix-ui` move, 391 tests still passing.
+`@gram-ai/functions` untouched, 391 tests still passing.
+
+PR #5350 wraps this as `mise run install:lock -F admin react-day-picker`, which
+also mirrors the manifests into a temp dir so `pnpm add` cannot touch the
+aube-shaped `node_modules` at all. **Prefer that task if it exists in your
+worktree**; the two commands above are the fallback while #5350 is unmerged.
 
 `shadcn add` cannot install anything here. It shells out to bare `pnpm add`,
 which dies on the aube-shaped `node_modules` with `ERR_PNPM_HOIST_PATTERN_DIFF`,
