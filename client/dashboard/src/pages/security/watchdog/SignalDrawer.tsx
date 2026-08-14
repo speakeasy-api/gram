@@ -245,8 +245,11 @@ export function SignalDrawer({
     if (!signal) return;
     // The signal itself carries the rule, so the sheet offers — and defaults
     // to — the "Any <rule> finding" option even before evidence rows load.
-    // Evidence rows still ride along for the exact-value option and the
-    // custom branch's findings context.
+    // Whatever evidence has arrived by now rides along for the exact-value
+    // option and the custom branch's findings context; opening before the
+    // query resolves makes this a rule-only create, since the snapshot
+    // deliberately doesn't refill as rows land — that would rebuild the form
+    // under an operator who is already typing.
     setExclusionState({
       mode: "create",
       results: evidence,
@@ -261,18 +264,23 @@ export function SignalDrawer({
     signal !== null && hasJudgeSource(signal.detectionSources);
 
   // Which signal is on screen is a URL param, so browser back/forward swaps it
-  // while the drawer stays mounted — and every piece of state here snapshots
+  // while the drawer stays mounted — and every piece of state here belongs to
   // the signal it was started from, so none of it may outlive a switch. An open
-  // exclusion editor would go on targeting the previous signal's rule, a
+  // exclusion editor would go on targeting the previous signal's rule; a
   // pending dismissal would clear the previous signal's findings under the new
-  // signal's name, and a collection still in flight must not open that dialog
-  // at all. Tracked by key rather than by the signal object so a list refetch's
-  // new identity doesn't discard live state; clearing on mount is a no-op.
+  // signal's name; a collection still in flight would leave the new signal's
+  // action spinning (and must not open that dialog at all — hence the key
+  // compare below); and the back-from-editor transition would replay for a
+  // signal whose editor was never opened. Tracked by key rather than by the
+  // signal object so a list refetch's new identity doesn't discard live state;
+  // clearing on mount is a no-op.
   const activeSignalKey = useRef<string | null>(null);
   useEffect(() => {
     activeSignalKey.current = signal?.key ?? null;
     setExclusionState(null);
     setPendingDismiss(null);
+    setCollecting(false);
+    setReturningFromEditor(false);
   }, [signal?.key]);
 
   const openSignalDismiss = async () => {
@@ -291,7 +299,10 @@ export function SignalDrawer({
       if (activeSignalKey.current !== requestKey) return;
       toast.error("Failed to load this signal's findings.");
     } finally {
-      setCollecting(false);
+      // Same guard: the switch already cleared the flag for the new signal, so
+      // a late-settling request must not clear it out from under a collection
+      // the operator started there.
+      if (activeSignalKey.current === requestKey) setCollecting(false);
     }
   };
 

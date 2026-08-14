@@ -138,7 +138,11 @@ export function ExclusionEditor({
   const formKey =
     state.mode === "edit"
       ? `edit-${state.exclusion.id}`
-      : `create-${(state.results ?? []).map((r) => r.id).join(",")}`;
+      : // Keyed by both inputs the form seeds from, so a host that swaps one
+        // create for another — a different rule with the same findings, or
+        // none on either side — rebuilds instead of keeping the old selection
+        // and draft.
+        `create-${state.presetRuleId ?? ""}-${(state.results ?? []).map((r) => r.id).join(",")}`;
 
   return (
     <ExclusionForm
