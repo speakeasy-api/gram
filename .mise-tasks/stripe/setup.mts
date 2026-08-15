@@ -362,7 +362,7 @@ async function main() {
     [
       "Start webhook forwarding for this worktree in a separate terminal:",
       '  if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi',
-      '  stripe listen --skip-verify --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"',
+      '  stripe listen --latest --skip-verify --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"',
     ].join("\n"),
   );
 

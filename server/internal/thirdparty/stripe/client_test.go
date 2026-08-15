@@ -932,18 +932,33 @@ func TestVerifyWebhookRejectsReplayedTimestamp(t *testing.T) {
 	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
-func TestVerifyWebhookRejectsWrongAPIVersion(t *testing.T) {
+func TestVerifyWebhookAcceptsNewerVersionInSDKReleaseTrain(t *testing.T) {
 	t.Parallel()
 
 	const secret = "whsec_test"
 	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
-		Payload: webhookPayload(t, "2026-05-27.dahlia", time.Now(), map[string]any{"id": "in_test"}),
+		Payload: webhookPayload(t, "2026-07-29.dahlia", time.Now(), map[string]any{"id": "in_test"}),
+		Secret:  secret,
+	})
+	c := &client{webhookSecret: secret}
+
+	event, err := c.VerifyWebhook(signed.Payload, signed.Header)
+	require.NoError(t, err)
+	require.Equal(t, "in_test", event.ObjectID)
+}
+
+func TestVerifyWebhookRejectsIncompatibleReleaseTrain(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+		Payload: webhookPayload(t, "2025-09-30.clover", time.Now(), map[string]any{"id": "in_test"}),
 		Secret:  secret,
 	})
 	c := &client{webhookSecret: secret}
 
 	_, err := c.VerifyWebhook(signed.Payload, signed.Header)
-	require.ErrorContains(t, err, "expected API version "+stripesdk.APIVersion)
+	require.ErrorContains(t, err, "expects API version "+stripesdk.APIVersion)
 	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 

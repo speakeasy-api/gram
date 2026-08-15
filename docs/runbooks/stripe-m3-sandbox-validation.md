@@ -62,7 +62,7 @@ References:
    ```sh
    pitchfork restart server
    if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi
-   stripe listen --skip-verify \
+   stripe listen --latest --skip-verify \
      --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"
    ```
 
