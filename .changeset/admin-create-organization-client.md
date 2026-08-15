@@ -24,6 +24,8 @@ A refused name leaves the dialog open with the name still in it and the server's
 reason beside it, because a rejected name is one the operator wants to edit
 rather than retype. A deployment with no WorkOS configuration refuses this way
 too, so it reports that it cannot create organizations instead of failing
-silently. While a create is in flight, the confirm button, the cancel button, the
+silently. A refusal also leaves the list as it found it, so pressing Create while
+the list is still loading cannot leave the table saying there are no
+organizations. While a create is in flight, the confirm button, the cancel button, the
 close control and the Escape key are all held, so one press creates one
 organization.

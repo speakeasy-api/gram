@@ -71,6 +71,8 @@ const mocks = vi.hoisted(() => ({
         body: BulkUpdateAccountTypeRequest,
       ) => Promise<BulkUpdateAccountTypeResult>
     >(),
+  createOrganization:
+    vi.fn<(body: { name: string }) => Promise<AdminOrganization>>(),
 }));
 
 // Only the endpoints this page's route tree reaches are replaced. The rest of
@@ -91,6 +93,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
     bulkUpdateAccountType: mocks.bulkUpdateAccountType,
+    createOrganization: mocks.createOrganization,
   };
 });
 
@@ -413,6 +416,10 @@ beforeEach(() => {
   mocks.bulkUpdateAccountType.mockReset();
   mocks.bulkUpdateAccountType.mockImplementation(({ ids }) =>
     Promise.resolve({ updated_ids: [...ids].reverse(), missing_ids: [] }),
+  );
+  mocks.createOrganization.mockReset();
+  mocks.createOrganization.mockImplementation(({ name }) =>
+    Promise.resolve({ ...CREATED_ORG, name }),
   );
 });
 
@@ -3656,6 +3663,104 @@ describe("organizations list bulk account type", () => {
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent),
     ).toEqual([...ACCOUNT_TYPE_OPTIONS]);
+  });
+});
+
+// A record neither row on the page carries, and free tier with no trial, which
+// is what the create endpoint makes.
+const CREATED_ORG: AdminOrganization = {
+  id: "org_placeholder_three",
+  name: "Placeholder Three",
+  slug: "placeholder-three",
+  account_type: "free",
+  whitelisted: false,
+  member_count: 0,
+  created_at: "2026-01-02T00:00:00Z",
+  updated_at: "2026-01-02T00:00:00Z",
+};
+
+// The control's own behaviour is covered in CreateOrganization.test.tsx. These
+// two are about the page: that it draws the control at all, and that what the
+// control says reaches the one live region, which is the whole reason the
+// announcement is routed through the page rather than spoken locally.
+describe("organizations list create organization", () => {
+  it("offers the create control in the toolbar", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    const control = screen.getByRole("button", { name: "Create organization" });
+    // In the search box's own row, not the strip inside the table: this is the
+    // page's action rather than the table's. The row is the search box's
+    // grandparent, and walking up from the box rather than down from the page
+    // keeps the assertion off every other container on it.
+    const row = screen
+      .getByLabelText("Search organizations")
+      .closest("div")?.parentElement;
+    expect(row?.contains(control)).toBe(true);
+  });
+
+  it("announces a created organization through the page's live region", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create organization" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Organization name"), {
+      target: { value: CREATED_ORG.name },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    });
+
+    // The region itself, not a spy on the reporter. A control that announced
+    // into its own region, or into nothing, would pass every test in the
+    // component's own file and fail this one.
+    await waitFor(() => {
+      expect(announcement()).toContain(`Created ${CREATED_ORG.name}.`);
+    });
+  });
+});
+
+// The write cancels every organization read in flight before it goes out, and
+// this control is pressable while the page's first list read is still open: the
+// toolbar is drawn whether or not the rows have arrived. A cancelled read
+// reverts and nothing restarts it, so a refused create can leave the table on
+// its loading state with no request outstanding.
+describe("organizations list create organization: a refusal", () => {
+  it("leaves the list fetching rather than cancelled", async () => {
+    let releaseList!: (result: ListOrganizationsResult) => void;
+    mocks.listOrganizations.mockReturnValueOnce(
+      new Promise<ListOrganizationsResult>((resolve) => {
+        releaseList = resolve;
+      }),
+    );
+
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    expect(screen.getByText("Loading...")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create organization" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Organization name"), {
+      target: { value: CREATED_ORG.name },
+    });
+    mocks.createOrganization.mockRejectedValueOnce(
+      new GramAdminError(422, { message: "no" }, "Unprocessable Entity"),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    });
+    await screen.findByRole("alert");
+
+    // The read the write cancelled is dead: React Query drops its answer, so
+    // the rows can only arrive from a request made after the failure.
+    releaseList({ organizations: ORGS });
+    // An open Radix modal hides the rest of the page from the accessibility
+    // tree, so the rows are unreachable by role until the operator is out of
+    // the dialog. Closing it is their next move anyway.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("link", { name: FIRST_ORG.name });
   });
 });
 

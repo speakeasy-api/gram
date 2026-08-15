@@ -55,10 +55,14 @@ const CREATED: AdminOrganization = {
   updated_at: "2026-01-02T00:00:00Z",
 };
 
-// Subscribes to the same list entry the page's table does, so an invalidation
-// is observable here as another call rather than as a spy on the cache.
+// A filtered page, not the bare key the component invalidates. The operator can
+// be on any filter and any page when they create, so a probe on the same key the
+// component names would leave that claim undefended: narrowing the invalidation,
+// or making it exact, would keep passing.
+const PROBE_PARAMS = { q: "placeholder", account_types: ["free"] };
+
 function ListProbe(): React.JSX.Element {
-  const { data } = useQuery(organizationsListQuery());
+  const { data } = useQuery(organizationsListQuery(PROBE_PARAMS));
   return <span data-testid="rows">{data?.organizations.length ?? -1}</span>;
 }
 
@@ -151,7 +155,9 @@ describe("creating an organization", () => {
   it("sends the name and closes", async () => {
     await open();
     type("Placeholder New");
-    submitForm();
+    // The button itself, once. Everything else here drives the form, so an
+    // inert primary control would otherwise go unnoticed.
+    fireEvent.click(submitButton());
 
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenCalledWith({
@@ -164,16 +170,35 @@ describe("creating an organization", () => {
   });
 
   it("names the organization it created, on screen and out loud", async () => {
+    // The server normalises the name it stores and answers with what it
+    // stored, so the two differ here on purpose: an assertion against a
+    // fixture that echoes the field would hold nothing.
+    mocks.createOrganization.mockResolvedValue({
+      ...CREATED,
+      name: "Placeholder New",
+    });
     await open();
-    type("Placeholder New");
+    type("placeholder    new");
     submitForm();
 
-    // From the response, not from the field: the server normalises the name.
     await screen.findByText(/Created Placeholder New\./);
+    expect(screen.queryByText(/placeholder    new/)).toBeNull();
     await waitFor(() => {
       expect(announce).toHaveBeenCalledWith(
         expect.stringContaining("Created Placeholder New."),
       );
+    });
+  });
+
+  it("clears the page's failure banner", async () => {
+    await open();
+    type("Placeholder New");
+    submitForm();
+
+    // A re-enable that failed reports in a banner on the page, and every
+    // sibling write clears it when the next one lands.
+    await waitFor(() => {
+      expect(showFailure).toHaveBeenCalledWith(null);
     });
   });
 
@@ -184,7 +209,14 @@ describe("creating an organization", () => {
 
     // The record is free tier with no trial, so a filtered list can be right
     // to leave it out and the confirmation cannot be "look at the table".
-    await screen.findByText(/may not show it under the current filters/);
+    const line = await screen.findByText(
+      /may not show it under the current filters/,
+    );
+    // The line is truncated in a row that also holds a search box and the
+    // filter chips, and the caveat is the half that gets clipped. This is an
+    // attribute assertion: happy-dom lays nothing out and cannot say what is
+    // on screen.
+    expect(line.getAttribute("title")).toBe(line.textContent);
   });
 
   it("trims the name before sending it", async () => {
@@ -241,6 +273,13 @@ describe("an empty name", () => {
     expect(mocks.createOrganization).not.toHaveBeenCalled();
   });
 
+  it("is marked required on the field", async () => {
+    await open();
+    // The submit is disabled until there is a name, and a disabled control is
+    // no explanation. This is what a screen reader has to go on.
+    expect(nameField().required).toBe(true);
+  });
+
   it("leaves the submit disabled", async () => {
     await open();
     expect(submitButton().disabled).toBe(true);
@@ -248,6 +287,36 @@ describe("an empty name", () => {
     expect(submitButton().disabled).toBe(true);
     type("Placeholder New");
     expect(submitButton().disabled).toBe(false);
+  });
+});
+
+describe("cancelling", () => {
+  it("gives the keyboard back to the trigger", async () => {
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Radix restores through the trigger, which is why this dialog needs no
+    // focus rescue of its own. Restoration runs on a timeout, so this waits.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Create organization" }),
+      );
+    });
+  });
+
+  it("sends nothing", async () => {
+    await open();
+    type("Placeholder New");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Cancel sits inside the form, so losing type="button" would make it
+    // submit: the button that abandons the write would create the
+    // organization.
+    expect(mocks.createOrganization).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
@@ -330,6 +399,21 @@ describe("a refusal", () => {
     expect(nameField().value).toBe("Placeholder New");
   });
 
+  it("marks the field invalid and points it at the reason", async () => {
+    mocks.createOrganization.mockRejectedValue(refusal(REASON));
+    await open();
+    type("Placeholder New");
+    submitForm();
+
+    const alert = await screen.findByRole("alert");
+    const field = nameField();
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    // The operator tabs back to edit the rejected name, and the alert has
+    // already fired by then.
+    expect(field.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(alert.id).toBeTruthy();
+  });
+
   it("reports nothing as created", async () => {
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     await open();
@@ -359,6 +443,24 @@ describe("a refusal", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
+  });
+
+  it("does not sit beside the previous create's confirmation", async () => {
+    await open();
+    type("Placeholder New");
+    submitForm();
+    await screen.findByText(/Created Placeholder New\./);
+
+    mocks.createOrganization.mockRejectedValue(refusal(REASON));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create organization" }),
+    );
+    await screen.findByRole("dialog");
+
+    // Opening the dialog again is the operator saying the last create is
+    // done with. Leaving it up would put a success and a refusal on screen
+    // together.
+    expect(screen.queryByText(/Created Placeholder New\./)).toBeNull();
   });
 
   it("is not still showing when the dialog is reopened", async () => {
