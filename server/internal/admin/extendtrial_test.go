@@ -590,8 +590,11 @@ func TestExtendTrial_ASecondExtensionThatUnblocksOntoAnExtendedTrialSucceeds(t *
 	ctx, svc, conn := newTestAdminService(t)
 
 	// Close enough that it expires while the second call is blocked, far enough
-	// that the first call still finds a running trial.
-	seededEndsAt := time.Now().UTC().Add(2 * time.Second)
+	// that the first call still finds a running trial. Five seconds is the budget
+	// for two round trips and a BeginTx on a loaded box, plus any drift between
+	// this process's clock and the database's, and it sets the test's runtime
+	// because the wait below runs it out.
+	seededEndsAt := time.Now().UTC().Add(5 * time.Second)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_race", name: "Race Co", slug: "ext-race", accountType: "enterprise", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_race", endsAt: seededEndsAt})
 
