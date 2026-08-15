@@ -369,16 +369,30 @@ SELECT
     allocation.source_key
   , allocation.source_day
   , allocation.source_snapshot_usd
-  , spend.spend_usd AS final_spend_usd
+  , (CASE
+      WHEN chat_key.created_at IS NULL
+        OR allocation.source_day < (chat_key.created_at AT TIME ZONE 'UTC')::date
+        THEN 0::numeric
+      ELSE spend.spend_usd
+    END)::numeric(14, 6) AS final_spend_usd
+  , carry.amount_usd AS existing_carry_amount_usd
   , allocation.original_invoice_id
 FROM stripe_invoice_allocations allocation
 JOIN stripe_invoices invoice
   ON invoice.organization_id = allocation.organization_id
  AND invoice.stripe_invoice_id = allocation.original_invoice_id
-JOIN openrouter_spend_daily spend
+LEFT JOIN openrouter_api_keys chat_key
+  ON chat_key.organization_id = allocation.organization_id
+ AND chat_key.key_type = 'chat'
+LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = allocation.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = allocation.source_day
+LEFT JOIN stripe_invoice_allocations carry
+  ON carry.organization_id = allocation.organization_id
+ AND carry.source_kind = allocation.source_kind
+ AND carry.source_key = allocation.source_key
+ AND carry.seq = 2
 WHERE allocation.organization_id = @organization_id
   AND invoice.stripe_invoice_id = @stripe_invoice_id
   AND invoice.service_period_end + interval '72 hours' <= @now
