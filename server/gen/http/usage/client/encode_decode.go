@@ -713,6 +713,470 @@ func DecodeSetBillingMetadataResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetBillingEmailRequest instantiates a HTTP request object with method
+// and path set to call the "usage" service "getBillingEmail" endpoint
+func (c *Client) BuildGetBillingEmailRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetBillingEmailUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getBillingEmail", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetBillingEmailRequest returns an encoder for requests sent to the
+// usage getBillingEmail server.
+func EncodeGetBillingEmailRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetBillingEmailPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getBillingEmail", "*usage.GetBillingEmailPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetBillingEmailResponse returns a decoder for responses returned by
+// the usage getBillingEmail endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetBillingEmailResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetBillingEmailResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetBillingEmailResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			res := NewGetBillingEmailBillingEmailOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetBillingEmailUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetBillingEmailForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetBillingEmailBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetBillingEmailNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetBillingEmailConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetBillingEmailUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetBillingEmailInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetBillingEmailInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+				}
+				err = ValidateGetBillingEmailInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+				}
+				return nil, NewGetBillingEmailInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetBillingEmailUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+				}
+				err = ValidateGetBillingEmailUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+				}
+				return nil, NewGetBillingEmailUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getBillingEmail", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetBillingEmailGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getBillingEmail", err)
+			}
+			err = ValidateGetBillingEmailGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getBillingEmail", err)
+			}
+			return nil, NewGetBillingEmailGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getBillingEmail", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetBillingEmailRequest instantiates a HTTP request object with method
+// and path set to call the "usage" service "setBillingEmail" endpoint
+func (c *Client) BuildSetBillingEmailRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetBillingEmailUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "setBillingEmail", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetBillingEmailRequest returns an encoder for requests sent to the
+// usage setBillingEmail server.
+func EncodeSetBillingEmailRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.SetBillingEmailPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "setBillingEmail", "*usage.SetBillingEmailPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetBillingEmailRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("usage", "setBillingEmail", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetBillingEmailResponse returns a decoder for responses returned by
+// the usage setBillingEmail endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetBillingEmailResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetBillingEmailResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetBillingEmailResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			res := NewSetBillingEmailBillingEmailOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetBillingEmailUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetBillingEmailForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetBillingEmailBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetBillingEmailNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetBillingEmailConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetBillingEmailUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetBillingEmailInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetBillingEmailInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+				}
+				err = ValidateSetBillingEmailInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+				}
+				return nil, NewSetBillingEmailInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetBillingEmailUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+				}
+				err = ValidateSetBillingEmailUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+				}
+				return nil, NewSetBillingEmailUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "setBillingEmail", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetBillingEmailGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "setBillingEmail", err)
+			}
+			err = ValidateSetBillingEmailGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "setBillingEmail", err)
+			}
+			return nil, NewSetBillingEmailGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "setBillingEmail", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetUsageTiersRequest instantiates a HTTP request object with method and
 // path set to call the "usage" service "getUsageTiers" endpoint
 func (c *Client) BuildGetUsageTiersRequest(ctx context.Context, v any) (*http.Request, error) {

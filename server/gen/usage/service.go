@@ -23,6 +23,10 @@ type Service interface {
 	GetTokensUnderManagement(context.Context, *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error)
 	// Set an organization's billing contract terms. Restricted to platform admins.
 	SetBillingMetadata(context.Context, *SetBillingMetadataPayload) (res *TokensUnderManagement, err error)
+	// Get the billing notification email for a PAYG organization
+	GetBillingEmail(context.Context, *GetBillingEmailPayload) (res *BillingEmail, err error)
+	// Set or clear the billing notification email for a PAYG organization
+	SetBillingEmail(context.Context, *SetBillingEmailPayload) (res *BillingEmail, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
@@ -55,7 +59,14 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
+var MethodNames = [10]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
+
+// BillingEmail is the result type of the usage service getBillingEmail method.
+type BillingEmail struct {
+	// The configured billing notification email. Omitted when organization
+	// administrators receive billing notifications.
+	Email *string
+}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
@@ -78,6 +89,12 @@ type CreateStripeCheckoutPayload struct {
 // CreateTopUpCheckoutPayload is the payload type of the usage service
 // createTopUpCheckout method.
 type CreateTopUpCheckoutPayload struct {
+	SessionToken *string
+}
+
+// GetBillingEmailPayload is the payload type of the usage service
+// getBillingEmail method.
+type GetBillingEmailPayload struct {
 	SessionToken *string
 }
 
@@ -112,6 +129,14 @@ type PeriodUsage struct {
 	IncludedCredits *int
 	// Whether the project has an active subscription
 	HasActiveSubscription bool
+}
+
+// SetBillingEmailPayload is the payload type of the usage service
+// setBillingEmail method.
+type SetBillingEmailPayload struct {
+	SessionToken *string
+	// The billing notification email. Omit to notify organization administrators.
+	Email *string
 }
 
 // SetBillingMetadataPayload is the payload type of the usage service

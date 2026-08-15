@@ -10,6 +10,20 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
+-- name: LockBillingMetadata :one
+SELECT *
+FROM billing_metadata
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
+-- name: UpsertBillingEmail :one
+INSERT INTO billing_metadata (organization_id, alert_email)
+VALUES (@organization_id, sqlc.narg(alert_email))
+ON CONFLICT (organization_id) DO UPDATE SET
+    alert_email = EXCLUDED.alert_email
+  , updated_at = clock_timestamp()
+RETURNING *;
+
 -- name: StoreStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id)

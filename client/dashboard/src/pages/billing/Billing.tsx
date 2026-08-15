@@ -24,6 +24,7 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
+import { BillingEmailSection } from "@/components/billing/billing-email-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
@@ -68,6 +69,9 @@ function BillingInner() {
     <>
       <StartPaygCheckoutCTA label="Add payment method" />
       <UsageSection />
+      {/* Only pay-as-you-go organizations get product billing notifications;
+          enterprise contracts are billed through their contract terms. */}
+      {productTier === "payg" && <BillingEmailSection />}
       {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />

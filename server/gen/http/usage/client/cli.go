@@ -95,6 +95,46 @@ func BuildSetBillingMetadataPayload(usageSetBillingMetadataBody string, usageSet
 	return v, nil
 }
 
+// BuildGetBillingEmailPayload builds the payload for the usage getBillingEmail
+// endpoint from CLI flags.
+func BuildGetBillingEmailPayload(usageGetBillingEmailSessionToken string) (*usage.GetBillingEmailPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetBillingEmailSessionToken != "" {
+			sessionToken = &usageGetBillingEmailSessionToken
+		}
+	}
+	v := &usage.GetBillingEmailPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetBillingEmailPayload builds the payload for the usage setBillingEmail
+// endpoint from CLI flags.
+func BuildSetBillingEmailPayload(usageSetBillingEmailBody string, usageSetBillingEmailSessionToken string) (*usage.SetBillingEmailPayload, error) {
+	var err error
+	var body SetBillingEmailRequestBody
+	{
+		err = json.Unmarshal([]byte(usageSetBillingEmailBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"alice@example.com\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if usageSetBillingEmailSessionToken != "" {
+			sessionToken = &usageSetBillingEmailSessionToken
+		}
+	}
+	v := &usage.SetBillingEmailPayload{
+		Email: body.Email,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateCustomerSessionPayload builds the payload for the usage
 // createCustomerSession endpoint from CLI flags.
 func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken string) (*usage.CreateCustomerSessionPayload, error) {

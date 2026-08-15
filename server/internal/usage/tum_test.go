@@ -83,6 +83,7 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 		authz:         authzEngine,
 		db:            db,
 		repo:          repo.New(db),
+		orgRepo:       orgRepo.New(db),
 		telemetryRepo: telemetryrepo.New(chConn),
 		auditLogger:   audit.NewLogger(),
 		stripeClient:  nil,
