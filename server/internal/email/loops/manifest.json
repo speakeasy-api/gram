@@ -6,6 +6,13 @@
     "reply_to_email": "gram@speakeasy.com"
   },
   "templates": {
+    "access_paused": {
+      "managed_name": "gram.transactional.v2.access_paused",
+      "subject": "Access paused for {data.organization_name}",
+      "preview_text": "Start pay as you go to restore access.",
+      "source": "access_paused.lmx",
+      "variables": ["organization_name", "action_url"]
+    },
     "access_request": {
       "managed_name": "gram.transactional.v2.access_request",
       "subject": "Access requested for {data.organization_name}",
@@ -52,6 +59,13 @@
         "inviter_email",
         "organization_name"
       ]
+    },
+    "trial_ending_soon": {
+      "managed_name": "gram.transactional.v2.trial_ending_soon",
+      "subject": "Your Gram trial ends on {data.trial_end_date}",
+      "preview_text": "Set up billing to keep access for {data.organization_name}.",
+      "source": "trial_ending_soon.lmx",
+      "variables": ["organization_name", "trial_end_date", "action_url"]
     },
     "tum_usage_overage": {
       "managed_name": "gram.transactional.v2.tum_usage_overage",

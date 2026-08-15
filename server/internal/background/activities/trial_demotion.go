@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -23,6 +24,7 @@ type DemoteExpiredTrials struct {
 	repo       *trialsrepo.Queries
 	openRouter openrouter.Provisioner
 	audit      *audit.Logger
+	notifier   trialemails.Notifier
 }
 
 func NewDemoteExpiredTrials(
@@ -30,6 +32,7 @@ func NewDemoteExpiredTrials(
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
 	auditLogger *audit.Logger,
+	notifier trialemails.Notifier,
 ) *DemoteExpiredTrials {
 	return &DemoteExpiredTrials{
 		logger:     logger.With(attr.SlogComponent("demote_expired_trials")),
@@ -37,6 +40,7 @@ func NewDemoteExpiredTrials(
 		repo:       trialsrepo.New(db),
 		openRouter: openRouterProvisioner,
 		audit:      auditLogger,
+		notifier:   notifier,
 	}
 }
 
@@ -109,6 +113,11 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit trial demotion: %w", err)
+	}
+	if d.notifier != nil {
+		if err := d.notifier.TrialInactive(ctx, args.OrganizationID); err != nil {
+			d.logger.ErrorContext(ctx, "notify inactive trial after demotion", attr.SlogOrganizationID(args.OrganizationID), attr.SlogError(err))
+		}
 	}
 
 	return nil

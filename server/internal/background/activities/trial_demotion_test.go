@@ -17,6 +17,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -69,6 +70,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 			conn,
 			provisioner,
 			audit.NewLogger(),
+			trialemails.NoopNotifier{},
 		),
 	}
 }

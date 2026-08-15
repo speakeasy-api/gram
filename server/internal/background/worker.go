@@ -481,6 +481,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
+	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
+	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
+	temporalWorker.RegisterActivity(activities.SendAccessPausedEmail)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -596,6 +599,7 @@ func NewTemporalWorker(
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
+	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
