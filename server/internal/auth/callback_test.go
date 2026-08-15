@@ -665,8 +665,8 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		// auth context. The email has to be threaded through provisioning.
 		entry, err := audittest.LatestAuditLogByAction(ctx, instance.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 		require.NoError(t, err)
-		require.NotNil(t, entry.ActorDisplayName, "signup must attribute the trial to the user who signed up")
-		require.Equal(t, userInfo.Email, *entry.ActorDisplayName)
+		require.NotEmpty(t, entry.ActorDisplay, "signup must attribute the trial to the user who signed up")
+		require.Equal(t, userInfo.Email, entry.ActorDisplay)
 	})
 
 	t.Run("trial notifier failure does not fail signup", func(t *testing.T) {

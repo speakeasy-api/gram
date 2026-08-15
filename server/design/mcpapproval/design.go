@@ -74,6 +74,126 @@ var _ = Service("mcpApproval", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpApprovalRequest"}`)
 	})
 
+	Method("ensureServerReview", func() {
+		Description("Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("target", String, "The server URL the dossier describes.", func() {
+				MaxLength(2048)
+			})
+			Required("target")
+		})
+
+		Result(ApprovalRequestSummary)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.ensureServerReview")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "ensureMcpServerReview")
+		Meta("openapi:extension:x-speakeasy-name-override", "ensureServerReview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnsureMcpServerReview"}`)
+	})
+
+	Method("createRequest", func() {
+		Description("Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("target_kind", String, func() {
+				Description("The namespace of the reference.")
+				Enum("server_url", "stdio_command")
+			})
+			Attribute("target", String, "The server reference: a URL, or the stdio command that launches it.", func() {
+				MaxLength(2048)
+			})
+			Attribute("note", String, "The requester's justification for wanting access to this server. Must not be blank.", func() {
+				MaxLength(4000)
+			})
+			Required("target_kind", "target", "note")
+		})
+
+		Result(ApprovalRequestSummary)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.createRequest")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createMcpApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "createRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateMcpApprovalRequest"}`)
+	})
+
+	Method("promote", func() {
+		Description("Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("risk_policy_bypass_request_id", String, "The bypass request to promote.")
+			Required("risk_policy_bypass_request_id")
+		})
+
+		Result(ApprovalRequestSummary)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.promote")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "promoteMcpApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "promote")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PromoteMcpApprovalRequest"}`)
+	})
+
+	Method("refreshEvidence", func() {
+		Description("Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The approval request ID.")
+			Required("id")
+		})
+
+		Result(ApprovalRequestDetail)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.refreshEvidence")
+			// The id travels as a query parameter, leaving the POST bodyless:
+			// an id-only JSON body is structurally identical to other one-field
+			// forms and the OpenAPI generator dedupes it into whichever named
+			// type hashed first, which mislabels the SDK surface.
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshMcpApprovalEvidence")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshEvidence")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshMcpApprovalEvidence"}`)
+	})
+
 	Method("recordDecision", func() {
 		Description("Approve or deny an MCP approval request, recording the rationale and who it applies to.")
 		Security(security.Session, security.ProjectSlug)
@@ -116,7 +236,7 @@ var ApprovalRequestSummary = Type("ApprovalRequestSummary", func() {
 
 	Attribute("id", String, "The approval request ID.")
 	Attribute("target_kind", String, "The namespace of the requested reference, such as server_url or stdio_command.")
-	Attribute("target_raw", String, "The reference exactly as the requester named it.")
+	Attribute("target_raw", String, "The stored display form of the requested reference, with credential-shaped material (URL query strings and userinfo, secret-named flag and environment values in commands) redacted at intake.")
 	Attribute("server_slug", String, "The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.")
 	Attribute("artifact_ref", String, "The resolved artifact identity. Absent when the server could not be identified, which must surface as unknown rather than as an absence of findings.")
 	Attribute("version_pinned", Boolean, "Whether the reference names an exact version.")

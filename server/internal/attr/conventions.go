@@ -154,6 +154,7 @@ const (
 	ChatAnalysisScoredTokensKey = attribute.Key("gram.chat_analysis.scored_tokens")
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
+	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -1963,6 +1964,11 @@ func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 
 func MCPRegistryID(v string) attribute.KeyValue { return MCPRegistryIDKey.String(v) }
 func SlogMCPRegistryID(v string) slog.Attr      { return slog.String(string(MCPRegistryIDKey), v) }
+
+func MCPApprovalRequestID(v string) attribute.KeyValue { return MCPApprovalRequestIDKey.String(v) }
+func SlogMCPApprovalRequestID(v string) slog.Attr {
+	return slog.String(string(MCPApprovalRequestIDKey), v)
+}
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }

@@ -29,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 func newAdminCommand() *cli.Command {
@@ -200,6 +202,12 @@ func newAdminCommand() *cli.Command {
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
 			EnvVars: []string{"OPENROUTER_DEV_KEY"},
 		},
+		&cli.StringFlag{
+			Name:     "loops-api-key",
+			Usage:    "Loops API key for trial lifecycle contact updates. Empty or 'unset' disables Loops writes.",
+			EnvVars:  []string{"LOOPS_API_KEY"},
+			Required: false,
+		},
 	}
 
 	return &cli.Command{
@@ -311,8 +319,10 @@ func newAdminCommand() *cli.Command {
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
 			adminTrialKeyReviver := newAdminTrialKeyReviver(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminTrialKeyReviver, trialNotifier))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

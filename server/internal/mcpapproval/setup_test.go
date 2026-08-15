@@ -2,8 +2,12 @@ package mcpapproval_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,14 +24,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var infra *testenv.Environment
@@ -56,6 +71,9 @@ type testInstance struct {
 	authContext    *contextvalues.AuthContext
 	organizationID string
 	projectID      uuid.UUID
+
+	// probes is the instance's remote-probe stand-in, reconfigurable per test.
+	probes *testProbes
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -95,8 +113,22 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	probes := &testProbes{onGather: nil, fail: false}
+	assembler := evidence.NewAssembler(
+		packagemeta.NewClient(notFoundRegistry{}),
+		repometa.NewClient(notFoundRegistry{}),
+		advisories.NewClient(emptyAdvisoryDB{}),
+		domainmeta.NewClient(notFoundRegistry{}),
+		telemetryrepo.New(chConn),
+		probes,
+		probes,
+		probes,
+	)
+
 	ti := &testInstance{
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger()),
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), assembler),
 		conn:           conn,
 		repo:           repo.New(conn),
 		features:       features,
@@ -104,6 +136,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		authContext:    authContext,
 		organizationID: organizationID,
 		projectID:      projectID,
+		probes:         probes,
 	}
 
 	enableMCPApproval(t, ctx, ti)
@@ -168,6 +201,30 @@ func withProject(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 	return authztest.WithExactGrants(t, scoped, exact...)
 }
 
+// seedMemberPrincipal makes userID an active member of the test organization
+// and returns its principal URN. Decisions reject granted principals that do
+// not resolve in the organization, so tests naming one must seed it first.
+func seedMemberPrincipal(t *testing.T, ctx context.Context, ti *testInstance, userID string) string {
+	t.Helper()
+
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       userID + "@example.test",
+		DisplayName: userID,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+
+	return urn.NewPrincipal(urn.PrincipalTypeUser, userID).String()
+}
+
 // seededRequest describes an approval request to plant.
 //
 // The intake endpoint that writes these lands with the request-submission
@@ -200,14 +257,15 @@ func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 	}
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID: ti.organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "server_url",
-		TargetRaw:      seed.targetKey,
-		TargetKey:      seed.targetKey,
-		ArtifactRef:    conv.ToPGText("npm:@scope/pkg@1.2.3"),
-		VersionPinned:  true,
-		Status:         seed.status,
+		OrganizationID:            ti.organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "server_url",
+		TargetRaw:                 seed.targetKey,
+		TargetKey:                 seed.targetKey,
+		ArtifactRef:               conv.ToPGText("npm:@scope/pkg@1.2.3"),
+		VersionPinned:             true,
+		Status:                    seed.status,
+		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -225,14 +283,15 @@ func seedUnresolvedRequest(t *testing.T, ctx context.Context, ti *testInstance, 
 	t.Helper()
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID: ti.organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "stdio_command",
-		TargetRaw:      raw,
-		TargetKey:      raw,
-		ArtifactRef:    pgtype.Text{},
-		VersionPinned:  false,
-		Status:         "requested",
+		OrganizationID:            ti.organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "stdio_command",
+		TargetRaw:                 raw,
+		TargetKey:                 raw,
+		ArtifactRef:               pgtype.Text{},
+		VersionPinned:             false,
+		Status:                    "requested",
+		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -253,7 +312,7 @@ func seedEvidence(t *testing.T, ctx context.Context, ti *testInstance, projectID
 func seedRequester(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, userID, note string) {
 	t.Helper()
 
-	_, err := ti.repo.CreateApprovalRequestRequester(ctx, repo.CreateApprovalRequestRequesterParams{
+	_, err := ti.repo.UpsertApprovalRequestRequester(ctx, repo.UpsertApprovalRequestRequesterParams{
 		OrganizationID:       ti.organizationID,
 		ProjectID:            projectID,
 		McpApprovalRequestID: requestID,
@@ -283,6 +342,74 @@ func requestStatus(t *testing.T, ctx context.Context, ti *testInstance, projectI
 	require.NoError(t, err)
 
 	return request.Status
+}
+
+// testProbes stands in for the remote probes. Its zero configuration is
+// quiet: nothing discovered, nothing declared, no gaps — remote-probe
+// behavior is covered by the evidence package's own tests. Tests reach into
+// their instance's probes to reconfigure them: fail turns every remote source
+// into a gap, and onGather runs mid-gather — after the service read the
+// request row and before it writes — which is how the CAS tests interleave a
+// concurrent write.
+type testProbes struct {
+	onGather func()
+	fail     bool
+}
+
+func (p *testProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	if p.onGather != nil {
+		p.onGather()
+	}
+	if p.fail {
+		return nil, errors.New("authority probe unreachable")
+	}
+
+	return nil, nil
+}
+
+func (p *testProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	if p.fail {
+		return nil, errors.New("tools probe unreachable")
+	}
+
+	return nil, nil
+}
+
+func (p *testProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+	if p.fail {
+		return nil, errors.New("catalog unreachable")
+	}
+
+	return nil, nil
+}
+
+// emptyAdvisoryDB answers every advisory query with an empty document, which
+// is OSV's shape for a package it has nothing on — checked and clean.
+type emptyAdvisoryDB struct{}
+
+func (emptyAdvisoryDB) Do(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		Status:     http.StatusText(http.StatusOK),
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{}`)),
+		Header:     http.Header{},
+		Request:    request,
+	}, nil
+}
+
+// notFoundRegistry answers every package-registry request with a 404, so
+// admissions in tests gather cleanly with "not published there" instead of
+// reaching real registries.
+type notFoundRegistry struct{}
+
+func (notFoundRegistry) Do(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		Status:     http.StatusText(http.StatusNotFound),
+		StatusCode: http.StatusNotFound,
+		Body:       io.NopCloser(strings.NewReader(`{"error":"Not found"}`)),
+		Header:     http.Header{},
+		Request:    request,
+	}, nil
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

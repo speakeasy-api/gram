@@ -41,7 +41,7 @@ export type ApprovalRequestSummary = {
    */
   targetKind: string;
   /**
-   * The reference exactly as the requester named it.
+   * The stored display form of the requested reference, with credential-shaped material (URL query strings and userinfo, secret-named flag and environment values in commands) redacted at intake.
    */
   targetRaw: string;
   /**

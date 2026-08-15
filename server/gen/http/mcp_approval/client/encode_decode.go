@@ -506,6 +506,974 @@ func DecodeGetRequestResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildEnsureServerReviewRequest instantiates a HTTP request object with
+// method and path set to call the "mcpApproval" service "ensureServerReview"
+// endpoint
+func (c *Client) BuildEnsureServerReviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnsureServerReviewMcpApprovalPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpApproval", "ensureServerReview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeEnsureServerReviewRequest returns an encoder for requests sent to the
+// mcpApproval ensureServerReview server.
+func EncodeEnsureServerReviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpapproval.EnsureServerReviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpApproval", "ensureServerReview", "*mcpapproval.EnsureServerReviewPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewEnsureServerReviewRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpApproval", "ensureServerReview", err)
+		}
+		return nil
+	}
+}
+
+// DecodeEnsureServerReviewResponse returns a decoder for responses returned by
+// the mcpApproval ensureServerReview endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeEnsureServerReviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeEnsureServerReviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body EnsureServerReviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			res := NewEnsureServerReviewApprovalRequestSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body EnsureServerReviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EnsureServerReviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EnsureServerReviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EnsureServerReviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EnsureServerReviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EnsureServerReviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EnsureServerReviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EnsureServerReviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+				}
+				err = ValidateEnsureServerReviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+				}
+				return nil, NewEnsureServerReviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EnsureServerReviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+				}
+				err = ValidateEnsureServerReviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+				}
+				return nil, NewEnsureServerReviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpApproval", "ensureServerReview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body EnsureServerReviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "ensureServerReview", err)
+			}
+			err = ValidateEnsureServerReviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "ensureServerReview", err)
+			}
+			return nil, NewEnsureServerReviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpApproval", "ensureServerReview", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateRequestRequest instantiates a HTTP request object with method and
+// path set to call the "mcpApproval" service "createRequest" endpoint
+func (c *Client) BuildCreateRequestRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateRequestMcpApprovalPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpApproval", "createRequest", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateRequestRequest returns an encoder for requests sent to the
+// mcpApproval createRequest server.
+func EncodeCreateRequestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpapproval.CreateRequestPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpApproval", "createRequest", "*mcpapproval.CreateRequestPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateRequestRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpApproval", "createRequest", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateRequestResponse returns a decoder for responses returned by the
+// mcpApproval createRequest endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateRequestResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateRequestResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			res := NewCreateRequestApprovalRequestSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateRequestUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateRequestForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateRequestBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateRequestNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateRequestConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateRequestUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateRequestInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateRequestInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+				}
+				err = ValidateCreateRequestInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+				}
+				return nil, NewCreateRequestInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateRequestUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+				}
+				err = ValidateCreateRequestUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+				}
+				return nil, NewCreateRequestUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpApproval", "createRequest", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateRequestGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "createRequest", err)
+			}
+			err = ValidateCreateRequestGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "createRequest", err)
+			}
+			return nil, NewCreateRequestGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpApproval", "createRequest", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildPromoteRequest instantiates a HTTP request object with method and path
+// set to call the "mcpApproval" service "promote" endpoint
+func (c *Client) BuildPromoteRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PromoteMcpApprovalPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpApproval", "promote", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePromoteRequest returns an encoder for requests sent to the mcpApproval
+// promote server.
+func EncodePromoteRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpapproval.PromotePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpApproval", "promote", "*mcpapproval.PromotePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewPromoteRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpApproval", "promote", err)
+		}
+		return nil
+	}
+}
+
+// DecodePromoteResponse returns a decoder for responses returned by the
+// mcpApproval promote endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodePromoteResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePromoteResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PromoteResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			res := NewPromoteApprovalRequestSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PromoteUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PromoteForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PromoteBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PromoteNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PromoteConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PromoteUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PromoteInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PromoteInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+				}
+				err = ValidatePromoteInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+				}
+				return nil, NewPromoteInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PromoteUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+				}
+				err = ValidatePromoteUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+				}
+				return nil, NewPromoteUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpApproval", "promote", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PromoteGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "promote", err)
+			}
+			err = ValidatePromoteGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "promote", err)
+			}
+			return nil, NewPromoteGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpApproval", "promote", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRefreshEvidenceRequest instantiates a HTTP request object with method
+// and path set to call the "mcpApproval" service "refreshEvidence" endpoint
+func (c *Client) BuildRefreshEvidenceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshEvidenceMcpApprovalPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpApproval", "refreshEvidence", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshEvidenceRequest returns an encoder for requests sent to the
+// mcpApproval refreshEvidence server.
+func EncodeRefreshEvidenceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpapproval.RefreshEvidencePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpApproval", "refreshEvidence", "*mcpapproval.RefreshEvidencePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRefreshEvidenceResponse returns a decoder for responses returned by
+// the mcpApproval refreshEvidence endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRefreshEvidenceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshEvidenceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshEvidenceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			res := NewRefreshEvidenceApprovalRequestDetailOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshEvidenceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshEvidenceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshEvidenceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshEvidenceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshEvidenceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshEvidenceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshEvidenceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshEvidenceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+				}
+				err = ValidateRefreshEvidenceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+				}
+				return nil, NewRefreshEvidenceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshEvidenceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+				}
+				err = ValidateRefreshEvidenceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+				}
+				return nil, NewRefreshEvidenceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpApproval", "refreshEvidence", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshEvidenceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpApproval", "refreshEvidence", err)
+			}
+			err = ValidateRefreshEvidenceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpApproval", "refreshEvidence", err)
+			}
+			return nil, NewRefreshEvidenceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpApproval", "refreshEvidence", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRecordDecisionRequest instantiates a HTTP request object with method
 // and path set to call the "mcpApproval" service "recordDecision" endpoint
 func (c *Client) BuildRecordDecisionRequest(ctx context.Context, v any) (*http.Request, error) {

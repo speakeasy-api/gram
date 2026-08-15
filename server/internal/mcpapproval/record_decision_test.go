@@ -9,8 +9,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func decisionPayload(id, decision string) *gen.RecordDecisionPayload {
@@ -27,16 +29,17 @@ func TestRecordDecision_Approve(t *testing.T) {
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
+	principal := seedMemberPrincipal(t, ctx, ti, "user-platform-lead")
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.Rationale = "read-only tools, pinned version, vendor we already use"
-	payload.GrantedPrincipalUrns = []string{"urn:gram:team:platform"}
+	payload.GrantedPrincipalUrns = []string{principal}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "approved", decision.Decision)
 	require.NotEmpty(t, decision.DecidedBy)
 	require.NotNil(t, decision.Rationale)
-	require.Equal(t, []string{"urn:gram:team:platform"}, decision.GrantedPrincipalUrns)
+	require.Equal(t, []string{principal}, decision.GrantedPrincipalUrns)
 
 	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
@@ -51,7 +54,7 @@ func TestRecordDecision_DenyDropsGrants(t *testing.T) {
 
 	payload := decisionPayload(requestID.String(), "denied")
 	payload.Rationale = "demands a broad token and publishes no source"
-	payload.GrantedPrincipalUrns = []string{"urn:gram:team:platform", "urn:gram:user:someone"}
+	payload.GrantedPrincipalUrns = []string{"role:platform", "urn:gram:user:someone"}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
 	require.NoError(t, err)
@@ -159,6 +162,37 @@ func TestRecordDecision_OrganizationFollowsRequest(t *testing.T) {
 	decisions := decisionsFor(t, ctx, ti, ti.projectID, requestID)
 	require.Len(t, decisions, 1)
 	require.Equal(t, request.OrganizationID, decisions[0].OrganizationID)
+}
+
+// A bypass request already decided through the legacy drain keeps its
+// recorded outcome: deciding the promoted review must not overwrite it.
+func TestRecordDecision_LeavesDecidedLegacyBypassAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "blocked-user", "hit the block")
+	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(ti.conn).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+		Status:               "denied",
+		DecidedBy:            conv.ToPGText("legacy-admin"),
+		GrantedPrincipalUrns: []string{},
+		ID:                   bypassID,
+		ProjectID:            ti.projectID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(promoted.ID, "approved"))
+	require.NoError(t, err)
+
+	bypass, err := riskrepo.New(ti.conn).GetRiskPolicyBypassRequest(ctx, riskrepo.GetRiskPolicyBypassRequestParams{
+		ID: bypassID, ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "denied", bypass.Status)
+	require.Equal(t, "legacy-admin", bypass.DecidedBy.String)
 }
 
 func TestRecordDecision_RejectsUnknownDecision(t *testing.T) {

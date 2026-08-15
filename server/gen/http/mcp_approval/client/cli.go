@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	mcpapproval "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	goa "goa.design/goa/v3/pkg"
@@ -92,6 +93,177 @@ func BuildGetRequestPayload(mcpApprovalGetRequestID string, mcpApprovalGetReques
 		}
 	}
 	v := &mcpapproval.GetRequestPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildEnsureServerReviewPayload builds the payload for the mcpApproval
+// ensureServerReview endpoint from CLI flags.
+func BuildEnsureServerReviewPayload(mcpApprovalEnsureServerReviewBody string, mcpApprovalEnsureServerReviewSessionToken string, mcpApprovalEnsureServerReviewApikeyToken string, mcpApprovalEnsureServerReviewProjectSlugInput string) (*mcpapproval.EnsureServerReviewPayload, error) {
+	var err error
+	var body EnsureServerReviewRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalEnsureServerReviewBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"target\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Target) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target", body.Target, utf8.RuneCountInString(body.Target), 2048, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalEnsureServerReviewSessionToken != "" {
+			sessionToken = &mcpApprovalEnsureServerReviewSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalEnsureServerReviewApikeyToken != "" {
+			apikeyToken = &mcpApprovalEnsureServerReviewApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalEnsureServerReviewProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalEnsureServerReviewProjectSlugInput
+		}
+	}
+	v := &mcpapproval.EnsureServerReviewPayload{
+		Target: body.Target,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateRequestPayload builds the payload for the mcpApproval
+// createRequest endpoint from CLI flags.
+func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalCreateRequestSessionToken string, mcpApprovalCreateRequestApikeyToken string, mcpApprovalCreateRequestProjectSlugInput string) (*mcpapproval.CreateRequestPayload, error) {
+	var err error
+	var body CreateRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalCreateRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"aaa\",\n      \"target\": \"aaa\",\n      \"target_kind\": \"stdio_command\"\n   }'")
+		}
+		if !(body.TargetKind == "server_url" || body.TargetKind == "stdio_command") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", body.TargetKind, []any{"server_url", "stdio_command"}))
+		}
+		if utf8.RuneCountInString(body.Target) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target", body.Target, utf8.RuneCountInString(body.Target), 2048, false))
+		}
+		if utf8.RuneCountInString(body.Note) > 4000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", body.Note, utf8.RuneCountInString(body.Note), 4000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalCreateRequestSessionToken != "" {
+			sessionToken = &mcpApprovalCreateRequestSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalCreateRequestApikeyToken != "" {
+			apikeyToken = &mcpApprovalCreateRequestApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalCreateRequestProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalCreateRequestProjectSlugInput
+		}
+	}
+	v := &mcpapproval.CreateRequestPayload{
+		TargetKind: body.TargetKind,
+		Target:     body.Target,
+		Note:       body.Note,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildPromotePayload builds the payload for the mcpApproval promote endpoint
+// from CLI flags.
+func BuildPromotePayload(mcpApprovalPromoteBody string, mcpApprovalPromoteSessionToken string, mcpApprovalPromoteApikeyToken string, mcpApprovalPromoteProjectSlugInput string) (*mcpapproval.PromotePayload, error) {
+	var err error
+	var body PromoteRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalPromoteBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"risk_policy_bypass_request_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalPromoteSessionToken != "" {
+			sessionToken = &mcpApprovalPromoteSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalPromoteApikeyToken != "" {
+			apikeyToken = &mcpApprovalPromoteApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalPromoteProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalPromoteProjectSlugInput
+		}
+	}
+	v := &mcpapproval.PromotePayload{
+		RiskPolicyBypassRequestID: body.RiskPolicyBypassRequestID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRefreshEvidencePayload builds the payload for the mcpApproval
+// refreshEvidence endpoint from CLI flags.
+func BuildRefreshEvidencePayload(mcpApprovalRefreshEvidenceID string, mcpApprovalRefreshEvidenceSessionToken string, mcpApprovalRefreshEvidenceApikeyToken string, mcpApprovalRefreshEvidenceProjectSlugInput string) (*mcpapproval.RefreshEvidencePayload, error) {
+	var id string
+	{
+		id = mcpApprovalRefreshEvidenceID
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalRefreshEvidenceSessionToken != "" {
+			sessionToken = &mcpApprovalRefreshEvidenceSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalRefreshEvidenceApikeyToken != "" {
+			apikeyToken = &mcpApprovalRefreshEvidenceApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalRefreshEvidenceProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalRefreshEvidenceProjectSlugInput
+		}
+	}
+	v := &mcpapproval.RefreshEvidencePayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
@@ -21,6 +19,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -725,47 +724,6 @@ func TestService_ListShadowMCPInventoryUsers_InvalidURLIsBadRequest(t *testing.T
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestService_UpsertShadowMCPInventoryPolicyBypass_ReplacesURLGrantsWithPolicyAudience(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	oldPolicy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Old Block Shadow MCP",
-		Action:         "block",
-	})
-	newPolicy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "New Block Shadow MCP",
-		Action:         "block",
-	})
-	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_shadow_mcp", "Shadow MCP Reviewers", "shadow-mcp-reviewers", "Can review Shadow MCP servers"))
-	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID)
-	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), authz.AllUsersPrincipal())
-	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, newPolicy.ID.String(), rolePrincipal)
-	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), "https://mcp.example.com/mcp")
-
-	result, err := ti.service.UpsertShadowMCPInventoryPolicyBypass(ctx, &gen.UpsertShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: projectID,
-		ServerURL: "HTTPS://MCP.EXAMPLE.COM:443/mcp?token=ignored#frag",
-		PolicyIds: []string{
-			newPolicy.ID.String(),
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryAccessAllowed, result.Access)
-	require.Equal(t, []string{newPolicy.ID.String()}, result.AllowedPolicyIds)
-
-	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, oldPolicy.ID.String(), "https://mcp.example.com/mcp"))
-	require.Equal(t, []string{rolePrincipal.String()}, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, newPolicy.ID.String(), "https://mcp.example.com/mcp"))
-}
-
 func TestService_ResolveShadowMCPInventoryRequest_ApprovesURLAndResolvesPendingRequests(t *testing.T) {
 	t.Parallel()
 
@@ -865,191 +823,6 @@ func TestService_ResolveShadowMCPInventoryRequest_DeniesURLAndResolvesPendingReq
 	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
 }
 
-func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesURLGrants(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Block Shadow MCP",
-		Action:         "block",
-	})
-	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), authz.AllUsersPrincipal())
-	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp")
-
-	result, err := ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: projectID,
-		ServerURL: "https://mcp.example.com/mcp",
-	})
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryAccessBlocked, result.Access)
-	require.Empty(t, result.AllowedPolicyIds)
-	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://mcp.example.com/mcp"))
-}
-
-func TestService_DeleteShadowMCPInventoryPolicyBypass_RevokesApprovedRequestAndAllowsRerequest(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	serverURL := "https://mcp.example.com/mcp"
-	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Block Shadow MCP",
-		Action:         "block",
-	})
-	requestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		PolicyID:       policy.ID.String(),
-		ServerURL:      serverURL,
-		RequesterID:    authCtx.UserID,
-		RequesterEmail: "alex@example.com",
-	})
-	_, err := riskrepo.New(ti.conn).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
-		Status:               shadowMCPInventoryBypassStatusApproved,
-		DecidedBy:            conv.ToPGText(authCtx.UserID),
-		GrantedPrincipalUrns: []string{authz.AllUsersPrincipal().String()},
-		ID:                   uuid.MustParse(requestID),
-		ProjectID:            uuid.MustParse(projectID),
-	})
-	require.NoError(t, err)
-	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), serverURL)
-
-	_, err = ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: projectID,
-		ServerURL: serverURL,
-	})
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryBypassStatusRevoked, shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, requestID))
-	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), serverURL))
-
-	rerequestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		PolicyID:       policy.ID.String(),
-		ServerURL:      serverURL,
-		RequesterID:    authCtx.UserID,
-		RequesterEmail: "alex@example.com",
-	})
-	require.Equal(t, requestID, rerequestID)
-	require.Equal(t, shadowMCPInventoryBypassStatusRequested, shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, requestID))
-
-	state, err := ti.service.shadowMCPInventoryURLState(ctx, authCtx.ActiveOrganizationID, uuid.MustParse(projectID), serverURL)
-	require.NoError(t, err)
-	require.Equal(t, 1, state.RequestCount)
-	require.NotNil(t, state.LatestRequest)
-	require.Equal(t, requestID, state.LatestRequest.ID)
-}
-
-func TestService_DeleteShadowMCPInventoryPolicyBypass_AuditsRevokedApprovedRequest(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	serverURL := "https://mcp.example.com/mcp"
-	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Block Shadow MCP",
-		Action:         "block",
-	})
-	requestID := createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		PolicyID:       policy.ID.String(),
-		ServerURL:      serverURL,
-		RequesterID:    authCtx.UserID,
-		RequesterEmail: "alex@example.com",
-	})
-	_, err := riskrepo.New(ti.conn).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
-		Status:               shadowMCPInventoryBypassStatusApproved,
-		DecidedBy:            conv.ToPGText(authCtx.UserID),
-		GrantedPrincipalUrns: []string{authz.AllUsersPrincipal().String()},
-		ID:                   uuid.MustParse(requestID),
-		ProjectID:            uuid.MustParse(projectID),
-	})
-	require.NoError(t, err)
-	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), serverURL)
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
-	require.NoError(t, err)
-
-	_, err = ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: projectID,
-		ServerURL: serverURL,
-	})
-	require.NoError(t, err)
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
-	require.NoError(t, err)
-	require.Equal(t, policy.Name, record.SubjectDisplay)
-
-	metadata, err := audittest.DecodeAuditData(record.Metadata)
-	require.NoError(t, err)
-	require.Equal(t, requestID, metadata["request_id"])
-	require.Equal(t, shadowMCPInventoryBypassStatusApproved, metadata["previous_status"])
-	require.Equal(t, shadowMCPInventoryBypassStatusRevoked, metadata["current_status"])
-
-	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryBypassStatusApproved, beforeSnapshot["status"])
-
-	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryBypassStatusRevoked, afterSnapshot["status"])
-}
-
-func TestService_DeleteShadowMCPInventoryPolicyBypass_RemovesStaleURLGrants(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	flagPolicy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Flag Shadow MCP",
-		Action:         "flag",
-	})
-	disabledPolicy := createDisabledShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Disabled Block Shadow MCP",
-		Action:         "block",
-	})
-	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, flagPolicy.ID.String(), "https://mcp.example.com/mcp")
-	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, disabledPolicy.ID.String(), "https://mcp.example.com/mcp")
-
-	result, err := ti.service.DeleteShadowMCPInventoryPolicyBypass(ctx, &gen.DeleteShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: projectID,
-		ServerURL: "https://mcp.example.com/mcp",
-	})
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryAccessNone, result.Access)
-	require.Empty(t, result.AllowedPolicyIds)
-	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, flagPolicy.ID.String(), "https://mcp.example.com/mcp"))
-	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, disabledPolicy.ID.String(), "https://mcp.example.com/mcp"))
-}
-
 type shadowMCPInventoryTelemetryInput struct {
 	ProjectID  string
 	ServerURL  string
@@ -1083,12 +856,6 @@ func createShadowMCPInventoryPolicy(t *testing.T, ctx context.Context, ti *testI
 	t.Helper()
 
 	return createShadowMCPInventoryPolicyWithEnabled(t, ctx, ti, input, true)
-}
-
-func createDisabledShadowMCPInventoryPolicy(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryPolicyInput) riskrepo.RiskPolicy {
-	t.Helper()
-
-	return createShadowMCPInventoryPolicyWithEnabled(t, ctx, ti, input, false)
 }
 
 func createShadowMCPInventoryPolicyWithEnabled(t *testing.T, ctx context.Context, ti *testInstance, input shadowMCPInventoryPolicyInput, enabled bool) riskrepo.RiskPolicy {
@@ -1361,89 +1128,6 @@ func TestService_ListShadowMCPInventory_AllowAllDispositionUsesBlockedList(t *te
 	require.Empty(t, fine.BlockedPolicyIds)
 }
 
-func TestService_BlockAndUnblockShadowMCPInventoryServer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Allow All Shadow MCP",
-		Action:         "block",
-		Disposition:    "allow_all",
-		BlockedURLs:    nil,
-	})
-
-	state, err := ti.service.BlockShadowMCPInventoryServer(ctx, &gen.BlockShadowMCPInventoryServerPayload{
-		ProjectID: projectID,
-		ServerURL: "https://sketchy.example.com/mcp",
-		PolicyID:  policy.ID.String(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryAccessBlocked, state.Access)
-	require.Equal(t, []string{policy.ID.String()}, state.BlockedPolicyIds)
-
-	// The block rule is a project-wide risk_policy:block grant held by the
-	// all-users principal.
-	grants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBlock,
-		ResourceID:     policy.ID.String(),
-	})
-	require.NoError(t, err)
-	require.Len(t, grants, 1)
-	require.Equal(t, authz.AllUsersPrincipal().String(), grants[0].PrincipalUrn)
-	require.Equal(t, "https://sketchy.example.com/mcp", grants[0].Selector[authz.SelectorKeyServerURL])
-
-	state, err = ti.service.UnblockShadowMCPInventoryServer(ctx, &gen.UnblockShadowMCPInventoryServerPayload{
-		ProjectID: projectID,
-		ServerURL: "https://sketchy.example.com/mcp",
-		PolicyID:  policy.ID.String(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, shadowMCPInventoryAccessAllowed, state.Access)
-	require.Empty(t, state.BlockedPolicyIds)
-
-	grants, err = authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBlock,
-		ResourceID:     policy.ID.String(),
-	})
-	require.NoError(t, err)
-	require.Empty(t, grants)
-}
-
-func TestService_BlockShadowMCPInventoryServer_RejectsBlockAllPolicy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	projectID := authCtx.ProjectID.String()
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Name:           "Block All Shadow MCP",
-		Action:         "block",
-		Disposition:    "",
-		BlockedURLs:    nil,
-	})
-
-	_, err := ti.service.BlockShadowMCPInventoryServer(ctx, &gen.BlockShadowMCPInventoryServerPayload{
-		ProjectID: projectID,
-		ServerURL: "https://sketchy.example.com/mcp",
-		PolicyID:  policy.ID.String(),
-	})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-}
-
 func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t *testing.T) {
 	t.Parallel()
 
@@ -1497,24 +1181,25 @@ func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t 
 	require.Equal(t, "https://other.example.com/mcp", blockGrants[0].Selector[authz.SelectorKeyServerURL])
 }
 
-func seedShadowMCPApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, canonicalURL string, status string, requesterCount int) mcpapprovalrepo.McpApprovalRequest {
+func seedShadowMCPApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, canonicalURL string, status string, requesterCount int) mcpapprovalrepo.UpsertApprovalRequestRow {
 	t.Helper()
 
 	queries := mcpapprovalrepo.New(ti.conn)
 	request, err := queries.UpsertApprovalRequest(ctx, mcpapprovalrepo.UpsertApprovalRequestParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "server_url",
-		TargetRaw:      canonicalURL,
-		TargetKey:      canonicalURL,
-		ArtifactRef:    conv.ToPGTextEmpty(""),
-		VersionPinned:  false,
-		Status:         status,
+		OrganizationID:            organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "server_url",
+		TargetRaw:                 canonicalURL,
+		TargetKey:                 canonicalURL,
+		ArtifactRef:               conv.ToPGTextEmpty(""),
+		VersionPinned:             false,
+		Status:                    status,
+		RiskPolicyBypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 
 	for range requesterCount {
-		_, err := queries.CreateApprovalRequestRequester(ctx, mcpapprovalrepo.CreateApprovalRequestRequesterParams{
+		_, err := queries.UpsertApprovalRequestRequester(ctx, mcpapprovalrepo.UpsertApprovalRequestRequesterParams{
 			OrganizationID:       organizationID,
 			ProjectID:            projectID,
 			McpApprovalRequestID: request.ID,
@@ -1592,4 +1277,156 @@ func TestService_ShadowMCPInventory_JoinsApprovalRequestState(t *testing.T) {
 	require.NotNil(t, detail.ApprovalRequest)
 	require.Equal(t, request.ID.String(), detail.ApprovalRequest.ID)
 	require.Equal(t, 2, detail.ApprovalRequest.RequesterCount)
+}
+
+func TestService_GetShadowMCPInventoryServer_ResolvesRequestOnlyServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://requested-only.example.com/mcp", "denied", 1)
+
+	server, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  authCtx.ProjectID.String(),
+		ServerSlug: shadowmcp.ServerSlug("https://requested-only.example.com/mcp"),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "https://requested-only.example.com/mcp", server.CanonicalServerURL)
+	require.Equal(t, "requested-only.example.com", server.URLHost)
+	require.Equal(t, 0, server.ObservedUseCount)
+	require.Equal(t, 0, server.UserCount)
+	require.Empty(t, server.TopUsers)
+	require.Nil(t, server.LastCalled)
+	require.NotNil(t, server.ApprovalRequest)
+	require.Equal(t, request.ID.String(), server.ApprovalRequest.ID)
+	require.Equal(t, "denied", server.ApprovalRequest.Status)
+	require.Equal(t, 1, server.ApprovalRequest.RequesterCount)
+
+	_, err = ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  authCtx.ProjectID.String(),
+		ServerSlug: shadowmcp.ServerSlug("https://never-requested.example.com/mcp"),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func seedShadowMCPStdioApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, command string, status string) mcpapprovalrepo.UpsertApprovalRequestRow {
+	t.Helper()
+
+	request, err := mcpapprovalrepo.New(ti.conn).UpsertApprovalRequest(ctx, mcpapprovalrepo.UpsertApprovalRequestParams{
+		OrganizationID:            organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "stdio_command",
+		TargetRaw:                 command,
+		TargetKey:                 command,
+		ArtifactRef:               conv.ToPGTextEmpty(""),
+		VersionPinned:             false,
+		Status:                    status,
+		RiskPolicyBypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	return request
+}
+
+func TestService_ListShadowMCPInventory_UnionsRequestOnlyTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	now := time.Now().UTC()
+
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://observed.example.com/mcp",
+			URLHost:            "observed.example.com",
+			ServerName:         "Observed MCP",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+		// A second observed server so a one-row page spills past the limit
+		// and produces a real cursor for the later-pages assertion.
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://observed-2.example.com/mcp",
+			URLHost:            "observed-2.example.com",
+			ServerName:         "Observed MCP Two",
+			SeenAt:             now.Add(-4 * time.Hour),
+			FirstSeen:          now.Add(-4 * time.Hour),
+			LastSeen:           now.Add(-3 * time.Hour),
+			UpdatedAt:          now.Add(-3 * time.Hour),
+		},
+	}))
+
+	// Observed AND requested: must appear once, as the observed row.
+	seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://observed.example.com/mcp", "requested", 2)
+	// Requested, never observed: appears as a synthesized first-page row.
+	urlOnly := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://asked-only.example.com/mcp", "denied", 1)
+	// Stdio commands are known only through their reviews.
+	stdio := seedShadowMCPStdioApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "npx -y example-package", "requested")
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 4)
+
+	byURL := make(map[string]*gen.ShadowMCPInventoryServer, len(result.Servers))
+	for _, server := range result.Servers {
+		byURL[server.CanonicalServerURL] = server
+	}
+
+	observed := byURL["https://observed.example.com/mcp"]
+	require.Equal(t, "server_url", *observed.TargetKind)
+	require.NotNil(t, observed.ApprovalRequest)
+	require.Equal(t, "requested", observed.ApprovalRequest.Status)
+
+	askedOnly := byURL["https://asked-only.example.com/mcp"]
+	require.Equal(t, "server_url", *askedOnly.TargetKind)
+	require.Equal(t, 0, askedOnly.ObservedUseCount)
+	require.NotNil(t, askedOnly.ApprovalRequest)
+	require.Equal(t, urlOnly.ID.String(), askedOnly.ApprovalRequest.ID)
+	require.Equal(t, "denied", askedOnly.ApprovalRequest.Status)
+
+	stdioRow := byURL["npx -y example-package"]
+	require.NotNil(t, stdioRow)
+	require.Equal(t, "stdio_command", *stdioRow.TargetKind)
+	require.Empty(t, stdioRow.URLHost)
+	require.NotNil(t, stdioRow.ApprovalRequest)
+	require.Equal(t, stdio.ID.String(), stdioRow.ApprovalRequest.ID)
+
+	// Later pages carry no synthesized rows: a one-row page spills the
+	// observed set past the limit, and the cursor-driven second page holds
+	// only observed servers.
+	firstPage, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstPage.NextCursor)
+
+	paged, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     1,
+		Cursor:    firstPage.NextCursor,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, paged.Servers)
+	for _, server := range paged.Servers {
+		require.Equal(t, "server_url", *server.TargetKind)
+		require.NotEqual(t, "npx -y example-package", server.CanonicalServerURL)
+		require.NotEqual(t, "https://asked-only.example.com/mcp", server.CanonicalServerURL)
+	}
 }

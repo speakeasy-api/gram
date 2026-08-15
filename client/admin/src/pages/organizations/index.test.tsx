@@ -28,9 +28,13 @@ import {
   GramAdminError,
   TRIAL_STATES,
   type AdminOrganization,
+  type AdminOrganizationStats,
+  type BulkUpdateAccountTypeRequest,
+  type BulkUpdateAccountTypeResult,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 import { useState, type JSX } from "react";
 
@@ -51,6 +55,7 @@ const mocks = vi.hoisted(() => ({
       (params?: ListOrganizationsParams) => Promise<ListOrganizationsResult>
     >(),
   getSession: vi.fn(),
+  getOrganizationStats: vi.fn(),
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
@@ -60,6 +65,14 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   extendTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  bulkUpdateAccountType:
+    vi.fn<
+      (
+        body: BulkUpdateAccountTypeRequest,
+      ) => Promise<BulkUpdateAccountTypeResult>
+    >(),
+  createOrganization:
+    vi.fn<(body: { name: string }) => Promise<AdminOrganization>>(),
 }));
 
 // Only the endpoints this page's route tree reaches are replaced. The rest of
@@ -72,12 +85,15 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     ...actual,
     listOrganizations: mocks.listOrganizations,
     getSession: mocks.getSession,
+    getOrganizationStats: mocks.getOrganizationStats,
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
+    bulkUpdateAccountType: mocks.bulkUpdateAccountType,
+    createOrganization: mocks.createOrganization,
   };
 });
 
@@ -135,6 +151,14 @@ const ORGS: AdminOrganization[] = [
     updated_at: "2026-04-07T00:00:00Z",
   },
 ];
+
+const STATS: AdminOrganizationStats = {
+  total: 12,
+  created_last_7_days: 3,
+  trials_ending_soon: 2,
+  disabled: 1,
+  disabled_last_7_days: 1,
+};
 
 // A page the cursor leads to. Nothing it holds appears on the first page, so a
 // row that survives the page change is a reused node rather than a match.
@@ -362,6 +386,8 @@ beforeEach(() => {
     email: "ops@example.test",
     name: "Ops",
   });
+  mocks.getOrganizationStats.mockReset();
+  mocks.getOrganizationStats.mockResolvedValue(STATS);
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(FIRST_ORG);
   mocks.listOrganizationProjects.mockReset();
@@ -382,6 +408,18 @@ beforeEach(() => {
   mocks.extendTrial.mockReset();
   mocks.extendTrial.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
+  );
+  // Everything the request asked for, and nothing missing. The reversal guards
+  // nothing on its own, because only the length of this array is ever read;
+  // "names the organizations the server could not find" is the test that holds
+  // the reporting, by answering a different set from the one it was sent.
+  mocks.bulkUpdateAccountType.mockReset();
+  mocks.bulkUpdateAccountType.mockImplementation(({ ids }) =>
+    Promise.resolve({ updated_ids: [...ids].reverse(), missing_ids: [] }),
+  );
+  mocks.createOrganization.mockReset();
+  mocks.createOrganization.mockImplementation(({ name }) =>
+    Promise.resolve({ ...CREATED_ORG, name }),
   );
 });
 
@@ -707,6 +745,21 @@ describe("organizations list", () => {
     ).toBe("acme");
   });
 
+  it("counts a full set of types rather than calling it all of them", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: [...ACCOUNT_TYPE_OPTIONS] }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual([...ACCOUNT_TYPE_OPTIONS]);
+    });
+    // An organization can carry a type the picker does not offer, so every
+    // option at once is still a narrowing and must not read as "All types".
+    expect(filterTrigger("Type").getAttribute("aria-label")).toBe(
+      `Type filter: ${ACCOUNT_TYPE_OPTIONS.length} selected`,
+    );
+  });
+
   it("keeps an account type the picker does not offer", async () => {
     // ACCOUNT_TYPE_OPTIONS is the list the picker offers, not the list the
     // column can hold. Dropping a value from outside it would widen the view a
@@ -798,6 +851,21 @@ describe("organizations list", () => {
     );
   });
 
+  it("names every trial state at once rather than counting them", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ trial: [...TRIAL_STATES] }),
+    });
+
+    await waitFor(() => {
+      expect(lastListParams().trial_states).toEqual([...TRIAL_STATES]);
+    });
+    // Every organization holds exactly one of these, so all of them is the
+    // whole platform. "6 selected" reads as a narrowing that is not there.
+    expect(filterTrigger("Trial").getAttribute("aria-label")).toBe(
+      "Trial filter: All trial states",
+    );
+  });
+
   it("keeps the sort when a filter is applied", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: urlFor({ sort: "name", dir: "asc" }),
@@ -815,21 +883,32 @@ describe("organizations list", () => {
     expect(url).toContain("dir=asc");
   });
 
-  it("returns to the first page when a filter is applied", async () => {
-    const { router } = await renderRouteTree(routeTree, {
-      initialPath: urlFor({ page: 3 }),
+  it("returns to the first page when the sheet applies the set already on", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ disabled: ["disabled"] }),
     });
 
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // Nothing in the URL moves, so the pager cannot notice on its own. Page
+    // three of a filter set is not the first page an operator asked for.
     await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().cursor).toBeUndefined();
     });
-    // Page three of the old filter set is not page three of the new one, and
-    // an operator who narrowed a list expects its first rows.
-    expect(currentSearch(router)).not.toContain("page");
   });
 
   it("keeps an unrecognised type on offer after the operator unchecks it", async () => {
@@ -898,6 +977,37 @@ describe("organizations list", () => {
     expect(lastListParams().cursor).toBeUndefined();
   });
 
+  it("drops the cursor when the search box changes the term", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      next_cursor: "cursor_page_two",
+    });
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await waitFor(() => {
+      expect(lastListParams().cursor).toBe("cursor_page_two");
+    });
+
+    // The box writes to the URL itself, so nothing tells the pager. Only the
+    // signature the render compares can catch this one.
+    fireEvent.change(screen.getByLabelText("Search organizations"), {
+      target: { value: "acme" },
+    });
+
+    await waitFor(
+      () => {
+        expect(lastListParams().q).toBe("acme");
+      },
+      { timeout: 2000 },
+    );
+    expect(lastListParams().cursor).toBeUndefined();
+  });
+
   it("renders every cell of a row out of the record that produced it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -918,6 +1028,8 @@ describe("organizations list", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
+      // The select column's header is a checkbox, so it carries no text.
+      "",
       "Name",
       "Slug",
       "Type",
@@ -933,6 +1045,8 @@ describe("organizations list", () => {
         .getAllByRole("cell")
         .map((cell) => cell.textContent),
     ).toEqual([
+      // The select checkbox is named on the control, not in the cell.
+      "",
       FIRST_ORG.name,
       FIRST_ORG.slug,
       FIRST_ORG.account_type,
@@ -1073,7 +1187,7 @@ describe("organizations list peek", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Slug", "Type", "Actions"]);
+    ).toEqual(["", "Name", "Slug", "Type", "Actions"]);
   });
 
   it("takes the trial column down with the rest while it is open", async () => {
@@ -1202,13 +1316,14 @@ describe("organizations list peek", () => {
     await peekOn(FIRST_ORG.name);
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Type", "Actions"]);
+    ).toEqual(["", "Name", "Type", "Actions"]);
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
+      "",
       "Name",
       "Type",
       "Members",
@@ -1236,7 +1351,7 @@ describe("organizations list peek", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Slug", "Type", "Actions"]);
+    ).toEqual(["", "Name", "Slug", "Type", "Actions"]);
     expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
@@ -1300,6 +1415,8 @@ describe("organizations list peek", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual([
+      // The select column's header is a checkbox, so it carries no text.
+      "",
       "Name",
       "Slug",
       "Type",
@@ -2258,6 +2375,48 @@ describe("organizations list write actions", () => {
     );
   });
 
+  // Unlike the row, which repaints from the answer the write already returned.
+  it("asks for the platform totals again after a write", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+    const before = mocks.getOrganizationStats.mock.calls.length;
+    expect(before).toBeGreaterThan(0);
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats.mock.calls.length).toBeGreaterThan(
+        before,
+      );
+    });
+  });
+
+  // The write drops the read in flight before it goes out. A write that then
+  // fails puts nothing in its place, and a first read holds no figures to fall
+  // back on, so the strip would keep the dashes it started with.
+  it("asks for the platform totals again when the write is refused", async () => {
+    mocks.disableOrganization.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { name: "conflict", message: "organization is already disabled" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    // Held open, so the cancel catches it before it has answered once.
+    mocks.getOrganizationStats.mockReturnValueOnce(new Promise(() => {}));
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: LIVE.name });
+    expect(mocks.getOrganizationStats.mock.calls.length).toBe(1);
+
+    await openRowMenu(LIVE.name);
+    await confirmDisable();
+
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats.mock.calls.length).toBe(2);
+    });
+  });
+
   it("stays on the list while the operator works the menu it opened from a row", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
@@ -2787,22 +2946,848 @@ describe("organizations list actions column", () => {
 // The bar takes a table, so the last-column case is reachable here by handing
 // it a two column table rather than by clicking seven items shut through a
 // menu that closes each time.
+describe("organizations list bulk account type", () => {
+  // Every id the operator can act on comes from a ticked row, so the tests
+  // reach the rows the way an operator does: through the checkbox named for
+  // the organization it is on. There is no field anywhere here that takes an
+  // id, and there must not be one: the write matches an id case-sensitively
+  // and the search matches case-insensitively, so a typed id can name a row
+  // that is on screen and still come back missing.
+  function selectAll(): HTMLElement {
+    return screen.getByRole("checkbox", {
+      name: "Select every organization on this page",
+    });
+  }
+
+  function rowCheckbox(name: string): HTMLElement {
+    return screen.getByRole("checkbox", { name: `Select ${name}` });
+  }
+
+  async function tick(name: string): Promise<void> {
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: `Select ${name}`,
+      }),
+    );
+  }
+
+  function bulkTrigger(): HTMLElement {
+    return screen.getByRole("button", { name: "Set account type" });
+  }
+
+  // The two halves of the action, kept apart on purpose: picking a type opens
+  // the confirmation and writes nothing, and confirming is what writes.
+  function pick(type: string): void {
+    openOn(bulkTrigger());
+    fireEvent.click(screen.getByRole("menuitem", { name: type }));
+  }
+
+  async function confirm(type: string): Promise<void> {
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: `Set to ${type}` }));
+    });
+  }
+
+  function dialogTitle(): string {
+    return (
+      within(screen.getByRole("dialog")).getByRole("heading").textContent ?? ""
+    );
+  }
+
+  function lastBulkRequest(): BulkUpdateAccountTypeRequest {
+    const call = mocks.bulkUpdateAccountType.mock.calls.at(-1);
+    if (!call?.[0]) throw new Error("nothing was sent to the bulk endpoint");
+    return call[0];
+  }
+
+  it("says nothing is selected until a row is ticked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+    // The action appears with the selection. Offering it against nothing would
+    // be offering a request the server refuses: the payload takes one id at
+    // least.
+    expect(
+      screen.queryByRole("button", { name: "Set account type" }),
+    ).toBeNull();
+  });
+
+  it("counts the rows the operator ticked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    expect(screen.getByText("1 selected")).toBeTruthy();
+
+    await tick(SECOND_ORG.name);
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    expect(screen.queryByText("Nothing selected")).toBeNull();
+  });
+
+  // The strip swaps its contents in place. happy-dom performs no layout, so
+  // nothing here can prove the strip keeps its height; what it can prove is
+  // that the control the height is set by is in both states. The geometry is
+  // checked in a browser.
+  it("keeps the Columns control in the strip in both states", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+    const bar = screen.getByText("Nothing selected").parentElement;
+    if (!bar) throw new Error("the strip has no element");
+    expect(within(bar).getByRole("button", { name: "Columns" })).toBeTruthy();
+
+    await tick(FIRST_ORG.name);
+
+    const selectedBar = screen.getByText("1 selected").parentElement;
+    expect(selectedBar).toBe(bar);
+    expect(within(bar).getByRole("button", { name: "Columns" })).toBeTruthy();
+  });
+
+  it("ticks every row on the page from the header checkbox", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    fireEvent.click(selectAll());
+
+    expect(screen.getByText(`${ORGS.length} selected`)).toBeTruthy();
+    for (const org of ORGS) {
+      expect(rowCheckbox(org.name).getAttribute("aria-checked")).toBe("true");
+    }
+  });
+
+  it("unticks every row on the page from the header checkbox", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    fireEvent.click(selectAll());
+    fireEvent.click(selectAll());
+
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+    expect(rowCheckbox(FIRST_ORG.name).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+  });
+
+  it("reports the header checkbox as mixed while only some rows are ticked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+
+    // Not "false". The next press clears rather than extends, and an unchecked
+    // box states the opposite to whoever cannot see the count beside it.
+    expect(selectAll().getAttribute("aria-checked")).toBe("mixed");
+  });
+
+  it("leaves the list where it is when a checkbox is ticked", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    // The checkbox sits inside a row that opens the organization when it is
+    // clicked. A row handler that answered this one would take the operator
+    // off the list at the moment they started building a selection.
+    await tick(FIRST_ORG.name);
+
+    expect(router.state.location.pathname).toBe("/organizations");
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
+  it("puts the row's checkbox ahead of everything else in it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // The select column is leftmost and the actions column is pinned to the
+    // right edge, so the keyboard has to walk the row the way the eye does:
+    // checkbox, then the record, then what can be done to it. happy-dom lays
+    // nothing out, so this is the order and not the placement.
+    expect(tabStopBefore(link)).toBe(rowCheckbox(FIRST_ORG.name));
+    expect(tabStopBefore(await peekTrigger(FIRST_ORG.name))).not.toBe(
+      rowCheckbox(FIRST_ORG.name),
+    );
+  });
+
+  it("pins the select column to the left edge, in both the header and the rows", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // The list is wider than the window at every width an operator uses, so an
+    // unpinned checkbox scrolls off the left while the actions column holds the
+    // right. A table whose purpose is picking rows cannot hide the control that
+    // picks them. happy-dom lays nothing out, so these read the classes that
+    // carry the pin; the measurement is in the browser.
+    const head = screen
+      .getByRole("checkbox", {
+        name: "Select every organization on this page",
+      })
+      .closest("th");
+    const cell = rowCheckbox(FIRST_ORG.name).closest("td");
+
+    for (const pinned of [head, cell]) {
+      expect(pinned?.classList.contains("sticky")).toBe(true);
+      expect(pinned?.classList.contains("left-0")).toBe(true);
+      expect(pinned?.classList.contains("z-1")).toBe(true);
+      // The table is `w-full`, so a column that did not shrink to the checkbox
+      // would take a share of the freed width and read as an empty gutter.
+      expect(pinned?.classList.contains("w-px")).toBe(true);
+    }
+
+    // Each element's own colour, and not the other's. The header's grey painted
+    // down the column would cover the rows sliding under it and stop the hover
+    // and peek highlight dead at the checkbox.
+    expect(head?.classList.contains("bg-muted")).toBe(true);
+    expect(cell?.classList.contains("bg-inherit")).toBe(true);
+    expect(cell?.classList.contains("bg-muted")).toBe(false);
+  });
+
+  it("leaves the row's own controls alone when a checkbox is ticked", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    await tick(FIRST_ORG.name);
+
+    // The actions column carries peek and the row menu in one pinned cell. A
+    // checkbox press that reached either would open a panel or a menu over the
+    // list the operator is building a selection in.
+    expect(
+      screen.queryByRole("complementary", { name: "Organization peek" }),
+    ).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
+  it("clears the selection when the operator pages", async () => {
+    mocks.listOrganizations.mockImplementation((params) =>
+      Promise.resolve(
+        params?.cursor
+          ? { organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+
+    // A selection that survives a page is a selection the operator cannot see.
+    // The count would still read 1 and the row it names would be off screen.
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+  });
+
+  it("clears the selection when a platform total opens the rows behind it", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    fireEvent.click(screen.getByRole("button", { name: /^Disabled/ }));
+
+    // A stat cell replaces the filters, so the rows under the selection are a
+    // different set from the one the operator ticked. It reaches the selection
+    // through the search in the URL, the same way the filter sheet does.
+    await waitFor(() => {
+      expect(screen.getByText("Nothing selected")).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Set account type" }),
+    ).toBeNull();
+
+    // The strip is a sibling above the bar the bulk control lives in, so a
+    // selection swaps that bar's contents and leaves the totals alone. Document
+    // order, not layout: happy-dom lays nothing out.
+    const strip = screen.getByRole("group", { name: "Platform totals" });
+    await tick(FIRST_ORG.name);
+    expect(screen.getByRole("group", { name: "Platform totals" })).toBe(strip);
+    expect(
+      strip.compareDocumentPosition(bulkTrigger()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not bring the selection back when the operator pages back", async () => {
+    mocks.listOrganizations.mockImplementation((params) =>
+      Promise.resolve(
+        params?.cursor
+          ? { organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    const next = await screen.findByRole("button", { name: "Next" });
+    await waitFor(() => {
+      expect(next.hasAttribute("disabled")).toBe(false);
+    });
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    // The page the selection was made on is back, so a selection that was only
+    // hidden by the page change rather than dropped shows up again here. The
+    // pager is component state and stays out of the URL, which is why watching
+    // the URL alone is not enough.
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+    expect(rowCheckbox(FIRST_ORG.name).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+  });
+
+  it("clears the selection when a filter is applied", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+
+    await openFilters("Status");
+    await chooseFilter("Status", "Disabled");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+    });
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+  });
+
+  it("clears the selection when the sort changes", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    await tick(FIRST_ORG.name);
+
+    // The sort is in the URL and not in the list request, so a page that
+    // watched only the request would keep a selection across a reorder.
+    await act(async () => {
+      await router.navigate({
+        to: "/organizations",
+        search: { sort: "name", dir: "asc" },
+      });
+    });
+
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+  });
+
+  it("clears the selection when the search term changes", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    await tick(FIRST_ORG.name);
+
+    await act(async () => {
+      await router.navigate({ to: "/organizations", search: { q: "acme" } });
+    });
+
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+  });
+
+  it("unticks one row and keeps the rest", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    fireEvent.click(selectAll());
+    await tick(SECOND_ORG.name);
+
+    // The second press on a ticked row clears that row, so a checkbox that
+    // only ever ticked would leave the operator no way back short of clearing
+    // the whole selection.
+    expect(screen.getByText(`${ORGS.length - 1} selected`)).toBeTruthy();
+    expect(rowCheckbox(SECOND_ORG.name).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+  });
+
+  it("drops the selection when the operator clears it by hand", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+    expect(mocks.bulkUpdateAccountType).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing until the operator confirms", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(SECOND_ORG.name);
+    pick("enterprise");
+
+    // The whole point of the confirmation. A control that wrote on the pick
+    // would have changed both records by now, and the dialog below would be a
+    // decoration over a write that had already happened.
+    await screen.findByRole("dialog");
+    expect(mocks.bulkUpdateAccountType).not.toHaveBeenCalled();
+  });
+
+  it("names the count and the target type in the confirmation", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(SECOND_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+
+    // The count is the thing an operator gets wrong, and the type is the thing
+    // they picked. Both are read back before anything is written.
+    expect(dialogTitle()).toBe("Set 2 organizations to enterprise?");
+  });
+
+  it("counts one organization in the singular", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("free");
+    await screen.findByRole("dialog");
+
+    expect(dialogTitle()).toBe("Set 1 organization to free?");
+  });
+
+  it("sends the ticked ids and the picked type, and nothing else", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(TRIALLING_ORG.name);
+    pick("pro");
+    await screen.findByRole("dialog");
+    await confirm("pro");
+
+    // Two of the three rows on the page, so a request built from the rows
+    // rather than from the selection fails here. The ids are compared as a set
+    // for the same reason the answer is read as one.
+    const sent = lastBulkRequest();
+    expect([...sent.ids].sort()).toEqual(
+      [FIRST_ORG.id, TRIALLING_ORG.id].sort(),
+    );
+    expect(sent.account_type).toBe("pro");
+  });
+
+  it("writes nothing when the operator cancels", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mocks.bulkUpdateAccountType).not.toHaveBeenCalled();
+    // The selection is what the operator built. Cancelling the write is not
+    // asking to build it again.
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
+  it("clears the selection once the write lands", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(SECOND_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // A selection that outlives the write it was made for is a second write
+    // one press away, against rows that already carry the type.
+    expect(screen.getByText("Nothing selected")).toBeTruthy();
+    expect(announcement()).toBe("2 organizations set to enterprise.");
+  });
+
+  it("asks for the list again once the write lands", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+    const before = mocks.listOrganizations.mock.calls.length;
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+
+    // The answer carries ids, not records, so there is nothing to repaint the
+    // rows from. Without the invalidation the table keeps showing the type the
+    // operator just changed.
+    await waitFor(() => {
+      expect(mocks.listOrganizations.mock.calls.length).toBeGreaterThan(before);
+    });
+  });
+
+  it("names the organizations the server could not find", async () => {
+    mocks.bulkUpdateAccountType.mockImplementation(({ ids }) =>
+      Promise.resolve({
+        updated_ids: ids.filter((id) => id !== SECOND_ORG.id),
+        missing_ids: [SECOND_ORG.id],
+      }),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(SECOND_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+
+    // Shown as well as spoken. A bulk write that quietly did less than it said
+    // is worse than one that failed, and the count comes off the answer rather
+    // than off what was asked for.
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain("1 organization set to enterprise.");
+    // The verb has to agree at one as well as at many, and the noun is already
+    // counted, so the sentence cannot branch on the count twice.
+    expect(banner.textContent).toContain(
+      `1 organization matched nothing and stayed unchanged: ${SECOND_ORG.name}.`,
+    );
+    expect(announcement()).toBe(banner.textContent?.replace("Dismiss", ""));
+  });
+
+  it("names every organization the server could not find, not just the first", async () => {
+    mocks.bulkUpdateAccountType.mockImplementation(() =>
+      Promise.resolve({
+        updated_ids: [],
+        missing_ids: [SECOND_ORG.id, FIRST_ORG.id],
+      }),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    await tick(SECOND_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+
+    // The same sentence at two, so the wording cannot be fixed at one count by
+    // breaking it at the other. The order is the answer's, not the selection's.
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain("0 organizations set to enterprise.");
+    expect(banner.textContent).toContain(
+      `2 organizations matched nothing and stayed unchanged: ${SECOND_ORG.name}, ${FIRST_ORG.name}.`,
+    );
+  });
+
+  it("reports nothing missing when every id landed", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("free");
+    await screen.findByRole("dialog");
+    await confirm("free");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    // No banner at all: nothing went missing, and a banner that always shows
+    // teaches the operator to ignore the one that matters.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(announcement()).toBe("1 organization set to free.");
+  });
+
+  it("keeps the dialog open holding the reason when the server refuses", async () => {
+    mocks.bulkUpdateAccountType.mockRejectedValue(
+      new GramAdminError(
+        400,
+        { name: "invalid", message: "account_type is not allowed" },
+        "gram admin 400 Bad Request",
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+
+    // As an alert, not merely as text: the modal takes the page's live region
+    // out of the accessibility tree, so this role is the only thing that speaks
+    // the refusal to an operator who cannot see it.
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("alert").textContent).toBe(
+      "account_type is not allowed",
+    );
+    // Nothing was written, so the selection the operator would retry with is
+    // still there.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
+  it("does not carry a refused write's reason into the next one", async () => {
+    mocks.bulkUpdateAccountType.mockRejectedValue(
+      new GramAdminError(
+        400,
+        { name: "invalid", message: "account_type is not allowed" },
+        "gram admin 400 Bad Request",
+      ),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    pick("free");
+
+    // The reason belongs to the write that was refused. A dialog that opened
+    // holding it would be telling the operator their next write had already
+    // failed.
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+  });
+
+  it("gives the keyboard back to the control the dialog opened from", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(document.activeElement).toBe(bulkTrigger());
+  });
+
+  it("puts the keyboard on the list when the write takes that control away", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    await confirm("enterprise");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    // A landed write clears the selection, which takes the trigger the dialog
+    // opened from off the page. Dropped on the body instead, the next Tab
+    // restarts at the top of the document, nowhere near the rows just written.
+    expect(
+      screen.queryByRole("button", { name: "Set account type" }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("region", { name: "Organizations table" }),
+    );
+  });
+
+  it("shuts the dialog's own controls while the write is in flight", async () => {
+    let land = (): void => {};
+    mocks.bulkUpdateAccountType.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          land = () =>
+            resolve({ updated_ids: [FIRST_ORG.id], missing_ids: [] });
+        }),
+    );
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    // Held open on purpose: every other test resolves the write inside the same
+    // act, so nothing else ever observes this state.
+    await confirm("enterprise");
+
+    const dialog = screen.getByRole("dialog");
+    const setting = await within(dialog).findByRole("button", {
+      name: "Setting...",
+    });
+    expect(setting.hasAttribute("disabled")).toBe(true);
+    // Cancel too: a write already sent cannot be called back by closing the
+    // dialog it was sent from.
+    expect(
+      within(dialog)
+        .getByRole("button", { name: "Cancel" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    // The close control goes rather than sitting there live beside a greyed
+    // Cancel, doing nothing when it is pressed.
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
+
+    // A press and an Escape a macrotask later, which is as fast as an operator
+    // can be. Neither may reach the endpoint or take the dialog down.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(setting);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(mocks.bulkUpdateAccountType.mock.calls).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    await act(async () => {
+      land();
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
+  it("lets the operator pick a different type after cancelling", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    pick("enterprise");
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    pick("free");
+    await screen.findByRole("dialog");
+
+    // The dialog reads the type off the pick that opened it, not off the first
+    // one the operator ever made.
+    expect(dialogTitle()).toBe("Set 1 organization to free?");
+    await confirm("free");
+    expect(lastBulkRequest().account_type).toBe("free");
+  });
+
+  it("offers every account type the server takes and no other", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    await tick(FIRST_ORG.name);
+    openOn(bulkTrigger());
+
+    // ACCOUNT_TYPE_OPTIONS mirrors constants.AccountTypes, which is the enum
+    // the payload declares. An option outside it is a request the generated
+    // decoder refuses before the handler ever sees it.
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual([...ACCOUNT_TYPE_OPTIONS]);
+  });
+});
+
+// A record neither row on the page carries, and free tier with no trial, which
+// is what the create endpoint makes.
+const CREATED_ORG: AdminOrganization = {
+  id: "org_placeholder_three",
+  name: "Placeholder Three",
+  slug: "placeholder-three",
+  account_type: "free",
+  whitelisted: false,
+  member_count: 0,
+  created_at: "2026-01-02T00:00:00Z",
+  updated_at: "2026-01-02T00:00:00Z",
+};
+
+// The control's own behaviour is covered in CreateOrganization.test.tsx. These
+// two are about the page: that it draws the control at all, and that what the
+// control says reaches the one live region, which is the whole reason the
+// announcement is routed through the page rather than spoken locally.
+describe("organizations list create organization", () => {
+  it("offers the create control in the toolbar", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    const control = screen.getByRole("button", { name: "Create organization" });
+    // In the search box's own row, not the strip inside the table: this is the
+    // page's action rather than the table's. The row is the search box's
+    // grandparent, and walking up from the box rather than down from the page
+    // keeps the assertion off every other container on it.
+    const row = screen
+      .getByLabelText("Search organizations")
+      .closest("div")?.parentElement;
+    expect(row?.contains(control)).toBe(true);
+  });
+
+  it("announces a created organization through the page's live region", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create organization" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Organization name"), {
+      target: { value: CREATED_ORG.name },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    });
+
+    // The region itself, not a spy on the reporter. A control that announced
+    // into its own region, or into nothing, would pass every test in the
+    // component's own file and fail this one.
+    await waitFor(() => {
+      expect(announcement()).toContain(`Created ${CREATED_ORG.name}.`);
+    });
+  });
+});
+
+// The write cancels every organization read in flight before it goes out, and
+// this control is pressable while the page's first list read is still open: the
+// toolbar is drawn whether or not the rows have arrived. A cancelled read
+// reverts and nothing restarts it, so a refused create can leave the table on
+// its loading state with no request outstanding.
+describe("organizations list create organization: a refusal", () => {
+  it("leaves the list fetching rather than cancelled", async () => {
+    let releaseList!: (result: ListOrganizationsResult) => void;
+    mocks.listOrganizations.mockReturnValueOnce(
+      new Promise<ListOrganizationsResult>((resolve) => {
+        releaseList = resolve;
+      }),
+    );
+
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    expect(screen.getByText("Loading...")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create organization" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Organization name"), {
+      target: { value: CREATED_ORG.name },
+    });
+    mocks.createOrganization.mockRejectedValueOnce(
+      new GramAdminError(422, { message: "no" }, "Unprocessable Entity"),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    });
+    await screen.findByRole("alert");
+
+    // The read the write cancelled is dead: React Query drops its answer, so
+    // the rows can only arrive from a request made after the failure.
+    releaseList({ organizations: ORGS });
+    // An open Radix modal hides the rest of the page from the accessibility
+    // tree, so the rows are unreachable by role until the operator is out of
+    // the dialog. Closing it is their next move anyway.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("link", { name: FIRST_ORG.name });
+  });
+});
+
 describe("TableActionBar", () => {
   // Destructured off the tuple rather than off a slice, which widens each
   // element back to a bare column definition.
-  const [FIRST, SECOND, THIRD] = ORG_COLUMNS;
+  // Position, not an id lookup, for the select column: leftmost is the claim.
+  const [SELECT, FIRST, SECOND, THIRD] = ORG_COLUMNS;
   // Found by id rather than by position, so a column added after it does not
   // quietly become the one these cases are about.
   const ACTIONS = ORG_COLUMNS.find((definition) => definition.id === "actions");
-  if (!FIRST || !SECOND || !THIRD || !ACTIONS) {
-    throw new Error("ORG_COLUMNS needs three data columns and an actions one");
+  if (!SELECT || !FIRST || !SECOND || !THIRD || !ACTIONS) {
+    throw new Error(
+      "ORG_COLUMNS needs a select column, three data ones and an actions one",
+    );
   }
 
   // Sliced, so the array carries the element type useTable asks for. Two data
   // columns for the cases about the bar's own two rules, and the control
   // column beside one of them for the cases where a column that cannot be
   // hidden is in the count.
-  const MENU_COLUMNS = ORG_COLUMNS.slice(0, 2);
+  const MENU_COLUMNS = ORG_COLUMNS.slice(1, 3);
   const WITH_ACTIONS_COLUMN: typeof MENU_COLUMNS = [ACTIONS, FIRST];
   // A second opt-out column, so the rule still has to count hideable columns
   // rather than visible ones when more than one of them cannot be hidden.
@@ -3011,6 +3996,20 @@ describe("TableActionBar", () => {
     fireEvent.click(itemFor(SECOND.header));
     expect(onVisibilityChange).toHaveBeenCalled();
   });
+
+  it("names the select column in the menu and locks it", () => {
+    const { onVisibilityChange } = openColumnsMenu({}, [SELECT, FIRST, SECOND]);
+
+    // Its header draws a checkbox rather than text, so there is no name to
+    // read off it and the menu would otherwise list it by its raw id.
+    const item = screen.getByRole("menuitemcheckbox", { name: "Select" });
+
+    // Hiding it would take away the only way to make a selection, and leave
+    // the bar above the table offering an action against nothing.
+    fireEvent.click(item);
+    expect(onVisibilityChange).not.toHaveBeenCalled();
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+  });
 });
 
 // A param the schema drops is absent from the parsed search, so every expected
@@ -3070,10 +4069,7 @@ describe("organizationsSearchSchema", () => {
     ["reads a direction in the union", { dir: "desc" }, { dir: "desc" }],
     ["drops a direction outside the union", { dir: "sideways" }, {}],
     ["drops the old disabled flag when it is off", { disabled: false }, {}],
-    ["drops page 1, which is the default", { page: 1 }, {}],
-    ["drops a page below 1", { page: 0 }, {}],
-    ["drops a page between two whole ones", { page: 2.5 }, {}],
-    ["keeps a page past the first", { page: 2 }, { page: 2 }],
+    ["drops a key the schema does not declare", { page: 2 }, {}],
   ];
 
   it.each(cases)("%s", (_name, search, expected) => {

@@ -24,6 +24,18 @@ export const Access = {
 } as const;
 export type Access = ClosedEnum<typeof Access>;
 
+/**
+ * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+ */
+export const TargetKind = {
+  ServerUrl: "server_url",
+  StdioCommand: "stdio_command",
+} as const;
+/**
+ * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+ */
+export type TargetKind = ClosedEnum<typeof TargetKind>;
+
 export type ShadowMCPInventoryServer = {
   access: Access;
   allowedPolicyIds: Array<string>;
@@ -44,6 +56,10 @@ export type ShadowMCPInventoryServer = {
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
+  /**
+   * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+   */
+  targetKind?: TargetKind | undefined;
   topUsers: Array<string>;
   urlHost: string;
   userCount: number;
@@ -53,6 +69,10 @@ export type ShadowMCPInventoryServer = {
 export const Access$inboundSchema: z.ZodMiniEnum<typeof Access> = z.enum(
   Access,
 );
+
+/** @internal */
+export const TargetKind$inboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
+  .enum(TargetKind);
 
 /** @internal */
 export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
@@ -83,6 +103,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
+    target_kind: z.optional(TargetKind$inboundSchema),
     top_users: z.array(z.string()),
     url_host: z.string(),
     user_count: z.int(),
@@ -101,6 +122,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "request_count": "requestCount",
       "server_name": "serverName",
       "server_slug": "serverSlug",
+      "target_kind": "targetKind",
       "top_users": "topUsers",
       "url_host": "urlHost",
       "user_count": "userCount",
