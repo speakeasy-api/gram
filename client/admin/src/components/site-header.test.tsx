@@ -1,5 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationQuery, projectQuery } from "@/lib/adminQueries";
@@ -324,6 +330,25 @@ describe("SiteHeader", () => {
 
     await waitFor(() => {
       expect(crumbs()).toEqual(["Organizations", ORG.name, "Members"]);
+    });
+  });
+
+  it("carries the operator up the trail when a crumb is clicked", async () => {
+    // A real click, not `router.navigate`: the crumb is a hand-assembled anchor
+    // rather than a `Link`, so the spread props are the only thing keeping the
+    // click on the router, and navigating around the anchor cannot see that.
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+      queryClient: seeded(),
+    });
+    expect(router.state.location.pathname).toBe(
+      `/organizations/${ORG.slug}/members`,
+    );
+
+    fireEvent.click(within(bar()).getByRole("link", { name: ORG.name }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/organizations/${ORG.slug}`);
     });
   });
 });
