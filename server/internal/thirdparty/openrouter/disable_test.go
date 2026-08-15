@@ -279,3 +279,34 @@ func TestRefreshAPIKeyLimit_KeepsLockdownThatLandsMidRefresh(t *testing.T) {
 	require.True(t, row.Disabled, "a refresh must not clear a lockdown it never saw")
 	require.Equal(t, int64(42), row.MonthlyCredits)
 }
+
+func TestRefreshAPIKeyLimit_RejectsChangedUpstreamIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: 100,
+		KeyHash:        "hash-stored",
+		Reinstate:      false,
+	})
+	require.NoError(t, err)
+
+	limit := 42
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, &limit)
+	require.ErrorContains(t, err, "upstream key identity changed")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "hash-stored", row.KeyHash)
+	require.Equal(t, int64(100), row.MonthlyCredits)
+}

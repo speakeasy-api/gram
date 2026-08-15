@@ -720,6 +720,7 @@ SELECT
     billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
   , billing_metadata.stripe_billing_cycle_anchor
+  , billing_metadata.stripe_checkout_session_id
   , organization_metadata.gram_account_type
 FROM billing_metadata
 JOIN organization_metadata
@@ -731,6 +732,7 @@ type GetPaygInvoiceIdentityRow struct {
 	StripeCustomerID         pgtype.Text
 	StripeSubscriptionID     pgtype.Text
 	StripeBillingCycleAnchor pgtype.Timestamptz
+	StripeCheckoutSessionID  pgtype.Text
 	GramAccountType          string
 }
 
@@ -741,6 +743,7 @@ func (q *Queries) GetPaygInvoiceIdentity(ctx context.Context, organizationID str
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
 		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutSessionID,
 		&i.GramAccountType,
 	)
 	return i, err
@@ -1452,6 +1455,23 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 		&i.ReuseExistingIntent,
 	)
 	return i, err
+}
+
+const setStripeCheckoutSessionFixture = `-- name: SetStripeCheckoutSessionFixture :exec
+UPDATE billing_metadata
+SET stripe_checkout_session_id = $1
+WHERE organization_id = $2
+`
+
+type SetStripeCheckoutSessionFixtureParams struct {
+	StripeCheckoutSessionID pgtype.Text
+	OrganizationID          string
+}
+
+// Test-only fixture for invoice/checkout webhook ordering.
+func (q *Queries) SetStripeCheckoutSessionFixture(ctx context.Context, arg SetStripeCheckoutSessionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setStripeCheckoutSessionFixture, arg.StripeCheckoutSessionID, arg.OrganizationID)
+	return err
 }
 
 const setStripeSubscriptionFixture = `-- name: SetStripeSubscriptionFixture :exec

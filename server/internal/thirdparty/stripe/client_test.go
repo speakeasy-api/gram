@@ -676,8 +676,8 @@ func TestFindInvoiceAllocationValidatesFinancialData(t *testing.T) {
 			wantID:   "cn_placeholder",
 		},
 		{
-			name:      "credit note invoice mismatch",
-			note:      &stripesdk.CreditNote{ID: "cn_placeholder", Invoice: &stripesdk.Invoice{ID: "in_other"}, Currency: stripesdk.CurrencyUSD, Amount: 125, Metadata: map[string]string{allocationMetadataKey: "allocation_placeholder"}},
+			name:      "credit note amount mismatch",
+			note:      &stripesdk.CreditNote{ID: "cn_placeholder", Invoice: invoice, Currency: stripesdk.CurrencyUSD, Amount: 124, Metadata: map[string]string{allocationMetadataKey: "allocation_placeholder"}},
 			findNote:  true,
 			wantError: "different financial data",
 		},

@@ -595,11 +595,18 @@ SELECT
     billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
   , billing_metadata.stripe_billing_cycle_anchor
+  , billing_metadata.stripe_checkout_session_id
   , organization_metadata.gram_account_type
 FROM billing_metadata
 JOIN organization_metadata
   ON organization_metadata.id = billing_metadata.organization_id
 WHERE billing_metadata.organization_id = @organization_id;
+
+-- name: SetStripeCheckoutSessionFixture :exec
+-- Test-only fixture for invoice/checkout webhook ordering.
+UPDATE billing_metadata
+SET stripe_checkout_session_id = @stripe_checkout_session_id
+WHERE organization_id = @organization_id;
 
 -- name: UpsertStripeInvoice :one
 INSERT INTO stripe_invoices (

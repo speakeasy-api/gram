@@ -181,8 +181,13 @@ func (s *Service) currentStripeInvoice(ctx context.Context, event *stripeclient.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "failed to retrieve current Stripe invoice").LogWarn(ctx, s.logger)
 	}
-	if state == nil || state.ID != event.ObjectID || state.CustomerID == "" || state.CustomerID != event.CustomerID || state.SubscriptionID == "" || state.ServicePeriodStart.IsZero() || !state.ServicePeriodEnd.After(state.ServicePeriodStart) {
+	if state == nil || state.ID != event.ObjectID || state.CustomerID == "" || state.CustomerID != event.CustomerID {
 		return nil, oops.E(oops.CodeBadRequest, nil, "Stripe invoice identifiers do not match current state").LogWarn(ctx, s.logger)
+	}
+	if state.BillingReason == "subscription_create" || state.BillingReason == "subscription_cycle" {
+		if state.SubscriptionID == "" || state.ServicePeriodStart.IsZero() || !state.ServicePeriodEnd.After(state.ServicePeriodStart) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Stripe subscription invoice identifiers do not match current state").LogWarn(ctx, s.logger)
+		}
 	}
 	return state, nil
 }
@@ -244,12 +249,6 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if invoice == nil {
 		return false, errors.New("missing current Stripe invoice state")
 	}
-	if invoice.Currency != "usd" {
-		return false, fmt.Errorf("unsupported Stripe invoice currency %q", invoice.Currency)
-	}
-	if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
-		return false, errors.New("stripe invoice service period is not UTC-day aligned")
-	}
 	switch invoice.BillingReason {
 	case "subscription_create", "subscription_cycle":
 	default:
@@ -261,16 +260,28 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if err != nil {
 		return false, fmt.Errorf("read PAYG invoice identity: %w", err)
 	}
+	if !identity.StripeCustomerID.Valid || identity.StripeCustomerID.String != event.CustomerID {
+		return false, errors.New("stripe invoice customer does not belong to the organization")
+	}
 	if identity.GramAccountType != "payg" {
+		if identity.StripeCheckoutSessionID.Valid {
+			return false, errors.New("PAYG Checkout activation has not committed")
+		}
 		return false, nil
 	}
-	if !identity.StripeCustomerID.Valid || identity.StripeCustomerID.String != event.CustomerID || !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
+	if !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
 		return false, errors.New("stripe invoice does not belong to active PAYG billing")
 	}
 	if invoice.ServicePeriodStart.Before(identity.StripeBillingCycleAnchor.Time.UTC()) {
 		// Checkout can create a zero-dollar free stub before the first paid
 		// midnight. It is intentionally outside pass-through billing.
 		return false, nil
+	}
+	if invoice.Currency != "usd" {
+		return false, fmt.Errorf("unsupported Stripe invoice currency %q", invoice.Currency)
+	}
+	if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
+		return false, errors.New("stripe invoice service period is not UTC-day aligned")
 	}
 
 	_, err = q.UpsertStripeInvoice(ctx, repo.UpsertStripeInvoiceParams{

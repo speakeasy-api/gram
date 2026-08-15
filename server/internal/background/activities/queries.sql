@@ -369,13 +369,13 @@ SELECT
     allocation.source_key
   , allocation.source_day
   , allocation.source_snapshot_usd
-  , COALESCE(spend.spend_usd, 0::numeric) AS final_spend_usd
+  , spend.spend_usd AS final_spend_usd
   , allocation.original_invoice_id
 FROM stripe_invoice_allocations allocation
 JOIN stripe_invoices invoice
   ON invoice.organization_id = allocation.organization_id
  AND invoice.stripe_invoice_id = allocation.original_invoice_id
-LEFT JOIN openrouter_spend_daily spend
+JOIN openrouter_spend_daily spend
   ON spend.organization_id = allocation.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = allocation.source_day
