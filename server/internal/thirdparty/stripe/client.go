@@ -714,9 +714,6 @@ func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent,
 	if err != nil {
 		return nil, fmt.Errorf("verify Stripe webhook: %w", err)
 	}
-	if event.APIVersion != stripesdk.APIVersion {
-		return nil, fmt.Errorf("verify Stripe webhook: expected API version %s, got %s", stripesdk.APIVersion, event.APIVersion)
-	}
 
 	var objectID string
 	var customerID string
