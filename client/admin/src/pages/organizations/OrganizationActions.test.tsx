@@ -10,7 +10,9 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import {
   GramAdminError,
   MAX_TRIAL_EXTENSION_DAYS,
+  MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
+  MIN_TRIAL_REARM_DAYS,
   TRIAL_STATES,
   type AdminOrganization,
   type TrialState,
@@ -41,10 +43,12 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   extendTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  rearmTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
 }));
 
-// The three writes only. errorMessage stays real, because what the operator is
-// told about a failure is the subject of several of these tests.
+// The writes only. errorMessage stays real, because what the operator is told
+// about a failure is the subject of several of these tests.
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return {
@@ -52,6 +56,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
+    rearmTrial: mocks.rearmTrial,
   };
 });
 
@@ -74,6 +79,22 @@ const ORG: AdminOrganization = {
 const DISABLED_ORG: AdminOrganization = {
   ...ORG,
   disabled_at: "2026-03-04T00:00:00Z",
+};
+
+// Demoted and back on the free tier: the record that offers Re-arm trial and
+// no longer offers Extend trial.
+const DEMOTED_ORG: AdminOrganization = {
+  ...ORG,
+  account_type: "free",
+  trial_state: "demoted",
+  trial_ends_at: undefined,
+};
+
+// What the endpoint answers a re-arm with.
+const REARMED_ORG: AdminOrganization = {
+  ...ORG,
+  whitelisted: true,
+  trial_ends_at: "2026-08-28T00:00:00Z",
 };
 
 // The two states the server will extend. Written out rather than imported from
@@ -151,10 +172,22 @@ async function openExtendDialog(): Promise<void> {
   await screen.findByRole("dialog");
 }
 
+async function openRearmDialog(): Promise<void> {
+  fireEvent.click(screen.getByRole("menuitem", { name: "Re-arm trial" }));
+  await screen.findByRole("dialog");
+}
+
 async function submitDays(value: string): Promise<void> {
   fireEvent.change(dayInput(), { target: { value } });
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+  });
+}
+
+async function submitRearmDays(value: string): Promise<void> {
+  fireEvent.change(dayInput(), { target: { value } });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Re-arm" }));
   });
 }
 
@@ -183,6 +216,8 @@ beforeEach(() => {
     ...ORG,
     trial_ends_at: "2026-05-20T00:00:00Z",
   });
+  mocks.rearmTrial.mockReset();
+  mocks.rearmTrial.mockResolvedValue(REARMED_ORG);
 });
 
 afterEach(cleanup);
@@ -231,6 +266,44 @@ describe("the row menu", () => {
       // locked out. Offering it anyway is offering to buy more of a trial
       // nobody can use.
       expect(menuItems().includes("Extend trial")).toBe(false);
+    },
+  );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "offers Re-arm trial for the %s trial only where the server would take it",
+    async (state) => {
+      await renderMenu({ ...ORG, trial_state: state });
+
+      // Only a demoted trial. A converted or running one is refused with a
+      // conflict, and an expired trial has not been demoted yet: the sweeper
+      // that demotes it has not reached it, so there is nothing to put back.
+      expect(menuItems().includes("Re-arm trial")).toBe(state === "demoted");
+    },
+  );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "never offers both trial actions at once, on the %s trial",
+    async (state) => {
+      await renderMenu({ ...ORG, trial_state: state });
+
+      // The two menus read together rather than one at a time. Two separate
+      // tests would each pass while one record offered both, and a seventh
+      // state added to TRIAL_STATES is walked here as well as in the build.
+      const offered = menuItems().filter(
+        (item) => item === "Extend trial" || item === "Re-arm trial",
+      );
+      expect(offered.length).toBeLessThanOrEqual(1);
+    },
+  );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "keeps Re-arm trial off a disabled organization on the %s trial",
+    async (state) => {
+      await renderMenu({ ...DISABLED_ORG, trial_state: state });
+
+      // The server would take it: nothing in the re-arm handler reads
+      // disabled_at, so the restored trial would run behind the lockout.
+      expect(menuItems().includes("Re-arm trial")).toBe(false);
     },
   );
 
@@ -292,9 +365,9 @@ describe("the row menu", () => {
 });
 
 describe("the extend trial dialog", () => {
-  // One dialog component now draws every day-count question, so the extend
-  // words have to be asserted somewhere or a second caller's words can be
-  // passed in their place without a test noticing.
+  // The other half of the pair. One dialog component draws both, so the extend
+  // words have to be asserted somewhere or they can be replaced by the re-arm
+  // words without a test noticing.
   it("names the record and says where the days go", async () => {
     await renderMenu();
     await openExtendDialog();
@@ -302,6 +375,9 @@ describe("the extend trial dialog", () => {
     const text = dialog().textContent ?? "";
     expect(text).toContain(`Extend the trial for ${ORG.name}?`);
     expect(text).toContain("added to the date the trial ends on now");
+    // Extend moves a date and nothing else, so it must not carry the sentence
+    // that describes what re-arm restores.
+    expect(text).not.toContain("model provider keys");
   });
 
   it("starts on the trial length the rest of the system assumes", async () => {
@@ -525,9 +601,281 @@ describe("the extend trial dialog", () => {
   });
 });
 
-// The only bounds the app passes today are the extension pair, so nothing
-// drawn from it can tell a dialog that reads its `bounds` prop from one that
-// hardcodes that pair. A fabricated pair is the only way to hold the
+describe("the re-arm trial dialog", () => {
+  it("starts on the trial length the rest of the system assumes", async () => {
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    expect(dayInput().value).toBe(DEFAULT_DAYS);
+  });
+
+  // Re-arm is not extend with another verb. An operator who reads a day count
+  // and expects only a new date has been told less than half of what the write
+  // does, and three of the four things it does are not dates at all.
+  //
+  // Named here as well as in the extend test below, because one dialog draws
+  // both: with only one path asserted, the two sets of words are a prop swap
+  // apart and the suite stays green either way round.
+  it("says what the write does besides moving a date", async () => {
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    const text = dialog().textContent ?? "";
+    expect(text).toContain(`Re-arm the trial for ${DEMOTED_ORG.name}?`);
+    expect(text).toContain("account type");
+    expect(text).toContain("model provider keys");
+    expect(text).toContain("book-a-demo gate");
+    expect(text).toContain("counted from now");
+  });
+
+  it("re-arms for the day count the operator typed", async () => {
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    await submitRearmDays("30");
+
+    expect(mocks.rearmTrial).toHaveBeenCalledWith({
+      id: DEMOTED_ORG.id,
+      days: 30,
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(announce).toHaveBeenCalledWith(
+      `${DEMOTED_ORG.name} trial re-armed for 30 days.`,
+    );
+  });
+
+  it("says one day rather than 1 days", async () => {
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    await submitRearmDays("1");
+
+    expect(announce).toHaveBeenCalledWith(
+      `${DEMOTED_ORG.name} trial re-armed for 1 day.`,
+    );
+  });
+
+  // Both edges and both sides of each, against the re-arm bounds rather than
+  // the extension ones. The two pairs are equal today and are separate names on
+  // the server so they can stop being.
+  it.each([
+    [String(MIN_TRIAL_REARM_DAYS - 1), false],
+    [String(MIN_TRIAL_REARM_DAYS), true],
+    [String(MAX_TRIAL_REARM_DAYS), true],
+    [String(MAX_TRIAL_REARM_DAYS + 1), false],
+    ["-7", false],
+    ["1.5", false],
+    ["", false],
+  ] as [string, boolean][])(
+    "sends %s to the server only where the server would take it",
+    async (value, sent) => {
+      await renderMenu(DEMOTED_ORG);
+      await openRearmDialog();
+
+      await submitRearmDays(value);
+
+      expect(mocks.rearmTrial).toHaveBeenCalledTimes(sent ? 1 : 0);
+      if (!sent) {
+        expect((await screen.findByRole("alert")).textContent).toContain(
+          `between ${MIN_TRIAL_REARM_DAYS} and ${MAX_TRIAL_REARM_DAYS}`,
+        );
+        expect(dayInput().getAttribute("aria-invalid")).toBe("true");
+        expect(screen.getByRole("dialog")).toBeTruthy();
+        expect(announce).toHaveBeenCalledWith(
+          `Could not re-arm the trial for ${DEMOTED_ORG.name}: Enter a whole number of days between ${MIN_TRIAL_REARM_DAYS} and ${MAX_TRIAL_REARM_DAYS}.`,
+        );
+      }
+    },
+  );
+
+  it("keeps the dialog open on a refusal, holding the day count", async () => {
+    mocks.rearmTrial.mockRejectedValue(
+      new GramAdminError(
+        409,
+        {
+          name: "conflict",
+          message: "organization has no demoted enterprise trial to re-arm",
+        },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    await submitRearmDays("30");
+
+    // A rejected attempt is one the operator adjusts, not one they retype.
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(dayInput().value).toBe("30");
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "organization has no demoted enterprise trial to re-arm",
+    );
+    expect(announce).toHaveBeenCalledWith(
+      `Could not re-arm the trial for ${DEMOTED_ORG.name}: organization has no demoted enterprise trial to re-arm`,
+    );
+  });
+
+  it("sends one request however many times the button is pressed", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.rearmTrial.mockReturnValue(held.promise);
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    await submitRearmDays("30");
+    const submit = await screen.findByRole("button", { name: "Re-arming..." });
+    await act(async () => {
+      fireEvent.click(submit);
+      fireEvent.click(submit);
+    });
+
+    // Re-arm is not idempotent: a second one that landed would restart the
+    // trial from later, and the operator would have no account of which run
+    // the row is showing.
+    expect(mocks.rearmTrial).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      held.resolve(REARMED_ORG);
+    });
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+  });
+
+  it("cannot be dismissed while the write is in flight", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.rearmTrial.mockReturnValue(held.promise);
+    await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+    await submitRearmDays("30");
+    await screen.findByRole("button", { name: "Re-arming..." });
+
+    await act(async () => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+
+    expect(dialogNode()).not.toBeNull();
+
+    await act(async () => {
+      held.resolve(REARMED_ORG);
+    });
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+  });
+
+  it("opens the next attempt without the last one's failure", async () => {
+    mocks.rearmTrial.mockRejectedValue(
+      new GramAdminError(404, null, "gram admin 404 Not Found"),
+    );
+    const trigger = await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+    await submitRearmDays("30");
+    expect(await screen.findByRole("alert")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+    fireEvent.pointerDown(trigger, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    await openRearmDialog();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(dayInput().value).toBe(DEFAULT_DAYS);
+  });
+});
+
+// The five ways out of the re-arm dialog, each its own Radix path and each one
+// a way to end with the keyboard on document.body.
+describe("the keyboard when the re-arm dialog closes", () => {
+  it("goes back to the row menu trigger when the write succeeds", async () => {
+    const trigger = await renderMenu(DEMOTED_ORG);
+    await openRearmDialog();
+
+    await submitRearmDays("30");
+
+    await waitFor(() => {
+      expect(dialogNode()).toBeNull();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  it.each([
+    [
+      "Escape",
+      (): void => {
+        fireEvent.keyDown(document, { key: "Escape" });
+      },
+    ],
+    [
+      "Cancel",
+      (): void => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      },
+    ],
+    [
+      "the backdrop",
+      (): void => {
+        fireEvent.pointerDown(overlay(), {
+          button: 0,
+          ctrlKey: false,
+          pointerType: "mouse",
+        });
+        fireEvent.click(overlay(), { button: 0, ctrlKey: false });
+      },
+    ],
+    [
+      "the X",
+      (): void => {
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      },
+    ],
+  ] as [string, () => void][])(
+    "goes back to the row menu trigger when %s closes it",
+    async (_path, close) => {
+      const trigger = await renderMenu(DEMOTED_ORG);
+      await openRearmDialog();
+
+      await act(async () => {
+        close();
+      });
+
+      await waitFor(() => {
+        expect(dialogNode()).toBeNull();
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(trigger);
+      });
+      expect(mocks.rearmTrial).not.toHaveBeenCalled();
+    },
+  );
+
+  it("goes back to the peek footer control the dialog opened from", async () => {
+    await renderFooter(DEMOTED_ORG);
+    const button = screen.getByRole("button", {
+      name: `Re-arm trial for ${DEMOTED_ORG.name}`,
+    });
+    fireEvent.click(button);
+    await screen.findByRole("dialog");
+
+    await submitRearmDays("30");
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(button);
+    });
+  });
+});
+
+// Both endpoints bound their day count at 1 and 365, so nothing drawn from the
+// app can tell a dialog that reads its `bounds` prop from one that hardcodes
+// the extension pair. A pair neither endpoint uses is the only way to hold the
 // parameterisation, and it is the reason the component is exported.
 describe("the day-count dialog on bounds of its own", () => {
   const BOUNDS = { min: 7, max: 30 };
@@ -925,6 +1273,56 @@ describe("the peek panel footer", () => {
     expect(
       screen.queryByRole("button", { name: `Disable ${ORG.name}` }),
     ).toBeNull();
+  });
+
+  it("offers Re-arm trial, and not Extend trial, for a demoted trial", async () => {
+    await renderFooter(DEMOTED_ORG);
+
+    expect(
+      screen.getByRole("button", {
+        name: `Re-arm trial for ${DEMOTED_ORG.name}`,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: `Extend trial for ${DEMOTED_ORG.name}`,
+      }),
+    ).toBeNull();
+  });
+
+  it("hides Re-arm trial for a trial the server would refuse", async () => {
+    await renderFooter();
+
+    expect(
+      screen.queryByRole("button", { name: `Re-arm trial for ${ORG.name}` }),
+    ).toBeNull();
+  });
+
+  it("marks the re-arm control busy rather than disabling it", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.rearmTrial.mockReturnValue(held.promise);
+    await renderFooter(DEMOTED_ORG);
+    const rearm = screen.getByRole("button", {
+      name: `Re-arm trial for ${DEMOTED_ORG.name}`,
+    });
+
+    fireEvent.click(rearm);
+    await screen.findByRole("dialog");
+    await submitRearmDays("30");
+
+    // A control that goes dead under the operator's hand drops the keyboard
+    // onto the body, which is the thing this design exists to avoid.
+    await waitFor(() => {
+      expect(rearm.getAttribute("aria-busy")).toBe("true");
+    });
+    expect(rearm.hasAttribute("disabled")).toBe(false);
+
+    await act(async () => {
+      held.resolve(REARMED_ORG);
+    });
+    await waitFor(() => {
+      expect(rearm.getAttribute("aria-busy")).toBe("false");
+    });
   });
 
   it("hides Extend trial for a trial the server would refuse", async () => {
