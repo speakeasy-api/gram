@@ -155,6 +155,19 @@ func TestCostAnalytics_CanonicalFold_GroupByEmailFoldsBuckets(t *testing.T) {
 	require.NotContains(t, costs, personalEmail)
 	require.NotContains(t, costs, strings.ToUpper(personalEmail))
 	require.InDelta(t, 4, costs[hostname], 0.001)
+
+	// A hostname filter (no "@", so it skips the map entirely) still matches
+	// case-insensitively — the literal path's semantics, preserved under fold.
+	filtered, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    now.Add(-time.Hour).Format(time.RFC3339),
+		To:      now.Add(time.Hour).Format(time.RFC3339),
+		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{strings.ToUpper(hostname)}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Table, 1)
+	require.InDelta(t, 4, filtered.Table[0].Measures.TotalCost, 0.001)
 }
 
 func TestCostAnalytics_CanonicalFold_UnmappedEmailStaysLiteral(t *testing.T) {
@@ -589,6 +602,86 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), res.TotalEvents)
+}
+
+func TestHooksDrill_CanonicalFold_ExclusionAndTraceList(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "xwork-" + suffix + "@example.com"
+	personalEmail := "xpersonal-" + suffix + "@example.com"
+	strangerEmail := "xstranger-" + suffix + "@example.com"
+	userID := uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	event := func(email string) {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   deploymentID,
+			timestamp:      now.Add(-10 * time.Minute),
+			traceID:        uuid.NewString(),
+			userEmail:      email,
+			hookSource:     "mcp",
+			toolSource:     "server-a",
+			toolName:       "weather",
+			result:         `"ok"`,
+			skillName:      "",
+			conversationID: "conv-" + uuid.NewString()[:8],
+		})
+	}
+	event(workEmail)
+	event(strings.ToUpper(personalEmail))
+	event(strangerEmail)
+	event("")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	// not_eq excludes the whole folded identity — both linked emails — or the
+	// excluded employee would reappear as a partial bucket.
+	res, err := ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: from,
+		To:   to,
+		Filters: []*gen.LogFilter{
+			{Path: "user.email", Operator: "not_eq", Values: []string{workEmail}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), res.TotalEvents)
+
+	// eq considers only the first value, matching the literal path's contract.
+	res, err = ti.service.GetHooksSummary(ctx, &gen.GetHooksSummaryPayload{
+		From: from,
+		To:   to,
+		Filters: []*gen.LogFilter{
+			{Path: "user.email", Operator: "eq", Values: []string{workEmail, strangerEmail}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), res.TotalEvents)
+
+	// The trace-list drill folds like the buckets that link to it: filtering
+	// by the canonical email returns the personal-email trace too.
+	traces, err := ti.service.ListHooksTraces(ctx, &gen.ListHooksTracesPayload{
+		From:  from,
+		To:    to,
+		Limit: 50,
+		Filters: []*gen.LogFilter{
+			{Path: "user.email", Operator: "eq", Values: []string{workEmail}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, traces.Traces, 2)
 }
 
 func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {

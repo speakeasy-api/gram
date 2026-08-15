@@ -386,26 +386,30 @@ WHERE id = ANY(@ids::bigint[])
 -- since deleted or disconnected (matching the Go resolver): a second historical
 -- claimant has telemetry rows under the shared email, and folding it to the
 -- surviving owner would move the departed claimant's usage onto them.
+--
+-- The btrim charset mirrors Go's strings.TrimSpace (conv.NormalizeEmail) —
+-- bare btrim() strips only ASCII spaces, so a tab- or NBSP-padded email would
+-- key the map differently than the ingest-normalized ClickHouse rows.
 WITH directory AS (
     SELECT
         our.organization_id,
-        lower(btrim(u.email)) AS email_lower,
+        lower(btrim(u.email, E' \t\r\n\v\f\u0085\u00a0')) AS email_lower,
         min(u.id) AS user_id,
         count(*) AS claimants
     FROM users u
     JOIN organization_user_relationships our ON our.user_id = u.id
     WHERE u.deleted_at IS NULL
       AND our.deleted_at IS NULL
-      AND btrim(u.email) != ''
-    GROUP BY our.organization_id, lower(btrim(u.email))
+      AND btrim(u.email, E' \t\r\n\v\f\u0085\u00a0') != ''
+    GROUP BY our.organization_id, lower(btrim(u.email, E' \t\r\n\v\f\u0085\u00a0'))
 ), account_owners AS (
-    SELECT ua.organization_id, lower(btrim(ua.email)) AS email_lower, ua.user_id
+    SELECT ua.organization_id, lower(btrim(ua.email, E' \t\r\n\v\f\u0085\u00a0')) AS email_lower, ua.user_id
     FROM user_accounts ua
     WHERE ua.deleted_at IS NULL
       AND ua.user_id IS NOT NULL
       AND ua.email IS NOT NULL
-      AND btrim(ua.email) != ''
-    GROUP BY ua.organization_id, lower(btrim(ua.email)), ua.user_id
+      AND btrim(ua.email, E' \t\r\n\v\f\u0085\u00a0') != ''
+    GROUP BY ua.organization_id, lower(btrim(ua.email, E' \t\r\n\v\f\u0085\u00a0')), ua.user_id
 ), unique_account_owner AS (
     SELECT organization_id, email_lower, min(user_id) AS user_id
     FROM account_owners
@@ -429,7 +433,7 @@ FROM unique_account_owner uao
 JOIN users u ON u.id = uao.user_id AND u.deleted_at IS NULL
 JOIN directory d
     ON d.organization_id = uao.organization_id
-    AND d.email_lower = lower(btrim(u.email))
+    AND d.email_lower = lower(btrim(u.email, E' \t\r\n\v\f\u0085\u00a0'))
     AND d.user_id = u.id
     AND d.claimants = 1
 WHERE NOT EXISTS (

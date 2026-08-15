@@ -3924,15 +3924,17 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
-		GramProjectID:  params.projectID,
-		TimeStart:      params.timeStart,
-		TimeEnd:        params.timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: payload.TypesToInclude,
-		SortOrder:      params.sortOrder,
-		Cursor:         params.cursor,
-		Limit:          params.limit + 1,
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		Filters:              attributeFilters,
+		TypesToInclude:       payload.TypesToInclude,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		CanonicalIdentityOrg: canonicalOrg,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))
