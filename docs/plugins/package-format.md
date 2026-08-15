@@ -50,6 +50,14 @@ When plugins are published, all platform configs land in a single repo. The root
 │   ├── .codex-plugin/plugin.json
 │   └── .mcp.json
 │
+├── <org-slug>-observability-copilot/  # Copilot observability plugin
+│   ├── plugin.json                    # at the package root, not a vendor dir
+│   ├── speakeasy.json
+│   └── hooks/
+│       ├── hooks.json
+│       ├── bootstrap.sh
+│       └── bootstrap.ps1
+│
 └── agent-plugins/<plugin-slug>/       # Portable Agent Plugins 1.0 package
     ├── .cursor-plugin/plugin.json     # Native Cursor overlay
     ├── .codex-plugin/plugin.json      # Native Codex overlay
@@ -329,6 +337,59 @@ curl -s -X POST \
   "https://app.getgram.ai/rpc/hooks.cursor"
 ```
 
+### Copilot observability
+
+Directory: `<org-slug>-observability-copilot/`
+
+Copilot is an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-spec) client, so `plugin.json` sits at the package **root** rather than in a vendor subdirectory:
+
+```json
+{
+  "name": "<org-slug>-observability-copilot",
+  "version": "0.<hooks-generator-version>.<publish>",
+  "description": "Speakeasy observability hooks for Org Name. ..."
+}
+```
+
+**`hooks/hooks.json`** — Copilot's own camelCase event names, one entry per event:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash \"$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh\" --config=\"$COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot --timeout=60s",
+        "powershell": "& \"$env:COPILOT_PLUGIN_ROOT/hooks/bootstrap.ps1\" \"--config=$env:COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot --timeout=60s; exit $LASTEXITCODE",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}
+```
+
+Registered events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `postToolUseFailure`, `permissionRequest`, `agentStop`, `subagentStop`, `notification`.
+
+Four differences from the other dialects, each load-bearing:
+
+| Field                 | Copilot                | Why                                                                                                                                                                                                                                                                             |
+| --------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `matcher`             | **absent**             | An empty matcher is a validation error that discards this plugin's entire hook config. Absent means match-all — the semantic the other dialects' `"matcher": ""` was reaching for.                                                                                              |
+| `timeoutSec`          | seconds                | Copilot's own default is 30s. Claude and Cursor spell the same field `timeout`.                                                                                                                                                                                                 |
+| `bash` / `powershell` | native per-entry split | Copilot runs the `powershell` value as PowerShell directly, so unlike Codex there is no base64 `-EncodedCommand` wrapping. Without it, a Windows machine with no bash fails `preToolUse` — which is fail-closed, so every tool call is denied rather than merely untelemetered. |
+| `failClosed`          | **absent**             | Copilot fixes the posture per event: `preToolUse` is fail-closed on any non-timeout error, everything else fails open.                                                                                                                                                          |
+
+The hook config ships at `hooks/hooks.json` **only**. Copilot parses both `<root>/hooks.json` and `<root>/hooks/hooks.json`, so shipping both registers every hook twice.
+
+**Surface support.** Hooks run in Copilot CLI only. VS Code and the Copilot app load the plugin — MCP servers and skills work there — but never fire its hooks. Copilot's cloud agent reads hooks from `.github/hooks/*.json` in the repository and is not targeted by this package.
+
+**Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Gram's entry suppresses Gram's telemetry for that call.
+
+### MCP servers and skills on Copilot
+
+MCP servers and skills reach Copilot through the platform-neutral Agent Plugins 1.0 package under `agent-plugins/<plugin-slug>/`, not through a Copilot-specific package. That package carries `plugin.json`, `mcp.json` and `skills/`, is credential-free, and installs with `copilot plugin install OWNER/REPO:agent-plugins/<plugin-slug>` or from an extracted ZIP via `copilot --plugin-dir`. Plugins that fail the portability gate (a server needing a Gram credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
+
 ## README
 
 The auto-generated `README.md` contains:
@@ -342,4 +403,4 @@ The auto-generated `README.md` contains:
 
 `downloadPluginPackage` returns a ZIP containing only the files for one plugin on one platform. Native ZIPs mirror their platform package layout. The `agent-plugin` platform returns a credential-free Agent Plugins 1.0 package rooted at `plugin.json`.
 
-`downloadObservabilityPlugin` returns the observability ZIP for a single platform (Claude or Cursor), minting a fresh hooks-scoped API key each time.
+`downloadObservabilityPlugin` returns the observability ZIP for a single platform — `claude`, `cursor`, `codex`, `opencode` or `copilot` — minting a fresh hooks-scoped API key each time. The ZIP is rooted at the package files themselves (no per-platform subdirectory), so `copilot --plugin-dir <extracted>` works directly.

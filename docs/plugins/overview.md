@@ -37,7 +37,9 @@ Team member installs from Claude/Cursor/Codex marketplace
 
 Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect` scope) still enforces access at the MCP entrypoint.
 
-**Observability plugin.** Every publish automatically includes a per-org observability plugin (one for Claude, one for Cursor) that bundles hooks forwarding tool-use events back to Gram. This is required for proper audit logging.
+**Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode and GitHub Copilot — that bundles hooks forwarding tool-use events back to Gram. This is required for proper audit logging.
+
+**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
 
 **Scoped API keys.** At publish time, Gram mints two API keys and embeds them in the generated configs:
 
@@ -63,21 +65,21 @@ Slugs must be unique per `(organization_id, project_id)` (filtered index, ignore
 
 All endpoints live under `/rpc/plugins.<method>` and require session auth + `Gram-Project` header.
 
-| Endpoint                      | Auth scope | Description                                                      |
-| ----------------------------- | ---------- | ---------------------------------------------------------------- |
-| `listPlugins`                 | `OrgRead`  | List plugins with server/assignment counts                       |
-| `getPlugin`                   | `OrgRead`  | Full plugin detail (nested servers + assignments)                |
-| `createPlugin`                | `OrgAdmin` | Create plugin (slug auto-derived from name if omitted)           |
-| `updatePlugin`                | `OrgAdmin` | Rename/re-slug/redescribe                                        |
-| `deletePlugin`                | `OrgAdmin` | Soft-delete plugin + all its servers                             |
-| `addPluginServer`             | `OrgAdmin` | Add toolset to plugin                                            |
-| `updatePluginServer`          | `OrgAdmin` | Change display name, policy, sort order                          |
-| `removePluginServer`          | `OrgAdmin` | Remove server from plugin                                        |
-| `setPluginAssignments`        | `OrgAdmin` | Replace all principal assignments (atomic)                       |
-| `downloadPluginPackage`       | `OrgRead`  | Download single-plugin ZIP for `claude`, `cursor`, or `codex`    |
-| `downloadObservabilityPlugin` | `OrgAdmin` | Download per-org observability plugin ZIP (mints hooks API key)  |
-| `getPublishStatus`            | `OrgRead`  | Check GitHub config + connection status; returns marketplace URL |
-| `publishPlugins`              | `OrgAdmin` | Generate all plugins, push to GitHub, mint API keys              |
+| Endpoint                      | Auth scope | Description                                                                                                              |
+| ----------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `listPlugins`                 | `OrgRead`  | List plugins with server/assignment counts                                                                               |
+| `getPlugin`                   | `OrgRead`  | Full plugin detail (nested servers + assignments)                                                                        |
+| `createPlugin`                | `OrgAdmin` | Create plugin (slug auto-derived from name if omitted)                                                                   |
+| `updatePlugin`                | `OrgAdmin` | Rename/re-slug/redescribe                                                                                                |
+| `deletePlugin`                | `OrgAdmin` | Soft-delete plugin + all its servers                                                                                     |
+| `addPluginServer`             | `OrgAdmin` | Add toolset to plugin                                                                                                    |
+| `updatePluginServer`          | `OrgAdmin` | Change display name, policy, sort order                                                                                  |
+| `removePluginServer`          | `OrgAdmin` | Remove server from plugin                                                                                                |
+| `setPluginAssignments`        | `OrgAdmin` | Replace all principal assignments (atomic)                                                                               |
+| `downloadPluginPackage`       | `OrgRead`  | Download single-plugin ZIP for `claude`, `cursor`, or `codex`                                                            |
+| `downloadObservabilityPlugin` | `OrgAdmin` | Download per-org observability plugin ZIP for `claude`, `cursor`, `codex`, `opencode` or `copilot` (mints hooks API key) |
+| `getPublishStatus`            | `OrgRead`  | Check GitHub config + connection status; returns marketplace URL                                                         |
+| `publishPlugins`              | `OrgAdmin` | Generate all plugins, push to GitHub, mint API keys                                                                      |
 
 ## Implementation
 
