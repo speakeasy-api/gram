@@ -29400,6 +29400,7 @@ paths:
                         - cursor
                         - codex
                         - opencode
+                        - copilot
                     type: string
                 - allowEmptyValue: true
                   description: Session header

@@ -1145,6 +1145,74 @@ func TestGenerateCursorObservabilityPluginRegistersBootstrapCommands(t *testing.
 	}
 }
 
+func TestGenerateCopilotObservabilityPluginRegistersBootstrapCommands(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	root := CopilotObservabilitySlug(cfg)
+	hooksJSON := files[root+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "copilot observability hooks/hooks.json missing")
+	require.NotNil(t, files[root+"/plugin.json"], "copilot plugin.json must sit at the package root")
+	require.NotNil(t, files[root+"/hooks/bootstrap.ps1"], "copilot ships the PowerShell bootstrapper its powershell entries invoke")
+
+	var parsed copilotHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+	require.Equal(t, 1, parsed.Version)
+	require.Len(t, parsed.Hooks, len(CopilotObservabilityHookEvents))
+
+	for _, event := range CopilotObservabilityHookEvents {
+		entries, ok := parsed.Hooks[event]
+		require.True(t, ok, "event %q must be registered in hooks.json or Copilot will silently drop it", event)
+		require.Len(t, entries, 1)
+
+		timeoutSeconds := 60
+		if event == "sessionStart" {
+			timeoutSeconds = 330
+		}
+		require.Equal(t, "command", entries[0].Type)
+		require.Equal(t, timeoutSeconds, entries[0].TimeoutSec, "Copilot's own default is 30s")
+		require.Equal(t,
+			fmt.Sprintf(`bash "$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$COPILOT_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=copilot --timeout=%ds`, timeoutSeconds),
+			entries[0].Bash,
+		)
+		// A Windows machine with no bash fails preToolUse, which Copilot
+		// fail-closes: every tool call denied, not merely lost telemetry.
+		require.Equal(t, copilotHooksPowerShellCommand(timeoutSeconds), entries[0].PowerShell,
+			"every entry needs a powershell counterpart")
+		require.Contains(t, entries[0].PowerShell, "bootstrap.ps1")
+	}
+}
+
+// An empty matcher is a Copilot config validation error that discards this
+// plugin's ENTIRE hook config — silently, save for one CLI log line — so the
+// house `"matcher": ""` pattern would disable every Gram hook. Absent means
+// match-all. Assert on the raw bytes: the failure mode leaves no other trace.
+func TestGenerateCopilotObservabilityPluginEmitsNoMatcherKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "copilot")
+	require.NoError(t, err)
+
+	hooksJSON, ok := files["hooks/hooks.json"]
+	require.True(t, ok, "copilot package must ship hooks/hooks.json")
+	require.NotContains(t, string(hooksJSON), "matcher", "an empty matcher discards the whole plugin's hook config")
+
+	// Copilot parses <root>/hooks.json and <root>/hooks/hooks.json both, so
+	// shipping both registers every hook twice.
+	_, ok = files["hooks.json"]
+	require.False(t, ok, "a root hooks.json would double-register every hook")
+}
+
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -1637,6 +1705,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
 		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
+		prefixes[4] + "hooks/hooks.json":             []byte("v14 copilot"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1644,7 +1713,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 5)
+	require.Len(t, dst, 6)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
@@ -1811,7 +1880,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
