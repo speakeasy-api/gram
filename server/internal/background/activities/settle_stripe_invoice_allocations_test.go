@@ -209,6 +209,17 @@ func setChatKeyCreatedAt(t *testing.T, db *pgxpool.Pool, organizationID string, 
 	))
 }
 
+func setChatKeyDeletedAt(t *testing.T, db *pgxpool.Pool, organizationID string, deletedAt time.Time) {
+	t.Helper()
+	require.NoError(t, backgroundrepo.New(db).SetOpenRouterAPIKeyDeletedAtFixture(
+		t.Context(), backgroundrepo.SetOpenRouterAPIKeyDeletedAtFixtureParams{
+			DeletedAt:      pgtype.Timestamptz{Time: deletedAt.UTC(), InfinityModifier: pgtype.Finite, Valid: true},
+			OrganizationID: organizationID,
+			KeyType:        "chat",
+		},
+	))
+}
+
 func addOpenRouterCarryFixture(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -581,6 +592,34 @@ func TestSettleStripeInvoiceAllocations_NoKeyDaysFinalizeAsDurableZero(t *testin
 		t.Context(), pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true})
 	require.NoError(t, err)
 	require.Empty(t, candidates, "an organization without a chat key cannot have chat spend")
+}
+
+func TestSettleStripeInvoiceAllocations_PostDeletionDaysFinalizeAsDurableZero(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_deleted_key_zero")
+	start := time.Date(2026, time.August, 11, 0, 0, 0, 0, time.UTC)
+	deletionDay := start.AddDate(0, 0, 1)
+	end := start.AddDate(0, 0, 3)
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "open", 0)
+	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
+	setChatKeyCreatedAt(t, db, organizationID, start.Add(-time.Hour))
+	setChatKeyDeletedAt(t, db, organizationID, deletionDay.Add(12*time.Hour))
+	putDailySpend(t, db, organizationID, start, "0.010000")
+	putDailySpend(t, db, organizationID, deletionDay, "0.020000")
+	now := end.Add(76 * time.Hour)
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: now}))
+	rows := listAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 6)
+	require.Equal(t, "0.010000", numericString(t, rows[1].SourceSnapshotUsd))
+	require.Equal(t, "0.020000", numericString(t, rows[3].SourceSnapshotUsd), "deletion-day spend remains billable")
+	require.Equal(t, "0", numericString(t, rows[5].SourceSnapshotUsd), "post-deletion day is an authoritative zero")
+	require.Equal(t, int32(2), rows[5].Seq)
+
+	candidates, err := backgroundrepo.New(db).ListStripeInvoiceBillingOrganizations(
+		t.Context(), pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true})
+	require.NoError(t, err)
+	require.Empty(t, candidates, "post-deletion zeroes must finish the invoice candidate")
 }
 
 func TestSettleStripeInvoiceAllocations_LateMiddleDayReconcilesExistingLaterCarry(t *testing.T) {

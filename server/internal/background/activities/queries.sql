@@ -373,6 +373,9 @@ SELECT
       WHEN chat_key.created_at IS NULL
         OR allocation.source_day < (chat_key.created_at AT TIME ZONE 'UTC')::date
         THEN 0::numeric
+	  WHEN chat_key.deleted_at IS NOT NULL
+	    AND allocation.source_day >= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
+	    THEN COALESCE(spend.spend_usd, 0::numeric)
       ELSE spend.spend_usd
     END)::numeric(14, 6) AS final_spend_usd
   , carry.amount_usd AS existing_carry_amount_usd
@@ -388,6 +391,10 @@ LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = allocation.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = allocation.source_day
+ AND (
+   chat_key.deleted_at IS NULL
+   OR spend.day <= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
+ )
 LEFT JOIN stripe_invoice_allocations carry
   ON carry.organization_id = allocation.organization_id
  AND carry.source_kind = allocation.source_kind
@@ -599,6 +606,12 @@ WHERE organization_id = @organization_id
 -- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeyDeletedAtFixture :exec
+UPDATE openrouter_api_keys
+SET deleted_at = @deleted_at
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
