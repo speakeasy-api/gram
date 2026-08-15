@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -60,6 +61,9 @@ func (s *Service) SetBillingEmail(ctx context.Context, payload *gen.SetBillingEm
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	if err := queries.LockBillingEmailOrganization(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock billing email organization").LogError(ctx, s.logger)
+	}
 	var snapshotBefore *audit.BillingMetadataSnapshot
 	before, err := queries.LockBillingMetadata(ctx, authCtx.ActiveOrganizationID)
 	switch {
@@ -69,9 +73,18 @@ func (s *Service) SetBillingEmail(ctx context.Context, payload *gen.SetBillingEm
 		return nil, oops.E(oops.CodeUnexpected, err, "lock billing metadata").LogError(ctx, s.logger)
 	}
 
+	email := payload.Email
+	if email != nil {
+		trimmed := strings.TrimSpace(*email)
+		if trimmed == "" {
+			email = nil
+		} else {
+			email = &trimmed
+		}
+	}
 	row, err := queries.UpsertBillingEmail(ctx, repo.UpsertBillingEmailParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		AlertEmail:     conv.PtrToPGText(payload.Email),
+		AlertEmail:     conv.PtrToPGText(email),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "set billing email").LogError(ctx, s.logger)

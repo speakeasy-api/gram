@@ -27,6 +27,9 @@ func TestResolveOrganizationAdminEmails_UsesEffectiveGrantsAndDeterministicDedup
 	seedGrant(t, ctx, db, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, "admin-zeta"), ScopeOrgAdmin, organizationID)
 	seedActiveOrganizationUser(t, ctx, db, organizationID, "ordinary-member")
 	seedRoleAssignmentForUser(t, ctx, db, organizationID, "ordinary-member", SystemRoleMember)
+	seedActiveOrganizationUser(t, ctx, db, organizationID, "blocked-admin")
+	seedRoleAssignmentForUser(t, ctx, db, organizationID, "blocked-admin", SystemRoleAdmin)
+	seedGrant(t, ctx, db, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, "blocked-admin"), ScopeOrgBlockedAdmin, organizationID)
 
 	for userID, email := range map[string]string{
 		"admin-alpha":           "Alpha@example.test",
@@ -46,7 +49,7 @@ func TestResolveOrganizationAdminEmails_UsesEffectiveGrantsAndDeterministicDedup
 	recipients, err := ResolveOrganizationAdminEmails(ctx, db, organizationID)
 
 	require.NoError(t, err)
-	require.Equal(t, []string{"alpha@EXAMPLE.TEST", "zeta@example.test"}, recipients)
+	require.Equal(t, []string{"Alpha@example.test", "zeta@example.test"}, recipients)
 }
 
 func TestResolveOrganizationAdminEmails_ReturnsPartialAudienceWithResolutionError(t *testing.T) {

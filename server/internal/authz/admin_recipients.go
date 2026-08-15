@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -27,8 +28,11 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
 	}
-	recipients := make([]string, 0, len(users))
-	seen := make(map[string]struct{}, len(users))
+	type recipient struct {
+		email  string
+		userID string
+	}
+	byEmail := make(map[string]recipient, len(users))
 	var resolutionErrors []error
 	for _, user := range users {
 		principals, err := ResolveUserPrincipals(ctx, db, organizationID, user.ID)
@@ -41,16 +45,31 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 			resolutionErrors = append(resolutionErrors, fmt.Errorf("load grants for organization user %q: %w", user.ID, err))
 			continue
 		}
-		if !GrantsSatisfy(grants, check) {
+		evaluation, err := evaluateGrantCheck(grants, check)
+		if err != nil {
+			resolutionErrors = append(resolutionErrors, fmt.Errorf("evaluate grants for organization user %q: %w", user.ID, err))
+			continue
+		}
+		if evaluation.Grant == nil {
 			continue
 		}
 
 		emailKey := strings.ToLower(user.Email)
-		if _, ok := seen[emailKey]; ok {
+		current, ok := byEmail[emailKey]
+		if ok && current.userID <= user.ID {
 			continue
 		}
-		seen[emailKey] = struct{}{}
-		recipients = append(recipients, user.Email)
+		byEmail[emailKey] = recipient{email: user.Email, userID: user.ID}
+	}
+
+	emailKeys := make([]string, 0, len(byEmail))
+	for emailKey := range byEmail {
+		emailKeys = append(emailKeys, emailKey)
+	}
+	slices.Sort(emailKeys)
+	recipients := make([]string, 0, len(emailKeys))
+	for _, emailKey := range emailKeys {
+		recipients = append(recipients, byEmail[emailKey].email)
 	}
 
 	return recipients, errors.Join(resolutionErrors...)

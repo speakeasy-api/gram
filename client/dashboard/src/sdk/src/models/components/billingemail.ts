@@ -11,17 +11,17 @@ export type BillingEmail = {
   /**
    * The configured billing notification email. Omitted when organization administrators receive billing notifications.
    */
-  email?: string | undefined;
+  email?: string | null | undefined;
 };
 
 /** @internal */
 export const BillingEmail$inboundSchema: z.ZodMiniType<BillingEmail, unknown> =
   z.object({
-    email: z.optional(z.string()),
+    email: z.optional(z.nullable(z.string())),
   });
 /** @internal */
 export type BillingEmail$Outbound = {
-  email?: string | undefined;
+  email?: string | null | undefined;
 };
 
 /** @internal */
@@ -29,7 +29,7 @@ export const BillingEmail$outboundSchema: z.ZodMiniType<
   BillingEmail$Outbound,
   BillingEmail
 > = z.object({
-  email: z.optional(z.string()),
+  email: z.optional(z.nullable(z.string())),
 });
 
 export function billingEmailToJSON(billingEmail: BillingEmail): string {

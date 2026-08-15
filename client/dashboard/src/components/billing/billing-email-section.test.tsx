@@ -145,6 +145,23 @@ describe("BillingEmailSection", () => {
     ).toBeTruthy();
   });
 
+  // A refetch that fails leaves the last successful value in the cache, so the
+  // query reports data and an error together. The form stays — taking it away
+  // would discard an in-progress edit — and the stale value is called out.
+  it("keeps the form and reports the failure when a cached value is held", () => {
+    mocks.query.mockReturnValue({
+      data: { email: "billing@example.test" },
+      isError: true,
+    });
+
+    render(<BillingEmailSection />);
+
+    expect(field()!.value).toBe("billing@example.test");
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /couldn't refresh the billing notification email/i,
+    );
+  });
+
   it("seeds the field from the configured address", () => {
     mocks.query.mockReturnValue({
       data: { email: "billing@example.test" },
@@ -255,5 +272,24 @@ describe("BillingEmailSection", () => {
     rerender(<BillingEmailSection />);
 
     expect(field()!.value).toBe("new@example.test");
+  });
+
+  // The refresh failure is reported around the form rather than in place of
+  // it, so the error appearing can't cost the admin what they had typed.
+  it("keeps an in-progress edit when a background refetch fails", () => {
+    const { rerender } = render(<BillingEmailSection />);
+
+    fireEvent.change(field()!, { target: { value: "new@example.test" } });
+
+    mocks.query.mockReturnValue({
+      data: { email: "stale@example.test" },
+      isError: true,
+    });
+    rerender(<BillingEmailSection />);
+
+    expect(field()!.value).toBe("new@example.test");
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /couldn't refresh the billing notification email/i,
+    );
   });
 });
