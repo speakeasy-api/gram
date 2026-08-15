@@ -24,7 +24,7 @@ export default function BookDemo(): JSX.Element {
   return (
     <AuthShell
       page="Book a demo"
-      contentClassName="max-w-[800px] gap-3"
+      contentClassName="max-w-[50rem] gap-6"
       // The card carries its own prefill footnote instead ("2E Book a demo").
       showTerms={false}
       headerAction={
@@ -39,11 +39,11 @@ export default function BookDemo(): JSX.Element {
     >
       <DemoBookingFlow />
       <Button
-        variant="secondary"
+        variant="primary"
+        size="md"
         icon="arrow-right"
         iconAfter
         href="/explore-demo"
-        className="w-full"
       >
         Explore a Live Demo
       </Button>
