@@ -6,11 +6,18 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+	temporalmocks "go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func TestPaygOpenRouterChatKeyReconcileWorkflowUsesCurrentStateActivity(t *testing.T) {
@@ -28,11 +35,15 @@ func TestPaygOpenRouterChatKeyReconcileWorkflowUsesCurrentStateActivity(t *testi
 		activity.RegisterOptions{Name: "ReconcilePaygOpenRouterChatKey"},
 	)
 
-	env.ExecuteWorkflow(PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{OrganizationID: "organization_placeholder"})
+	env.ExecuteWorkflow(PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{
+		OrganizationID: "organization_placeholder",
+		DesiredState:   openrouter.KeyDesiredStateDisabled,
+	})
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, "organization_placeholder", received.OrganizationID)
+	require.Equal(t, openrouter.KeyDesiredStateDisabled, received.DesiredState)
 }
 
 func TestPaygOpenRouterChatKeyReconcileWorkflowRetriesExternalFailure(t *testing.T) {
@@ -50,9 +61,37 @@ func TestPaygOpenRouterChatKeyReconcileWorkflowRetriesExternalFailure(t *testing
 		activity.RegisterOptions{Name: "ReconcilePaygOpenRouterChatKey"},
 	)
 
-	env.ExecuteWorkflow(PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{OrganizationID: "organization_placeholder"})
+	env.ExecuteWorkflow(PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{
+		OrganizationID: "organization_placeholder",
+		DesiredState:   openrouter.KeyDesiredStateDisabled,
+	})
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.ErrorContains(t, env.GetWorkflowError(), "reconcile PAYG OpenRouter chat key")
 	require.EqualValues(t, 5, attempts.Load())
+}
+
+func TestSchedulePaygOpenRouterChatKeyReconciliationDedupesExactEventReplay(t *testing.T) {
+	t.Parallel()
+
+	temporalClient := &temporalmocks.Client{}
+	workflowOptions := mock.MatchedBy(func(options client.StartWorkflowOptions) bool {
+		return options.ID == "v1:openrouter-chat-key-reconcile:billing:event_placeholder" &&
+			options.TaskQueue == "test" &&
+			options.WorkflowIDReusePolicy == enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+	})
+	workflowParams := ReconcilePaygOpenRouterChatKeyParams{
+		OrganizationID: "organization_placeholder",
+		DesiredState:   openrouter.KeyDesiredStateDisabled,
+	}
+	temporalClient.On("ExecuteWorkflow", mock.Anything, workflowOptions, mock.Anything, workflowParams).Return(nil, nil).Once()
+	temporalClient.On("ExecuteWorkflow", mock.Anything, workflowOptions, mock.Anything, workflowParams).Return(
+		nil,
+		serviceerror.NewWorkflowExecutionAlreadyStarted("duplicate", "request_placeholder", "run_placeholder"),
+	).Once()
+
+	scheduler := &OpenRouterKeyRefresher{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
+	require.NoError(t, scheduler.SchedulePaygOpenRouterChatKeyReconciliation(t.Context(), "event_placeholder", "organization_placeholder", openrouter.KeyDesiredStateDisabled))
+	require.NoError(t, scheduler.SchedulePaygOpenRouterChatKeyReconciliation(t.Context(), "event_placeholder", "organization_placeholder", openrouter.KeyDesiredStateDisabled))
+	temporalClient.AssertExpectations(t)
 }

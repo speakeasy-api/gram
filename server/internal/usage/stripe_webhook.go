@@ -36,6 +36,7 @@ var acceptedStripeWebhookEvents = map[string]struct{}{
 type stripeWebhookResult struct {
 	newlyEnabledFeatures []productfeatures.Feature
 	invoicePaymentFailed bool
+	subscriptionLost     bool
 }
 
 type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
@@ -190,6 +191,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	if result.invoicePaymentFailed && s.stripeMetrics != nil {
 		s.stripeMetrics.RecordInvoicePaymentFailed(ctx)
 	}
+	if result.subscriptionLost && s.stripeMetrics != nil {
+		s.stripeMetrics.RecordSubscriptionLost(ctx)
+	}
 
 	return nil
 }
@@ -260,11 +264,11 @@ func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.
 		}
 	case "invoice.payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
-		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: true}, nil
+		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: true, subscriptionLost: false}, nil
 	case "customer.subscription.deleted":
 		return s.deactivatePaygSubscription(ctx, tx, organizationID, event)
 	}
-	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false}, nil
+	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
 }
 
 func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent) (stripeWebhookResult, error) {
@@ -275,9 +279,9 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 	}
 
 	if !state.StripeCustomerID.Valid || state.StripeCustomerID.String != event.CustomerID ||
-		state.GramAccountType != "payg" || !state.Whitelisted ||
+		state.GramAccountType != "payg" ||
 		!state.StripeSubscriptionID.Valid || state.StripeSubscriptionID.String != event.ObjectID {
-		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false}, nil
+		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
 	}
 
 	billingRows, err := q.DeactivatePaygBillingMetadata(ctx, repo.DeactivatePaygBillingMetadataParams{
@@ -325,7 +329,7 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization deactivation: %w", err)
 	}
 
-	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false}, nil
+	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: true}, nil
 }
 
 func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, invoice *stripeclient.InvoiceState) (bool, error) {
@@ -429,7 +433,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		state.BillingCycleAnchorDay == anchorDay &&
 		state.GramAccountType == "payg" && state.Whitelisted
 	if alreadyActivated {
-		return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false}, nil
+		return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false, subscriptionLost: false}, nil
 	}
 
 	if _, err := q.ActivatePaygBillingMetadata(ctx, repo.ActivatePaygBillingMetadataParams{
@@ -467,5 +471,5 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization activation: %w", err)
 	}
 
-	return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false}, nil
+	return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false, subscriptionLost: false}, nil
 }

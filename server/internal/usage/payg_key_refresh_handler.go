@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // PaygKeyRefreshHandler schedules desired-state reconciliation after a
@@ -24,7 +25,7 @@ type PaygKeyRefreshHandler struct {
 // PaygKeyRefreshScheduler starts the idempotent reconciliation associated with
 // one committed outbox event.
 type PaygKeyRefreshScheduler interface {
-	SchedulePaygOpenRouterChatKeyReconciliation(context.Context, string, string) error
+	SchedulePaygOpenRouterChatKeyReconciliation(context.Context, string, string, openrouter.KeyDesiredState) error
 }
 
 func NewPaygKeyRefreshHandler(logger *slog.Logger, refresher PaygKeyRefreshScheduler) *PaygKeyRefreshHandler {
@@ -60,8 +61,12 @@ func (h *PaygKeyRefreshHandler) Handle(ctx context.Context, event *webhooksv1.Ev
 		)
 		return nil
 	}
+	var desiredState openrouter.KeyDesiredState
 	switch audit.Action(payload.Action) {
-	case audit.ActionOrganizationPaygActivated, audit.ActionOrganizationPaygDeactivated:
+	case audit.ActionOrganizationPaygActivated:
+		desiredState = openrouter.KeyDesiredStateEnabled
+	case audit.ActionOrganizationPaygDeactivated:
+		desiredState = openrouter.KeyDesiredStateDisabled
 	default:
 		return nil
 	}
@@ -76,7 +81,7 @@ func (h *PaygKeyRefreshHandler) Handle(ctx context.Context, event *webhooksv1.Ev
 		return errors.New("openrouter key refresh scheduler is unavailable")
 	}
 
-	if err := h.refresher.SchedulePaygOpenRouterChatKeyReconciliation(ctx, eventID, organizationID); err != nil {
+	if err := h.refresher.SchedulePaygOpenRouterChatKeyReconciliation(ctx, eventID, organizationID, desiredState); err != nil {
 		return fmt.Errorf("schedule PAYG OpenRouter chat key reconciliation: %w", err)
 	}
 

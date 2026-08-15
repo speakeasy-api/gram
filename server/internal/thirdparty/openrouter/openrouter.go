@@ -50,6 +50,25 @@ const (
 	KeyTypeInternal KeyType = "internal"
 )
 
+// KeyDesiredState is the state a durable billing transition expects for an
+// existing platform key. It travels with the event-specific workflow so an
+// older opposite transition can be recognized after out-of-order delivery.
+type KeyDesiredState string
+
+const (
+	KeyDesiredStateEnabled  KeyDesiredState = "enabled"
+	KeyDesiredStateDisabled KeyDesiredState = "disabled"
+)
+
+func (s KeyDesiredState) Validate() error {
+	switch s {
+	case KeyDesiredStateEnabled, KeyDesiredStateDisabled:
+		return nil
+	default:
+		return fmt.Errorf("invalid OpenRouter key desired state %q", s)
+	}
+}
+
 // AllKeyTypes is the single definition of the valid key-type set. Validate
 // and any caller that fans out across an org's keys (e.g. account-type
 // limit refreshes) consume it, so adding a key type here propagates without
@@ -191,6 +210,14 @@ var creditsAccountTypeMap = map[string]int{
 	string(billing.TierPayg):       100,
 	string(billing.TierEnterprise): 100,
 	"":                             5, // safety default
+}
+
+// AccountTypeCreditLimit returns the explicit platform-key policy for a billing
+// tier. Callers that require a particular tier must handle ok=false instead of
+// falling back to the free-tier limit.
+func AccountTypeCreditLimit(tier billing.Tier) (limit int, ok bool) {
+	limit, ok = creditsAccountTypeMap[string(tier)]
+	return limit, ok
 }
 
 // trialCreditLimit caps each key an organization inside a trial holds, so its

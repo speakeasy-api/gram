@@ -14,19 +14,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type capturePaygKeyRefreshScheduler struct {
 	calls          atomic.Int32
 	eventID        string
 	organizationID string
+	desiredState   openrouter.KeyDesiredState
 	err            error
 }
 
-func (c *capturePaygKeyRefreshScheduler) SchedulePaygOpenRouterChatKeyReconciliation(_ context.Context, eventID, organizationID string) error {
+func (c *capturePaygKeyRefreshScheduler) SchedulePaygOpenRouterChatKeyReconciliation(_ context.Context, eventID, organizationID string, desiredState openrouter.KeyDesiredState) error {
 	c.calls.Add(1)
 	c.eventID = eventID
 	c.organizationID = organizationID
+	c.desiredState = desiredState
 	return c.err
 }
 
@@ -74,6 +77,7 @@ func TestPaygKeyRefreshHandlerRetriesSchedulingFailure(t *testing.T) {
 	require.EqualValues(t, 2, refresher.calls.Load())
 	require.Equal(t, "outbox_event_placeholder", refresher.eventID)
 	require.Equal(t, stripeWebhookOrganizationID, refresher.organizationID)
+	require.Equal(t, openrouter.KeyDesiredStateEnabled, refresher.desiredState)
 }
 
 func TestPaygKeyRefreshHandlerSchedulesReverseBillingTransitionsAsWakeups(t *testing.T) {
@@ -91,6 +95,7 @@ func TestPaygKeyRefreshHandlerSchedulesReverseBillingTransitionsAsWakeups(t *tes
 	require.EqualValues(t, 2, refresher.calls.Load())
 	require.Equal(t, "outbox_activated", refresher.eventID)
 	require.Equal(t, stripeWebhookOrganizationID, refresher.organizationID)
+	require.Equal(t, openrouter.KeyDesiredStateEnabled, refresher.desiredState)
 }
 
 func TestPaygKeyRefreshHandlerDropsUnrelatedBillingAction(t *testing.T) {

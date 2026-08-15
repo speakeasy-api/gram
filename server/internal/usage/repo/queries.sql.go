@@ -492,7 +492,6 @@ SET gram_account_type = 'free',
     updated_at = clock_timestamp()
 WHERE id = $1
   AND gram_account_type = 'payg'
-  AND whitelisted IS TRUE
 `
 
 func (q *Queries) DeactivatePaygOrganization(ctx context.Context, organizationID string) (int64, error) {
