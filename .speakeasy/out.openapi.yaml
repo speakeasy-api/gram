@@ -70516,9 +70516,9 @@ components:
           items:
             $ref: '#/components/schemas/RiskExposureSlice'
           description: Finding counts by category, largest first.
-        findings_24h:
+        findings:
           type: integer
-          description: Deduplicated findings in the 24 hours ending at to.
+          description: Deduplicated live findings in the window.
           format: int64
         from:
           type: string
@@ -70532,9 +70532,9 @@ components:
           type: number
           description: Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.
           format: double
-        previous_findings_24h:
+        previous_findings:
           type: integer
-          description: Deduplicated findings in the 24 hours before that.
+          description: Deduplicated live findings in the equal-length window immediately before from.
           format: int64
         previous_org_risk_score:
           type: number
@@ -70562,8 +70562,8 @@ components:
         - to
         - org_risk_score
         - previous_org_risk_score
-        - findings_24h
-        - previous_findings_24h
+        - findings
+        - previous_findings
         - open_signals
         - critical_signals
         - users_exposed
