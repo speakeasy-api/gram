@@ -376,13 +376,17 @@ func pollRejectedByProvider(err error) bool {
 // skip the remaining activity attempts. Unlike a provider rejection, an
 // outage ends on its own, so it never counts toward auto-pausing.
 func pollProviderUnavailable(err error) bool {
-	// A canceled or expired activity context is our side giving up, not the
-	// provider failing; those must keep the normal retry path.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
+	// A throttling or server status is affirmative outage evidence and is
+	// checked first: a multi-stage sync can carry a timed-out sibling stage
+	// next to the outage (newSyncError drops only Canceled stages), and the
+	// sibling must not mask it.
 	if pollUnavailableHTTPStatus(err) != 0 {
 		return true
+	}
+	// Otherwise a canceled or expired activity context is our side giving
+	// up, not the provider failing; those must keep the normal retry path.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
 	}
 	var exhausted *guardian.RetriesExhaustedError
 	if errors.As(err, &exhausted) {

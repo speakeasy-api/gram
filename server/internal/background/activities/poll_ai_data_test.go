@@ -101,6 +101,18 @@ func TestPollProviderUnavailableMatchesOutages(t *testing.T) {
 	require.False(t, pollProviderUnavailable(fmt.Errorf("sync codex cost data: %w", context.Canceled)))
 	require.False(t, pollProviderUnavailable(fmt.Errorf("sync codex cost data: %w", context.DeadlineExceeded)))
 
+	// ...but a timed-out sibling stage must not mask affirmative outage
+	// evidence in a composite failure (newSyncError keeps DeadlineExceeded
+	// stages).
+	require.True(t, pollProviderUnavailable(fmt.Errorf("sync codex cost data: %w", &aiintegrations.SyncError{
+		Op: "sync codex costs",
+		Stages: []aiintegrations.SyncStageError{
+			{Stage: "import_cost_logs", Err: fmt.Errorf("download log: %w", context.DeadlineExceeded)},
+			{Stage: "import_cost_logs", Err: fmt.Errorf("list logs: %w", &guardian.RetriesExhaustedError{Method: "GET", URL: "https://api.chatgpt.com", Attempts: 5, StatusCode: 500, Body: "", Err: nil})},
+		},
+		Progress: nil,
+	})))
+
 	// Direct throttling/server statuses count too — including cursor's
 	// typed rate limit, which never becomes an HTTPError; rejections and
 	// unknown errors do not.
