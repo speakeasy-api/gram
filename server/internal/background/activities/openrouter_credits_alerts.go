@@ -34,6 +34,11 @@ const (
 	// sending delays the alert by at most this long instead of suppressing it
 	// for the rest of the month).
 	openRouterCreditsAlertRetryTTL = time.Hour
+	// The pre-send recipient claim must expire before the org-level retry
+	// reservation. If a worker crashes after claiming but before sending, the
+	// next org retry must see the recipient as eligible instead of treating the
+	// unfinished claim as a completed delivery.
+	openRouterCreditsAlertRecipientRetryTTL = openRouterCreditsAlertRetryTTL / 2
 
 	// openRouterCreditsAlertGrace extends a delivered threshold's reservation
 	// past the calendar-month boundary. OpenRouter resets monthly usage at
@@ -178,6 +183,10 @@ func openRouterCreditsAlertKey(orgID string, keyType openrouter.KeyType, thresho
 // partial-audience retry crossing midnight on the first cannot mint new keys.
 func openRouterCreditsAlertCycle(now time.Time) string {
 	return now.Add(-openRouterCreditsAlertGrace).Format("2006-01")
+}
+
+func openRouterCreditsAlertRecipientKey(idempotencyKey string) string {
+	return "openrouter-credits-alert-recipient:" + idempotencyKey
 }
 
 // openRouterCreditsAlertCandidate is one (org, key type) pair that crossed a
@@ -338,8 +347,26 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 		c.threshold >= 100,
 	)
 	idempotencyKey := recipientEmailIdempotencyKey(recipient, "openrouter-credits-alert", c.orgID, string(c.keyType), strconv.Itoa(c.threshold), openRouterCreditsAlertCycle(now))
+	recipientKey := openRouterCreditsAlertRecipientKey(idempotencyKey)
+	won, err := a.cache.Add(ctx, recipientKey, openRouterCreditsAlertRecipientRetryTTL)
+	if err != nil {
+		return fmt.Errorf("reserve openrouter credits alert recipient: %w", err)
+	}
+	if !won {
+		return nil
+	}
+
 	if err := a.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
-		return fmt.Errorf("send openrouter credits alert: %w", err)
+		sendErr := fmt.Errorf("send openrouter credits alert: %w", err)
+		if deleteErr := a.cache.Delete(ctx, recipientKey); deleteErr != nil {
+			return errors.Join(sendErr, fmt.Errorf("release openrouter credits alert recipient: %w", deleteErr))
+		}
+		return sendErr
+	}
+
+	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+	if err := a.cache.Expire(ctx, recipientKey, cycleEnd.Sub(now)+openRouterCreditsAlertGrace); err != nil {
+		return fmt.Errorf("persist openrouter credits alert recipient delivery: %w", err)
 	}
 
 	if a.alertsSent != nil {

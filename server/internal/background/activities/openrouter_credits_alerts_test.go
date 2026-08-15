@@ -314,7 +314,7 @@ func TestMaybeSendOpenRouterCreditsAlerts_PAYGExplicitEmailOverridesAdmins(t *te
 	require.Equal(t, "billing@example.test", sent[0].Email)
 }
 
-func TestMaybeSendOpenRouterCreditsAlerts_PartialPAYGAudienceRetriesWithStableRecipientKeys(t *testing.T) {
+func TestMaybeSendOpenRouterCreditsAlerts_PartialPAYGAudienceRetriesOnlyFailedRecipients(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -337,10 +337,9 @@ func TestMaybeSendOpenRouterCreditsAlerts_PartialPAYGAudienceRetriesWithStableRe
 	deleteAlertReservation(t, ctx, cacheAdapter, orgID, openrouter.KeyTypeChat, 90)
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
 	retry := captured.Sent()
-	require.Len(t, retry, 3)
+	require.Len(t, retry, 2)
 	require.Equal(t, "alpha@example.test", retry[1].Email)
-	require.Equal(t, "beta@example.test", retry[2].Email)
-	require.Equal(t, firstAttempt[0].IdempotencyKey, retry[2].IdempotencyKey)
+	require.NotEqual(t, firstAttempt[0].IdempotencyKey, retry[1].IdempotencyKey)
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_ChatBYOKSuppressesOnlyChatAlerts(t *testing.T) {
