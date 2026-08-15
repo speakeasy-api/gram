@@ -28,8 +28,22 @@ function BillingEmailSectionInner(): JSX.Element {
   const { data, isError } = useGetBillingEmail();
 
   let body: JSX.Element;
+  // A refetch that fails leaves the last successful value in the cache, so the
+  // query reports data and an error together. The form stays mounted in the
+  // same child position — swapping it for the error message would throw away
+  // whatever the admin had typed — and the failure is reported beside it.
   if (data) {
-    body = <BillingEmailForm initial={data} />;
+    body = (
+      <Stack gap={4}>
+        <BillingEmailForm initial={data} />
+        {isError && (
+          <Text muted small role="alert">
+            Couldn't refresh the billing notification email, so the address
+            shown may be out of date. Saving still works.
+          </Text>
+        )}
+      </Stack>
+    );
   } else if (isError) {
     body = (
       <Text muted small>

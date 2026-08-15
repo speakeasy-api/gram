@@ -173,6 +173,13 @@ func openRouterCreditsAlertKey(orgID string, keyType openrouter.KeyType, thresho
 	return fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, keyType, threshold)
 }
 
+// openRouterCreditsAlertCycle keeps provider idempotency on the prior month
+// during the same 48-hour rollover grace used by the Redis reservation. A
+// partial-audience retry crossing midnight on the first cannot mint new keys.
+func openRouterCreditsAlertCycle(now time.Time) string {
+	return now.Add(-openRouterCreditsAlertGrace).Format("2006-01")
+}
+
 // openRouterCreditsAlertCandidate is one (org, key type) pair that crossed a
 // threshold this tick and holds a fresh dedup reservation.
 type openRouterCreditsAlertCandidate struct {
@@ -330,7 +337,7 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 		strconv.Itoa(c.threshold),
 		c.threshold >= 100,
 	)
-	idempotencyKey := recipientEmailIdempotencyKey(recipient, "openrouter-credits-alert", c.orgID, string(c.keyType), strconv.Itoa(c.threshold), now.Format("2006-01"))
+	idempotencyKey := recipientEmailIdempotencyKey(recipient, "openrouter-credits-alert", c.orgID, string(c.keyType), strconv.Itoa(c.threshold), openRouterCreditsAlertCycle(now))
 	if err := a.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
 		return fmt.Errorf("send openrouter credits alert: %w", err)
 	}

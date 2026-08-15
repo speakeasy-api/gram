@@ -149,7 +149,10 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 	}
 
 	configuredEmail := conv.PtrEmpty(target.AlertEmail)
-	recipients, resolutionErr := resolveBillingNotificationRecipients(ctx, a.db, target.OrganizationID, target.AccountType, configuredEmail)
+	// Targets persisted by workflows started before AccountType was added came
+	// only from the legacy enterprise-with-email query.
+	accountType := conv.Default(target.AccountType, string(billing.TierEnterprise))
+	recipients, resolutionErr := resolveBillingNotificationRecipients(ctx, a.db, target.OrganizationID, accountType, configuredEmail)
 	if len(recipients) == 0 {
 		if resolutionErr == nil {
 			logger.InfoContext(ctx, "skipping weekly usage summary without eligible recipient")

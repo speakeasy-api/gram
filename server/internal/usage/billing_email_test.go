@@ -129,6 +129,29 @@ func TestBillingEmail_SetNullClearsEmail(t *testing.T) {
 	require.False(t, row.AlertEmail.Valid)
 }
 
+func TestBillingEmail_SetBlankNormalizesToClear(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-billing-email-blank"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	_, err := repo.New(db).UpsertBillingMetadata(t.Context(), repo.UpsertBillingMetadataParams{
+		OrganizationID:        organizationID,
+		AlertEmail:            pgtype.Text{String: "billing@example.test", Valid: true},
+		BillingCycleAnchorDay: 1,
+	})
+	require.NoError(t, err)
+
+	blank := "   "
+	result, err := service.SetBillingEmail(billingEmailAdminContext(t, organizationID), &gen.SetBillingEmailPayload{Email: &blank})
+
+	require.NoError(t, err)
+	require.Nil(t, result.Email)
+	row, err := repo.New(db).GetBillingMetadata(t.Context(), organizationID)
+	require.NoError(t, err)
+	require.False(t, row.AlertEmail.Valid)
+}
+
 func TestBillingEmail_RejectsNonAdmin(t *testing.T) {
 	t.Parallel()
 

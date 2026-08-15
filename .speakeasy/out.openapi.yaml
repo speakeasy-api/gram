@@ -56544,6 +56544,7 @@ components:
           type: string
           description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
           format: email
+          nullable: true
     BlockShadowMCPInventoryServerRequestBody:
       type: object
       properties:
