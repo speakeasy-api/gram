@@ -351,3 +351,8 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.3 // indirect
 )
+
+// TEMPORARY (Phase 2 of copilot support): consume the unreleased
+// ProviderCopilot from the local agenthooks checkout. Removed in Phase 4 once
+// the upstream tag is cut and pinned.
+replace github.com/speakeasy-api/agenthooks => ../agenthooks
