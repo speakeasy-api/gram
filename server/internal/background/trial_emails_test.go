@@ -10,7 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 )
 
 func trialLifecycleEmailRetryBudget() time.Duration {
@@ -48,6 +50,7 @@ func TestTrialLifecycleEmailWorkflowDispatchesAdminAdded(t *testing.T) {
 		Kind:           AdminAddedEmailKind,
 		OrganizationID: "<ORGANIZATION_ID>",
 		UserID:         "<USER_ID>",
+		ReminderOnly:   false,
 	}
 	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, input)
 
@@ -75,6 +78,8 @@ func TestTrialLifecycleEmailWorkflowRetriesActivity(t *testing.T) {
 	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{
 		Kind:           AdminAddedEmailKind,
 		OrganizationID: "<ORGANIZATION_ID>",
+		UserID:         "",
+		ReminderOnly:   false,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -102,7 +107,7 @@ func TestTrialLifecycleEmailWorkflowKeepsReminderAfterLegacySyncFailure(t *testi
 		activity.RegisterOptions{Name: "ResolveTrialEndingReminder"},
 	)
 
-	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{Kind: TrialStartedEmailKind, OrganizationID: "<ORGANIZATION_ID>", UserID: ""})
+	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{Kind: TrialStartedEmailKind, OrganizationID: "<ORGANIZATION_ID>", UserID: "", ReminderOnly: false})
 
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, trialLifecycleEmailRetryMaximumAttempts, attempts.Load())
@@ -146,6 +151,8 @@ func TestTrialLifecycleEmailWorkflowWaitsUntilThreeDaysBeforeEnd(t *testing.T) {
 	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{
 		Kind:           TrialStartedEmailKind,
 		OrganizationID: "<ORGANIZATION_ID>",
+		UserID:         "",
+		ReminderOnly:   false,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -162,7 +169,6 @@ func TestTrialLifecycleEmailWorkflowRetimesExtendedTrial(t *testing.T) {
 	createdAt := now.Add(-24 * time.Hour)
 	firstEnd := now.Add(4 * 24 * time.Hour)
 	extendedEnd := now.Add(8 * 24 * time.Hour)
-	var resolves atomic.Int32
 	var sends atomic.Int32
 
 	env.RegisterActivityWithOptions(
@@ -171,32 +177,90 @@ func TestTrialLifecycleEmailWorkflowRetimesExtendedTrial(t *testing.T) {
 	)
 	env.RegisterActivityWithOptions(
 		func(context.Context, string) (billingnotifications.TrialReminderState, error) {
-			endsAt := firstEnd
-			if resolves.Add(1) > 1 {
-				endsAt = extendedEnd
-			}
 			return billingnotifications.TrialReminderState{
 				Active:         true,
 				TrialCreatedAt: createdAt,
-				TrialEndsAt:    endsAt,
-				SendAt:         endsAt.Add(-72 * time.Hour),
+				TrialEndsAt:    firstEnd,
+				SendAt:         firstEnd.Add(-72 * time.Hour),
 			}, nil
 		},
 		activity.RegisterOptions{Name: "ResolveTrialEndingReminder"},
 	)
 	env.RegisterActivityWithOptions(
 		func(context.Context, billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
-			if sends.Add(1) == 1 {
-				return billingnotifications.SendTrialEndingSoonResult{Reschedule: true}, nil
-			}
-			return billingnotifications.SendTrialEndingSoonResult{}, nil
+			sends.Add(1)
+			return billingnotifications.SendTrialEndingSoonResult{Reschedule: true}, nil
 		},
 		activity.RegisterOptions{Name: "SendTrialEndingSoonEmail"},
 	)
 
-	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{Kind: TrialStartedEmailKind, OrganizationID: "<ORGANIZATION_ID>", UserID: ""})
+	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{Kind: TrialStartedEmailKind, OrganizationID: "<ORGANIZATION_ID>", UserID: "", ReminderOnly: false})
 
+	var continueErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueErr)
+	var nextInput TrialLifecycleEmailInput
+	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueErr.Input, &nextInput))
+	require.True(t, nextInput.ReminderOnly)
+	require.Equal(t, int32(1), sends.Load())
+
+	env = suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(
+		func(context.Context, string) (billingnotifications.TrialReminderState, error) {
+			return billingnotifications.TrialReminderState{
+				Active:         true,
+				TrialCreatedAt: createdAt,
+				TrialEndsAt:    extendedEnd,
+				SendAt:         extendedEnd.Add(-72 * time.Hour),
+			}, nil
+		},
+		activity.RegisterOptions{Name: "ResolveTrialEndingReminder"},
+	)
+	env.RegisterActivityWithOptions(
+		func(context.Context, billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
+			sends.Add(1)
+			return billingnotifications.SendTrialEndingSoonResult{}, nil
+		},
+		activity.RegisterOptions{Name: "SendTrialEndingSoonEmail"},
+	)
+	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, nextInput)
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, int32(2), sends.Load())
-	require.True(t, extendedEnd.Add(-72*time.Hour).Equal(env.Now()))
+}
+
+func TestTrialLifecycleEmailWorkflowChunksLongReminderTimer(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	now := env.Now().UTC()
+	trialEndsAt := now.Add(90 * 24 * time.Hour)
+	var lifecycleCalls atomic.Int32
+	env.RegisterActivityWithOptions(
+		func(context.Context, TrialLifecycleEmailInput) error {
+			lifecycleCalls.Add(1)
+			return nil
+		},
+		activity.RegisterOptions{Name: "SendTrialLifecycleEmail"},
+	)
+	env.RegisterActivityWithOptions(
+		func(context.Context, string) (billingnotifications.TrialReminderState, error) {
+			return billingnotifications.TrialReminderState{
+				Active:         true,
+				TrialCreatedAt: now,
+				TrialEndsAt:    trialEndsAt,
+				SendAt:         trialEndsAt.Add(-72 * time.Hour),
+			}, nil
+		},
+		activity.RegisterOptions{Name: "ResolveTrialEndingReminder"},
+	)
+
+	env.ExecuteWorkflow(TrialLifecycleEmailWorkflow, TrialLifecycleEmailInput{Kind: TrialStartedEmailKind, OrganizationID: "<ORGANIZATION_ID>", UserID: "", ReminderOnly: false})
+
+	var continueErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueErr)
+	var nextInput TrialLifecycleEmailInput
+	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueErr.Input, &nextInput))
+	require.True(t, nextInput.ReminderOnly)
+	require.Equal(t, int32(1), lifecycleCalls.Load())
+	require.True(t, now.Add(trialReminderTimerChunk).Equal(env.Now()))
 }

@@ -31,11 +31,17 @@ func NewEventHandler(logger *slog.Logger, scheduler AccessPausedScheduler) *Even
 
 func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gcp.MessageMetadata) error {
 	if event == nil {
+		h.logger.ErrorContext(ctx, "dropping nil billing notification event")
 		return nil
 	}
 	eventID := event.GetEventId()
 	organizationID := event.GetOrganizationId()
 	if eventID == "" || organizationID == "" {
+		h.logger.ErrorContext(ctx, "dropping invalid billing notification event",
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogOutboxPublicID(eventID),
+			attr.SlogEvent(event.GetEventType()),
+		)
 		return nil
 	}
 
@@ -59,6 +65,12 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 		expectedAction = audit.ActionOrganizationEnterpriseTrialDemoted
 	}
 	if audit.Action(payload.Action) != expectedAction || payload.OrganizationID != organizationID || payload.SubjectID != organizationID || payload.SubjectType != "organization" {
+		if audit.Action(payload.Action) == expectedAction {
+			h.logger.ErrorContext(ctx, "dropping mismatched billing notification event",
+				attr.SlogOrganizationID(organizationID),
+				attr.SlogOutboxPublicID(eventID),
+			)
+		}
 		return nil
 	}
 	if h.scheduler == nil {

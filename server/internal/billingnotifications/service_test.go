@@ -2,6 +2,7 @@ package billingnotifications
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"sync"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -144,4 +146,51 @@ func TestSendAccessPausedSubscriptionLossDoesNotDependOnRolloutFlag(t *testing.T
 	}))
 	require.Len(t, sender.sends, 1)
 	require.Equal(t, "billing@example.test", sender.sends[0].recipient)
+}
+
+func TestSendTrialEndingSoonDeliversResolvedRecipientsBeforeReturningResolutionError(t *testing.T) {
+	t.Parallel()
+	service, sender, organizationID := newNotificationTestService(t, "enterprise", true)
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, trialsrepo.New(service.db).InsertTrialFixture(t.Context(), trialsrepo.InsertTrialFixtureParams{
+		OrganizationID: organizationID,
+		Tier:           "enterprise",
+		CreatedAt:      pgtype.Timestamptz{Time: now.Add(-24 * time.Hour), Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(7 * 24 * time.Hour), Valid: true},
+		ConvertedAt:    pgtype.Timestamptz{},
+		DemotedAt:      pgtype.Timestamptz{},
+	}))
+	resolutionErr := errors.New("one administrator could not be resolved")
+	service.resolveRecipients = func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error) {
+		return []string{"resolved@example.test"}, resolutionErr
+	}
+	state, err := service.ResolveTrialReminder(t.Context(), organizationID)
+	require.NoError(t, err)
+
+	_, err = service.SendTrialEndingSoon(t.Context(), SendTrialEndingSoonInput{
+		OrganizationID: organizationID,
+		TrialCreatedAt: state.TrialCreatedAt,
+		TrialEndsAt:    state.TrialEndsAt,
+	})
+	require.ErrorIs(t, err, resolutionErr)
+	require.Len(t, sender.sends, 1)
+	require.Equal(t, "resolved@example.test", sender.sends[0].recipient)
+}
+
+func TestSendAccessPausedDeliversResolvedRecipientsBeforeReturningResolutionError(t *testing.T) {
+	t.Parallel()
+	service, sender, organizationID := newNotificationTestService(t, "free", false)
+	resolutionErr := errors.New("one administrator could not be resolved")
+	service.resolveRecipients = func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error) {
+		return []string{"resolved@example.test"}, resolutionErr
+	}
+
+	err := service.SendAccessPaused(t.Context(), SendAccessPausedInput{
+		EventID:        "event-placeholder",
+		OrganizationID: organizationID,
+		Kind:           AccessPausedSubscriptionLoss,
+	})
+	require.ErrorIs(t, err, resolutionErr)
+	require.Len(t, sender.sends, 1)
+	require.Equal(t, "resolved@example.test", sender.sends[0].recipient)
 }
