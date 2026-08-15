@@ -216,10 +216,25 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 	if err != nil {
 		return fmt.Errorf("list final source snapshots for invoice %s: %w", invoice.StripeInvoiceID, err)
 	}
+	// A final row is either durable spend or an authoritative pre-key zero. Do
+	// not allocate past the first unresolved day: later cents depend on every
+	// earlier exact snapshot.
+	readyCount := 0
+	for _, baseline := range baselines {
+		if !baseline.FinalSpendUsd.Valid {
+			break
+		}
+		readyCount++
+	}
+	baselines = baselines[:readyCount]
+
 	frozenSnapshots := make([]pgtype.Numeric, 0, len(baselines))
 	finalSnapshots := make([]pgtype.Numeric, 0, len(baselines))
 	previousCumulativeDeltaCents := int64(0)
-	for _, baseline := range baselines {
+	idealCarryCents := make([]int64, len(baselines))
+	existingCarryCents := int64(0)
+	missingCarryCount := 0
+	for i, baseline := range baselines {
 		frozenSnapshots = append(frozenSnapshots, baseline.SourceSnapshotUsd)
 		finalSnapshots = append(finalSnapshots, baseline.FinalSpendUsd)
 		frozenCents, err := roundNumericsToCents(frozenSnapshots)
@@ -231,8 +246,33 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 			return fmt.Errorf("round final snapshot for %s: %w", baseline.SourceKey, err)
 		}
 		cumulativeDeltaCents := finalCents - frozenCents
-		deltaCents := cumulativeDeltaCents - previousCumulativeDeltaCents
+		idealCarryCents[i] = cumulativeDeltaCents - previousCumulativeDeltaCents
 		previousCumulativeDeltaCents = cumulativeDeltaCents
+		if baseline.ExistingCarryAmountUsd.Valid {
+			cents, err := roundNumericToCents(baseline.ExistingCarryAmountUsd)
+			if err != nil {
+				return fmt.Errorf("read existing carry for %s: %w", baseline.SourceKey, err)
+			}
+			existingCarryCents += cents
+		} else {
+			missingCarryCount++
+		}
+	}
+
+	// Existing carries are immutable. If an older run stored a later sibling
+	// before a missing middle day arrived, put the aggregate reconciliation on
+	// the last missing row so all seq=2 rows still sum to the rounded cycle delta.
+	remainingCarryCents := previousCumulativeDeltaCents - existingCarryCents
+	for i, baseline := range baselines {
+		if baseline.ExistingCarryAmountUsd.Valid {
+			continue
+		}
+		deltaCents := idealCarryCents[i]
+		missingCarryCount--
+		if missingCarryCount == 0 {
+			deltaCents = remainingCarryCents
+		}
+		remainingCarryCents -= deltaCents
 		destination := pgtype.Text{String: "", Valid: false}
 		if deltaCents < 0 {
 			destination = pgtype.Text{String: invoice.StripeInvoiceID, Valid: true}
