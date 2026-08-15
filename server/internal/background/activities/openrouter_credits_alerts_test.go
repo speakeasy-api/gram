@@ -73,6 +73,34 @@ type captureAlertExpireCache struct {
 	expires map[string]time.Duration
 }
 
+type rotateAlertGenerationAfterReservationCache struct {
+	cache.Cache
+	orgID      string
+	generation string
+	once       sync.Once
+}
+
+func (c *rotateAlertGenerationAfterReservationCache) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	won, err := c.Cache.Add(ctx, key, ttl)
+	if err != nil {
+		return false, fmt.Errorf("reserve alert before generation rotation: %w", err)
+	}
+	if won {
+		c.once.Do(func() {
+			err = c.Set(
+				ctx,
+				activities.OpenRouterCreditsAlertGenerationKeyForTest(c.orgID, openrouter.KeyTypeChat),
+				c.generation,
+				24*time.Hour,
+			)
+		})
+		if err != nil {
+			return false, fmt.Errorf("rotate alert generation after reservation: %w", err)
+		}
+	}
+	return won, nil
+}
+
 func (c *captureAlertExpireCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	c.mu.Lock()
 	c.expires[key] = ttl
@@ -195,7 +223,7 @@ func deleteAlertReservation(t *testing.T, ctx context.Context, cacheAdapter cach
 
 func setAlertGeneration(t *testing.T, ctx context.Context, cacheAdapter cache.Cache, orgID string, generation string) {
 	t.Helper()
-	key := fmt.Sprintf("openrouter-credits-alert-generation:%s:%s", orgID, openrouter.KeyTypeChat)
+	key := activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, openrouter.KeyTypeChat)
 	require.NoError(t, cacheAdapter.Set(ctx, key, generation, 24*time.Hour))
 }
 
@@ -259,6 +287,23 @@ func TestMaybeSendOpenRouterCreditsAlerts_ExtendsGenerationWithReservation(t *te
 	generationTTL, ok := capturedCache.ttl(spendCapGenerationKey(orgID))
 	require.True(t, ok)
 	require.Equal(t, reservationTTL, generationTTL)
+}
+
+func TestMaybeSendOpenRouterCreditsAlerts_SkipsGenerationChangedAfterReservation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	var rotatingCache *rotateAlertGenerationAfterReservationCache
+	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTestWithCache(t, "openrouter_credits_alert_generation_race", func(base cache.Cache) cache.Cache {
+		rotatingCache = &rotateAlertGenerationAfterReservationCache{Cache: base, generation: "operation_new_placeholder"}
+		return rotatingCache
+	})
+	orgID, _ := createAlertOrg(t, ctx, conn, "billing@example.com", "")
+	rotatingCache.orgID = orgID
+	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_old_placeholder")
+
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 60, 100)}))
+	require.Empty(t, captured.Sent(), "a poll reserved under the old generation must not send after cap rotation")
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_ExhaustedFlagsExhaustion(t *testing.T) {

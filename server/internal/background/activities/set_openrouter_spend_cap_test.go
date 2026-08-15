@@ -102,7 +102,7 @@ func newSpendCapActivityCache(t *testing.T) cache.Cache {
 }
 
 func spendCapGenerationKey(organizationID string) string {
-	return "openrouter-credits-alert-generation:" + organizationID + ":chat"
+	return activities.OpenRouterCreditsAlertGenerationKeyForTest(organizationID, openrouter.KeyTypeChat)
 }
 
 func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) {

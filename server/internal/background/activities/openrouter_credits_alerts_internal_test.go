@@ -5,7 +5,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
+
+func OpenRouterCreditsAlertGenerationKeyForTest(orgID string, keyType openrouter.KeyType) string {
+	return openRouterCreditsAlertGenerationKey(orgID, keyType)
+}
 
 func TestHighestCrossedOpenRouterCreditsThreshold_Ladder(t *testing.T) {
 	t.Parallel()

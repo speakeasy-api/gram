@@ -209,6 +209,24 @@ type openRouterCreditsAlertCandidate struct {
 	generation string
 }
 
+var errOpenRouterCreditsAlertGenerationChanged = errors.New("openrouter credits alert generation changed")
+
+func (a *MaybeSendOpenRouterCreditsAlerts) readGeneration(
+	ctx context.Context,
+	orgID string,
+	keyType openrouter.KeyType,
+) (string, error) {
+	var generation string
+	err := a.cache.Get(ctx, openRouterCreditsAlertGenerationKey(orgID, keyType), &generation)
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read OpenRouter credits alert generation: %w", err)
+	}
+	return generation, nil
+}
+
 func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []OpenRouterCreditsMetric) error {
 	// Collapse the tick's metrics down to the (org, key type) pairs that have
 	// crossed a threshold on an alertable key. Everything below the lowest
@@ -225,14 +243,8 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			continue
 		}
 
-		var generation string
-		err := a.cache.Get(ctx, openRouterCreditsAlertGenerationKey(m.OrganizationID, keyType), &generation)
-		switch {
-		case errors.Is(err, redisCache.ErrCacheMiss):
-			// Keep using the legacy namespace until an explicit cap change
-			// rotates this org onto a generation-scoped ladder.
-			generation = ""
-		case err != nil:
+		generation, err := a.readGeneration(ctx, m.OrganizationID, keyType)
+		if err != nil {
 			a.logger.ErrorContext(ctx, "read openrouter credits alert generation",
 				attr.SlogOrganizationID(m.OrganizationID), attr.SlogOpenRouterKeyType(string(keyType)), attr.SlogError(err))
 			a.recordFailure(ctx, m.OrganizationID, keyType)
@@ -333,35 +345,67 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			continue
 		}
 
-		deliveryErrors := []error{audience.err}
-		for _, recipient := range audience.recipients {
-			if err := a.sendOne(ctx, c, r.OrganizationName, recipient, now); err != nil {
-				deliveryErrors = append(deliveryErrors, err)
+		deliver := func() error {
+			// Cap writes and chat-alert delivery share one per-org lock. The final
+			// generation check therefore orders an in-flight poll either wholly
+			// before the cap change, or skips it after the new ladder is installed.
+			if c.keyType == openrouter.KeyTypeChat {
+				generation, err := a.readGeneration(ctx, c.orgID, c.keyType)
+				if err != nil {
+					return err
+				}
+				if generation != c.generation {
+					return errOpenRouterCreditsAlertGenerationChanged
+				}
 			}
+
+			deliveryErrors := []error{audience.err}
+			for _, recipient := range audience.recipients {
+				if err := a.sendOne(ctx, c, r.OrganizationName, recipient, now); err != nil {
+					deliveryErrors = append(deliveryErrors, err)
+				}
+			}
+			if err := errors.Join(deliveryErrors...); err != nil {
+				return err
+			}
+
+			// Finalize the org-level reservation only after the full audience has
+			// accepted the send. Provider idempotency keys make a partial retry safe.
+			_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+			ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
+			expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold, c.generation), ttl); err != nil {
+				logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
+			}
+			// A generation must outlive every reservation created beneath it. If it
+			// expired first, the next poll would fall back to the legacy namespace
+			// and could resend the same threshold during the current cycle.
+			if c.generation != "" {
+				if err := a.cache.Expire(expireCtx, openRouterCreditsAlertGenerationKey(c.orgID, c.keyType), ttl); err != nil {
+					logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert generation", attr.SlogError(err))
+				}
+			}
+			return nil
 		}
-		if err := errors.Join(deliveryErrors...); err != nil {
-			logger.ErrorContext(ctx, "failed to deliver openrouter credits alert audience", attr.SlogError(err))
+
+		var deliveryErr error
+		if c.keyType == openrouter.KeyTypeChat {
+			deliveryErr = withOpenRouterChatKeyBillingLock(ctx, a.logger, a.db, c.orgID, func(_ *repo.Queries) error {
+				return deliver()
+			})
+		} else {
+			deliveryErr = deliver()
+		}
+		if errors.Is(deliveryErr, errOpenRouterCreditsAlertGenerationChanged) {
+			logger.InfoContext(ctx, "skipping stale OpenRouter credits alert generation")
+			continue
+		}
+		if deliveryErr != nil {
+			logger.ErrorContext(ctx, "failed to deliver openrouter credits alert audience", attr.SlogError(deliveryErr))
 			a.recordFailure(ctx, c.orgID, c.keyType)
 			continue
 		}
-
-		// Finalize the org-level reservation only after the full audience has
-		// accepted the send. Provider idempotency keys make a partial retry safe.
-		_, cycleEnd := usage.CurrentBillingCycle(now, 1)
-		ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
-		expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold, c.generation), ttl); err != nil {
-			logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
-		}
-		// A generation must outlive every reservation created beneath it. If it
-		// expired first, the next poll would fall back to the legacy namespace
-		// and could resend the same threshold during the current cycle.
-		if c.generation != "" {
-			if err := a.cache.Expire(expireCtx, openRouterCreditsAlertGenerationKey(c.orgID, c.keyType), ttl); err != nil {
-				logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert generation", attr.SlogError(err))
-			}
-		}
-		cancel()
 	}
 
 	return nil
