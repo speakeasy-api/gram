@@ -237,8 +237,7 @@ SET gram_account_type = 'free',
     whitelisted = FALSE,
     updated_at = clock_timestamp()
 WHERE id = @organization_id
-  AND gram_account_type = 'payg'
-  AND whitelisted IS TRUE;
+  AND gram_account_type = 'payg';
 
 -- name: DisablePaygOpenRouterChatKey :exec
 UPDATE openrouter_api_keys

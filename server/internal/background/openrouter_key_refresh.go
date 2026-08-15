@@ -42,12 +42,15 @@ func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Contex
 // as the workflow identity, so Pub/Sub redelivery cannot start the same
 // reconciliation twice. The workflow reads current billing state instead of
 // trusting the event's historical transition.
-func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterChatKeyReconciliation(ctx context.Context, eventID, orgID string) error {
+func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterChatKeyReconciliation(ctx context.Context, eventID, orgID string, desiredState openrouter.KeyDesiredState) error {
 	if eventID == "" {
 		return errors.New("PAYG billing event ID is required")
 	}
 	if orgID == "" {
 		return errors.New("organization ID is required")
+	}
+	if err := desiredState.Validate(); err != nil {
+		return fmt.Errorf("schedule PAYG OpenRouter chat key reconciliation: %w", err)
 	}
 
 	_, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
@@ -57,6 +60,7 @@ func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterChatKeyReconciliation(ctx
 		WorkflowRunTimeout:    3 * time.Minute,
 	}, PaygOpenRouterChatKeyReconcileWorkflow, ReconcilePaygOpenRouterChatKeyParams{
 		OrganizationID: orgID,
+		DesiredState:   desiredState,
 	})
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	switch {
@@ -71,6 +75,7 @@ func (w *OpenRouterKeyRefresher) SchedulePaygOpenRouterChatKeyReconciliation(ctx
 
 type ReconcilePaygOpenRouterChatKeyParams struct {
 	OrganizationID string
+	DesiredState   openrouter.KeyDesiredState
 }
 
 func PaygOpenRouterChatKeyReconcileWorkflow(ctx workflow.Context, params ReconcilePaygOpenRouterChatKeyParams) error {
@@ -85,7 +90,7 @@ func PaygOpenRouterChatKeyReconcileWorkflow(ctx workflow.Context, params Reconci
 	if err := workflow.ExecuteActivity(
 		ctx,
 		a.ReconcilePaygOpenRouterChatKey,
-		activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: params.OrganizationID},
+		activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: params.OrganizationID, DesiredState: params.DesiredState},
 	).Get(ctx, nil); err != nil {
 		return fmt.Errorf("reconcile PAYG OpenRouter chat key: %w", err)
 	}

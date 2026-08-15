@@ -5,17 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
-
-const paygOpenRouterChatCreditLimit = 100
 
 type ReconcilePaygOpenRouterChatKey struct {
 	logger     *slog.Logger
@@ -25,7 +22,7 @@ type ReconcilePaygOpenRouterChatKey struct {
 
 func NewReconcilePaygOpenRouterChatKey(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner) *ReconcilePaygOpenRouterChatKey {
 	return &ReconcilePaygOpenRouterChatKey{
-		logger:     logger.With(attr.SlogComponent("payg-openrouter-chat-key-reconciler")),
+		logger:     logger,
 		db:         db,
 		openRouter: openRouter,
 	}
@@ -33,32 +30,23 @@ func NewReconcilePaygOpenRouterChatKey(logger *slog.Logger, db *pgxpool.Pool, op
 
 type ReconcilePaygOpenRouterChatKeyArgs struct {
 	OrganizationID string
+	DesiredState   openrouter.KeyDesiredState
 }
 
 func (r *ReconcilePaygOpenRouterChatKey) Do(ctx context.Context, args ReconcilePaygOpenRouterChatKeyArgs) error {
 	if args.OrganizationID == "" {
 		return errors.New("organization ID is required")
 	}
-
-	conn, err := r.db.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire connection for PAYG chat key reconciliation: %w", err)
+	if err := args.DesiredState.Validate(); err != nil {
+		return fmt.Errorf("invalid PAYG OpenRouter chat key desired state %q", args.DesiredState)
 	}
 
-	queries := repo.New(conn)
-	if err := queries.AcquirePaygOpenRouterChatKeyLock(ctx, args.OrganizationID); err != nil {
-		// The statement may have acquired the session lock before context
-		// cancellation surfaced. Do not return an uncertain session to the pool.
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		closeErr := conn.Hijack().Close(cleanupCtx)
-		cancel()
-		if closeErr != nil {
-			r.logger.ErrorContext(ctx, "close connection after PAYG chat key billing lock failure", attr.SlogError(closeErr))
-		}
-		return fmt.Errorf("acquire PAYG chat key billing lock: %w", err)
-	}
-	defer r.releaseLockAndConnection(ctx, conn, queries, args.OrganizationID)
+	return withOpenRouterChatKeyBillingLock(ctx, r.logger, r.db, args.OrganizationID, func(queries *repo.Queries) error {
+		return r.reconcileLocked(ctx, queries, args)
+	})
+}
 
+func (r *ReconcilePaygOpenRouterChatKey) reconcileLocked(ctx context.Context, queries *repo.Queries, args ReconcilePaygOpenRouterChatKeyArgs) error {
 	projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -71,18 +59,31 @@ func (r *ReconcilePaygOpenRouterChatKey) Do(ctx context.Context, args ReconcileP
 
 	hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
 	switch {
-	case projection.GramAccountType == "payg" && hasSubscription:
-		limit := paygOpenRouterChatCreditLimit
+	case projection.GramAccountType == string(billing.TierPayg) && hasSubscription:
+		if args.DesiredState != openrouter.KeyDesiredStateEnabled {
+			return nil
+		}
+		limit, ok := openrouter.AccountTypeCreditLimit(billing.TierPayg)
+		if !ok {
+			return errors.New("PAYG OpenRouter credit policy is unavailable")
+		}
 		if _, err := r.openRouter.RefreshAPIKeyLimit(ctx, args.OrganizationID, openrouter.KeyTypeChat, &limit); errors.Is(err, pgx.ErrNoRows) {
 			// Keys are provisioned lazily. Billing activation must not create one.
 			return nil
 		} else if err != nil {
 			return fmt.Errorf("enable PAYG OpenRouter chat key: %w", err)
 		}
-	case projection.GramAccountType != "payg" && !hasSubscription:
+	case projection.GramAccountType == string(billing.TierBase) && !hasSubscription:
+		if args.DesiredState != openrouter.KeyDesiredStateDisabled {
+			return nil
+		}
 		if err := r.openRouter.DisableAPIKey(ctx, args.OrganizationID, openrouter.KeyTypeChat); err != nil {
 			return fmt.Errorf("disable PAYG OpenRouter chat key: %w", err)
 		}
+	case projection.GramAccountType != string(billing.TierPayg) && projection.GramAccountType != string(billing.TierBase):
+		// Enterprise and Polar-managed tiers are outside self-serve Stripe
+		// billing. Old PAYG events must not mutate their keys.
+		return nil
 	default:
 		// The billing transition writes both halves in one transaction. A mixed
 		// projection means another writer did not honor that invariant; retrying
@@ -91,28 +92,4 @@ func (r *ReconcilePaygOpenRouterChatKey) Do(ctx context.Context, args ReconcileP
 	}
 
 	return nil
-}
-
-func (r *ReconcilePaygOpenRouterChatKey) releaseLockAndConnection(ctx context.Context, conn *pgxpool.Conn, queries *repo.Queries, organizationID string) {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
-
-	unlocked, err := queries.ReleasePaygOpenRouterChatKeyLock(cleanupCtx, organizationID)
-	if err == nil && unlocked {
-		conn.Release()
-		return
-	}
-
-	if err == nil {
-		err = errors.New("lock was not held by this session")
-	}
-	r.logger.ErrorContext(ctx, "release PAYG chat key billing lock", attr.SlogError(err))
-
-	// A pooled connection must never be returned while it might still own a
-	// session advisory lock. Closing the hijacked connection lets Postgres
-	// release all of its session locks.
-	hijacked := conn.Hijack()
-	if closeErr := hijacked.Close(cleanupCtx); closeErr != nil {
-		r.logger.ErrorContext(ctx, "close connection with unreleased PAYG chat key billing lock", attr.SlogError(closeErr))
-	}
 }
