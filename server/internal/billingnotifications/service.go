@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -26,20 +27,22 @@ type Sender interface {
 }
 
 type Service struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	sender   Sender
-	features feature.Provider
-	siteURL  *url.URL
+	logger            *slog.Logger
+	db                *pgxpool.Pool
+	sender            Sender
+	features          feature.Provider
+	siteURL           *url.URL
+	resolveRecipients func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error)
 }
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, siteURL *url.URL) *Service {
 	return &Service{
-		logger:   logger.With(attr.SlogComponent("billing-notifications")),
-		db:       db,
-		sender:   sender,
-		features: features,
-		siteURL:  siteURL,
+		logger:            logger.With(attr.SlogComponent("billing-notifications")),
+		db:                db,
+		sender:            sender,
+		features:          features,
+		siteURL:           siteURL,
+		resolveRecipients: ResolveRecipients,
 	}
 }
 
@@ -102,17 +105,17 @@ func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEnding
 	if err != nil {
 		return SendTrialEndingSoonResult{}, err
 	}
-	recipients, err := ResolveRecipients(ctx, s.db, input.OrganizationID, "payg", configuredEmail)
-	if err != nil {
-		return SendTrialEndingSoonResult{}, err
-	}
+	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, "payg", configuredEmail)
 
 	template := email.TrialEndingSoon{
 		OrganizationName: organization.Name,
 		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
 		ActionURL:        s.siteURL.JoinPath(organization.Slug, "billing").String(),
 	}
-	var sendErrors []error
+	sendErrors := make([]error, 0, len(recipients)+1)
+	if resolutionErr != nil {
+		sendErrors = append(sendErrors, resolutionErr)
+	}
 	for _, recipient := range recipients {
 		key := RecipientIdempotencyKey(recipient, "trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
 		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {
@@ -188,15 +191,15 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 	if err != nil {
 		return err
 	}
-	recipients, err := ResolveRecipients(ctx, s.db, input.OrganizationID, "payg", configuredEmail)
-	if err != nil {
-		return err
-	}
+	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, "payg", configuredEmail)
 	template := email.AccessPaused{
 		OrganizationName: organization.Name,
 		ActionURL:        s.siteURL.JoinPath(organization.Slug).String(),
 	}
-	var sendErrors []error
+	sendErrors := make([]error, 0, len(recipients)+1)
+	if resolutionErr != nil {
+		sendErrors = append(sendErrors, resolutionErr)
+	}
 	for _, recipient := range recipients {
 		key := RecipientIdempotencyKey(recipient, "access-paused", input.EventID)
 		if err := s.sender.SendIdempotent(ctx, recipient, key, template); err != nil {

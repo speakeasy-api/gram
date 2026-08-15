@@ -17,7 +17,6 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -29,6 +28,23 @@ type trialProvisioner struct {
 
 	disabled []string
 	failWith error
+}
+
+type recordingTrialNotifier struct {
+	inactive []string
+}
+
+func (n *recordingTrialNotifier) TrialStarted(context.Context, string) error {
+	return nil
+}
+
+func (n *recordingTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (n *recordingTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	n.inactive = append(n.inactive, organizationID)
+	return nil
 }
 
 var _ openrouter.Provisioner = (*trialProvisioner)(nil)
@@ -47,6 +63,7 @@ type trialTestInstance struct {
 	trials      *trialsrepo.Queries
 	orgs        *orgrepo.Queries
 	provisioner *trialProvisioner
+	notifier    *recordingTrialNotifier
 	activity    *activities.DemoteExpiredTrials
 }
 
@@ -59,18 +76,20 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 	require.NoError(t, err)
 
 	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), disabled: nil, failWith: nil}
+	notifier := &recordingTrialNotifier{inactive: nil}
 
 	return ctx, &trialTestInstance{
 		conn:        conn,
 		trials:      trialsrepo.New(conn),
 		orgs:        orgrepo.New(conn),
 		provisioner: provisioner,
+		notifier:    notifier,
 		activity: activities.NewDemoteExpiredTrials(
 			testenv.NewLogger(t),
 			conn,
 			provisioner,
 			audit.NewLogger(),
-			trialemails.NoopNotifier{},
+			notifier,
 		),
 	}
 }
@@ -132,6 +151,7 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	require.True(t, trial.DemotedAt.Valid)
 
 	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
+	require.Equal(t, []string{orgID}, ti.notifier.inactive)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
@@ -198,6 +218,7 @@ func TestDemoteExpiredTrials_DemoteSkipsTrialConvertedAfterListing(t *testing.T)
 	require.False(t, trial.DemotedAt.Valid)
 
 	require.Empty(t, ti.provisioner.disabled, "a trial that converted keeps its keys")
+	require.Empty(t, ti.notifier.inactive, "a no-op demotion must not publish trial inactivity")
 }
 
 // Temporal retries a failed activity, so a second demotion of the same trial
@@ -226,6 +247,7 @@ func TestDemoteExpiredTrials_DemoteIsIdempotent(t *testing.T) {
 	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, after, again)
+	require.Equal(t, []string{orgID}, ti.notifier.inactive, "a retried demotion notifies exactly once")
 }
 
 // The lockdown runs inside the demotion transaction on purpose: a stamped
@@ -252,4 +274,5 @@ func TestDemoteExpiredTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
 	due, err := ti.activity.List(ctx)
 	require.NoError(t, err)
 	require.Equal(t, []string{orgID}, due)
+	require.Empty(t, ti.notifier.inactive, "a rolled-back demotion must not publish trial inactivity")
 }
