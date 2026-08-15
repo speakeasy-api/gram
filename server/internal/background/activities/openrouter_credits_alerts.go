@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -104,9 +105,9 @@ var openRouterCreditsAlertConfigs = map[openrouter.KeyType]openRouterCreditsAler
 // 402s the customer's chat surfaces, while the 'internal' key's exhaustion
 // pauses platform-side analysis (risk judges, titles, resolutions, memory) —
 // and thresholds dedup independently per (org, key type). Disabled orgs and
-// orgs without a configured billing alert email are filtered out at the SQL
-// layer; chat-BYOK suppression is applied per key type via
-// openRouterCreditsAlertConfigs.
+// enterprise orgs without a configured billing alert email are filtered out
+// at the SQL layer; PAYG orgs fall back to their effective administrators.
+// Chat-BYOK suppression is applied per key type via openRouterCreditsAlertConfigs.
 type MaybeSendOpenRouterCreditsAlerts struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
@@ -223,10 +224,9 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 		return nil
 	}
 
-	// Resolve recipients in one round-trip. The query excludes disabled orgs
-	// and orgs without a billing alert email; ineligible orgs keep their
-	// reservations, so they are re-checked once per reservation TTL rather
-	// than every tick.
+	// Resolve billing routing metadata in one round-trip. Ineligible orgs keep
+	// their reservations, so they are re-checked once per reservation TTL
+	// rather than every tick.
 	orgIDSet := make(map[string]struct{}, len(pending))
 	orgIDs := make([]string, 0, len(pending))
 	for _, c := range pending {
@@ -249,6 +249,11 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 	for _, r := range recipients {
 		eligible[r.OrganizationID] = r
 	}
+	type resolvedAudience struct {
+		recipients []string
+		err        error
+	}
+	audiences := make(map[string]resolvedAudience, len(eligible))
 	for _, c := range pending {
 		logger := a.logger.With(
 			attr.SlogOrganizationID(c.orgID),
@@ -265,25 +270,59 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			logger.InfoContext(ctx, "skipping openrouter credits alert for chat-BYOK org")
 			continue
 		}
-		a.sendOne(ctx, c, r.OrganizationName, r.AlertEmail.String, now)
+
+		audience, resolved := audiences[c.orgID]
+		if !resolved {
+			configuredEmail := conv.FromPGText[string](r.AlertEmail)
+			audience.recipients, audience.err = resolveBillingNotificationRecipients(ctx, a.db, c.orgID, r.GramAccountType, configuredEmail)
+			audiences[c.orgID] = audience
+		}
+		if len(audience.recipients) == 0 {
+			if audience.err != nil {
+				logger.ErrorContext(ctx, "failed to resolve openrouter credits alert recipients", attr.SlogError(audience.err))
+				a.recordFailure(ctx, c.orgID, c.keyType)
+			} else {
+				logger.InfoContext(ctx, "skipping openrouter credits alert without eligible recipient")
+			}
+			continue
+		}
+
+		deliveryErrors := []error{audience.err}
+		for _, recipient := range audience.recipients {
+			if err := a.sendOne(ctx, c, r.OrganizationName, recipient, now); err != nil {
+				deliveryErrors = append(deliveryErrors, err)
+			}
+		}
+		if err := errors.Join(deliveryErrors...); err != nil {
+			logger.ErrorContext(ctx, "failed to deliver openrouter credits alert audience", attr.SlogError(err))
+			a.recordFailure(ctx, c.orgID, c.keyType)
+			continue
+		}
+
+		// Finalize the org-level reservation only after the full audience has
+		// accepted the send. Provider idempotency keys make a partial retry safe.
+		_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+		ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
+		expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), ttl); err != nil {
+			logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
+		}
+		cancel()
 	}
 
 	return nil
 }
 
-// sendOne dispatches a single threshold alert whose dedup reservation the
-// caller already holds. On success the reservation is extended to outlive the
-// billing month (plus rollover grace) so the threshold alerts once per month;
-// on failure the short reservation is left in place, deferring the retry to
-// the next tick after it expires instead of hammering the email provider every
-// 5 minutes.
+// sendOne dispatches one recipient's threshold alert. The caller holds the
+// org-level reservation and only finalizes it after every recipient succeeds.
+// Its recipient-specific provider key makes partial audience retries safe.
 func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 	ctx context.Context,
 	c openRouterCreditsAlertCandidate,
 	orgName string,
 	recipient string,
 	now time.Time,
-) {
+) error {
 	logger := a.logger.With(attr.SlogOrganizationID(c.orgID), attr.SlogOpenRouterKeyType(string(c.keyType)))
 
 	tmpl := openRouterCreditsAlertConfigs[c.keyType].template(
@@ -291,25 +330,9 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 		strconv.Itoa(c.threshold),
 		c.threshold >= 100,
 	)
-	if err := a.emails.Send(ctx, recipient, tmpl); err != nil {
-		logger.ErrorContext(ctx, "failed to send openrouter credits alert", attr.SlogError(err))
-		a.recordFailure(ctx, c.orgID, c.keyType)
-		return
-	}
-
-	// OpenRouter credits reset at calendar-month boundaries, so the delivered
-	// marker must survive until shortly after this month ends and then get out
-	// of the way of next month's ladder. The email is already out the door, so
-	// the extension must survive activity cancellation — losing it would lapse
-	// the short reservation and re-send the same threshold within the month.
-	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
-	ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
-	expireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	if err := a.cache.Expire(expireCtx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), ttl); err != nil {
-		// Worst case the short reservation lapses and the same threshold
-		// re-sends within the month — log so repeats are explicable.
-		logger.ErrorContext(expireCtx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
+	idempotencyKey := recipientEmailIdempotencyKey(recipient, "openrouter-credits-alert", c.orgID, string(c.keyType), strconv.Itoa(c.threshold), now.Format("2006-01"))
+	if err := a.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {
+		return fmt.Errorf("send openrouter credits alert: %w", err)
 	}
 
 	if a.alertsSent != nil {
@@ -319,6 +342,7 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 		))
 	}
 	logger.InfoContext(ctx, "sent openrouter credits alert", attr.SlogValueInt(c.threshold))
+	return nil
 }
 
 // recordFailure bumps the failure counter that stands in for workflow-level

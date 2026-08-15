@@ -1304,6 +1304,37 @@ func (q *Queries) ListTUMMeterReportsForDelivery(ctx context.Context, arg ListTU
 	return items, nil
 }
 
+const lockBillingMetadata = `-- name: LockBillingMetadata :one
+SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+FROM billing_metadata
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockBillingMetadata(ctx context.Context, organizationID string) (BillingMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockBillingMetadata, organizationID)
+	var i BillingMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
+		&i.TumMonthlyTokenLimit,
+		&i.AlertEmail,
+		&i.BillingCycleAnchorDay,
+		&i.TunneledMcpServerLimit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const markReconciledTUMMeterReportsMissing = `-- name: MarkReconciledTUMMeterReportsMissing :execrows
 UPDATE stripe_meter_reports
 SET delivery_state = 'reconciled_missing',
@@ -1680,6 +1711,44 @@ func (q *Queries) UpsertBillingCycleUsage(ctx context.Context, arg UpsertBilling
 		arg.FinalizedAt,
 	)
 	return err
+}
+
+const upsertBillingEmail = `-- name: UpsertBillingEmail :one
+INSERT INTO billing_metadata (organization_id, alert_email)
+VALUES ($1, $2)
+ON CONFLICT (organization_id) DO UPDATE SET
+    alert_email = EXCLUDED.alert_email
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+`
+
+type UpsertBillingEmailParams struct {
+	OrganizationID string
+	AlertEmail     pgtype.Text
+}
+
+func (q *Queries) UpsertBillingEmail(ctx context.Context, arg UpsertBillingEmailParams) (BillingMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertBillingEmail, arg.OrganizationID, arg.AlertEmail)
+	var i BillingMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.StripeBillingCycleAnchor,
+		&i.StripeCheckoutIdempotencyKey,
+		&i.StripeCheckoutBillingCycleAnchor,
+		&i.StripeCheckoutTrialEnd,
+		&i.StripeCheckoutExpiresAt,
+		&i.StripeCheckoutSessionID,
+		&i.TumMonthlyTokenLimit,
+		&i.AlertEmail,
+		&i.BillingCycleAnchorDay,
+		&i.TunneledMcpServerLimit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertBillingMetadata = `-- name: UpsertBillingMetadata :one
