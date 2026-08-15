@@ -40,11 +40,22 @@ import {
   useExtendTrial,
 } from "./rowActions";
 
-// The trial length the rest of the system assumes, so the operator extending a
-// trial by the usual amount types nothing.
-const DEFAULT_EXTENSION_DAYS = 14;
+// The trial length the rest of the system assumes, so the operator doing the
+// usual thing types nothing. It is the starting value of both day counts.
+const DEFAULT_TRIAL_DAYS = 14;
 
-const BOUNDS_HINT = `Enter a whole number of days between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}.`;
+// Each action carries the bounds of its own endpoint. They hold the same pair
+// today and they are separate on the server so they can stop doing that.
+type DayBounds = { min: number; max: number };
+
+const EXTEND_BOUNDS: DayBounds = {
+  min: MIN_TRIAL_EXTENSION_DAYS,
+  max: MAX_TRIAL_EXTENSION_DAYS,
+};
+
+function boundsHint({ min, max }: DayBounds): string {
+  return `Enter a whole number of days between ${min} and ${max}.`;
+}
 
 /**
  * How these controls report a write.
@@ -114,6 +125,10 @@ export function OrganizationActions({
   const isDisabled = Boolean(org.disabled_at);
   const busy = disable.isPending || enable.isPending || extend.isPending;
 
+  // The failures the trial dialog reports, written once so the bounds refusal
+  // and the server's own refusal are led by the same words.
+  const extendFailureLead = `Could not extend the trial for ${org.name}`;
+
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
   // Where the keyboard goes when a dialog closes. Radix restores focus to a
@@ -121,7 +136,7 @@ export function OrganizationActions({
   // cancels FocusScope's own restore and then focuses `triggerRef.current`,
   // which is null here, so without this every close drops the keyboard onto
   // `document.body`. The control that opened the dialog is still mounted on
-  // all six exit paths, the peek footer button being the same node after the
+  // all five exit paths, the peek footer button being the same node after the
   // write it started, so one handler covers success, Escape, Cancel, the
   // backdrop and the X.
   const openedFrom = useRef<HTMLElement | null>(null);
@@ -185,9 +200,7 @@ export function OrganizationActions({
           announce(`${org.name} trial extended by ${dayCount(days)}.`);
         },
         onError: (error) =>
-          announce(
-            `Could not extend the trial for ${org.name}: ${errorMessage(error)}`,
-          ),
+          announce(`${extendFailureLead}: ${errorMessage(error)}`),
       },
     );
   };
@@ -205,8 +218,13 @@ export function OrganizationActions({
         />
       )}
       {open === "extend" && (
-        <ExtendTrial
-          org={org}
+        <TrialDaysDialog
+          bounds={EXTEND_BOUNDS}
+          title={`Extend the trial for ${org.name}?`}
+          description="The days are added to the date the trial ends on now, not to today."
+          submitLabel="Extend"
+          pendingLabel="Extending..."
+          failureLead={extendFailureLead}
           pending={extend.isPending}
           failure={extend.error}
           onCancel={() => setOpen(undefined)}
@@ -331,8 +349,10 @@ function dayCount(days: number): string {
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
-// A modal takes the rest of the page out of the accessibility tree, the live
-// region included, so a failure the operator is looking at needs its own.
+// The dialog's own account of a failure, beside the field it is about. The
+// page's region does survive an open modal, because `hideOthers` exempts a node
+// that carries `aria-live` by name, but it is sr-only and polite: on its own it
+// leaves a sighted operator reading a dialog that reports nothing.
 function Failure({
   id,
   children,
@@ -404,15 +424,33 @@ function ConfirmDisable({
   );
 }
 
-function ExtendTrial({
-  org,
+// One day-count dialog, holding nothing of the write it asks for: a second
+// trial write asks the operator the same question, refuses values the same way
+// and reports a failure the same way, so only bounds and words are props here.
+// Two copies would be two places to keep the refusal path honest.
+//
+// Exported for a test that renders it on a bounds pair no endpoint uses,
+// because a dialog that reads the `bounds` prop and one that hardcodes the
+// extension bounds behave alike on every pair the app passes it.
+export function TrialDaysDialog({
+  bounds,
+  title,
+  description,
+  submitLabel,
+  pendingLabel,
+  failureLead,
   pending,
   failure,
   onCancel,
   onCloseAutoFocus,
   onSubmit,
 }: {
-  org: AdminOrganization;
+  bounds: DayBounds;
+  title: string;
+  description: string;
+  submitLabel: string;
+  pendingLabel: string;
+  failureLead: string;
   pending: boolean;
   failure: Error | null;
   onCancel: () => void;
@@ -420,21 +458,22 @@ function ExtendTrial({
   onSubmit: (days: number) => void;
 }): JSX.Element {
   const { announce } = useContext(WriteReportContext);
-  const [days, setDays] = useState(String(DEFAULT_EXTENSION_DAYS));
+  const [days, setDays] = useState(String(DEFAULT_TRIAL_DAYS));
   const [rejected, setRejected] = useState(false);
   const fieldID = useId();
   const messageID = useId();
+  const hint = boundsHint(bounds);
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     const parsed = Number(days);
-    // The server's own bounds, refused here so a request that cannot succeed
+    // The endpoint's own bounds, refused here so a request that cannot succeed
     // never leaves the browser. A whole number, because the interval the
-    // server adds is a count of days.
+    // server works in is a count of days.
     if (
       !Number.isInteger(parsed) ||
-      parsed < MIN_TRIAL_EXTENSION_DAYS ||
-      parsed > MAX_TRIAL_EXTENSION_DAYS
+      parsed < bounds.min ||
+      parsed > bounds.max
     ) {
       setRejected(true);
       // Spoken as well as shown, because showing it a second time shows
@@ -442,7 +481,7 @@ function ExtendTrial({
       // repeated leaves the DOM untouched and a `role="alert"` announces only
       // what is inserted or changed. The live region alternates a zero-width
       // space, so it speaks every time.
-      announce(`Could not extend the trial for ${org.name}: ${BOUNDS_HINT}`);
+      announce(`${failureLead}: ${hint}`);
       return;
     }
     setRejected(false);
@@ -463,12 +502,11 @@ function ExtendTrial({
             and is not part of the accessibility tree. */}
         <form noValidate onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>Extend the trial for {org.name}?</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             {/* Radix points the dialog's description at this, so the bounds
                 are announced with the title rather than only after a refusal. */}
             <DialogDescription>
-              The days are added to the date the trial ends on now, not to
-              today. {BOUNDS_HINT}
+              {description} {hint}
             </DialogDescription>
           </DialogHeader>
 
@@ -479,8 +517,8 @@ function ExtendTrial({
             <Input
               id={fieldID}
               type="number"
-              min={MIN_TRIAL_EXTENSION_DAYS}
-              max={MAX_TRIAL_EXTENSION_DAYS}
+              min={bounds.min}
+              max={bounds.max}
               step={1}
               value={days}
               disabled={pending}
@@ -499,7 +537,7 @@ function ExtendTrial({
               is about the value now in the field, so a stale server failure
               underneath it would give the operator two reasons and no way to
               tell which one the next press answers. */}
-          {rejected && <Failure id={messageID}>{BOUNDS_HINT}</Failure>}
+          {rejected && <Failure id={messageID}>{hint}</Failure>}
           {!rejected && failure && (
             <Failure id={messageID}>{errorMessage(failure)}</Failure>
           )}
@@ -515,7 +553,7 @@ function ExtendTrial({
               Cancel
             </Button>
             <Button type="submit" size="sm" disabled={pending}>
-              {pending ? "Extending..." : "Extend"}
+              {pending ? pendingLabel : submitLabel}
             </Button>
           </DialogFooter>
         </form>

@@ -19,6 +19,7 @@ import { renderWithApp } from "@/test/harness";
 
 import {
   OrganizationActions,
+  TrialDaysDialog,
   WriteReportProvider,
 } from "./OrganizationActions";
 
@@ -291,6 +292,18 @@ describe("the row menu", () => {
 });
 
 describe("the extend trial dialog", () => {
+  // One dialog component now draws every day-count question, so the extend
+  // words have to be asserted somewhere or a second caller's words can be
+  // passed in their place without a test noticing.
+  it("names the record and says where the days go", async () => {
+    await renderMenu();
+    await openExtendDialog();
+
+    const text = dialog().textContent ?? "";
+    expect(text).toContain(`Extend the trial for ${ORG.name}?`);
+    expect(text).toContain("added to the date the trial ends on now");
+  });
+
   it("starts on the trial length the rest of the system assumes", async () => {
     await renderMenu();
     await openExtendDialog();
@@ -509,6 +522,77 @@ describe("the extend trial dialog", () => {
     expect(announce).toHaveBeenCalledWith(
       `${ORG.name} trial extended by 1 day.`,
     );
+  });
+});
+
+// The only bounds the app passes today are the extension pair, so nothing
+// drawn from it can tell a dialog that reads its `bounds` prop from one that
+// hardcodes that pair. A fabricated pair is the only way to hold the
+// parameterisation, and it is the reason the component is exported.
+describe("the day-count dialog on bounds of its own", () => {
+  const BOUNDS = { min: 7, max: 30 };
+
+  async function renderOnFabricatedBounds(): Promise<
+    ReturnType<typeof vi.fn<(days: number) => void>>
+  > {
+    const onSubmit = vi.fn<(days: number) => void>();
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <TrialDaysDialog
+          bounds={BOUNDS}
+          title="Fabricated?"
+          description="Fabricated."
+          submitLabel="Go"
+          pendingLabel="Going..."
+          failureLead="Could not go"
+          pending={false}
+          failure={null}
+          onCancel={() => {}}
+          onCloseAutoFocus={() => {}}
+          onSubmit={onSubmit}
+        />
+      </WriteReportProvider>,
+    );
+    return onSubmit;
+  }
+
+  async function submit(label: string): Promise<void> {
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+    });
+  }
+
+  it("takes its hint and its field attributes from the bounds it was given", async () => {
+    await renderOnFabricatedBounds();
+
+    expect(dialog().textContent).toContain(
+      `between ${BOUNDS.min} and ${BOUNDS.max}`,
+    );
+    expect(dayInput().getAttribute("min")).toBe(String(BOUNDS.min));
+    expect(dayInput().getAttribute("max")).toBe(String(BOUNDS.max));
+  });
+
+  it("refuses a value the bounds it was given exclude", async () => {
+    const onSubmit = await renderOnFabricatedBounds();
+
+    // Inside the extension bounds and outside these, which is the whole point:
+    // a dialog reading the wrong pair sends it.
+    fireEvent.change(dayInput(), { target: { value: "365" } });
+    await submit("Go");
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      `between ${BOUNDS.min} and ${BOUNDS.max}`,
+    );
+  });
+
+  it("takes a value only these bounds allow", async () => {
+    const onSubmit = await renderOnFabricatedBounds();
+
+    fireEvent.change(dayInput(), { target: { value: String(BOUNDS.max) } });
+    await submit("Go");
+
+    expect(onSubmit).toHaveBeenCalledWith(BOUNDS.max);
   });
 });
 
