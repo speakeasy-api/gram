@@ -14,11 +14,13 @@ import (
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 )
@@ -32,14 +34,22 @@ type SetOpenRouterSpendCap struct {
 	db         *pgxpool.Pool
 	openRouter openrouter.Provisioner
 	audit      openRouterSpendCapAuditLogger
+	cache      cache.Cache
 }
 
-func NewSetOpenRouterSpendCap(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner, auditLogger openRouterSpendCapAuditLogger) *SetOpenRouterSpendCap {
+func NewSetOpenRouterSpendCap(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	openRouter openrouter.Provisioner,
+	auditLogger openRouterSpendCapAuditLogger,
+	cacheAdapter cache.Cache,
+) *SetOpenRouterSpendCap {
 	return &SetOpenRouterSpendCap{
 		logger:     logger,
 		db:         db,
 		openRouter: openRouter,
 		audit:      auditLogger,
+		cache:      cacheAdapter,
 	}
 }
 
@@ -75,17 +85,9 @@ func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendC
 }
 
 func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activitiesrepo.Queries, args SetOpenRouterSpendCapArgs) error {
-	projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
-	if err != nil {
-		return fmt.Errorf("read billing state before setting OpenRouter spend cap: %w", err)
-	}
-	hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
-	if projection.GramAccountType != string(billing.TierPayg) || !hasSubscription {
-		return fmt.Errorf("PAYG subscription required to set OpenRouter spend cap: account_type=%q has_subscription=%t", projection.GramAccountType, hasSubscription)
-	}
-
 	subject := urn.NewOpenRouterAPIKey(args.OrganizationID, string(openrouter.KeyTypeChat))
-	recorded, err := auditrepo.New(s.db).HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
+	auditQueries := auditrepo.New(s.db)
+	recorded, err := auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
 		SubjectID:      subject.ID,
 		OperationID:    args.OperationID,
@@ -94,7 +96,29 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 		return fmt.Errorf("check spend-cap audit operation: %w", err)
 	}
 	if recorded {
-		return nil
+		latest, err := auditQueries.IsLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.IsLatestOpenRouterSpendCapAuditOperationParams{
+			OrganizationID: args.OrganizationID,
+			SubjectID:      subject.ID,
+			OperationID:    args.OperationID,
+		})
+		if err != nil {
+			return fmt.Errorf("check latest spend-cap audit operation: %w", err)
+		}
+		if !latest {
+			return nil
+		}
+	}
+
+	projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("read billing state before setting OpenRouter spend cap: %w", err)
+	}
+	hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
+	if projection.GramAccountType != string(billing.TierPayg) || !hasSubscription {
+		if recorded {
+			return nil
+		}
+		return fmt.Errorf("PAYG subscription required to set OpenRouter spend cap: account_type=%q has_subscription=%t", projection.GramAccountType, hasSubscription)
 	}
 
 	key, err := openrouterrepo.New(s.db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
@@ -102,13 +126,28 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 		KeyType:        string(openrouter.KeyTypeChat),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
+		if recorded {
+			return nil
+		}
 		return errors.New("chat key must be provisioned before setting its spend cap")
 	}
 	if err != nil {
 		return fmt.Errorf("read chat key before setting spend cap: %w", err)
 	}
 	if key.Disabled {
+		if recorded {
+			return nil
+		}
 		return errors.New("cannot set spend cap while the chat key is disabled")
+	}
+	if recorded {
+		// A cache failure after the durable cap mutation must be repairable on
+		// activity retry. Do not let an older retry rotate the generation after
+		// a newer operation has installed a different cap.
+		if key.MonthlyCredits != int64(args.Limit) {
+			return nil
+		}
+		return s.rearmCreditsAlerts(ctx, args)
 	}
 	before := key.MonthlyCredits
 	applied := false
@@ -219,6 +258,21 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit spend-cap audit transaction: %w", err)
+	}
+
+	return s.rearmCreditsAlerts(ctx, args)
+}
+
+func (s *SetOpenRouterSpendCap) rearmCreditsAlerts(ctx context.Context, args SetOpenRouterSpendCapArgs) error {
+	now := time.Now().UTC()
+	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+	if err := s.cache.Set(
+		ctx,
+		openRouterCreditsAlertGenerationKey(args.OrganizationID, openrouter.KeyTypeChat),
+		args.OperationID,
+		cycleEnd.Sub(now)+openRouterCreditsAlertGrace,
+	); err != nil {
+		return fmt.Errorf("re-arm OpenRouter chat credits alerts: %w", err)
 	}
 	return nil
 }

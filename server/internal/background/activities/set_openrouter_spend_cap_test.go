@@ -3,11 +3,13 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	redislib "github.com/go-redis/cache/v9"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -20,10 +22,12 @@ import (
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type failFirstSpendCapAuditLogger struct {
@@ -36,6 +40,21 @@ type spendCapHeartbeatFixture struct {
 	ObservedKeyUpdatedAt time.Time
 	AppliedKeyUpdatedAt  time.Time
 	Applied              bool
+}
+
+type failFirstSpendCapGenerationCache struct {
+	cache.Cache
+	calls atomic.Int32
+}
+
+func (c *failFirstSpendCapGenerationCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if c.calls.Add(1) == 1 {
+		return errors.New("cache unavailable")
+	}
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set spend-cap alert generation: %w", err)
+	}
+	return nil
 }
 
 func (l *failFirstSpendCapAuditLogger) LogOpenRouterAPIKeySetSpendCap(
@@ -75,6 +94,17 @@ func spendCapActivityArgs(operationID, organizationID string, limit int) activit
 	}
 }
 
+func newSpendCapActivityCache(t *testing.T) cache.Cache {
+	t.Helper()
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	return cache.NewRedisCacheAdapter(redisClient)
+}
+
+func spendCapGenerationKey(organizationID string) string {
+	return "openrouter-credits-alert-generation:" + organizationID + ":chat"
+}
+
 func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -102,7 +132,8 @@ func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) 
 	}).Return(600, nil).Once()
 
 	auditLogger := &failFirstSpendCapAuditLogger{delegate: audit.NewLogger()}
-	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, auditLogger)
+	cacheAdapter := newSpendCapActivityCache(t)
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, auditLogger, cacheAdapter)
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -126,6 +157,9 @@ func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) 
 	require.NoError(t, err)
 	require.EqualValues(t, 250, before["monthly_credits"])
 	require.EqualValues(t, 600, after["monthly_credits"])
+	var generation string
+	require.NoError(t, cacheAdapter.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
+	require.Equal(t, "operation_retry_placeholder", generation)
 }
 
 func TestSetOpenRouterSpendCapRetryReappliesWhenOriginalValueEqualsRequestedLimit(t *testing.T) {
@@ -159,7 +193,7 @@ func TestSetOpenRouterSpendCapRetryReappliesWhenOriginalValueEqualsRequestedLimi
 		}))
 	}).Return(600, nil).Once()
 
-	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger())
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), newSpendCapActivityCache(t))
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(setter.Do)
@@ -195,7 +229,7 @@ func TestSetOpenRouterSpendCapRetryAuditsWhenAppliedHeartbeatWasLost(t *testing.
 		KeyType:        string(openrouter.KeyTypeChat),
 	}))
 
-	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger())
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), newSpendCapActivityCache(t))
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(setter.Do)
@@ -286,7 +320,8 @@ func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerUnauditedOperation(t *te
 	require.NoError(t, err)
 
 	firstAuditLogger := &failFirstSpendCapAuditLogger{delegate: audit.NewLogger()}
-	firstSetter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, firstAuditLogger)
+	cacheAdapter := newSpendCapActivityCache(t)
+	firstSetter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, firstAuditLogger, cacheAdapter)
 	var suite testsuite.WorkflowTestSuite
 	firstEnv := suite.NewTestActivityEnvironment()
 	firstEnv.RegisterActivity(firstSetter.Do)
@@ -299,7 +334,7 @@ func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerUnauditedOperation(t *te
 	require.NoError(t, err)
 
 	secondAuditLogger := &failFirstSpendCapAuditLogger{delegate: audit.NewLogger()}
-	secondSetter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, secondAuditLogger)
+	secondSetter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, secondAuditLogger, cacheAdapter)
 	secondEnv := suite.NewTestActivityEnvironment()
 	secondEnv.RegisterActivity(secondSetter.Do)
 	_, err = secondEnv.ExecuteActivity(secondSetter.Do, spendCapActivityArgs("operation_second_placeholder", organizationID, 700))
@@ -352,6 +387,9 @@ func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerUnauditedOperation(t *te
 	require.NoError(t, err)
 	require.EqualValues(t, 600, before["monthly_credits"])
 	require.EqualValues(t, 700, after["monthly_credits"])
+	var generation string
+	require.NoError(t, cacheAdapter.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
+	require.Equal(t, "operation_second_placeholder", generation)
 }
 
 func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
@@ -401,7 +439,8 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 		updateLimit(args, 700)
 	}).Return(700, nil).Once()
 
-	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger())
+	cacheAdapter := newSpendCapActivityCache(t)
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), cacheAdapter)
 	run := func(args activities.SetOpenRouterSpendCapArgs) error {
 		var suite testsuite.WorkflowTestSuite
 		env := suite.NewTestActivityEnvironment()
@@ -445,4 +484,157 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
+	var generation string
+	require.NoError(t, cacheAdapter.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
+	require.Equal(t, "operation_second_placeholder", generation)
+}
+
+func TestSetOpenRouterSpendCapRetryRepairsAlertGeneration(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 100)
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 600 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 600,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}).Return(600, nil).Once()
+
+	redisCache := newSpendCapActivityCache(t)
+	generationCache := &failFirstSpendCapGenerationCache{Cache: redisCache}
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), generationCache)
+	run := func() error {
+		var suite testsuite.WorkflowTestSuite
+		env := suite.NewTestActivityEnvironment()
+		env.RegisterActivity(setter.Do)
+		_, err := env.ExecuteActivity(setter.Do, spendCapActivityArgs("operation_cache_retry_placeholder", organizationID, 600))
+		if err != nil {
+			return fmt.Errorf("execute spend-cap activity: %w", err)
+		}
+		return nil
+	}
+
+	require.ErrorContains(t, run(), "re-arm OpenRouter chat credits alerts")
+	require.NoError(t, run())
+	provisioner.AssertExpectations(t)
+	require.EqualValues(t, 2, generationCache.calls.Load())
+
+	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count, "the cache retry must not duplicate the audit event")
+	var generation string
+	require.NoError(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
+	require.Equal(t, "operation_cache_retry_placeholder", generation)
+}
+
+func TestSetOpenRouterSpendCapStaleRetryCannotReplaceNewerSameLimitGeneration(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 100)
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 600 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 600,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}).Return(600, nil).Twice()
+
+	redisCache := newSpendCapActivityCache(t)
+	generationCache := &failFirstSpendCapGenerationCache{Cache: redisCache}
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), generationCache)
+	run := func(operationID string) error {
+		var suite testsuite.WorkflowTestSuite
+		env := suite.NewTestActivityEnvironment()
+		env.RegisterActivity(setter.Do)
+		_, err := env.ExecuteActivity(setter.Do, spendCapActivityArgs(operationID, organizationID, 600))
+		if err != nil {
+			return fmt.Errorf("execute spend-cap activity: %w", err)
+		}
+		return nil
+	}
+
+	require.ErrorContains(t, run("operation_first_placeholder"), "re-arm OpenRouter chat credits alerts")
+	require.NoError(t, run("operation_second_placeholder"))
+	require.NoError(t, run("operation_first_placeholder"))
+	provisioner.AssertExpectations(t)
+
+	var generation string
+	require.NoError(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
+	require.Equal(t, "operation_second_placeholder", generation)
+}
+
+func TestSetOpenRouterSpendCapRecordedRetryNoopsAfterSubscriptionLoss(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 100)
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 600 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 600,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}).Return(600, nil).Once()
+
+	redisCache := newSpendCapActivityCache(t)
+	generationCache := &failFirstSpendCapGenerationCache{Cache: redisCache}
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), generationCache)
+	args := spendCapActivityArgs("operation_loss_placeholder", organizationID, 600)
+	run := func() error {
+		var suite testsuite.WorkflowTestSuite
+		env := suite.NewTestActivityEnvironment()
+		env.RegisterActivity(setter.Do)
+		_, err := env.ExecuteActivity(setter.Do, args)
+		if err != nil {
+			return fmt.Errorf("execute spend-cap activity: %w", err)
+		}
+		return nil
+	}
+
+	require.ErrorContains(t, run(), "re-arm OpenRouter chat credits alerts")
+	require.NoError(t, usagerepo.New(db).DisablePaygOpenRouterChatKey(t.Context(), organizationID))
+	require.NoError(t, run())
+	provisioner.AssertExpectations(t)
+
+	var generation string
+	require.ErrorIs(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation), redislib.ErrCacheMiss)
 }

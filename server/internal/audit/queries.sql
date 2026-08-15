@@ -43,6 +43,17 @@ SELECT EXISTS (
     AND metadata->>'operation_id' = @operation_id::text
 ) AS recorded;
 
+-- name: IsLatestOpenRouterSpendCapAuditOperation :one
+SELECT COALESCE((
+  SELECT metadata->>'operation_id'
+  FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = @subject_id
+  ORDER BY seq DESC
+  LIMIT 1
+), '') = @operation_id::text AS latest;
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform

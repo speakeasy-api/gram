@@ -51,3 +51,18 @@ func TestOpenRouterCreditsAlertCycleStaysStableThroughRolloverGrace(t *testing.T
 	require.Equal(t, "2026-07", openRouterCreditsAlertCycle(time.Date(2026, time.August, 1, 0, 30, 0, 0, time.UTC)))
 	require.Equal(t, "2026-08", openRouterCreditsAlertCycle(time.Date(2026, time.August, 3, 0, 0, 0, 0, time.UTC)))
 }
+
+func TestOpenRouterCreditsAlertKeyPreservesLegacyReservationsUntilCapChange(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(
+		t,
+		"openrouter-credits-alert:org_placeholder:chat:90",
+		openRouterCreditsAlertKey("org_placeholder", "chat", 90, ""),
+	)
+	require.Equal(
+		t,
+		"openrouter-credits-alert:org_placeholder:chat:90:operation_placeholder",
+		openRouterCreditsAlertKey("org_placeholder", "chat", 90, "operation_placeholder"),
+	)
+}

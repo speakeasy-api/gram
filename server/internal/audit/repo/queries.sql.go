@@ -116,6 +116,32 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	return i, err
 }
 
+const isLatestOpenRouterSpendCapAuditOperation = `-- name: IsLatestOpenRouterSpendCapAuditOperation :one
+SELECT COALESCE((
+  SELECT metadata->>'operation_id'
+  FROM audit_logs
+  WHERE organization_id = $1
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = $2
+  ORDER BY seq DESC
+  LIMIT 1
+), '') = $3::text AS latest
+`
+
+type IsLatestOpenRouterSpendCapAuditOperationParams struct {
+	OrganizationID string
+	SubjectID      string
+	OperationID    string
+}
+
+func (q *Queries) IsLatestOpenRouterSpendCapAuditOperation(ctx context.Context, arg IsLatestOpenRouterSpendCapAuditOperationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLatestOpenRouterSpendCapAuditOperation, arg.OrganizationID, arg.SubjectID, arg.OperationID)
+	var latest bool
+	err := row.Scan(&latest)
+	return latest, err
+}
+
 const listAuditActionFacets = `-- name: ListAuditActionFacets :many
 SELECT
   action AS value,
