@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,13 +34,18 @@ const ErrTypeAIUsagePollFailed = "AIUsagePollFailed"
 // aiUsagePollFailureDetails is the structured details payload attached to
 // ErrTypeAIUsagePollFailed application errors.
 type aiUsagePollFailureDetails struct {
-	ConfigID     string                      `json:"config_id"`
-	Provider     string                      `json:"provider,omitempty"`
-	Attempt      int32                       `json:"attempt"`
-	MaxAttempts  int32                       `json:"max_attempts"`
-	NonRetryable bool                        `json:"non_retryable"`
-	Stages       []stageFailureDetail        `json:"stages,omitempty"`
-	Progress     aiintegrations.SyncProgress `json:"progress,omitempty"`
+	ConfigID     string `json:"config_id"`
+	Provider     string `json:"provider,omitempty"`
+	Attempt      int32  `json:"attempt"`
+	MaxAttempts  int32  `json:"max_attempts"`
+	NonRetryable bool   `json:"non_retryable"`
+	// ProviderUnavailable marks failures caused by a provider outage
+	// (persistent 429/5xx or transport errors): non-retryable within the
+	// run because the schedule-level backoff owns the retry cadence, not
+	// because the failure is permanent.
+	ProviderUnavailable bool                        `json:"provider_unavailable,omitempty"`
+	Stages              []stageFailureDetail        `json:"stages,omitempty"`
+	Progress            aiintegrations.SyncProgress `json:"progress,omitempty"`
 }
 
 type stageFailureDetail struct {
@@ -145,29 +151,31 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		}
 
 		attempt := activity.GetInfo(ctx).Attempt
-		nonRetryable := pollRejectedByProvider(err)
+		rejected := pollRejectedByProvider(err)
+		unavailable := pollProviderUnavailable(err)
 
 		// Temporal records failures, but that's not visible to the user. We
 		// record the failure on the last attempt — or immediately when
-		// retrying can't help, e.g. a rejected api key — so it's visible to
-		// the user in the dashboard.
-		if attempt >= PollUsageMaxAttempts || nonRetryable {
+		// retrying within this run can't help: a rejected api key, or a
+		// provider outage whose retry cadence the schedule-level backoff
+		// already owns — so it's visible to the user in the dashboard.
+		if attempt >= PollUsageMaxAttempts || rejected || unavailable {
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 
 			// Provider rejections are permanent until the user fixes the
 			// integration, so after a few of them in a row the schedule is
-			// auto-paused instead of re-enqueued forever. Retryable failures
-			// never pause: the schedule keeps polling, at a cadence that
-			// backs off with the failure streak.
-			pauseAfter := conv.Ternary[int32](nonRetryable, aiintegrations.AutoPauseAfterRejectedPolls, 0)
+			// auto-paused instead of re-enqueued forever. Other failures —
+			// including provider outages — never pause: the schedule keeps
+			// polling, at a cadence that backs off with the failure streak.
+			pauseAfter := conv.Ternary[int32](rejected, aiintegrations.AutoPauseAfterRejectedPolls, 0)
 			shareableErr := shareablePollError(schedule, err)
 			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, shareableErr, pauseAfter); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
 			}
 		}
 
-		err = newPollFailureError(cfg.ID, cfg.Provider, attempt, nonRetryable, err)
+		err = newPollFailureError(cfg.ID, cfg.Provider, attempt, rejected, unavailable, err)
 	}()
 
 	switch schedule {
@@ -249,6 +257,18 @@ func shareablePollError(schedule string, cause error) error {
 	var contentErr *aiintegrations.CodexCostContentError
 	if errors.As(cause, &contentErr) {
 		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
+	}
+
+	// A spent retry budget means the provider kept answering with retryable
+	// statuses or transport errors — an outage, not a configuration problem.
+	// Say so, with the last status when one was seen, instead of the generic
+	// schedule message.
+	var exhausted *guardian.RetriesExhaustedError
+	if errors.As(cause, &exhausted) {
+		if exhausted.StatusCode != 0 {
+			return oops.E(oops.CodeUnavailable, cause, "provider api is temporarily unavailable (HTTP %d); the sync will back off and retry", exhausted.StatusCode)
+		}
+		return oops.E(oops.CodeUnavailable, cause, "provider api is unreachable; the sync will back off and retry")
 	}
 
 	var cursorErr *cursorapi.HTTPError
@@ -343,19 +363,51 @@ func pollRejectedByProvider(err error) bool {
 	return false
 }
 
+// pollProviderUnavailable reports whether the poll failed because the
+// provider was unavailable: the HTTP client's whole retry budget was spent
+// on retryable statuses or transport errors, or a throttling/server status
+// surfaced directly. Retrying inside the Temporal run cannot outlast an
+// outage — the schedule-level failure backoff owns that cadence — so these
+// skip the remaining activity attempts. Unlike a provider rejection, an
+// outage ends on its own, so it never counts toward auto-pausing.
+func pollProviderUnavailable(err error) bool {
+	var exhausted *guardian.RetriesExhaustedError
+	if errors.As(err, &exhausted) {
+		return true
+	}
+	statusUnavailable := func(status int) bool {
+		return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+	}
+	var cursorErr *cursorapi.HTTPError
+	if errors.As(err, &cursorErr) {
+		return statusUnavailable(cursorErr.StatusCode)
+	}
+	var anthropicErr *anthropicapi.HTTPError
+	if errors.As(err, &anthropicErr) {
+		return statusUnavailable(anthropicErr.StatusCode)
+	}
+	var codexErr *codexapi.HTTPError
+	if errors.As(err, &codexErr) {
+		return statusUnavailable(codexErr.StatusCode)
+	}
+	return false
+}
+
 // newPollFailureError wraps a poll failure in a typed Temporal application
 // error. The details payload surfaces the provider, attempt count, per-stage
 // failures, and run progress in the Temporal UI; the cause chain is kept
 // intact for errors.Is/errors.As callers.
-func newPollFailureError(configID uuid.UUID, provider string, attempt int32, nonRetryable bool, cause error) error {
+func newPollFailureError(configID uuid.UUID, provider string, attempt int32, rejected bool, providerUnavailable bool, cause error) error {
+	nonRetryable := rejected || providerUnavailable
 	details := aiUsagePollFailureDetails{
-		ConfigID:     configID.String(),
-		Provider:     provider,
-		Attempt:      attempt,
-		MaxAttempts:  PollUsageMaxAttempts,
-		NonRetryable: nonRetryable,
-		Stages:       nil,
-		Progress:     nil,
+		ConfigID:            configID.String(),
+		Provider:            provider,
+		Attempt:             attempt,
+		MaxAttempts:         PollUsageMaxAttempts,
+		NonRetryable:        nonRetryable,
+		ProviderUnavailable: providerUnavailable,
+		Stages:              nil,
+		Progress:            nil,
 	}
 
 	var syncErr *aiintegrations.SyncError
