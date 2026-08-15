@@ -86,14 +86,79 @@ func TestPollProviderUnavailableMatchesOutages(t *testing.T) {
 	})
 	require.True(t, pollProviderUnavailable(wrapped))
 
-	// Direct throttling/server statuses count too; rejections and unknown
-	// errors do not.
+	// Repeated response-less transport failures affirm an outage; a single
+	// response-less attempt means the retry policy refused to retry (TLS
+	// verification, redirect policy, resilience denial) and stays on the
+	// normal retry path.
+	require.True(t, pollProviderUnavailable(&guardian.RetriesExhaustedError{
+		Method: "GET", URL: "https://api.chatgpt.com", Attempts: 3, StatusCode: 0, Body: "", Err: errors.New("dial tcp: connection refused"),
+	}))
+	require.False(t, pollProviderUnavailable(&guardian.RetriesExhaustedError{
+		Method: "", URL: "", Attempts: 1, StatusCode: 0, Body: "", Err: errors.New("tls: failed to verify certificate"),
+	}))
+
+	// Caller-side aborts are never outages, wherever they sit in the chain.
+	require.False(t, pollProviderUnavailable(fmt.Errorf("sync codex cost data: %w", context.Canceled)))
+	require.False(t, pollProviderUnavailable(fmt.Errorf("sync codex cost data: %w", context.DeadlineExceeded)))
+
+	// Direct throttling/server statuses count too — including cursor's
+	// typed rate limit, which never becomes an HTTPError; rejections and
+	// unknown errors do not.
 	require.True(t, pollProviderUnavailable(&codexapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
 	require.True(t, pollProviderUnavailable(&anthropicapi.HTTPError{StatusCode: 429, Status: "429 Too Many Requests"}))
 	require.True(t, pollProviderUnavailable(&cursorapi.HTTPError{StatusCode: 500, Status: "500 Internal Server Error"}))
+	require.True(t, pollProviderUnavailable(&cursorapi.RateLimitError{Status: "429 Too Many Requests", RetryAfter: time.Minute, Page: 2}))
 	require.False(t, pollProviderUnavailable(&codexapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
 	require.False(t, pollProviderUnavailable(&anthropicapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
 	require.False(t, pollProviderUnavailable(errors.New("json decode failed")))
+}
+
+func TestShareablePollErrorClassifiesDirectProviderStatuses(t *testing.T) {
+	t.Parallel()
+
+	// A direct 5xx (cursor's client has no HTTP-level retries) must produce
+	// the same outage message as a spent retry budget, not the generic
+	// schedule fallback.
+	err := shareablePollError(aiintegrations.ScheduleCursor, fmt.Errorf("fetch cursor usage window: %w",
+		&cursorapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+	require.Contains(t, err.Error(), "temporarily unavailable (HTTP 503)")
+
+	err = shareablePollError(aiintegrations.ScheduleCursor, fmt.Errorf("fetch cursor usage window: %w",
+		&cursorapi.RateLimitError{Status: "429 Too Many Requests", RetryAfter: time.Minute, Page: 1}))
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+	require.Contains(t, err.Error(), "temporarily unavailable (HTTP 429)")
+}
+
+func TestShareablePollErrorPrefersRejectionOverOutage(t *testing.T) {
+	t.Parallel()
+
+	// A multi-stage sync can fail with both a rejected api key and an
+	// exhausted retry budget; the rejection is the actionable message and
+	// must win over the transient-outage one.
+	cause := fmt.Errorf("sync codex cost data: %w", &aiintegrations.SyncError{
+		Op: "sync codex costs",
+		Stages: []aiintegrations.SyncStageError{
+			{
+				Stage: "import_cost_logs",
+				Err:   fmt.Errorf("download log: %w", &guardian.RetriesExhaustedError{Method: "GET", URL: "https://api.chatgpt.com", Attempts: 5, StatusCode: 500, Body: "", Err: nil}),
+			},
+			{
+				Stage: "import_cost_logs",
+				Err:   fmt.Errorf("list logs: %w", &codexapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}),
+			},
+		},
+		Progress: nil,
+	})
+
+	err := shareablePollError(aiintegrations.ScheduleCodexCompliance, cause)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Contains(t, err.Error(), "codex compliance rejected the configured api key")
 }
 
 func TestNewPollFailureErrorMarksProviderOutagesNonRetryable(t *testing.T) {

@@ -152,7 +152,10 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 
 		attempt := activity.GetInfo(ctx).Attempt
 		rejected := pollRejectedByProvider(err)
-		unavailable := pollProviderUnavailable(err)
+		// A multi-stage sync can carry both a rejection and an outage;
+		// the rejection wins so the auto-pause path and the actionable
+		// message stay in charge.
+		unavailable := !rejected && pollProviderUnavailable(err)
 
 		// Temporal records failures, but that's not visible to the user. We
 		// record the failure on the last attempt — or immediately when
@@ -259,18 +262,6 @@ func shareablePollError(schedule string, cause error) error {
 		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
 	}
 
-	// A spent retry budget means the provider kept answering with retryable
-	// statuses or transport errors — an outage, not a configuration problem.
-	// Say so, with the last status when one was seen, instead of the generic
-	// schedule message.
-	var exhausted *guardian.RetriesExhaustedError
-	if errors.As(cause, &exhausted) {
-		if exhausted.StatusCode != 0 {
-			return oops.E(oops.CodeUnavailable, cause, "provider api is temporarily unavailable (HTTP %d); the sync will back off and retry", exhausted.StatusCode)
-		}
-		return oops.E(oops.CodeUnavailable, cause, "provider api is unreachable; the sync will back off and retry")
-	}
-
 	var cursorErr *cursorapi.HTTPError
 	if errors.As(cause, &cursorErr) && cursorErr.StatusCode == 401 {
 		return oops.E(oops.CodeUnauthorized, cause, "cursor rejected the configured api key")
@@ -311,6 +302,20 @@ func shareablePollError(schedule string, cause error) error {
 				return oops.E(oops.CodeNotFound, cause, "codex cloud workspace not found or compliance api access not enabled")
 			}
 		}
+	}
+
+	// A provider outage — a throttling or server status answered directly
+	// or on the final attempt of a spent retry budget — is transient, not a
+	// configuration problem. Say so, with the status when one was seen,
+	// instead of the generic schedule message. Checked after the provider
+	// rejection cases: a multi-stage sync can carry both a rejection and an
+	// outage, and the rejection is the actionable one.
+	if status := pollUnavailableHTTPStatus(cause); status != 0 {
+		return oops.E(oops.CodeUnavailable, cause, "provider api is temporarily unavailable (HTTP %d); the sync will back off and retry", status)
+	}
+	var exhausted *guardian.RetriesExhaustedError
+	if errors.As(cause, &exhausted) {
+		return oops.E(oops.CodeUnavailable, cause, "provider api is unreachable; the sync will back off and retry")
 	}
 
 	// An interior oops boundary already chose a safe public message and code
@@ -371,26 +376,56 @@ func pollRejectedByProvider(err error) bool {
 // skip the remaining activity attempts. Unlike a provider rejection, an
 // outage ends on its own, so it never counts toward auto-pausing.
 func pollProviderUnavailable(err error) bool {
-	var exhausted *guardian.RetriesExhaustedError
-	if errors.As(err, &exhausted) {
+	// A canceled or expired activity context is our side giving up, not the
+	// provider failing; those must keep the normal retry path.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if pollUnavailableHTTPStatus(err) != 0 {
 		return true
 	}
+	var exhausted *guardian.RetriesExhaustedError
+	if errors.As(err, &exhausted) {
+		// Repeated transport failures with no response affirm an outage. A
+		// single response-less attempt means the retry policy refused to
+		// retry (TLS verification, redirect policy, resilience denial) —
+		// not evidence the provider is down.
+		return exhausted.StatusCode == 0 && exhausted.Attempts > 1
+	}
+	return false
+}
+
+// pollUnavailableHTTPStatus returns the throttling or server status a
+// provider answered with — directly, via cursor's typed rate limit, or on
+// the final attempt of a spent retry budget — or zero when the failure
+// carries no such status. Shared by the outage classification and the
+// org-visible message so the two cannot disagree about what counts as an
+// outage.
+func pollUnavailableHTTPStatus(err error) int {
 	statusUnavailable := func(status int) bool {
 		return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 	}
+	var exhausted *guardian.RetriesExhaustedError
+	if errors.As(err, &exhausted) && statusUnavailable(exhausted.StatusCode) {
+		return exhausted.StatusCode
+	}
+	var rateLimited *cursorapi.RateLimitError
+	if errors.As(err, &rateLimited) {
+		return http.StatusTooManyRequests
+	}
 	var cursorErr *cursorapi.HTTPError
-	if errors.As(err, &cursorErr) {
-		return statusUnavailable(cursorErr.StatusCode)
+	if errors.As(err, &cursorErr) && statusUnavailable(cursorErr.StatusCode) {
+		return cursorErr.StatusCode
 	}
 	var anthropicErr *anthropicapi.HTTPError
-	if errors.As(err, &anthropicErr) {
-		return statusUnavailable(anthropicErr.StatusCode)
+	if errors.As(err, &anthropicErr) && statusUnavailable(anthropicErr.StatusCode) {
+		return anthropicErr.StatusCode
 	}
 	var codexErr *codexapi.HTTPError
-	if errors.As(err, &codexErr) {
-		return statusUnavailable(codexErr.StatusCode)
+	if errors.As(err, &codexErr) && statusUnavailable(codexErr.StatusCode) {
+		return codexErr.StatusCode
 	}
-	return false
+	return 0
 }
 
 // newPollFailureError wraps a poll failure in a typed Temporal application
