@@ -531,6 +531,7 @@ func TestSettleStripeInvoiceAllocations_PreKeyDaysFinalizeAsDurableZero(t *testi
 	keyDay := start.AddDate(0, 0, 2)
 	end := start.AddDate(0, 0, 3)
 	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "draft", 0)
+	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
 	setChatKeyCreatedAt(t, db, organizationID, keyDay.Add(12*time.Hour))
 	putDailySpend(t, db, organizationID, keyDay, "0.015000")
 	now := end.Add(76 * time.Hour)

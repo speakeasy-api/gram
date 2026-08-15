@@ -214,14 +214,14 @@ WHERE invoice.organization_id IS NOT NULL
         invoice.service_period_start,
         invoice.service_period_end - interval '1 day',
         interval '1 day'
-      ) AS source_day
+      ) AS generated(source_timestamp)
       WHERE invoice.service_period_end + interval '48 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = source_day::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
             AND allocation.seq = 1
         )
     )
@@ -231,14 +231,14 @@ WHERE invoice.organization_id IS NOT NULL
         invoice.service_period_start,
         invoice.service_period_end - interval '1 day',
         interval '1 day'
-      ) AS source_day
+      ) AS generated(source_timestamp)
       WHERE invoice.service_period_end + interval '72 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = source_day::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
             AND allocation.seq = 2
         )
     )
@@ -281,14 +281,14 @@ WHERE invoice.organization_id = @organization_id
         invoice.service_period_start,
         invoice.service_period_end - interval '1 day',
         interval '1 day'
-      ) AS source_day
+      ) AS generated(source_timestamp)
       WHERE invoice.service_period_end + interval '48 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = source_day::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
             AND allocation.seq = 1
         )
     )
@@ -298,14 +298,14 @@ WHERE invoice.organization_id = @organization_id
         invoice.service_period_start,
         invoice.service_period_end - interval '1 day',
         interval '1 day'
-      ) AS source_day
+      ) AS generated(source_timestamp)
       WHERE invoice.service_period_end + interval '72 hours' <= @now
         AND NOT EXISTS (
           SELECT 1
           FROM stripe_invoice_allocations allocation
           WHERE allocation.organization_id = invoice.organization_id
             AND allocation.source_kind = 'openrouter_daily_spend'
-            AND allocation.source_key = source_day::date::text || ':chat'
+            AND allocation.source_key = generated.source_timestamp::date::text || ':chat'
             AND allocation.seq = 2
         )
     )
