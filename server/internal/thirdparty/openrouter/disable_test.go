@@ -345,7 +345,7 @@ func TestRefreshAPIKeyLimit_NilPreservesPaygChatCap(t *testing.T) {
 	require.Equal(t, int64(raisedCap), row.MonthlyCredits)
 }
 
-func TestRefreshAPIKeyLimit_NilPreservesDisabledPaygChatKey(t *testing.T) {
+func TestRefreshAPIKeyLimit_NilPreservesDisabledChatKeyAfterTierTransition(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -362,13 +362,17 @@ func TestRefreshAPIKeyLimit_NilPreservesDisabledPaygChatKey(t *testing.T) {
 	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, &raisedCap)
 	require.NoError(t, err)
 	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+	require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+		ID:              orgID,
+		GramAccountType: string(billing.TierBase),
+	}))
 	patchesBeforeRefresh := upstream.recorded()
 
 	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
 	require.NoError(t, err)
 	require.Equal(t, raisedCap, refreshed)
 	require.Equal(t, patchesBeforeRefresh, upstream.recorded(),
-		"a generic PAYG refresh must not reinstate a key disabled after subscription loss")
+		"a generic refresh must not reinstate a key disabled during subscription loss")
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,

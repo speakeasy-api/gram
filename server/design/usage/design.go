@@ -3,6 +3,7 @@ package usage
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -102,8 +103,8 @@ var BillingEmail = Type("BillingEmail", func() {
 // customer-facing OpenRouter chat key.
 var SpendCap = Type("SpendCap", func() {
 	Attribute("monthly_credits", Int, "The monthly chat spend cap in USD", func() {
-		Minimum(1)
-		Maximum(10000)
+		Minimum(constants.MinimumPaygSpendCapUSD)
+		Maximum(constants.MaximumPaygSpendCapUSD)
 	})
 
 	Required("monthly_credits")
@@ -238,8 +239,8 @@ var _ = Service("usage", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("monthly_credits", Int, "The monthly chat spend cap in USD", func() {
-				Minimum(1)
-				Maximum(10000)
+				Minimum(constants.MinimumPaygSpendCapUSD)
+				Maximum(constants.MaximumPaygSpendCapUSD)
 			})
 			Required("monthly_credits")
 		})

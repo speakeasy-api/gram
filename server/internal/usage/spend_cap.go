@@ -9,15 +9,11 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-)
-
-const (
-	minimumSpendCap = 1
-	maximumSpendCap = 10000
 )
 
 type openRouterKeyRefreshScheduler interface {
@@ -37,8 +33,8 @@ func (s *Service) SetSpendCap(ctx context.Context, payload *gen.SetSpendCapPaylo
 	}); err != nil {
 		return nil, err
 	}
-	if payload.MonthlyCredits < minimumSpendCap || payload.MonthlyCredits > maximumSpendCap {
-		return nil, oops.E(oops.CodeInvalid, nil, "monthly_credits must be between %d and %d", minimumSpendCap, maximumSpendCap).LogWarn(ctx, s.logger)
+	if payload.MonthlyCredits < constants.MinimumPaygSpendCapUSD || payload.MonthlyCredits > constants.MaximumPaygSpendCapUSD {
+		return nil, oops.E(oops.CodeInvalid, nil, "monthly_credits must be between %d and %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD).LogWarn(ctx, s.logger)
 	}
 
 	_, err := trialsrepo.New(s.db).GetActiveTrial(ctx, authCtx.ActiveOrganizationID)

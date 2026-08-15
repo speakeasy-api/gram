@@ -30,6 +30,12 @@ type failFirstSpendCapAuditLogger struct {
 	calls    atomic.Int32
 }
 
+type spendCapHeartbeatFixture struct {
+	BeforeMonthlyCredits int64
+	LatestAuditSeq       int64
+	Applied              bool
+}
+
 func (l *failFirstSpendCapAuditLogger) LogOpenRouterAPIKeySetSpendCap(
 	ctx context.Context,
 	dbtx auditrepo.DBTX,
@@ -91,7 +97,7 @@ func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) 
 			OrganizationID: organizationID,
 			KeyType:        string(openrouter.KeyTypeChat),
 		}))
-	}).Return(600, nil).Twice()
+	}).Return(600, nil).Once()
 
 	auditLogger := &failFirstSpendCapAuditLogger{delegate: audit.NewLogger()}
 	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, auditLogger)
@@ -118,6 +124,83 @@ func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) 
 	require.NoError(t, err)
 	require.EqualValues(t, 250, before["monthly_credits"])
 	require.EqualValues(t, 600, after["monthly_credits"])
+}
+
+func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerOperation(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 100)
+
+	updateLimit := func(args mock.Arguments, limit int64) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: limit,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 600 }),
+	).Run(func(args mock.Arguments) { updateLimit(args, 600) }).Return(600, nil).Once()
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 700 }),
+	).Run(func(args mock.Arguments) { updateLimit(args, 700) }).Return(700, nil).Once()
+
+	subject := urn.NewOpenRouterAPIKey(organizationID, string(openrouter.KeyTypeChat))
+	initialSeq, err := auditrepo.New(db).GetLatestOpenRouterSpendCapAuditSeq(t.Context(), auditrepo.GetLatestOpenRouterSpendCapAuditSeqParams{
+		OrganizationID: organizationID,
+		SubjectID:      subject.ID,
+	})
+	require.NoError(t, err)
+
+	auditLogger := &failFirstSpendCapAuditLogger{delegate: audit.NewLogger()}
+	firstSetter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, auditLogger)
+	var suite testsuite.WorkflowTestSuite
+	firstEnv := suite.NewTestActivityEnvironment()
+	firstEnv.RegisterActivity(firstSetter.Do)
+	_, err = firstEnv.ExecuteActivity(firstSetter.Do, spendCapActivityArgs("operation_first_placeholder", organizationID, 600))
+	require.ErrorContains(t, err, "audit unavailable")
+
+	secondSetter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger())
+	secondEnv := suite.NewTestActivityEnvironment()
+	secondEnv.RegisterActivity(secondSetter.Do)
+	_, err = secondEnv.ExecuteActivity(secondSetter.Do, spendCapActivityArgs("operation_second_placeholder", organizationID, 700))
+	require.NoError(t, err)
+
+	retryEnv := suite.NewTestActivityEnvironment()
+	retryEnv.RegisterActivity(firstSetter.Do)
+	retryEnv.SetHeartbeatDetails(spendCapHeartbeatFixture{
+		BeforeMonthlyCredits: 100,
+		LatestAuditSeq:       initialSeq,
+		Applied:              true,
+	})
+	_, err = retryEnv.ExecuteActivity(firstSetter.Do, spendCapActivityArgs("operation_first_placeholder", organizationID, 600))
+	require.NoError(t, err)
+	provisioner.AssertExpectations(t)
+
+	key, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 700, key.MonthlyCredits)
+	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
 }
 
 func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {

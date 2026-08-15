@@ -13,6 +13,7 @@ import (
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -50,6 +51,8 @@ type SetOpenRouterSpendCapArgs struct {
 
 type setOpenRouterSpendCapHeartbeat struct {
 	BeforeMonthlyCredits int64
+	LatestAuditSeq       int64
+	Applied              bool
 }
 
 func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) error {
@@ -59,8 +62,8 @@ func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendC
 	if args.OrganizationID == "" {
 		return errors.New("organization ID is required")
 	}
-	if args.Limit < 1 || args.Limit > 10000 {
-		return fmt.Errorf("spend cap must be between 1 and 10000: %d", args.Limit)
+	if args.Limit < constants.MinimumPaygSpendCapUSD || args.Limit > constants.MaximumPaygSpendCapUSD {
+		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, args.Limit)
 	}
 
 	return withOpenRouterChatKeyBillingLock(ctx, s.logger, s.db, args.OrganizationID, func(queries *activitiesrepo.Queries) error {
@@ -104,23 +107,53 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 	if key.Disabled {
 		return errors.New("cannot set spend cap while the chat key is disabled")
 	}
+	auditQueries := auditrepo.New(s.db)
 	before := key.MonthlyCredits
+	latestAuditSeq, err := auditQueries.GetLatestOpenRouterSpendCapAuditSeq(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditSeqParams{
+		OrganizationID: args.OrganizationID,
+		SubjectID:      subject.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("read latest spend-cap audit sequence: %w", err)
+	}
+	applied := false
 	if activity.HasHeartbeatDetails(ctx) {
 		var heartbeat setOpenRouterSpendCapHeartbeat
 		if err := activity.GetHeartbeatDetails(ctx, &heartbeat); err != nil {
 			return fmt.Errorf("restore spend-cap operation heartbeat: %w", err)
 		}
 		before = heartbeat.BeforeMonthlyCredits
+		if latestAuditSeq > heartbeat.LatestAuditSeq {
+			// Another operation completed after this attempt began. Retrying this
+			// older request must not overwrite the newer cap or audit trail.
+			s.logger.WarnContext(ctx, "skipping superseded spend-cap retry")
+			return nil
+		}
+		applied = heartbeat.Applied || key.MonthlyCredits == int64(args.Limit)
 	} else {
 		// The heartbeat is durable across activity retries. Recording the value
 		// before the upstream PATCH preserves the true before snapshot if the
 		// PATCH and local mirror succeed but the audit transaction later fails.
-		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{BeforeMonthlyCredits: before})
+		// An attempt with no heartbeat has not made an external change, so it
+		// remains eligible and concurrent requests stay completion-ordered.
+		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
+			BeforeMonthlyCredits: before,
+			LatestAuditSeq:       latestAuditSeq,
+			Applied:              false,
+		})
 	}
 
-	refreshed, err := s.openRouter.RefreshAPIKeyLimit(ctx, args.OrganizationID, openrouter.KeyTypeChat, &args.Limit)
-	if err != nil {
-		return fmt.Errorf("refresh OpenRouter chat spend cap: %w", err)
+	refreshed := args.Limit
+	if !applied {
+		refreshed, err = s.openRouter.RefreshAPIKeyLimit(ctx, args.OrganizationID, openrouter.KeyTypeChat, &args.Limit)
+		if err != nil {
+			return fmt.Errorf("refresh OpenRouter chat spend cap: %w", err)
+		}
+		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
+			BeforeMonthlyCredits: before,
+			LatestAuditSeq:       latestAuditSeq,
+			Applied:              true,
+		})
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -129,7 +162,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	auditQueries := auditrepo.New(dbtx)
+	auditQueries = auditrepo.New(dbtx)
 	recorded, err = auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
 		SubjectID:      subject.ID,

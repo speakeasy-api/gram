@@ -126,7 +126,15 @@ function TrialLockedSpendCap(): JSX.Element {
 // value the section shows — a second source could disagree with the meter
 // sitting directly above it.
 function PaygSpendCap(): JSX.Element {
-  const { data, isError } = useGetCreditUsage();
+  // The shared query client throws everything but a 401/403 to the app error
+  // boundary, which would take the whole billing page down over one section
+  // and skip the branches below. This section handles its own failures, so it
+  // opts out and keeps them inline.
+  const { data, isError, refetch, isFetching } = useGetCreditUsage(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   // A refetch that fails leaves the last successful value in the cache, so the
   // query reports data and an error together. The form stays mounted in the
@@ -152,11 +160,24 @@ function PaygSpendCap(): JSX.Element {
     );
   }
 
+  // Nothing was ever cached, so there is no cap to show and no form to keep.
+  // The failure never reaches an error boundary, so recovery belongs here: a
+  // retry of this one query rather than a reload of the whole billing page.
   if (isError) {
     return (
-      <Text muted small>
-        Couldn't load the chat spend cap. Reload the page to try again.
-      </Text>
+      <Stack direction="horizontal" align="center" gap={3}>
+        <Text muted small role="alert">
+          Couldn't load the chat spend cap.
+        </Text>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          {isFetching ? "RETRYING..." : "RETRY"}
+        </Button>
+      </Stack>
     );
   }
 
@@ -196,11 +217,25 @@ function spendCapError(value: string): string | null {
   return valid ? null : RANGE_MESSAGE;
 }
 
-// The field seeds from the loaded value at mount and is never re-seeded, so a
-// background refetch landing mid-edit can't overwrite what the admin typed.
+// The field seeds from the loaded value and re-seeds only while it is pristine:
+// a cap changed elsewhere (another admin, the save's own invalidation) has to
+// reach an untouched field, but a background refetch landing mid-edit must not
+// overwrite what this admin typed.
 function SpendCapForm({ initial }: { initial: number }): JSX.Element {
   const queryClient = useQueryClient();
   const [cap, setCap] = useState(() => String(initial));
+  // The value the field was last seeded from. Comparing against it — rather
+  // than against a dirty flag — means an admin who edits back to the seeded
+  // amount is pristine again, and it survives a save because the invalidated
+  // query comes back with the amount now in the field.
+  const [seeded, setSeeded] = useState(initial);
+
+  // Adjusting state during render rather than in an effect: React re-runs this
+  // component before committing, so the field never paints the stale cap.
+  if (seeded !== initial) {
+    setSeeded(initial);
+    if (cap === String(seeded)) setCap(String(initial));
+  }
 
   const mutation = useSetSpendCapMutation({
     onSuccess: () => {

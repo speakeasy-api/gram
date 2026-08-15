@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   productTier: vi.fn(),
   session: vi.fn(),
   query: vi.fn(),
+  refetch: vi.fn(),
   mutation: vi.fn(),
   mutate: vi.fn(),
   reset: vi.fn(),
@@ -31,7 +32,9 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
-  useGetCreditUsage: () => mocks.query(),
+  // The hook options are part of what's under test — the section has to opt out
+  // of the shared throwOnError — so the arguments are forwarded, not dropped.
+  useGetCreditUsage: (...args: unknown[]) => mocks.query(...args),
   invalidateAllGetCreditUsage: mocks.invalidate,
 }));
 
@@ -66,6 +69,36 @@ vi.mock("@/components/page-layout", () => {
 import { ChatSpendCapSection } from "./chat-spend-cap-section";
 
 const DAY = 24 * 60 * 60 * 1000;
+
+type CreditUsage = { creditsUsed: number; monthlyCredits: number };
+
+type QueryState = {
+  data?: CreditUsage | undefined;
+  isError?: boolean;
+  isFetching?: boolean;
+};
+
+/**
+ * The credit usage query the cap is read from. No `data` is a query that never
+ * resolved — the loading state, or a load that failed outright.
+ */
+function queryState({
+  data,
+  isError = false,
+  isFetching = false,
+}: QueryState = {}) {
+  mocks.query.mockReturnValue({
+    data,
+    isError,
+    isFetching,
+    refetch: mocks.refetch,
+  });
+}
+
+/** A loaded cap of `monthlyCredits`, as the query reports it. */
+function loadedCap(monthlyCredits: number) {
+  queryState({ data: { creditsUsed: 12, monthlyCredits } });
+}
 
 type MutationState = {
   isPending?: boolean;
@@ -132,10 +165,7 @@ describe("ChatSpendCapSection", () => {
     mocks.productTier.mockReturnValue("payg");
     mocks.session.mockReturnValue({ trial: null });
     mocks.hasAnyScope.mockReturnValue(true);
-    mocks.query.mockReturnValue({
-      data: { creditsUsed: 12, monthlyCredits: 250 },
-      isError: false,
-    });
+    loadedCap(250);
     mutationState();
   });
 
@@ -288,20 +318,69 @@ describe("ChatSpendCapSection", () => {
     expect(mocks.hasAnyScope).toHaveBeenCalledWith(["org:admin"]);
   });
 
+  // The shared query client throws everything but a 401/403 to the app error
+  // boundary, which would take the whole billing page down over this section
+  // and leave the branches below unreachable. Handling the failure inline only
+  // works if the query opts out.
+  it("keeps a load failure out of the app error boundary", () => {
+    render(<ChatSpendCapSection />);
+
+    const options = mocks.query.mock.calls.at(-1)?.[2] as {
+      throwOnError?: boolean;
+    };
+    expect(options.throwOnError).toBe(false);
+  });
+
   it("explains a failed load instead of showing an empty field", () => {
-    mocks.query.mockReturnValue({ data: undefined, isError: true });
+    queryState({ isError: true });
 
     render(<ChatSpendCapSection />);
 
     expect(field()).toBeNull();
-    expect(screen.getByText(/couldn't load the chat spend cap/i)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /couldn't load the chat spend cap/i,
+    );
+  });
+
+  // Nothing was cached, so there is no cap on screen to work from. The failure
+  // stays inside the section, so the way out has to be here too.
+  it("retries a failed load in place", () => {
+    queryState({ isError: true });
+
+    render(<ChatSpendCapSection />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^retry$/i }));
+
+    expect(mocks.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the retry while the reload is in flight", () => {
+    queryState({ isError: true, isFetching: true });
+
+    render(<ChatSpendCapSection />);
+
+    const button = screen.getByRole("button", { name: /retrying/i });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: /^retry$/i })).toBeNull();
+  });
+
+  it("shows the form once a retried load succeeds", () => {
+    queryState({ isError: true });
+
+    const { rerender } = render(<ChatSpendCapSection />);
+
+    loadedCap(250);
+    rerender(<ChatSpendCapSection />);
+
+    expect(field()!.value).toBe("250");
+    expect(saveButton()).not.toBeNull();
   });
 
   // A refetch that fails leaves the last successful value in the cache, so the
   // query reports data and an error together. The form stays — taking it away
   // would discard an in-progress edit — and the stale amount is called out.
   it("keeps the form and reports the failure when a cached cap is held", () => {
-    mocks.query.mockReturnValue({
+    queryState({
       data: { creditsUsed: 12, monthlyCredits: 250 },
       isError: true,
     });
@@ -321,13 +400,54 @@ describe("ChatSpendCapSection", () => {
 
     fireEvent.change(field()!, { target: { value: "900" } });
 
-    mocks.query.mockReturnValue({
-      data: { creditsUsed: 12, monthlyCredits: 250 },
-      isError: false,
-    });
+    loadedCap(400);
     rerender(<ChatSpendCapSection />);
 
     expect(field()!.value).toBe("900");
+  });
+
+  // The cap can change under an idle page — another admin sets it, or this
+  // section's own post-save invalidation lands — and an untouched field left
+  // showing the old amount would save that stale amount straight back.
+  it("takes up a cap that changed while the field was untouched", () => {
+    const { rerender } = render(<ChatSpendCapSection />);
+    expect(field()!.value).toBe("250");
+
+    loadedCap(400);
+    rerender(<ChatSpendCapSection />);
+
+    expect(field()!.value).toBe("400");
+    fireEvent.click(saveButton()!);
+    expect(sentCap()).toBe(400);
+  });
+
+  // An edit is dirty against whatever the field was last seeded from, so the
+  // admin who types over a synchronized cap keeps their amount too.
+  it("keeps an edit made after a cap synchronized in", () => {
+    const { rerender } = render(<ChatSpendCapSection />);
+
+    loadedCap(400);
+    rerender(<ChatSpendCapSection />);
+
+    fireEvent.change(field()!, { target: { value: "900" } });
+    loadedCap(500);
+    rerender(<ChatSpendCapSection />);
+
+    expect(field()!.value).toBe("900");
+  });
+
+  // Editing back to the amount on the server is not an edit to protect: the
+  // field is pristine again and the next cap has to reach it.
+  it("resumes synchronizing once an edit is reverted", () => {
+    const { rerender } = render(<ChatSpendCapSection />);
+
+    fireEvent.change(field()!, { target: { value: "900" } });
+    fireEvent.change(field()!, { target: { value: "250" } });
+
+    loadedCap(400);
+    rerender(<ChatSpendCapSection />);
+
+    expect(field()!.value).toBe("400");
   });
 
   // Trials run on the enterprise tier, but the account type can already read as

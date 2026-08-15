@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -39,8 +40,8 @@ func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, oper
 	if orgID == "" {
 		return errors.New("organization ID is required")
 	}
-	if limit < 1 || limit > 10000 {
-		return fmt.Errorf("spend cap must be between 1 and 10000: %d", limit)
+	if limit < constants.MinimumPaygSpendCapUSD || limit > constants.MaximumPaygSpendCapUSD {
+		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, limit)
 	}
 
 	workflowID := fmt.Sprintf("v1:openrouter-chat-spend-cap:%s", operationID)
@@ -81,10 +82,9 @@ type OpenRouterSpendCapParams struct {
 func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		// The activity records its original cap before the remote write so a
-		// retry can restore the truthful audit snapshot. Match the liveness
-		// window to StartToClose: the remote request may legitimately consume
-		// more than ten seconds without needing a concurrent retry.
+		// The heartbeat carries retry state; it does not extend StartToClose.
+		// RefreshAPIKeyLimit bounds its upstream PATCH to 20 seconds, leaving
+		// time in this attempt for the local mirror and audit transaction.
 		HeartbeatTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 5,

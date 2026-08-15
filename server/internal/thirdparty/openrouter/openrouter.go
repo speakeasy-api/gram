@@ -75,9 +75,14 @@ func (s KeyDesiredState) Validate() error {
 // hunting call sites.
 var AllKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
 
-// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while holding
-// the per-(org, key type) provisioning advisory lock.
-const upstreamKeyCreateTimeout = 15 * time.Second
+const (
+	// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while
+	// holding the per-(org, key type) provisioning advisory lock.
+	upstreamKeyCreateTimeout = 15 * time.Second
+	// upstreamKeyPatchTimeout leaves the spend-cap activity enough time to
+	// persist its mirror and audit before its 30-second attempt deadline.
+	upstreamKeyPatchTimeout = 20 * time.Second
+)
 
 // OrDefault resolves the zero value to the chat key, so existing callers
 // that never set a key type keep their behavior.
@@ -530,6 +535,12 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if key.MonthlyCredits == 0 && !key.Disabled {
 		return 0, errors.New("cannot make an update to monthly credits of 0")
 	}
+	if limit == nil && keyType == KeyTypeChat && key.Disabled {
+		// Generic refreshes must never undo a billing lockdown. An explicit
+		// activation or re-subscription passes a non-nil cap and is the only
+		// path allowed to reinstate the customer-facing chat key.
+		return int(key.MonthlyCredits), nil
+	}
 
 	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
@@ -559,7 +570,9 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		patch.Disabled = new(false)
 	}
 
-	keyResponse, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, patch)
+	patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+	defer cancel()
+	keyResponse, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, patch)
 	if err != nil {
 		return 0, err
 	}
