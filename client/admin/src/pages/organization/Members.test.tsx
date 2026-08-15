@@ -94,6 +94,19 @@ describe("Members", () => {
     ]);
   });
 
+  it("draws no checkbox on a table that did not ask for one", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/members`,
+    });
+    await screen.findByRole("cell", { name: MEMBER.email });
+
+    // Row selection is opt-in, and it is opted into by putting the select
+    // column in a page's own column list. The shared table registers the
+    // feature for every page that uses it, and a feature that drew a column of
+    // its own would put one here, where nothing reads a selection.
+    expect(screen.queryAllByRole("checkbox")).toEqual([]);
+  });
+
   it("reads a dash for a member who has never logged in", async () => {
     mocks.listOrganizationMembers.mockImplementation(() =>
       Promise.resolve({ members: [aMember({ last_login: undefined })] }),
