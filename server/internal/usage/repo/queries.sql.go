@@ -1307,16 +1307,6 @@ func (q *Queries) ListTUMMeterReportsForDelivery(ctx context.Context, arg ListTU
 	return items, nil
 }
 
-const lockBillingEmailOrganization = `-- name: LockBillingEmailOrganization :exec
-SELECT pg_advisory_xact_lock(hashtextextended('billing-email:' || $1::text, 0))
-`
-
-// Serializes the absent-row first write as well as updates to an existing row.
-func (q *Queries) LockBillingEmailOrganization(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, lockBillingEmailOrganization, organizationID)
-	return err
-}
-
 const lockBillingMetadata = `-- name: LockBillingMetadata :one
 SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
@@ -1346,6 +1336,16 @@ func (q *Queries) LockBillingMetadata(ctx context.Context, organizationID string
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockBillingMetadataOrganization = `-- name: LockBillingMetadataOrganization :exec
+SELECT pg_advisory_xact_lock(hashtextextended('billing-email:' || $1::text, 0))
+`
+
+// Serializes absent-row first writes and all billing metadata updates.
+func (q *Queries) LockBillingMetadataOrganization(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockBillingMetadataOrganization, organizationID)
+	return err
 }
 
 const markReconciledTUMMeterReportsMissing = `-- name: MarkReconciledTUMMeterReportsMissing :execrows

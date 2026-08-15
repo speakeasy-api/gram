@@ -16,8 +16,8 @@ FROM billing_metadata
 WHERE organization_id = @organization_id
 FOR UPDATE;
 
--- name: LockBillingEmailOrganization :exec
--- Serializes the absent-row first write as well as updates to an existing row.
+-- name: LockBillingMetadataOrganization :exec
+-- Serializes absent-row first writes and all billing metadata updates.
 SELECT pg_advisory_xact_lock(hashtextextended('billing-email:' || @organization_id::text, 0));
 
 -- name: UpsertBillingEmail :one
