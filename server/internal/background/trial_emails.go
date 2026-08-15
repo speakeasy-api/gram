@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	tenvironment "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"go.temporal.io/api/enums/v1"
@@ -16,11 +17,13 @@ import (
 const (
 	trialLifecycleEmailWorkflowIDPrefix              = "v1:trial-lifecycle-email"
 	trialLifecycleEmailActivityTimeout               = 5 * time.Minute
-	trialLifecycleEmailWorkflowRunTimeout            = 30 * time.Minute
+	trialLifecycleEmailWorkflowRunTimeout            = 180 * 24 * time.Hour
 	trialLifecycleEmailRetryInitialInterval          = 5 * time.Second
 	trialLifecycleEmailRetryMaximumInterval          = time.Minute
 	trialLifecycleEmailRetryBackoffCoefficient       = 2.0
 	trialLifecycleEmailRetryMaximumAttempts    int32 = 5
+	trialReminderRetryInitialInterval                = 30 * time.Second
+	trialReminderRetryMaximumInterval                = 30 * time.Minute
 )
 
 func trialLifecycleEmailRetryPolicy() *temporal.RetryPolicy {
@@ -29,6 +32,15 @@ func trialLifecycleEmailRetryPolicy() *temporal.RetryPolicy {
 		MaximumInterval:    trialLifecycleEmailRetryMaximumInterval,
 		BackoffCoefficient: trialLifecycleEmailRetryBackoffCoefficient,
 		MaximumAttempts:    trialLifecycleEmailRetryMaximumAttempts,
+	}
+}
+
+func trialReminderRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval:    trialReminderRetryInitialInterval,
+		MaximumInterval:    trialReminderRetryMaximumInterval,
+		BackoffCoefficient: trialLifecycleEmailRetryBackoffCoefficient,
+		MaximumAttempts:    0,
 	}
 }
 
@@ -120,7 +132,43 @@ func TrialLifecycleEmailWorkflow(ctx workflow.Context, input TrialLifecycleEmail
 
 	var a *Activities
 	if err := workflow.ExecuteActivity(ctx, a.SendTrialLifecycleEmail, input).Get(ctx, nil); err != nil {
-		return fmt.Errorf("send trial lifecycle email: %w", err)
+		if input.Kind != TrialStartedEmailKind {
+			return fmt.Errorf("send trial lifecycle email: %w", err)
+		}
+		workflow.GetLogger(ctx).Error("legacy trial lifecycle email failed; continuing to T-3 reminder", "error", err)
 	}
-	return nil
+	if input.Kind != TrialStartedEmailKind {
+		return nil
+	}
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: trialLifecycleEmailActivityTimeout,
+		RetryPolicy:         trialReminderRetryPolicy(),
+	})
+
+	for {
+		var state billingnotifications.TrialReminderState
+		if err := workflow.ExecuteActivity(ctx, a.ResolveTrialEndingReminder, input.OrganizationID).Get(ctx, &state); err != nil {
+			return fmt.Errorf("resolve trial ending reminder: %w", err)
+		}
+		if !state.Active {
+			return nil
+		}
+		if wait := state.SendAt.Sub(workflow.Now(ctx)); wait > 0 {
+			if err := workflow.Sleep(ctx, wait); err != nil {
+				return fmt.Errorf("wait for trial ending reminder: %w", err)
+			}
+		}
+
+		var result billingnotifications.SendTrialEndingSoonResult
+		if err := workflow.ExecuteActivity(ctx, a.SendTrialEndingSoonEmail, billingnotifications.SendTrialEndingSoonInput{
+			OrganizationID: input.OrganizationID,
+			TrialCreatedAt: state.TrialCreatedAt,
+			TrialEndsAt:    state.TrialEndsAt,
+		}).Get(ctx, &result); err != nil {
+			return fmt.Errorf("send trial ending soon email: %w", err)
+		}
+		if !result.Reschedule {
+			return nil
+		}
+	}
 }

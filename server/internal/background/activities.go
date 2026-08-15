@@ -32,6 +32,7 @@ import (
 	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -164,6 +165,7 @@ type Activities struct {
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
 	demoteExpiredTrials             *activities.DemoteExpiredTrials
 	trialEmails                     *trialemails.Service
+	billingNotifications            *billingnotifications.Service
 }
 
 func NewActivities(
@@ -372,8 +374,14 @@ func NewActivities(
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
-		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger, trialEmailsService),
-		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
+		demoteExpiredTrials: activities.NewDemoteExpiredTrials(
+			logger,
+			db,
+			openrouterProvisioner,
+			auditLogger,
+			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
+		),
+		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.
@@ -388,6 +396,7 @@ func NewActivities(
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
+		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, siteURL),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -424,6 +433,38 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 	default:
 		return fmt.Errorf("unsupported trial lifecycle email kind %q", input.Kind)
 	}
+}
+
+func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizationID string) (billingnotifications.TrialReminderState, error) {
+	if a.billingNotifications == nil {
+		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
+	}
+	state, err := a.billingNotifications.ResolveTrialReminder(ctx, organizationID)
+	if err != nil {
+		return billingnotifications.TrialReminderState{}, fmt.Errorf("resolve trial reminder: %w", err)
+	}
+	return state, nil
+}
+
+func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
+	if a.billingNotifications == nil {
+		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
+	}
+	result, err := a.billingNotifications.SendTrialEndingSoon(ctx, input)
+	if err != nil {
+		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("send trial ending soon notification: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SendAccessPausedEmail(ctx context.Context, input billingnotifications.SendAccessPausedInput) error {
+	if a.billingNotifications == nil {
+		return fmt.Errorf("billing notification service is not configured")
+	}
+	if err := a.billingNotifications.SendAccessPaused(ctx, input); err != nil {
+		return fmt.Errorf("send access paused notification: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
