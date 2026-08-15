@@ -429,6 +429,65 @@ func TestSettleStripeInvoiceAllocations_MissingBaselineBecomesPositiveCarry(t *t
 	require.NotEqual(t, "awaiting_source", rows[0].DeliveryState)
 }
 
+func TestSettleStripeInvoiceAllocations_MissingFinalSourceRemainsRecoverable(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_missing_final")
+	start := time.Date(2026, time.August, 5, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 1)
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "open", 0)
+	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(76 * time.Hour)}))
+	rows := listAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 1, "missing durable spend must not be finalized as a zero carry")
+	require.Equal(t, int32(1), rows[0].Seq)
+	require.Equal(t, "0", numericString(t, rows[0].SourceSnapshotUsd))
+
+	putDailySpend(t, db, organizationID, start, "0.015000")
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(77 * time.Hour)}))
+	rows = listAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 2)
+	require.Equal(t, int32(2), rows[1].Seq)
+	require.Equal(t, "0.020000", numericString(t, rows[1].AmountUsd))
+	require.Equal(t, "confirmed", rows[1].DeliveryState)
+	require.Len(t, stripe.itemInputs, 1)
+}
+
+func TestSettleStripeInvoiceAllocations_RoundsCumulativeCycleTotalsAndDrainsBatch(t *testing.T) {
+	t.Parallel()
+	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_cumulative_rounding")
+	start := time.Date(2026, time.August, 10, 0, 0, 0, 0, time.UTC)
+	secondDay := start.AddDate(0, 0, 1)
+	end := start.AddDate(0, 0, 2)
+	addStripeInvoice(t, db, stripe, organizationID, "in_original", start, end, "draft", 0)
+	addStripeInvoice(t, db, stripe, organizationID, "in_future", end.AddDate(0, 0, 2), end.AddDate(0, 0, 3), "draft", 0)
+	putDailySpend(t, db, organizationID, start, "0.004000")
+	putDailySpend(t, db, organizationID, secondDay, "0.004000")
+
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(48 * time.Hour)}))
+	rows := listAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 2)
+	require.Equal(t, "0", numericString(t, rows[0].AmountUsd))
+	require.Equal(t, "0.010000", numericString(t, rows[1].AmountUsd))
+	require.Len(t, stripe.itemInputs, 1, "fractional daily rows must round once at the cumulative cycle boundary")
+	require.Equal(t, int64(1), stripe.itemInputs[0].AmountCents)
+
+	putDailySpend(t, db, organizationID, start, "0.006000")
+	putDailySpend(t, db, organizationID, secondDay, "0.006000")
+	state := stripe.invoices["in_original"]
+	state.Status = "open"
+	state.FinalizedAt = end.Add(time.Hour)
+	require.NoError(t, activity.Do(t.Context(), activities.SettleStripeInvoiceAllocationsArgs{Now: end.Add(72 * time.Hour)}))
+
+	rows = listAllocationFixtures(t, db, organizationID)
+	require.Len(t, rows, 4)
+	require.Equal(t, "0.010000", numericString(t, rows[1].AmountUsd))
+	require.Equal(t, "0.010000", numericString(t, rows[2].AmountUsd))
+	require.Equal(t, "-0.010000", numericString(t, rows[3].AmountUsd))
+	require.Len(t, stripe.itemInputs, 2, "the bounded batch must drain both pending carry allocations")
+	require.Len(t, stripe.creditInputs, 1)
+}
+
 func TestSettleStripeInvoiceAllocations_TUMPositiveCarryIgnoresChatReadinessAndBindsExactBounds(t *testing.T) {
 	t.Parallel()
 	db, organizationID, stripe, activity := setupAllocationTest(t, "stripe_alloc_tum_positive")

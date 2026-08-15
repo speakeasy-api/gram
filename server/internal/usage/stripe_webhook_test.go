@@ -669,20 +669,26 @@ func TestStripeInvoiceCreatedDurablyIgnoresNonBillableInvoices(t *testing.T) {
 	tests := []struct {
 		name          string
 		billingReason string
+		currency      string
+		subscription  string
 		periodStart   time.Time
 		periodEnd     time.Time
 	}{
 		{
 			name:          "free pre-anchor stub",
 			billingReason: "subscription_create",
-			periodStart:   anchor.AddDate(0, -1, 0),
+			currency:      "usd",
+			subscription:  "subscription_placeholder",
+			periodStart:   anchor.AddDate(0, -1, 0).Add(9*time.Hour + 17*time.Minute),
 			periodEnd:     anchor,
 		},
 		{
 			name:          "unsupported billing reason",
 			billingReason: "manual",
-			periodStart:   anchor,
-			periodEnd:     anchor.AddDate(0, 1, 0),
+			currency:      "eur",
+			subscription:  "",
+			periodStart:   time.Time{},
+			periodEnd:     time.Time{},
 		},
 	}
 	for _, test := range tests {
@@ -694,8 +700,8 @@ func TestStripeInvoiceCreatedDurablyIgnoresNonBillableInvoices(t *testing.T) {
 			configureInvoiceWebhook(t, service, "event_"+strings.ReplaceAll(test.name, " ", "_"), &stripeclient.InvoiceState{
 				ID:                 "invoice_" + strings.ReplaceAll(test.name, " ", "_"),
 				CustomerID:         "customer_placeholder",
-				SubscriptionID:     "subscription_placeholder",
-				Currency:           "usd",
+				SubscriptionID:     test.subscription,
+				Currency:           test.currency,
 				BillingReason:      test.billingReason,
 				Status:             "draft",
 				ServicePeriodStart: test.periodStart,
@@ -707,6 +713,37 @@ func TestStripeInvoiceCreatedDurablyIgnoresNonBillableInvoices(t *testing.T) {
 			require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 		})
 	}
+}
+
+func TestStripeInvoiceCreatedRetriesUntilCheckoutActivationCommits(t *testing.T) {
+	t.Parallel()
+
+	periodStart := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	require.NoError(t, repo.New(db).SetStripeCheckoutSessionFixture(t.Context(), repo.SetStripeCheckoutSessionFixtureParams{
+		StripeCheckoutSessionID: pgtype.Text{String: "checkout_placeholder", Valid: true},
+		OrganizationID:          stripeWebhookOrganizationID,
+	}))
+	configureInvoiceWebhook(t, service, "event_before_activation", &stripeclient.InvoiceState{
+		ID:                 "invoice_before_activation",
+		CustomerID:         "customer_placeholder",
+		SubscriptionID:     "subscription_placeholder",
+		Currency:           "usd",
+		BillingReason:      "subscription_cycle",
+		Status:             "draft",
+		ServicePeriodStart: periodStart,
+		ServicePeriodEnd:   periodStart.AddDate(0, 1, 0),
+	})
+	service.stripeHandler = service.serviceStripeWebhookHandler
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "before-activation").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	require.Empty(t, stripeInvoices(t, db))
+
+	configurePaygInvoiceIdentity(t, service, "subscription_placeholder", periodStart)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "after-activation").Code)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Len(t, stripeInvoices(t, db), 1)
 }
 
 func TestStripeInvoiceCreatedRejectsMismatchedFinancialIdentity(t *testing.T) {

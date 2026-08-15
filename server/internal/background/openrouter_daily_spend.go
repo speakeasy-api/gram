@@ -25,9 +25,10 @@ const (
 	openRouterDailySpendActivityMaxAttempts = 3
 	openRouterDailySpendActivityTimeout     = 2 * time.Hour
 	// Schedule-to-close covers all three two-hour attempts, retry backoff, and
-	// queueing delay. The workflow gets a further hour to record the result.
+	// queueing delay. Collection and settlement run serially, and the workflow
+	// gets a further hour to record their results.
 	openRouterDailySpendActivityScheduleToCloseTimeout = 7 * time.Hour
-	openRouterDailySpendWorkflowRunTimeout             = openRouterDailySpendActivityScheduleToCloseTimeout + time.Hour
+	openRouterDailySpendWorkflowRunTimeout             = 2*openRouterDailySpendActivityScheduleToCloseTimeout + time.Hour
 )
 
 func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
@@ -48,25 +49,27 @@ func CollectOpenRouterDailySpendWorkflow(ctx workflow.Context) error {
 
 	var a *Activities
 	var collected activities.CollectOpenRouterDailySpendResult
-	if err := workflow.ExecuteActivity(ctx, a.CollectOpenRouterDailySpend, activities.CollectOpenRouterDailySpendArgs{
+	collectionErr := workflow.ExecuteActivity(ctx, a.CollectOpenRouterDailySpend, activities.CollectOpenRouterDailySpendArgs{
 		StartDay: startDay,
 		EndDay:   endDay,
-	}).Get(ctx, &collected); err != nil {
-		return fmt.Errorf("collect openrouter daily spend: %w", err)
+	}).Get(ctx, &collected)
+	if collectionErr != nil {
+		collectionErr = fmt.Errorf("collect openrouter daily spend: %w", collectionErr)
+		collected.ReadyOrganizationIDs = nil
 	}
 
-	// Settlement consumes only the durable rows written by the successful
-	// collection above. A failed or exhausted collection never bills a stale
-	// snapshot.
-	if err := workflow.ExecuteActivity(ctx, a.SettleStripeInvoiceAllocations, activities.SettleStripeInvoiceAllocationsArgs{
+	// A failed collection leaves the ready set empty, so settlement still routes
+	// independent TUM carries without freezing stale OpenRouter spend.
+	settlementErr := workflow.ExecuteActivity(ctx, a.SettleStripeInvoiceAllocations, activities.SettleStripeInvoiceAllocationsArgs{
 		Now:                                    workflow.Now(ctx).UTC(),
 		RestrictOpenRouterToReadyOrganizations: true,
 		OpenRouterReadyOrganizationIDs:         collected.ReadyOrganizationIDs,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("settle Stripe invoice allocations: %w", err)
+	}).Get(ctx, nil)
+	if settlementErr != nil {
+		settlementErr = fmt.Errorf("settle Stripe invoice allocations: %w", settlementErr)
 	}
 
-	return nil
+	return errors.Join(collectionErr, settlementErr)
 }
 
 func openRouterDailySpendScheduleOptions(taskQueue string) client.ScheduleOptions {

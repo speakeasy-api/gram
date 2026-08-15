@@ -527,6 +527,9 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if err != nil {
 		return 0, err
 	}
+	if keyResponse.Data.Hash != key.KeyHash {
+		return 0, errors.New("refresh openrouter key limit: upstream key identity changed")
+	}
 
 	_, err = o.repo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
 		OrganizationID: orgID,

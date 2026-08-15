@@ -22,6 +22,7 @@ const (
 	openRouterInvoiceObservationDelay = 72 * time.Hour
 	stripeAllocationRetryWindow       = 24 * time.Hour
 	stripeAllocationClaimLease        = 5 * time.Minute
+	stripeAllocationMaxBatchSize      = 64
 
 	stripeAllocationSourceOpenRouter = "openrouter_daily_spend"
 	stripeAllocationSourceTUM        = "tum_cycle"
@@ -38,7 +39,7 @@ type SettleStripeInvoiceAllocationsArgs struct {
 }
 
 // SettleStripeInvoiceAllocations freezes OpenRouter charges, attaches TUM
-// carries, and delivers at most one claimed allocation per organization.
+// carries, and drains a bounded allocation batch for each organization.
 type SettleStripeInvoiceAllocations struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
@@ -128,19 +129,26 @@ func (s *SettleStripeInvoiceAllocations) settleOrganization(
 		return fmt.Errorf("assign positive carry to draft invoice: %w", err)
 	}
 
-	claimed, err := queries.ClaimNextStripeInvoiceAllocation(ctx, repo.ClaimNextStripeInvoiceAllocationParams{
-		OrganizationID: organizationIDParam,
-		LeaseBefore:    timestamptz(now.Add(-stripeAllocationClaimLease)),
-		AttemptedAt:    timestamptz(now),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("claim invoice allocation: %w", err)
+	var failures []error
+	for range stripeAllocationMaxBatchSize {
+		claimed, err := queries.ClaimNextStripeInvoiceAllocation(ctx, repo.ClaimNextStripeInvoiceAllocationParams{
+			OrganizationID: organizationIDParam,
+			LeaseBefore:    timestamptz(now.Add(-stripeAllocationClaimLease)),
+			AttemptedAt:    timestamptz(now),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			break
+		}
+		if err != nil {
+			failures = append(failures, fmt.Errorf("claim invoice allocation: %w", err))
+			break
+		}
+		if err := s.deliverClaim(ctx, queries, claimed, now); err != nil {
+			failures = append(failures, fmt.Errorf("deliver allocation %s: %w", claimed.ID, err))
+		}
 	}
 
-	return s.deliverClaim(ctx, queries, claimed, now)
+	return errors.Join(failures...)
 }
 
 func (s *SettleStripeInvoiceAllocations) freezeInvoice(
@@ -162,15 +170,20 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 		}
 
 		missedFreeze := !now.Before(cycleEnd.Add(openRouterInvoiceObservationDelay))
+		frozenSnapshots := make([]pgtype.Numeric, 0, len(days))
+		previousCumulativeCents := int64(0)
 		for _, day := range days {
 			snapshot := day.SpendUsd
 			if missedFreeze {
 				snapshot = numericFromCents(0)
 			}
-			cents, err := roundNumericToCents(snapshot)
+			frozenSnapshots = append(frozenSnapshots, snapshot)
+			cumulativeCents, err := roundNumericsToCents(frozenSnapshots)
 			if err != nil {
 				return fmt.Errorf("round baseline for %s: %w", day.SourceDay.Time.Format(time.DateOnly), err)
 			}
+			cents := cumulativeCents - previousCumulativeCents
+			previousCumulativeCents = cumulativeCents
 
 			destination := pgtype.Text{String: "", Valid: false}
 			if cents != 0 && invoice.InvoiceState == "draft" {
@@ -203,16 +216,23 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 	if err != nil {
 		return fmt.Errorf("list final source snapshots for invoice %s: %w", invoice.StripeInvoiceID, err)
 	}
+	frozenSnapshots := make([]pgtype.Numeric, 0, len(baselines))
+	finalSnapshots := make([]pgtype.Numeric, 0, len(baselines))
+	previousCumulativeDeltaCents := int64(0)
 	for _, baseline := range baselines {
-		frozenCents, err := roundNumericToCents(baseline.SourceSnapshotUsd)
+		frozenSnapshots = append(frozenSnapshots, baseline.SourceSnapshotUsd)
+		finalSnapshots = append(finalSnapshots, baseline.FinalSpendUsd)
+		frozenCents, err := roundNumericsToCents(frozenSnapshots)
 		if err != nil {
 			return fmt.Errorf("round frozen snapshot for %s: %w", baseline.SourceKey, err)
 		}
-		finalCents, err := roundNumericToCents(baseline.FinalSpendUsd)
+		finalCents, err := roundNumericsToCents(finalSnapshots)
 		if err != nil {
 			return fmt.Errorf("round final snapshot for %s: %w", baseline.SourceKey, err)
 		}
-		deltaCents := finalCents - frozenCents
+		cumulativeDeltaCents := finalCents - frozenCents
+		deltaCents := cumulativeDeltaCents - previousCumulativeDeltaCents
+		previousCumulativeDeltaCents = cumulativeDeltaCents
 		destination := pgtype.Text{String: "", Valid: false}
 		if deltaCents < 0 {
 			destination = pgtype.Text{String: invoice.StripeInvoiceID, Valid: true}
@@ -588,29 +608,40 @@ func allocationDescription(claim repo.ClaimNextStripeInvoiceAllocationRow) strin
 }
 
 func roundNumericToCents(value pgtype.Numeric) (int64, error) {
-	if !value.Valid || value.NaN || value.InfinityModifier != pgtype.Finite || value.Int == nil {
-		return 0, errors.New("amount is not a finite numeric")
+	return roundNumericsToCents([]pgtype.Numeric{value})
+}
+
+func roundNumericsToCents(values []pgtype.Numeric) (int64, error) {
+	total := new(big.Rat)
+	for _, value := range values {
+		if !value.Valid || value.NaN || value.InfinityModifier != pgtype.Finite || value.Int == nil {
+			return 0, errors.New("amount is not a finite numeric")
+		}
+
+		term := new(big.Rat).SetInt(value.Int)
+		if value.Exp >= 0 {
+			factor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(value.Exp)), nil)
+			term.Mul(term, new(big.Rat).SetInt(factor))
+		} else {
+			divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(-int64(value.Exp)), nil)
+			term.Quo(term, new(big.Rat).SetInt(divisor))
+		}
+		total.Add(total, term)
 	}
 
-	abs := new(big.Int).Abs(new(big.Int).Set(value.Int))
-	exponent := int64(value.Exp) + 2
-	if exponent >= 0 {
-		abs.Mul(abs, new(big.Int).Exp(big.NewInt(10), big.NewInt(exponent), nil))
-	} else {
-		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(-exponent), nil)
-		quotient, remainder := new(big.Int).QuoRem(abs, divisor, new(big.Int))
-		if new(big.Int).Lsh(remainder, 1).Cmp(divisor) >= 0 {
-			quotient.Add(quotient, big.NewInt(1))
-		}
-		abs = quotient
+	scaled := new(big.Rat).Mul(total, big.NewRat(100, 1))
+	absNumerator := new(big.Int).Abs(new(big.Int).Set(scaled.Num()))
+	quotient, remainder := new(big.Int).QuoRem(absNumerator, scaled.Denom(), new(big.Int))
+	if new(big.Int).Lsh(remainder, 1).Cmp(scaled.Denom()) >= 0 {
+		quotient.Add(quotient, big.NewInt(1))
 	}
-	if value.Int.Sign() < 0 {
-		abs.Neg(abs)
+	if scaled.Sign() < 0 {
+		quotient.Neg(quotient)
 	}
-	if !abs.IsInt64() {
+	if !quotient.IsInt64() {
 		return 0, errors.New("amount exceeds Stripe minor-unit range")
 	}
-	return abs.Int64(), nil
+	return quotient.Int64(), nil
 }
 
 func numericFromCents(cents int64) pgtype.Numeric {

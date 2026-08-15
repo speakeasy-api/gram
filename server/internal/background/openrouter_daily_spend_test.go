@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
 
-func TestCollectOpenRouterDailySpendWorkflowCollectsLastThreeCompletedUTCDays(t *testing.T) {
+func TestCollectOpenRouterDailySpendWorkflowCollectsLastFourCompletedUTCDays(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -58,6 +58,7 @@ func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *tes
 	env := suite.NewTestWorkflowEnvironment()
 	var attempts atomic.Int32
 	var settlementAttempts atomic.Int32
+	var settled activities.SettleStripeInvoiceAllocationsArgs
 	env.RegisterActivityWithOptions(
 		func(context.Context, activities.CollectOpenRouterDailySpendArgs) (activities.CollectOpenRouterDailySpendResult, error) {
 			attempts.Add(1)
@@ -66,8 +67,9 @@ func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *tes
 		activity.RegisterOptions{Name: "CollectOpenRouterDailySpend"},
 	)
 	env.RegisterActivityWithOptions(
-		func(context.Context, activities.SettleStripeInvoiceAllocationsArgs) error {
+		func(_ context.Context, args activities.SettleStripeInvoiceAllocationsArgs) error {
 			settlementAttempts.Add(1)
+			settled = args
 			return nil
 		},
 		activity.RegisterOptions{Name: "SettleStripeInvoiceAllocations"},
@@ -78,7 +80,9 @@ func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *tes
 	require.True(t, env.IsWorkflowCompleted())
 	require.ErrorContains(t, env.GetWorkflowError(), "collect openrouter daily spend")
 	require.EqualValues(t, openRouterDailySpendActivityMaxAttempts, attempts.Load())
-	require.Zero(t, settlementAttempts.Load(), "failed collection must not settle stale spend")
+	require.EqualValues(t, 1, settlementAttempts.Load(), "failed collection must still route independent TUM carries")
+	require.True(t, settled.RestrictOpenRouterToReadyOrganizations)
+	require.Empty(t, settled.OpenRouterReadyOrganizationIDs)
 }
 
 func TestOpenRouterDailySpendScheduleOptions(t *testing.T) {
@@ -96,5 +100,5 @@ func TestOpenRouterDailySpendScheduleOptions(t *testing.T) {
 	require.Equal(t, openRouterDailySpendScheduledWorkflowID, action.ID)
 	require.Equal(t, "test-task-queue", action.TaskQueue)
 	require.Equal(t, openRouterDailySpendWorkflowRunTimeout, action.WorkflowRunTimeout)
-	require.Greater(t, openRouterDailySpendWorkflowRunTimeout, openRouterDailySpendActivityScheduleToCloseTimeout)
+	require.Greater(t, openRouterDailySpendWorkflowRunTimeout, 2*openRouterDailySpendActivityScheduleToCloseTimeout)
 }
