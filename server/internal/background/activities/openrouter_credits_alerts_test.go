@@ -303,6 +303,13 @@ func TestMaybeSendOpenRouterCreditsAlerts_SkipsGenerationChangedAfterReservation
 	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_old_placeholder")
 
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 60, 100)}))
+	var generation string
+	require.NoError(t, cacheAdapter.Get(
+		ctx,
+		activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, openrouter.KeyTypeChat),
+		&generation,
+	))
+	require.Equal(t, "operation_new_placeholder", generation, "the test must prove the simulated rotation succeeded")
 	require.Empty(t, captured.Sent(), "a poll reserved under the old generation must not send after cap rotation")
 }
 
