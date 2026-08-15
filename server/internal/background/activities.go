@@ -121,6 +121,7 @@ type Activities struct {
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
+	setOpenRouterSpendCap           *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey  *activities.ReconcilePaygOpenRouterChatKey
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
@@ -330,6 +331,7 @@ func NewActivities(
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
+		setOpenRouterSpendCap:           activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger),
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
@@ -482,6 +484,10 @@ func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID,
 
 func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.RefreshOpenRouterKeyArgs) error {
 	return a.refreshOpenRouterKey.Do(ctx, input)
+}
+
+func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities.SetOpenRouterSpendCapArgs) error {
+	return a.setOpenRouterSpendCap.Do(ctx, input)
 }
 
 func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input activities.ReconcilePaygOpenRouterChatKeyArgs) error {

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -309,4 +310,71 @@ func TestRefreshAPIKeyLimit_RejectsChangedUpstreamIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "hash-stored", row.KeyHash)
 	require.Equal(t, int64(100), row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_NilPreservesPaygChatCap(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+		ID:              orgID,
+		GramAccountType: string(billing.TierPayg),
+	}))
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	raisedCap := 321
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, &raisedCap)
+	require.NoError(t, err)
+
+	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
+	require.NoError(t, err)
+	require.Equal(t, raisedCap, refreshed)
+
+	patches := upstream.recorded()
+	require.Len(t, patches, 1, "a nil PAYG refresh must not PATCH upstream")
+	require.JSONEq(t, `{"limit":321,"limit_reset":"monthly"}`, patches[0])
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(raisedCap), row.MonthlyCredits)
+}
+
+func TestRefreshAPIKeyLimit_NilPreservesDisabledPaygChatKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+		ID:              orgID,
+		GramAccountType: string(billing.TierPayg),
+	}))
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	raisedCap := 321
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, &raisedCap)
+	require.NoError(t, err)
+	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+	patchesBeforeRefresh := upstream.recorded()
+
+	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
+	require.NoError(t, err)
+	require.Equal(t, raisedCap, refreshed)
+	require.Equal(t, patchesBeforeRefresh, upstream.recorded(),
+		"a generic PAYG refresh must not reinstate a key disabled after subscription loss")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.True(t, row.Disabled)
+	require.Equal(t, int64(raisedCap), row.MonthlyCredits)
 }

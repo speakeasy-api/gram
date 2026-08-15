@@ -27,6 +27,8 @@ type Service interface {
 	GetBillingEmail(context.Context, *GetBillingEmailPayload) (res *BillingEmail, err error)
 	// Set or clear the billing notification email for a PAYG organization
 	SetBillingEmail(context.Context, *SetBillingEmailPayload) (res *BillingEmail, err error)
+	// Set the monthly chat spend cap for a PAYG organization
+	SetSpendCap(context.Context, *SetSpendCapPayload) (res *SpendCap, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
@@ -59,7 +61,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
+var MethodNames = [11]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -151,6 +153,20 @@ type SetBillingMetadataPayload struct {
 	AlertEmail *string
 	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
 	BillingCycleAnchorDay int
+}
+
+// SetSpendCapPayload is the payload type of the usage service setSpendCap
+// method.
+type SetSpendCapPayload struct {
+	SessionToken *string
+	// The monthly chat spend cap in USD
+	MonthlyCredits int
+}
+
+// SpendCap is the result type of the usage service setSpendCap method.
+type SpendCap struct {
+	// The monthly chat spend cap in USD
+	MonthlyCredits int
 }
 
 type TUMPeriod struct {

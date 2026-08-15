@@ -70,6 +70,7 @@ export const AUDIT_ACTIONS = [
   "model_provider_key:upsert",
   "openrouter-key:disable",
   "openrouter-key:enable",
+  "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
@@ -347,6 +348,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled platform OpenRouter key";
     case "openrouter-key:enable":
       return "enabled platform OpenRouter key";
+    case "openrouter-key:set_spend_cap":
+      return "changed chat spend cap for";
 
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";

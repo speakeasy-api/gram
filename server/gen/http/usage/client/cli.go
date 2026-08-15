@@ -135,6 +135,40 @@ func BuildSetBillingEmailPayload(usageSetBillingEmailBody string, usageSetBillin
 	return v, nil
 }
 
+// BuildSetSpendCapPayload builds the payload for the usage setSpendCap
+// endpoint from CLI flags.
+func BuildSetSpendCapPayload(usageSetSpendCapBody string, usageSetSpendCapSessionToken string) (*usage.SetSpendCapPayload, error) {
+	var err error
+	var body SetSpendCapRequestBody
+	{
+		err = json.Unmarshal([]byte(usageSetSpendCapBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"monthly_credits\": 2\n   }'")
+		}
+		if body.MonthlyCredits < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 1, true))
+		}
+		if body.MonthlyCredits > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 10000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if usageSetSpendCapSessionToken != "" {
+			sessionToken = &usageSetSpendCapSessionToken
+		}
+	}
+	v := &usage.SetSpendCapPayload{
+		MonthlyCredits: body.MonthlyCredits,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateCustomerSessionPayload builds the payload for the usage
 // createCustomerSession endpoint from CLI flags.
 func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken string) (*usage.CreateCustomerSessionPayload, error) {

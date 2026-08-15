@@ -21,6 +21,7 @@ type Endpoints struct {
 	SetBillingMetadata       goa.Endpoint
 	GetBillingEmail          goa.Endpoint
 	SetBillingEmail          goa.Endpoint
+	SetSpendCap              goa.Endpoint
 	GetUsageTiers            goa.Endpoint
 	CreateCustomerSession    goa.Endpoint
 	CreateCheckout           goa.Endpoint
@@ -38,6 +39,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SetBillingMetadata:       NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
 		GetBillingEmail:          NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
 		SetBillingEmail:          NewSetBillingEmailEndpoint(s, a.APIKeyAuth),
+		SetSpendCap:              NewSetSpendCapEndpoint(s, a.APIKeyAuth),
 		GetUsageTiers:            NewGetUsageTiersEndpoint(s),
 		CreateCustomerSession:    NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
 		CreateCheckout:           NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
@@ -53,6 +55,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetBillingMetadata = m(e.SetBillingMetadata)
 	e.GetBillingEmail = m(e.GetBillingEmail)
 	e.SetBillingEmail = m(e.SetBillingEmail)
+	e.SetSpendCap = m(e.SetSpendCap)
 	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
@@ -172,6 +175,29 @@ func NewSetBillingEmailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.SetBillingEmail(ctx, p)
+	}
+}
+
+// NewSetSpendCapEndpoint returns an endpoint function that calls the method
+// "setSpendCap" of service "usage".
+func NewSetSpendCapEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSpendCapPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSpendCap(ctx, p)
 	}
 }
 

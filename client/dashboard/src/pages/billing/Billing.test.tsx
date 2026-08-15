@@ -45,6 +45,16 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
 // about which sections the page reaches for a given tier.
 vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
   useGetCreditUsage: () => ({ data: undefined }),
+  invalidateAllGetCreditUsage: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
+  useSetSpendCapMutation: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+  }),
 }));
 vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
   useGetPeriodUsage: () => ({ data: undefined }),
@@ -108,6 +118,9 @@ const cta = () =>
 
 const billingEmailField = () =>
   screen.queryByLabelText(/billing notification email/i);
+
+const spendCapSection = () =>
+  screen.queryByRole("heading", { name: /chat spend cap/i });
 
 /** The billing email section invalidates its query through the client. */
 function renderBilling() {
@@ -184,6 +197,38 @@ describe("Billing", () => {
       expect(billingEmailField()).toBeNull();
     },
   );
+
+  // The spend cap is a pay-as-you-go control. A trialing enterprise org is on
+  // its way onto PAYG, so it gets the cap locked rather than hidden — and the
+  // TUM early return is the path that org takes.
+  it.each<ProductTier>(["payg", "enterprise"])(
+    "places the chat spend cap on the %s view",
+    (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+
+      renderBilling();
+
+      expect(spendCapSection()).not.toBeNull();
+    },
+  );
+
+  it("shows no chat spend cap on the pre-checkout view", () => {
+    mocks.productTier.mockReturnValue("base");
+
+    renderBilling();
+
+    expect(spendCapSection()).toBeNull();
+  });
+
+  it("shows no chat spend cap to enterprise without an active trial", () => {
+    mocks.productTier.mockReturnValue("enterprise");
+    mocks.session.mockReturnValue({ trial: null });
+
+    renderBilling();
+
+    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(spendCapSection()).toBeNull();
+  });
 
   it("shows no checkout CTA once the trial has ended", () => {
     mocks.session.mockReturnValue({

@@ -32,6 +32,17 @@ INSERT INTO audit_logs (
 )
 RETURNING id, organization_id;
 
+-- name: HasOpenRouterSpendCapAuditOperation :one
+SELECT EXISTS (
+  SELECT 1
+  FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = @subject_id
+    AND metadata->>'operation_id' = @operation_id::text
+) AS recorded;
+
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform

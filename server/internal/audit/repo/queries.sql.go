@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const hasOpenRouterSpendCapAuditOperation = `-- name: HasOpenRouterSpendCapAuditOperation :one
+SELECT EXISTS (
+  SELECT 1
+  FROM audit_logs
+  WHERE organization_id = $1
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = $2
+    AND metadata->>'operation_id' = $3::text
+) AS recorded
+`
+
+type HasOpenRouterSpendCapAuditOperationParams struct {
+	OrganizationID string
+	SubjectID      string
+	OperationID    string
+}
+
+func (q *Queries) HasOpenRouterSpendCapAuditOperation(ctx context.Context, arg HasOpenRouterSpendCapAuditOperationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOpenRouterSpendCapAuditOperation, arg.OrganizationID, arg.SubjectID, arg.OperationID)
+	var recorded bool
+	err := row.Scan(&recorded)
+	return recorded, err
+}
+
 const insertAuditLog = `-- name: InsertAuditLog :one
 INSERT INTO audit_logs (
   organization_id,

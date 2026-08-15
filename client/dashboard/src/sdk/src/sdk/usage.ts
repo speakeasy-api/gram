@@ -12,9 +12,11 @@ import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManag
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { usageSetBillingEmail } from "../funcs/usageSetBillingEmail.js";
 import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
+import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
+import { SpendCap } from "../models/components/spendcap.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { UsageTiers } from "../models/components/usagetiers.js";
 import {
@@ -53,6 +55,10 @@ import {
   SetBillingMetadataRequest,
   SetBillingMetadataSecurity,
 } from "../models/operations/setbillingmetadata.js";
+import {
+  SetSpendCapRequest,
+  SetSpendCapSecurity,
+} from "../models/operations/setspendcap.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Usage extends ClientSDK {
@@ -235,6 +241,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<TokensUnderManagement> {
     return unwrapAsync(usageSetBillingMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSpendCap usage
+   *
+   * @remarks
+   * Set the monthly chat spend cap for a PAYG organization
+   */
+  async setSpendCap(
+    request: SetSpendCapRequest,
+    security?: SetSpendCapSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SpendCap> {
+    return unwrapAsync(usageSetSpendCap(
       this,
       request,
       security,

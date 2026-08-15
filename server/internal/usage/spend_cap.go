@@ -1,0 +1,68 @@
+package usage
+
+import (
+	"context"
+	"errors"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+const (
+	minimumSpendCap = 1
+	maximumSpendCap = 10000
+)
+
+type openRouterKeyRefreshScheduler interface {
+	SetOpenRouterSpendCap(context.Context, string, string, int, urn.Principal, *string) error
+}
+
+func (s *Service) SetSpendCap(ctx context.Context, payload *gen.SetSpendCapPayload) (*gen.SpendCap, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeOrgAdmin,
+		ResourceKind: "",
+		ResourceID:   authCtx.ActiveOrganizationID,
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
+	}
+	if payload.MonthlyCredits < minimumSpendCap || payload.MonthlyCredits > maximumSpendCap {
+		return nil, oops.E(oops.CodeInvalid, nil, "monthly_credits must be between %d and %d", minimumSpendCap, maximumSpendCap).LogWarn(ctx, s.logger)
+	}
+
+	_, err := trialsrepo.New(s.db).GetActiveTrial(ctx, authCtx.ActiveOrganizationID)
+	switch {
+	case err == nil:
+		return nil, oops.E(oops.CodeConflict, nil, "the chat spend cap cannot be changed during an active trial")
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeUnexpected, err, "check active trial before setting chat spend cap").LogError(ctx, s.logger)
+	}
+	if err := s.requirePaygOrganization(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
+	requestedLimit := payload.MonthlyCredits
+	if err := s.keyRefresher.SetOpenRouterSpendCap(
+		ctx,
+		uuid.NewString(),
+		authCtx.ActiveOrganizationID,
+		requestedLimit,
+		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		authCtx.Email,
+	); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "set chat spend cap").LogError(ctx, s.logger)
+	}
+
+	return &gen.SpendCap{MonthlyCredits: requestedLimit}, nil
+}

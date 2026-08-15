@@ -98,6 +98,17 @@ var BillingEmail = Type("BillingEmail", func() {
 	})
 })
 
+// SpendCap is the monthly USD ceiling enforced by the organization's
+// customer-facing OpenRouter chat key.
+var SpendCap = Type("SpendCap", func() {
+	Attribute("monthly_credits", Int, "The monthly chat spend cap in USD", func() {
+		Minimum(1)
+		Maximum(10000)
+	})
+
+	Required("monthly_credits")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -219,6 +230,31 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "setBillingEmail")
 		Meta("openapi:extension:x-speakeasy-name-override", "setBillingEmail")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setBillingEmail"}`)
+	})
+
+	Method("setSpendCap", func() {
+		Description("Set the monthly chat spend cap for a PAYG organization")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("monthly_credits", Int, "The monthly chat spend cap in USD", func() {
+				Minimum(1)
+				Maximum(10000)
+			})
+			Required("monthly_credits")
+		})
+
+		Result(SpendCap)
+
+		HTTP(func() {
+			POST("/rpc/usage.setSpendCap")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setSpendCap")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSpendCap")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setSpendCap"}`)
 	})
 
 	Method("getUsageTiers", func() {

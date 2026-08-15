@@ -52952,6 +52952,93 @@ paths:
             x-speakeasy-name-override: setBillingMetadata
             x-speakeasy-react-hook:
                 name: setBillingMetadata
+    /rpc/usage.setSpendCap:
+        post:
+            description: Set the monthly chat spend cap for a PAYG organization
+            operationId: setSpendCap
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SpendCap'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendCap'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setSpendCap usage
+            tags:
+                - usage
+            x-speakeasy-name-override: setSpendCap
+            x-speakeasy-react-hook:
+                name: setSpendCap
     /rpc/userSessionClients.get:
         get:
             description: Get a user_session_client by id.
@@ -73611,6 +73698,17 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SpendCap:
+            type: object
+            properties:
+                monthly_credits:
+                    type: integer
+                    description: The monthly chat spend cap in USD
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+            required:
+                - monthly_credits
         SpendRule:
             type: object
             properties:

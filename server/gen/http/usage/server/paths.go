@@ -32,6 +32,11 @@ func SetBillingEmailUsagePath() string {
 	return "/rpc/usage.setBillingEmail"
 }
 
+// SetSpendCapUsagePath returns the URL path to the usage service setSpendCap HTTP endpoint.
+func SetSpendCapUsagePath() string {
+	return "/rpc/usage.setSpendCap"
+}
+
 // GetUsageTiersUsagePath returns the URL path to the usage service getUsageTiers HTTP endpoint.
 func GetUsageTiersUsagePath() string {
 	return "/rpc/usage.getUsageTiers"

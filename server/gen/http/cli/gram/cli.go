@@ -159,7 +159,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -3178,6 +3178,10 @@ func ParseEndpoint(
 		usageSetBillingEmailBodyFlag         = usageSetBillingEmailFlags.String("body", "REQUIRED", "")
 		usageSetBillingEmailSessionTokenFlag = usageSetBillingEmailFlags.String("session-token", "", "")
 
+		usageSetSpendCapFlags            = flag.NewFlagSet("set-spend-cap", flag.ExitOnError)
+		usageSetSpendCapBodyFlag         = usageSetSpendCapFlags.String("body", "REQUIRED", "")
+		usageSetSpendCapSessionTokenFlag = usageSetSpendCapFlags.String("session-token", "", "")
+
 		usageGetUsageTiersFlags = flag.NewFlagSet("get-usage-tiers", flag.ExitOnError)
 
 		usageCreateCustomerSessionFlags            = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
@@ -4024,6 +4028,7 @@ func ParseEndpoint(
 	usageSetBillingMetadataFlags.Usage = usageSetBillingMetadataUsage
 	usageGetBillingEmailFlags.Usage = usageGetBillingEmailUsage
 	usageSetBillingEmailFlags.Usage = usageSetBillingEmailUsage
+	usageSetSpendCapFlags.Usage = usageSetSpendCapUsage
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
@@ -6093,6 +6098,9 @@ func ParseEndpoint(
 			case "set-billing-email":
 				epf = usageSetBillingEmailFlags
 
+			case "set-spend-cap":
+				epf = usageSetSpendCapFlags
+
 			case "get-usage-tiers":
 				epf = usageGetUsageTiersFlags
 
@@ -8096,6 +8104,9 @@ func ParseEndpoint(
 			case "set-billing-email":
 				endpoint = c.SetBillingEmail()
 				data, err = usagec.BuildSetBillingEmailPayload(*usageSetBillingEmailBodyFlag, *usageSetBillingEmailSessionTokenFlag)
+			case "set-spend-cap":
+				endpoint = c.SetSpendCap()
+				data, err = usagec.BuildSetSpendCapPayload(*usageSetSpendCapBodyFlag, *usageSetSpendCapSessionTokenFlag)
 			case "get-usage-tiers":
 				endpoint = c.GetUsageTiers()
 			case "create-customer-session":
@@ -21394,6 +21405,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    set-billing-metadata: Set an organization's billing contract terms. Restricted to platform admins.`)
 	fmt.Fprintln(os.Stderr, `    get-billing-email: Get the billing notification email for a PAYG organization`)
 	fmt.Fprintln(os.Stderr, `    set-billing-email: Set or clear the billing notification email for a PAYG organization`)
+	fmt.Fprintln(os.Stderr, `    set-spend-cap: Set the monthly chat spend cap for a PAYG organization`)
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
@@ -21495,6 +21507,26 @@ func usageSetBillingEmailUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage set-billing-email --body '{\n      \"email\": \"alice@example.com\"\n   }' --session-token \"abc123\"")
+}
+
+func usageSetSpendCapUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage set-spend-cap", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the monthly chat spend cap for a PAYG organization`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage set-spend-cap --body '{\n      \"monthly_credits\": 2\n   }' --session-token \"abc123\"")
 }
 
 func usageGetUsageTiersUsage() {
