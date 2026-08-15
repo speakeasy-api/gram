@@ -4,7 +4,9 @@ import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   BuildingIcon,
   ChevronLeftIcon,
+  ExternalLinkIcon,
   FolderIcon,
+  SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -19,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { organizationProjectsQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
+import { organizationFeaturesUrl } from "@/lib/impersonation";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 
 // Indexed as a plain string record, for the reason `Trial` gives: the server
@@ -36,6 +39,13 @@ function subtitle(org: AdminOrganization): string {
   return words ? `${org.account_type} · ${words}` : org.account_type;
 }
 
+// What the nav computed, in the words a screen reader is told. Held apart from
+// `currentProps` for the one item that is not a `Link` and so has no guess to
+// turn off.
+function ariaCurrent(isCurrent: boolean): AriaAttributes["aria-current"] {
+  return isCurrent ? "page" : undefined;
+}
+
 // Both answers about one item, from the one boolean the nav computes. Without
 // `exact`, `Link` marks itself aria-current="page" whenever the current address
 // merely starts with its target, and every record address starts with
@@ -49,7 +59,7 @@ function currentProps(isCurrent: boolean): {
 } {
   return {
     activeOptions: { exact: true },
-    "aria-current": isCurrent ? "page" : undefined,
+    "aria-current": ariaCurrent(isCurrent),
   };
 }
 
@@ -64,6 +74,11 @@ export function RecordNav({
 }): JSX.Element {
   const matchRoute = useMatchRoute();
   const { data } = useQuery(organizationProjectsQuery(org.id));
+
+  // The one item built from `org.slug` rather than the address: the server
+  // reads the organization back out of the redirect's first segment, so an id
+  // there lands the operator nowhere.
+  const featuresUrl = organizationFeaturesUrl(org.slug);
 
   // Undefined until the query resolves. `?? 0` here would paint a zero over a
   // question nothing has answered yet.
@@ -177,6 +192,39 @@ export function RecordNav({
                 <SidebarMenuBadge>{projectCount}</SidebarMenuBadge>
               )}
             </SidebarMenuItem>
+
+            {/* Absent rather than dead when the record has no slug or no app
+                origin is configured, the way the header's Open in Gram is. */}
+            {featuresUrl && (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Features">
+                  {/* A plain anchor, not a `Link`: this is the only item that
+                      leaves the admin app, because every admin endpoint for
+                      the feature switches resolves the operator's own
+                      organization rather than this record. AGE-3242. It is not
+                      an address here, so it can never be the current page. */}
+                  <a
+                    href={featuresUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-current={ariaCurrent(false)}
+                  >
+                    <SlidersHorizontalIcon />
+                    <span>
+                      Features
+                      <span className="sr-only">
+                        {" "}
+                        (opens in the Gram dashboard)
+                      </span>
+                    </span>
+                    <ExternalLinkIcon
+                      aria-hidden="true"
+                      className="ml-auto opacity-60 group-data-[collapsible=icon]:hidden"
+                    />
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
 
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={onMembers} tooltip="Members">
