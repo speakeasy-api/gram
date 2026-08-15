@@ -42,7 +42,7 @@ function subtitle(org: AdminOrganization): string {
 // `/organizations` and with the record's own index, so three items claim the
 // page at once. `Link` also writes that guess over an aria-current handed to it,
 // so turning the guess off is what lets the value below be the answer.
-// site-header.tsx:99 names the same default.
+// site-header.tsx:53 names the same default.
 function currentProps(isCurrent: boolean): {
   activeOptions: { exact: boolean };
   "aria-current": AriaAttributes["aria-current"];

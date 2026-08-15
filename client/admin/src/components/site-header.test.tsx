@@ -169,22 +169,58 @@ describe("SiteHeader", () => {
     expect(crumbs()).toEqual(["Projects", PROJECT.name]);
   });
 
-  it("marks only the last crumb as the current page", async () => {
-    // Not a role assertion: the vendored BreadcrumbPage carries role="link"
-    // aria-disabled="true" aria-current="page", so getAllByRole("link")
-    // returns the trailing crumb too. `ui/` may not be edited to change that,
-    // so aria-current is the only honest discriminator.
+  // Every address the bar can stand on, with the crumb that ends its trail.
+  // `/members` is the one address where position and "is this link's target the
+  // current address" agree, so a bar tested only there hides the record index,
+  // where the record crumb's own target is where the operator is standing.
+  it.each([
+    ["the organizations list", "/organizations", "Organizations"],
+    ["a record's own index", `/organizations/${ORG.slug}`, "Overview"],
+    ["the members view", `/organizations/${ORG.slug}/members`, "Members"],
+    ["the projects list", `/organizations/${ORG.slug}/projects`, "Projects"],
+    [
+      "one project inside a record",
+      `/organizations/${ORG.slug}/projects/${PROJECT.slug}`,
+      PROJECT.name,
+    ],
+    ["the standalone project page", `/projects/${PROJECT.slug}`, PROJECT.name],
+  ])(
+    "marks only the last crumb as the current page on %s",
+    async (_address, initialPath, last) => {
+      // Not a role assertion: the vendored BreadcrumbPage carries role="link"
+      // aria-disabled="true" aria-current="page", so getAllByRole("link")
+      // returns the trailing crumb too. `ui/` may not be edited to change that,
+      // so aria-current is the only honest discriminator.
+      await renderRouteTree(routeTree, {
+        initialPath,
+        queryClient: seeded(),
+      });
+
+      const current = within(bar())
+        .getAllByRole("listitem")
+        .filter((item) => item.querySelector("[aria-current='page']") !== null);
+
+      expect(current.map((item) => item.textContent?.trim())).toEqual([last]);
+    },
+  );
+
+  it("leaves the router's active flag off a crumb nobody is standing on", async () => {
+    // The other half of the router's guess, and the half the crumb cannot take
+    // back after the fact. Every crumb's target is an ancestor of the address,
+    // so without `exact` the router calls all three active and anything keyed
+    // off `data-status` lights the whole trail.
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/members`,
       queryClient: seeded(),
     });
 
-    const current = within(bar())
+    const flags = within(bar())
       .getAllByRole("listitem")
-      .filter((item) => item.querySelector("[aria-current='page']") !== null);
+      .map(
+        (item) => item.querySelector("a")?.getAttribute("data-status") ?? null,
+      );
 
-    expect(current).toHaveLength(1);
-    expect(current[0]?.textContent?.trim()).toBe("Members");
+    expect(flags).toEqual([null, null, null]);
   });
 
   it("links every crumb but the last back to its own view", async () => {

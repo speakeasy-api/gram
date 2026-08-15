@@ -1,6 +1,10 @@
 import { Fragment, type JSX } from "react";
 import { useQueries, type QueryKey } from "@tanstack/react-query";
-import { Link, useMatches, type LinkProps } from "@tanstack/react-router";
+import {
+  useLinkProps,
+  useMatches,
+  type LinkProps,
+} from "@tanstack/react-router";
 
 import {
   Breadcrumb,
@@ -36,6 +40,32 @@ declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
     crumb?: Crumb;
   }
+}
+
+// Position is the whole answer: a crumb that is not the last is not the current
+// page, whatever the address says. `Link` insists on deciding that for itself
+// and writes its answer last, over a handed-in `aria-current` and over
+// `activeProps` alike, so the guess is taken back off rather than argued with.
+// record-nav.tsx:46 keeps the same rule for the nav's items.
+function CrumbLink({
+  to,
+  children,
+}: {
+  to: LinkProps["to"];
+  children: string;
+}): JSX.Element {
+  // `exact` still earns its line, for the half of the guess this cannot take
+  // back: every crumb's target is an ancestor of the address, so without it
+  // every crumb would carry `data-status="active"` and the `active` class.
+  const linkProps = useLinkProps({ to, activeOptions: { exact: true } });
+
+  return (
+    <BreadcrumbLink asChild>
+      <a {...linkProps} aria-current={undefined}>
+        {children}
+      </a>
+    </BreadcrumbLink>
+  );
 }
 
 export function SiteHeader(): JSX.Element {
@@ -95,13 +125,7 @@ export function SiteHeader(): JSX.Element {
                       {label}
                     </BreadcrumbPage>
                   ) : (
-                    <BreadcrumbLink asChild>
-                      {/* Without `exact`, `Link` marks every ancestor of the
-                          current address aria-current="page" too. */}
-                      <Link to={to} activeOptions={{ exact: true }}>
-                        {label}
-                      </Link>
-                    </BreadcrumbLink>
+                    <CrumbLink to={to}>{label}</CrumbLink>
                   )}
                 </BreadcrumbItem>
               </Fragment>
