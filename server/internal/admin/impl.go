@@ -721,6 +721,9 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		// rejectExtension reads on the pool, so this connection goes back before
+		// it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
 		return nil, s.rejectExtension(ctx, logger, payload.ID)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
