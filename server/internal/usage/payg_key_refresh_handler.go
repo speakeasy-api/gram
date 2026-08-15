@@ -12,20 +12,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-// PaygKeyRefreshHandler schedules the OpenRouter limit refresh represented by
-// a committed PAYG activation audit event.
+// PaygKeyRefreshHandler schedules desired-state reconciliation after a
+// committed PAYG billing transition.
 type PaygKeyRefreshHandler struct {
 	logger    *slog.Logger
 	refresher PaygKeyRefreshScheduler
 }
 
-// PaygKeyRefreshScheduler starts the idempotent refresh associated with one
-// committed outbox event.
+// PaygKeyRefreshScheduler starts the idempotent reconciliation associated with
+// one committed outbox event.
 type PaygKeyRefreshScheduler interface {
-	SchedulePaygOpenRouterKeyRefresh(context.Context, string, string, openrouter.KeyType, *int) error
+	SchedulePaygOpenRouterChatKeyReconciliation(context.Context, string, string) error
 }
 
 func NewPaygKeyRefreshHandler(logger *slog.Logger, refresher PaygKeyRefreshScheduler) *PaygKeyRefreshHandler {
@@ -61,7 +60,9 @@ func (h *PaygKeyRefreshHandler) Handle(ctx context.Context, event *webhooksv1.Ev
 		)
 		return nil
 	}
-	if payload.Action != string(audit.ActionOrganizationPaygActivated) {
+	switch audit.Action(payload.Action) {
+	case audit.ActionOrganizationPaygActivated, audit.ActionOrganizationPaygDeactivated:
+	default:
 		return nil
 	}
 	if payload.OrganizationID != organizationID || payload.SubjectID != organizationID || payload.SubjectType != "organization" {
@@ -75,9 +76,8 @@ func (h *PaygKeyRefreshHandler) Handle(ctx context.Context, event *webhooksv1.Ev
 		return errors.New("openrouter key refresh scheduler is unavailable")
 	}
 
-	limit := paygOpenRouterChatCreditLimit
-	if err := h.refresher.SchedulePaygOpenRouterKeyRefresh(ctx, eventID, organizationID, openrouter.KeyTypeChat, &limit); err != nil {
-		return fmt.Errorf("schedule PAYG OpenRouter chat key refresh: %w", err)
+	if err := h.refresher.SchedulePaygOpenRouterChatKeyReconciliation(ctx, eventID, organizationID); err != nil {
+		return fmt.Errorf("schedule PAYG OpenRouter chat key reconciliation: %w", err)
 	}
 
 	return nil

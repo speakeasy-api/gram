@@ -31,6 +31,8 @@ import (
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -63,6 +65,14 @@ func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*
 type captureFeatureCache struct {
 	mu      sync.Mutex
 	enabled []productfeatures.Feature
+}
+
+type captureStripeWebhookMetrics struct {
+	invoicePaymentFailures atomic.Int32
+}
+
+func (c *captureStripeWebhookMetrics) RecordInvoicePaymentFailed(context.Context) {
+	c.invoicePaymentFailures.Add(1)
 }
 
 func (c *captureFeatureCache) UpdateFeatureCache(_ context.Context, _ string, feature productfeatures.Feature, enabled bool) {
@@ -253,6 +263,69 @@ func paygSchedulingIntentCount(t *testing.T, db *pgxpool.Pool) int {
 	}
 
 	return count
+}
+
+func organizationBillingActionIntentCount(t *testing.T, db *pgxpool.Pool, action audit.Action) int {
+	t.Helper()
+
+	rows, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+
+	count := 0
+	for _, row := range rows {
+		var event webhooksv1.Event
+		require.NoError(t, proto.Unmarshal(row.Message, &event))
+		if event.GetEventType() != string(events.OrganizationBillingV1.EventType()) {
+			continue
+		}
+
+		var payload events.AuditLogCreatedPayloadV1
+		require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+		if payload.Action == string(action) {
+			count++
+		}
+	}
+
+	return count
+}
+
+func configurePaygSubscriptionDeletion(t *testing.T, service *Service, eventID, currentSubscriptionID, deletedSubscriptionID string) *captureStripeWebhookMetrics {
+	t.Helper()
+
+	anchor := time.Date(2026, time.August, 23, 0, 0, 0, 0, time.UTC)
+	configurePaygInvoiceIdentity(t, service, currentSubscriptionID, anchor)
+	service.auditLogger = audit.NewLogger()
+	metrics := &captureStripeWebhookMetrics{}
+	service.stripeMetrics = metrics
+
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:             eventID,
+			Type:           "customer.subscription.deleted",
+			Created:        time.Now().UTC(),
+			ObjectID:       deletedSubscriptionID,
+			CustomerID:     "customer_placeholder",
+			SubscriptionID: "subscription_payload_must_not_be_used",
+		}, nil
+	}
+
+	return metrics
+}
+
+func createOpenRouterKeyFixture(t *testing.T, db *pgxpool.Pool, keyType openrouter.KeyType, credits int64) {
+	t.Helper()
+
+	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		KeyType:        string(keyType),
+		Key:            pgtype.Text{String: "key_placeholder_" + string(keyType), Valid: true},
+		KeyEncrypted:   pgtype.Text{String: "", Valid: false},
+		KeyHash:        "hash_placeholder_" + string(keyType),
+		MonthlyCredits: credits,
+	})
+	require.NoError(t, err)
 }
 
 func TestAttachStripeWebhookRoute(t *testing.T) {
@@ -1134,6 +1207,245 @@ func TestStripeCheckoutTerminalStateIsDurableNoop(t *testing.T) {
 	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.False(t, metadata.StripeSubscriptionID.Valid)
+}
+
+func TestStripeSubscriptionDeletionDeactivatesCurrentPaygBillingAtomically(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	metrics := configurePaygSubscriptionDeletion(t, service, "event_deactivation", "subscription_current", "subscription_current")
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 321)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 654)
+
+	tx := testenv.BeginTx(t, t.Context(), db)
+	_, err := productfeatures.SeedPaygEntitlementsTx(t.Context(), tx, stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "deactivate").Code)
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "customer_placeholder", metadata.StripeCustomerID.String)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+	require.False(t, metadata.StripeBillingCycleAnchor.Valid)
+	require.EqualValues(t, 23, metadata.BillingCycleAnchorDay)
+
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "free", organization.GramAccountType)
+	require.False(t, organization.Whitelisted)
+
+	chatKey, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.True(t, chatKey.Disabled)
+	require.EqualValues(t, 321, chatKey.MonthlyCredits)
+	internalKey, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		KeyType:        string(openrouter.KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.False(t, internalKey.Disabled)
+	require.EqualValues(t, 654, internalKey.MonthlyCredits)
+
+	featureEnabled, err := featurerepo.New(db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		FeatureName:    string(productfeatures.FeatureSkills),
+	})
+	require.NoError(t, err)
+	require.True(t, featureEnabled)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+	record, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
+	require.NoError(t, err)
+	require.Equal(t, "system", record.ActorID)
+	require.Equal(t, "organization", record.SubjectType)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "payg", beforeSnapshot["account_type"])
+	require.Equal(t, true, beforeSnapshot["whitelisted"])
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "free", afterSnapshot["account_type"])
+	require.Equal(t, false, afterSnapshot["whitelisted"])
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Zero(t, metrics.invoicePaymentFailures.Load())
+}
+
+func TestStripeSubscriptionDeletionDistinctReplayIsDomainNoop(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, service, "event_deactivation_first", "subscription_replay", "subscription_replay")
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
+
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:         "event_deactivation_second",
+			Type:       "customer.subscription.deleted",
+			Created:    time.Now().UTC(),
+			ObjectID:   "subscription_replay",
+			CustomerID: "customer_placeholder",
+		}, nil
+	}
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "second").Code)
+
+	require.Equal(t, 2, stripeWebhookReceiptCount(t, db))
+	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+}
+
+func TestStripeSubscriptionDeletionForNonCurrentSubscriptionIsDurableNoop(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, service, "event_deactivation_stale", "subscription_current", "subscription_stale")
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "stale").Code)
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_current", metadata.StripeSubscriptionID.String)
+	require.True(t, metadata.StripeBillingCycleAnchor.Valid)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "payg", organization.GramAccountType)
+	require.True(t, organization.Whitelisted)
+	chatKey, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.False(t, chatKey.Disabled)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 0, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+}
+
+func TestStripeSubscriptionDeletionForEnterpriseOrganizationIsDurableNoop(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, service, "event_deactivation_enterprise", "subscription_enterprise", "subscription_enterprise")
+	require.NoError(t, orgrepo.New(db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		ID:              stripeWebhookOrganizationID,
+		GramAccountType: "enterprise",
+	}))
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "enterprise").Code)
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_enterprise", metadata.StripeSubscriptionID.String)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", organization.GramAccountType)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 0, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+}
+
+func TestStripeSubscriptionDeletionForPolarOrganizationIsDurableNoop(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, service, "event_deactivation_polar", "subscription_polar", "subscription_polar")
+	require.NoError(t, orgrepo.New(db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		ID:              stripeWebhookOrganizationID,
+		GramAccountType: "pro",
+	}))
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "polar").Code)
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_polar", metadata.StripeSubscriptionID.String)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "pro", organization.GramAccountType)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 0, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+}
+
+func TestStripeSubscriptionDeletionAuditFailureRollsBackDomainAndReceipt(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, service, "event_deactivation_failure", "subscription_failure", "subscription_failure")
+	service.auditLogger = nil
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "failure").Code)
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_failure", metadata.StripeSubscriptionID.String)
+	require.True(t, metadata.StripeBillingCycleAnchor.Valid)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "payg", organization.GramAccountType)
+	require.True(t, organization.Whitelisted)
+	chatKey, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.False(t, chatKey.Disabled)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 0, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+}
+
+func TestStripeInvoicePaymentFailureIsObservedOnceAfterDurableReceipt(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	metrics := &captureStripeWebhookMetrics{}
+	service.stripeMetrics = metrics
+	service.stripeHandler = service.serviceStripeWebhookHandler
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:         "event_payment_failure",
+			Type:       "invoice.payment_failed",
+			Created:    time.Now().UTC(),
+			ObjectID:   "invoice_payment_failure",
+			CustomerID: "customer_placeholder",
+		}, nil
+	}
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
+	require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "replay").Code)
+	require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+}
+
+func TestStripeSubscriptionDeletionRejectsMissingObjectSubscription(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeStripeWebhookClient{verify: func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:             "event_deactivation_malformed",
+			Type:           "customer.subscription.deleted",
+			Created:        time.Now().UTC(),
+			CustomerID:     "customer_placeholder",
+			SubscriptionID: "subscription_payload_must_not_be_used",
+		}, nil
+	}}
+	service := &Service{logger: testenv.NewLogger(t), stripeClient: client, stripeHandler: testStripeWebhookHandler}
+	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "malformed").Code)
 }
 
 func TestStripeCheckoutRejectsMalformedIdentifiers(t *testing.T) {

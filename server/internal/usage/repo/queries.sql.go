@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireOpenRouterChatBillingLock = `-- name: AcquireOpenRouterChatBillingLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
+`
+
+// Serializes billing state changes with the chat-key reconciler.
+func (q *Queries) AcquireOpenRouterChatBillingLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterChatBillingLock, organizationID)
+	return err
+}
+
 const acquireStripeSubscriptionActivationLock = `-- name: AcquireStripeSubscriptionActivationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
 `
@@ -449,6 +459,62 @@ func (q *Queries) CreateTUMMeterReportIntent(ctx context.Context, arg CreateTUMM
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deactivatePaygBillingMetadata = `-- name: DeactivatePaygBillingMetadata :execrows
+UPDATE billing_metadata
+SET stripe_subscription_id = NULL,
+    stripe_billing_cycle_anchor = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND stripe_customer_id = $2
+  AND stripe_subscription_id = $3
+`
+
+type DeactivatePaygBillingMetadataParams struct {
+	OrganizationID       string
+	StripeCustomerID     pgtype.Text
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) DeactivatePaygBillingMetadata(ctx context.Context, arg DeactivatePaygBillingMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivatePaygBillingMetadata, arg.OrganizationID, arg.StripeCustomerID, arg.StripeSubscriptionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deactivatePaygOrganization = `-- name: DeactivatePaygOrganization :execrows
+UPDATE organization_metadata
+SET gram_account_type = 'free',
+    whitelisted = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND gram_account_type = 'payg'
+  AND whitelisted IS TRUE
+`
+
+func (q *Queries) DeactivatePaygOrganization(ctx context.Context, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivatePaygOrganization, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const disablePaygOpenRouterChatKey = `-- name: DisablePaygOpenRouterChatKey :exec
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = 'chat'
+  AND deleted IS FALSE
+`
+
+func (q *Queries) DisablePaygOpenRouterChatKey(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, disablePaygOpenRouterChatKey, organizationID)
+	return err
 }
 
 const finalizeStripeCheckoutIntent = `-- name: FinalizeStripeCheckoutIntent :one

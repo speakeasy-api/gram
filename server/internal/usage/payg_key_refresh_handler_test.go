@@ -14,41 +14,38 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 type capturePaygKeyRefreshScheduler struct {
 	calls          atomic.Int32
 	eventID        string
 	organizationID string
-	limit          int
-	keyType        openrouter.KeyType
 	err            error
 }
 
-func (c *capturePaygKeyRefreshScheduler) SchedulePaygOpenRouterKeyRefresh(_ context.Context, eventID, organizationID string, keyType openrouter.KeyType, limit *int) error {
+func (c *capturePaygKeyRefreshScheduler) SchedulePaygOpenRouterChatKeyReconciliation(_ context.Context, eventID, organizationID string) error {
 	c.calls.Add(1)
 	c.eventID = eventID
 	c.organizationID = organizationID
-	c.keyType = keyType
-	if limit != nil {
-		c.limit = *limit
-	}
 	return c.err
 }
 
 func paygKeyRefreshEvent(t *testing.T) *webhooksv1.Event {
 	t.Helper()
+	return paygKeyRefreshEventForAction(t, "outbox_event_placeholder", audit.ActionOrganizationPaygActivated)
+}
+
+func paygKeyRefreshEventForAction(t *testing.T, eventID string, action audit.Action) *webhooksv1.Event {
+	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
 		"organization_id": stripeWebhookOrganizationID,
-		"action":          string(audit.ActionOrganizationPaygActivated),
+		"action":          string(action),
 		"subject_id":      stripeWebhookOrganizationID,
 		"subject_type":    "organization",
 	})
 	require.NoError(t, err)
 
-	eventID := "outbox_event_placeholder"
 	eventType := string(events.OrganizationBillingV1.EventType())
 	organizationID := stripeWebhookOrganizationID
 	createdAt := "2026-08-14T12:00:00Z"
@@ -70,15 +67,30 @@ func TestPaygKeyRefreshHandlerRetriesSchedulingFailure(t *testing.T) {
 	event := paygKeyRefreshEvent(t)
 
 	err := handler.Handle(t.Context(), event, metadata)
-	require.ErrorContains(t, err, "schedule PAYG OpenRouter chat key refresh")
+	require.ErrorContains(t, err, "schedule PAYG OpenRouter chat key reconciliation")
 	refresher.err = nil
 	require.NoError(t, handler.Handle(t.Context(), event, metadata))
 
 	require.EqualValues(t, 2, refresher.calls.Load())
 	require.Equal(t, "outbox_event_placeholder", refresher.eventID)
 	require.Equal(t, stripeWebhookOrganizationID, refresher.organizationID)
-	require.Equal(t, openrouter.KeyTypeChat, refresher.keyType)
-	require.Equal(t, paygOpenRouterChatCreditLimit, refresher.limit)
+}
+
+func TestPaygKeyRefreshHandlerSchedulesReverseBillingTransitionsAsWakeups(t *testing.T) {
+	t.Parallel()
+
+	refresher := &capturePaygKeyRefreshScheduler{}
+	handler := NewPaygKeyRefreshHandler(testenv.NewLogger(t), refresher)
+	metadata := gcp.MessageMetadata{ID: "message_placeholder", Attributes: nil, DeliveryAttempt: nil}
+
+	deactivated := paygKeyRefreshEventForAction(t, "outbox_deactivated", audit.ActionOrganizationPaygDeactivated)
+	activated := paygKeyRefreshEventForAction(t, "outbox_activated", audit.ActionOrganizationPaygActivated)
+	require.NoError(t, handler.Handle(t.Context(), deactivated, metadata))
+	require.NoError(t, handler.Handle(t.Context(), activated, metadata))
+
+	require.EqualValues(t, 2, refresher.calls.Load())
+	require.Equal(t, "outbox_activated", refresher.eventID)
+	require.Equal(t, stripeWebhookOrganizationID, refresher.organizationID)
 }
 
 func TestPaygKeyRefreshHandlerDropsUnrelatedBillingAction(t *testing.T) {

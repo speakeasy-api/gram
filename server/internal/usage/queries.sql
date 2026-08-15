@@ -172,6 +172,10 @@ SELECT EXISTS (
 -- Serializes distinct Stripe events that refer to the same subscription.
 SELECT pg_advisory_xact_lock(hashtextextended(@stripe_subscription_id, 0));
 
+-- name: AcquireOpenRouterChatBillingLock :exec
+-- Serializes billing state changes with the chat-key reconciler.
+SELECT pg_advisory_xact_lock(hashtextextended('openrouter-chat-billing:' || @organization_id::text, 0));
+
 -- name: GetPaygActivationState :one
 SELECT
     billing_metadata.id AS billing_metadata_id
@@ -217,6 +221,32 @@ SET gram_account_type = 'payg',
     whitelisted = TRUE,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+
+-- name: DeactivatePaygBillingMetadata :execrows
+UPDATE billing_metadata
+SET stripe_subscription_id = NULL,
+    stripe_billing_cycle_anchor = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND stripe_customer_id = @stripe_customer_id
+  AND stripe_subscription_id = @stripe_subscription_id;
+
+-- name: DeactivatePaygOrganization :execrows
+UPDATE organization_metadata
+SET gram_account_type = 'free',
+    whitelisted = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id
+  AND gram_account_type = 'payg'
+  AND whitelisted IS TRUE;
+
+-- name: DisablePaygOpenRouterChatKey :exec
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = 'chat'
+  AND deleted IS FALSE;
 
 -- name: CreateStripeBillingMetadataFixture :exec
 -- Test-only fixture for webhook tests that need a Stripe customer association.

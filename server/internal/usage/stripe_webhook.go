@@ -33,10 +33,9 @@ var acceptedStripeWebhookEvents = map[string]struct{}{
 	"invoice.payment_failed":        {},
 }
 
-const paygOpenRouterChatCreditLimit = 100
-
 type stripeWebhookResult struct {
 	newlyEnabledFeatures []productfeatures.Feature
+	invoicePaymentFailed bool
 }
 
 type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
@@ -73,6 +72,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	}
 	if event.Type == "checkout.session.completed" && (event.ObjectID == "" || event.CustomerID == "" || event.SubscriptionID == "") {
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe Checkout completion identifiers").LogWarn(ctx, logger)
+	}
+	if event.Type == "customer.subscription.deleted" && event.ObjectID == "" {
+		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe subscription deletion identifier").LogWarn(ctx, logger)
 	}
 	if event.CustomerID == "" {
 		logger.WarnContext(ctx, "skipping Stripe webhook event without a customer")
@@ -120,6 +122,19 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := repo.New(tx)
+	var subscriptionLockID string
+	switch {
+	case event.Type == "checkout.session.completed" && checkoutEligible:
+		subscriptionLockID = event.SubscriptionID
+	case event.Type == "customer.subscription.deleted":
+		subscriptionLockID = event.ObjectID
+	}
+	if subscriptionLockID != "" {
+		if err := queries.AcquireStripeSubscriptionActivationLock(ctx, subscriptionLockID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to lock Stripe subscription state").LogError(ctx, logger)
+		}
+	}
+
 	organizationID, err := queries.GetBillingMetadataOrganizationByStripeCustomerID(ctx, pgtype.Text{String: event.CustomerID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -129,12 +144,15 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve Stripe webhook customer").LogError(ctx, logger)
 	}
 
+	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
+		if err := queries.AcquireOpenRouterChatBillingLock(ctx, organizationID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter chat billing state").LogError(ctx, logger)
+		}
+	}
+
 	if event.Type == "checkout.session.completed" && checkoutEligible {
 		if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
-		}
-		if err := queries.AcquireStripeSubscriptionActivationLock(ctx, event.SubscriptionID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to lock Stripe subscription activation").LogError(ctx, logger)
 		}
 	}
 
@@ -168,6 +186,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		for _, enabledFeature := range result.newlyEnabledFeatures {
 			s.productFeatures.UpdateFeatureCache(ctx, organizationID, enabledFeature, true)
 		}
+	}
+	if result.invoicePaymentFailed && s.stripeMetrics != nil {
+		s.stripeMetrics.RecordInvoicePaymentFailed(ctx)
 	}
 
 	return nil
@@ -239,10 +260,72 @@ func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.
 		}
 	case "invoice.payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
+		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: true}, nil
 	case "customer.subscription.deleted":
-		logger.InfoContext(ctx, "received Stripe subscription deletion")
+		return s.deactivatePaygSubscription(ctx, tx, organizationID, event)
 	}
-	return stripeWebhookResult{newlyEnabledFeatures: nil}, nil
+	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false}, nil
+}
+
+func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent) (stripeWebhookResult, error) {
+	q := repo.New(tx)
+	state, err := q.GetPaygActivationState(ctx, organizationID)
+	if err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("lock PAYG deactivation state: %w", err)
+	}
+
+	if !state.StripeCustomerID.Valid || state.StripeCustomerID.String != event.CustomerID ||
+		state.GramAccountType != "payg" || !state.Whitelisted ||
+		!state.StripeSubscriptionID.Valid || state.StripeSubscriptionID.String != event.ObjectID {
+		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false}, nil
+	}
+
+	billingRows, err := q.DeactivatePaygBillingMetadata(ctx, repo.DeactivatePaygBillingMetadataParams{
+		OrganizationID:       organizationID,
+		StripeCustomerID:     pgtype.Text{String: event.CustomerID, Valid: true},
+		StripeSubscriptionID: pgtype.Text{String: event.ObjectID, Valid: true},
+	})
+	if err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("clear PAYG Stripe subscription: %w", err)
+	}
+	if billingRows != 1 {
+		return stripeWebhookResult{}, fmt.Errorf("clear PAYG Stripe subscription: expected one row, updated %d", billingRows)
+	}
+
+	organizationRows, err := q.DeactivatePaygOrganization(ctx, organizationID)
+	if err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("deactivate PAYG organization: %w", err)
+	}
+	if organizationRows != 1 {
+		return stripeWebhookResult{}, fmt.Errorf("deactivate PAYG organization: expected one row, updated %d", organizationRows)
+	}
+	if err := q.DisablePaygOpenRouterChatKey(ctx, organizationID); err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("disable PAYG OpenRouter chat key: %w", err)
+	}
+
+	if s.auditLogger == nil {
+		return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+	}
+	if err := s.auditLogger.LogOrganizationPaygDeactivated(ctx, tx, audit.LogOrganizationPaygDeactivatedEvent{
+		OrganizationID:   organizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+		ActorDisplayName: nil,
+		ActorSlug:        nil,
+		OrganizationName: state.OrganizationName,
+		OrganizationSlug: state.OrganizationSlug,
+		OrganizationSnapshotBefore: &audit.OrganizationPaygActivationSnapshot{
+			AccountType: state.GramAccountType,
+			Whitelisted: state.Whitelisted,
+		},
+		OrganizationSnapshotAfter: &audit.OrganizationPaygActivationSnapshot{
+			AccountType: "free",
+			Whitelisted: false,
+		},
+	}); err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization deactivation: %w", err)
+	}
+
+	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false}, nil
 }
 
 func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, invoice *stripeclient.InvoiceState) (bool, error) {
@@ -346,7 +429,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		state.BillingCycleAnchorDay == anchorDay &&
 		state.GramAccountType == "payg" && state.Whitelisted
 	if alreadyActivated {
-		return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled}, nil
+		return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false}, nil
 	}
 
 	if _, err := q.ActivatePaygBillingMetadata(ctx, repo.ActivatePaygBillingMetadataParams{
@@ -384,5 +467,5 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization activation: %w", err)
 	}
 
-	return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled}, nil
+	return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false}, nil
 }
