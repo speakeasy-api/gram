@@ -721,10 +721,12 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// rejectExtension reads on the pool, so this connection goes back before
-		// it asks for a second one. The deferred rollback is idempotent.
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
-		return nil, s.rejectExtension(ctx, logger, payload.ID)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unextended trial",
+			"organization has no running enterprise trial to extend")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
 	}
@@ -768,16 +770,22 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
 }
 
-// rejectExtension turns an unextended trial into the error the operator should
-// act on. There are two causes and only the second is a conflict: the
-// organization does not exist at all, or it exists and its trial cannot be
-// extended. Disable and enable both answer not-found for an id that matches
-// nothing, so an operator who pastes one bad id must not be told to go and look
-// at a trial by this endpoint alone.
+// rejectTrialChange turns a trial write that touched no row into the error the
+// operator should act on. There are two causes and only the second is a
+// conflict: the organization does not exist at all, or it exists and its trial
+// is in the wrong state. Disable and enable both answer not-found for an id that
+// matches nothing, so an operator who pastes one bad id must not be told to go
+// and look at a trial by this endpoint alone.
+//
+// The organization existing means the trial is what blocks the write: converted,
+// demoted, expired, or never granted. Which one is not the operator's business,
+// and arming a trial that was never granted is the auth flow's job rather than
+// this endpoint's. failed_precondition would read better than conflict, but the
+// admin service does not declare it, so it would leave as a 500.
 //
 // The lookup is on the failure path only, and runs on the pool because the
-// caller's transaction is about to be rolled back.
-func (s *Service) rejectExtension(ctx context.Context, logger *slog.Logger, organizationID string) error {
+// caller's transaction is already rolled back.
+func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, organizationID string, lookupContext string, conflictMessage string) error {
 	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
 		ID:        organizationID,
 		AllowSlug: false,
@@ -788,16 +796,10 @@ func (s *Service) rejectExtension(ctx context.Context, logger *slog.Logger, orga
 	case lookupErr != nil:
 		// Falling through to the conflict here would report a trial state we
 		// never managed to read.
-		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unextended trial").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, lookupErr, "%s", lookupContext).LogError(ctx, logger)
 	}
 
-	// The organization exists, so it is the trial that blocks the write:
-	// converted, demoted, expired, or never granted. Which one is not the
-	// operator's business, and arming a trial that was never granted is the
-	// auth flow's job rather than this endpoint's. failed_precondition would
-	// read better than conflict, but the admin service does not declare it,
-	// so it would leave as a 500.
-	return oops.E(oops.CodeConflict, nil, "organization has no running enterprise trial to extend")
+	return oops.E(oops.CodeConflict, nil, "%s", conflictMessage)
 }
 
 // CreateOrganization creates an organization in WorkOS and then in Gram.
@@ -958,7 +960,12 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, s.rejectRearm(ctx, logger, payload.ID)
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unrearmed trial",
+			"organization has no demoted enterprise trial to re-arm")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
 	}
@@ -1004,25 +1011,6 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
-}
-
-// rejectRearm turns a zero-row re-arm into the error the operator should act
-// on: a pasted wrong id must report a missing organization, not a trial state.
-func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        organizationID,
-		AllowSlug: false,
-	})
-	switch {
-	case errors.Is(lookupErr, pgx.ErrNoRows):
-		return oops.C(oops.CodeNotFound)
-	case lookupErr != nil:
-		// Falling through would report a trial state we never managed to read.
-		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unrearmed trial").LogError(ctx, logger)
-	}
-
-	// Which of the three reasons applies is not the operator's business.
-	return oops.E(oops.CodeConflict, nil, "organization has no demoted enterprise trial to re-arm")
 }
 
 // reviveTrialKeys brings every platform key the organization holds back up, and

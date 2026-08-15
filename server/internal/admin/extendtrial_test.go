@@ -182,6 +182,9 @@ func TestExtendTrial_OrganizationWithNoTrialRow(t *testing.T) {
 
 	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_no_trial", Days: 3})
 	requireOopsCode(t, err, oops.CodeConflict)
+	// Extend and re-arm share one rejection helper, so each has to name its own
+	// message or the two can be swapped without a test noticing.
+	require.ErrorContains(t, err, "organization has no running enterprise trial to extend")
 
 	// Extend moves an end date; it must never be a way to arm a trial that was
 	// never granted, which is the auth flow's job.

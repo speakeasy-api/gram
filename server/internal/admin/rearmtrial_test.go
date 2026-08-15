@@ -523,6 +523,9 @@ func TestRearmTrial_OrganizationWithNoTrialRow(t *testing.T) {
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_no_trial", Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
+	// Extend and re-arm share one rejection helper, so each has to name its own
+	// message or the two can be swapped without a test noticing.
+	require.ErrorContains(t, err, "organization has no demoted enterprise trial to re-arm")
 
 	// Re-arm must never be a way to grant a trial; that is the auth flow's job.
 	_, err = trialsRepo.New(conn).GetTrial(ctx, "org_rearm_no_trial")
