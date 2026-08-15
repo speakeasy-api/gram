@@ -857,7 +857,10 @@ describe("the keyboard when the re-arm dialog closes", () => {
     },
   );
 
-  it("goes back to the peek footer control the dialog opened from", async () => {
+  // The connected-control branch only: this harness pins `org`, so the button
+  // outlives its own write. The fallback for when it does not is held by
+  // "gives the keyboard to the panel ..." in index.test.tsx, which has a cache.
+  it("goes back to the footer control while that control is still mounted", async () => {
     await renderFooter(DEMOTED_ORG);
     const button = screen.getByRole("button", {
       name: `Re-arm trial for ${DEMOTED_ORG.name}`,

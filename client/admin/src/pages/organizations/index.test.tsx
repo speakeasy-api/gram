@@ -412,6 +412,9 @@ beforeEach(() => {
   mocks.extendTrial.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
   );
+  // No default answer: the one describe that re-arms owns a record none of the
+  // rows above it carry, so it supplies its own.
+  mocks.rearmTrial.mockReset();
   // Everything the request asked for, and nothing missing. The reversal guards
   // nothing on its own, because only the length of this array is ever read;
   // "names the organizations the server could not find" is the test that holds
