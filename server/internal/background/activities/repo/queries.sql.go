@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquirePaygOpenRouterChatKeyLock = `-- name: AcquirePaygOpenRouterChatKeyLock :exec
+SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
+`
+
+// A session lock lets the reconciler serialize a billing projection read and
+// its upstream PATCH without holding a database transaction across the
+// network call. Billing writers take the same key transactionally before
+// changing the projection.
+func (q *Queries) AcquirePaygOpenRouterChatKeyLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquirePaygOpenRouterChatKeyLock, organizationID)
+	return err
+}
+
 const assignPositiveCarryToStripeInvoice = `-- name: AssignPositiveCarryToStripeInvoice :execrows
 WITH assignments AS (
   SELECT
@@ -1065,6 +1078,28 @@ func (q *Queries) GetOpenRouterDailySpendRecoveryStartDay(ctx context.Context, a
 	return recovery_start_day, err
 }
 
+const getPaygOpenRouterChatKeyProjection = `-- name: GetPaygOpenRouterChatKeyProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+WHERE organization_metadata.id = $1
+`
+
+type GetPaygOpenRouterChatKeyProjectionRow struct {
+	GramAccountType      string
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) GetPaygOpenRouterChatKeyProjection(ctx context.Context, organizationID string) (GetPaygOpenRouterChatKeyProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getPaygOpenRouterChatKeyProjection, organizationID)
+	var i GetPaygOpenRouterChatKeyProjectionRow
+	err := row.Scan(&i.GramAccountType, &i.StripeSubscriptionID)
+	return i, err
+}
+
 const getPlatformUsageMetrics = `-- name: GetPlatformUsageMetrics :many
 WITH latest_deployments AS (
   SELECT DISTINCT ON (project_id) project_id, d.id as deployment_id
@@ -2081,6 +2116,17 @@ func (q *Queries) ReconcileAndRotateStripeInvoiceAllocation(ctx context.Context,
 	return idempotency_key, err
 }
 
+const releasePaygOpenRouterChatKeyLock = `-- name: ReleasePaygOpenRouterChatKeyLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-chat-billing:' || $1::text, 0)) AS unlocked
+`
+
+func (q *Queries) ReleasePaygOpenRouterChatKeyLock(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, releasePaygOpenRouterChatKeyLock, organizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const releasePublishOutboxRows = `-- name: ReleasePublishOutboxRows :exec
 UPDATE publish_outbox SET
     locked_until = NULL,
@@ -2137,6 +2183,40 @@ type SetOpenRouterAPIKeyDeletedAtFixtureParams struct {
 
 func (q *Queries) SetOpenRouterAPIKeyDeletedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyDeletedAtFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyDeletedAtFixture, arg.DeletedAt, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setPaygOpenRouterChatKeyProjectionFixture = `-- name: SetPaygOpenRouterChatKeyProjectionFixture :exec
+WITH updated_organization AS (
+  UPDATE organization_metadata
+  SET gram_account_type = $2,
+      updated_at = clock_timestamp()
+  WHERE organization_metadata.id = $3
+  RETURNING organization_metadata.id
+)
+INSERT INTO billing_metadata (
+    organization_id
+  , stripe_customer_id
+  , stripe_subscription_id
+)
+SELECT
+    updated_organization.id
+  , 'customer_placeholder'
+  , $1
+FROM updated_organization
+ON CONFLICT (organization_id) DO UPDATE
+SET stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+    updated_at = clock_timestamp()
+`
+
+type SetPaygOpenRouterChatKeyProjectionFixtureParams struct {
+	StripeSubscriptionID pgtype.Text
+	GramAccountType      string
+	OrganizationID       string
+}
+
+func (q *Queries) SetPaygOpenRouterChatKeyProjectionFixture(ctx context.Context, arg SetPaygOpenRouterChatKeyProjectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setPaygOpenRouterChatKeyProjectionFixture, arg.StripeSubscriptionID, arg.GramAccountType, arg.OrganizationID)
 	return err
 }
 

@@ -34,6 +34,7 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -56,6 +57,7 @@ type Service struct {
 	openRouter      openrouter.Provisioner
 	stripeClient    stripeclient.Client
 	stripeHandler   stripeWebhookHandler
+	stripeMetrics   stripeWebhookMetricsRecorder
 	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
@@ -91,6 +93,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		openRouter:      openRouter,
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
+		stripeMetrics:   newStripeWebhookMetrics(otel.GetMeterProvider(), logger),
 		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
