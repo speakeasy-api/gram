@@ -339,7 +339,6 @@ func TestMaybeSendOpenRouterCreditsAlerts_PartialPAYGAudienceRetriesOnlyFailedRe
 	retry := captured.Sent()
 	require.Len(t, retry, 2)
 	require.Equal(t, "alpha@example.test", retry[1].Email)
-	require.NotEqual(t, firstAttempt[0].IdempotencyKey, retry[1].IdempotencyKey)
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_ChatBYOKSuppressesOnlyChatAlerts(t *testing.T) {

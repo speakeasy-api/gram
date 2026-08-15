@@ -365,7 +365,10 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 	}
 
 	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
-	if err := a.cache.Expire(ctx, recipientKey, cycleEnd.Sub(now)+openRouterCreditsAlertGrace); err != nil {
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	err = a.cache.Expire(persistCtx, recipientKey, cycleEnd.Sub(now)+openRouterCreditsAlertGrace)
+	cancel()
+	if err != nil {
 		return fmt.Errorf("persist openrouter credits alert recipient delivery: %w", err)
 	}
 
