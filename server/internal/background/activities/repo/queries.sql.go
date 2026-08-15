@@ -1402,6 +1402,9 @@ SELECT
       WHEN chat_key.created_at IS NULL
         OR allocation.source_day < (chat_key.created_at AT TIME ZONE 'UTC')::date
         THEN 0::numeric
+	  WHEN chat_key.deleted_at IS NOT NULL
+	    AND allocation.source_day >= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
+	    THEN COALESCE(spend.spend_usd, 0::numeric)
       ELSE spend.spend_usd
     END)::numeric(14, 6) AS final_spend_usd
   , carry.amount_usd AS existing_carry_amount_usd
@@ -1417,6 +1420,10 @@ LEFT JOIN openrouter_spend_daily spend
   ON spend.organization_id = allocation.organization_id
  AND spend.key_type = 'chat'
  AND spend.day = allocation.source_day
+ AND (
+   chat_key.deleted_at IS NULL
+   OR spend.day <= (chat_key.deleted_at AT TIME ZONE 'UTC')::date
+ )
 LEFT JOIN stripe_invoice_allocations carry
   ON carry.organization_id = allocation.organization_id
  AND carry.source_kind = allocation.source_kind
@@ -2117,6 +2124,24 @@ type SetOpenRouterAPIKeyCreatedAtFixtureParams struct {
 
 func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyCreatedAtFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterAPIKeyDeletedAtFixture = `-- name: SetOpenRouterAPIKeyDeletedAtFixture :exec
+UPDATE openrouter_api_keys
+SET deleted_at = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyDeletedAtFixtureParams struct {
+	DeletedAt      pgtype.Timestamptz
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) SetOpenRouterAPIKeyDeletedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyDeletedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyDeletedAtFixture, arg.DeletedAt, arg.OrganizationID, arg.KeyType)
 	return err
 }
 
