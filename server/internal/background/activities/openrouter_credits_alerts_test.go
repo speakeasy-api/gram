@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -76,7 +77,7 @@ type captureAlertExpireCache struct {
 type rotateAlertGenerationAfterReservationCache struct {
 	cache.Cache
 	orgID      string
-	generation string
+	generation spendCapAlertGenerationFixture
 	once       sync.Once
 }
 
@@ -221,10 +222,13 @@ func deleteAlertReservation(t *testing.T, ctx context.Context, cacheAdapter cach
 	require.NoError(t, cacheAdapter.Delete(ctx, key))
 }
 
-func setAlertGeneration(t *testing.T, ctx context.Context, cacheAdapter cache.Cache, orgID string, generation string) {
+func setAlertGeneration(t *testing.T, ctx context.Context, cacheAdapter cache.Cache, orgID string, generation string, monthlyCredits int64) {
 	t.Helper()
 	key := activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, openrouter.KeyTypeChat)
-	require.NoError(t, cacheAdapter.Set(ctx, key, generation, 24*time.Hour))
+	require.NoError(t, cacheAdapter.Set(ctx, key, spendCapAlertGenerationFixture{
+		OperationID:    generation,
+		MonthlyCredits: monthlyCredits,
+	}, 24*time.Hour))
 }
 
 func internalCreditsMetric(orgID string, used float64, limit int64) activities.OpenRouterCreditsMetric {
@@ -276,10 +280,10 @@ func TestMaybeSendOpenRouterCreditsAlerts_ExtendsGenerationWithReservation(t *te
 		capturedCache = &captureAlertExpireCache{Cache: base, expires: map[string]time.Duration{}}
 		return capturedCache
 	})
-	orgID, _ := createAlertOrg(t, ctx, conn, "billing@example.com", "")
-	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_placeholder")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.com", "", billing.TierPayg)
+	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_placeholder", 100)
 
-	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 60, 100)}))
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 60, 100)}))
 
 	reservationKey := fmt.Sprintf("openrouter-credits-alert:%s:chat:50:operation_placeholder", orgID)
 	reservationTTL, ok := capturedCache.ttl(reservationKey)
@@ -295,21 +299,27 @@ func TestMaybeSendOpenRouterCreditsAlerts_SkipsGenerationChangedAfterReservation
 
 	var rotatingCache *rotateAlertGenerationAfterReservationCache
 	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTestWithCache(t, "openrouter_credits_alert_generation_race", func(base cache.Cache) cache.Cache {
-		rotatingCache = &rotateAlertGenerationAfterReservationCache{Cache: base, generation: "operation_new_placeholder"}
+		rotatingCache = &rotateAlertGenerationAfterReservationCache{
+			Cache: base,
+			generation: spendCapAlertGenerationFixture{
+				OperationID:    "operation_new_placeholder",
+				MonthlyCredits: 100,
+			},
+		}
 		return rotatingCache
 	})
-	orgID, _ := createAlertOrg(t, ctx, conn, "billing@example.com", "")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.com", "", billing.TierPayg)
 	rotatingCache.orgID = orgID
-	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_old_placeholder")
+	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_old_placeholder", 100)
 
-	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 60, 100)}))
-	var generation string
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 60, 100)}))
+	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(
 		ctx,
 		activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, openrouter.KeyTypeChat),
 		&generation,
 	))
-	require.Equal(t, "operation_new_placeholder", generation, "the test must prove the simulated rotation succeeded")
+	require.Equal(t, "operation_new_placeholder", generation.OperationID, "the test must prove the simulated rotation succeeded")
 	require.Empty(t, captured.Sent(), "a poll reserved under the old generation must not send after cap rotation")
 }
 
@@ -395,7 +405,7 @@ func TestMaybeSendOpenRouterCreditsAlerts_CapChangeRearmsAdjustedLadder(t *testi
 	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
 
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
-	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_raised_cap_placeholder")
+	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_raised_cap_placeholder", 200)
 
 	// The raised 200-credit cap drops current usage below the first threshold.
 	// Each threshold then fires once as usage crosses the adjusted ladder.
@@ -414,13 +424,73 @@ func TestMaybeSendOpenRouterCreditsAlerts_CapChangeRearmsAdjustedLadder(t *testi
 		"the provider must accept the re-armed 90%% alert within its idempotency window")
 }
 
+func TestMaybeSendOpenRouterCreditsAlerts_SkipsMetricCollectedBeforeCapChange(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_stale_metric")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
+	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_raised_cap_placeholder", 200)
+
+	// This snapshot crossed 90% under the old cap, but arrived after the new
+	// generation was installed. It must not send or reserve the new ladder.
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
+	require.Empty(t, captured.Sent())
+
+	// A fresh snapshot under the new cap can still claim the same threshold.
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 180, 200)}))
+	sent := captured.Sent()
+	require.Len(t, sent, 1)
+	require.Equal(t, "90", sent[0].DataVariables["threshold_percent"])
+}
+
+func TestMaybeSendOpenRouterCreditsAlerts_RecoversGenerationFromAuditAfterCacheLoss(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_generation_recovery")
+	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
+	operationID := "operation_durable_placeholder"
+	require.NoError(t, audit.NewLogger().LogOpenRouterAPIKeySetSpendCap(ctx, conn, audit.LogOpenRouterAPIKeySetSpendCapEvent{
+		OrganizationID:      orgID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"),
+		ActorDisplayName:    nil,
+		ActorSlug:           nil,
+		OpenRouterAPIKeyURN: urn.NewOpenRouterAPIKey(orgID, string(openrouter.KeyTypeChat)),
+		KeyType:             string(openrouter.KeyTypeChat),
+		OperationIdentifier: operationID,
+		OpenRouterAPIKeySnapshotBefore: &audit.OpenRouterAPIKeySpendCapSnapshot{
+			MonthlyCredits: 100,
+		},
+		OpenRouterAPIKeySnapshotAfter: &audit.OpenRouterAPIKeySpendCapSnapshot{
+			MonthlyCredits: 200,
+		},
+	}))
+
+	metric := paygCreditsMetric(orgID, 180, 200)
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{metric}))
+	first := captured.Sent()
+	require.Len(t, first, 1)
+
+	// Simulate loss of all Redis state for this delivery. The durable audit row
+	// must restore the same provider idempotency key instead of the legacy key.
+	require.NoError(t, cacheAdapter.Delete(ctx, activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, openrouter.KeyTypeChat)))
+	require.NoError(t, cacheAdapter.Delete(ctx, fmt.Sprintf("openrouter-credits-alert:%s:chat:90:%s", orgID, operationID)))
+	require.NoError(t, cacheAdapter.Delete(ctx, "openrouter-credits-alert-recipient:"+first[0].IdempotencyKey))
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{metric}))
+
+	sent := captured.Sent()
+	require.Len(t, sent, 2)
+	require.Equal(t, sent[0].IdempotencyKey, sent[1].IdempotencyKey)
+}
+
 func TestMaybeSendOpenRouterCreditsAlerts_ReconcileLimitFlapDoesNotRearm(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
 	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_limit_flap")
 	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
-	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_stable_cap_placeholder")
+	setAlertGeneration(t, ctx, cacheAdapter, orgID, "operation_stable_cap_placeholder", 100)
 
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 100)}))
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{paygCreditsMetric(orgID, 95, 200)}))

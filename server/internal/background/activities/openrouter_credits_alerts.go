@@ -14,12 +14,15 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
@@ -118,6 +121,7 @@ type MaybeSendOpenRouterCreditsAlerts struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
 	repo         *repo.Queries
+	auditRepo    *auditrepo.Queries
 	cache        cache.Cache
 	emails       *email.Service
 	alertsSent   metric.Int64Counter
@@ -160,6 +164,7 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 		logger:       componentLogger,
 		db:           db,
 		repo:         repo.New(db),
+		auditRepo:    auditrepo.New(db),
 		cache:        cacheAdapter,
 		emails:       emails,
 		alertsSent:   sent,
@@ -203,10 +208,16 @@ func openRouterCreditsAlertRecipientKey(idempotencyKey string) string {
 // openRouterCreditsAlertCandidate is one (org, key type) pair that crossed a
 // threshold this tick and holds a fresh dedup reservation.
 type openRouterCreditsAlertCandidate struct {
-	orgID      string
-	keyType    openrouter.KeyType
-	threshold  int
-	generation string
+	orgID           string
+	keyType         openrouter.KeyType
+	threshold       int
+	generation      string
+	generationAware bool
+}
+
+type openRouterCreditsAlertGeneration struct {
+	OperationID    string `json:"operation_id"`
+	MonthlyCredits int64  `json:"monthly_credits"`
 }
 
 var errOpenRouterCreditsAlertGenerationChanged = errors.New("openrouter credits alert generation changed")
@@ -215,14 +226,35 @@ func (a *MaybeSendOpenRouterCreditsAlerts) readGeneration(
 	ctx context.Context,
 	orgID string,
 	keyType openrouter.KeyType,
-) (string, error) {
-	var generation string
+) (openRouterCreditsAlertGeneration, error) {
+	var generation openRouterCreditsAlertGeneration
 	err := a.cache.Get(ctx, openRouterCreditsAlertGenerationKey(orgID, keyType), &generation)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return "", nil
+		if keyType != openrouter.KeyTypeChat {
+			return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, nil
+		}
+		latest, err := a.auditRepo.GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
+			OrganizationID: orgID,
+			SubjectID:      urn.NewOpenRouterAPIKey(orgID, string(keyType)).ID,
+		})
+		if err != nil {
+			return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, fmt.Errorf("read durable OpenRouter credits alert generation: %w", err)
+		}
+		generation := openRouterCreditsAlertGeneration{
+			OperationID:    latest.OperationID,
+			MonthlyCredits: latest.MonthlyCredits,
+		}
+		if generation.OperationID != "" {
+			now := time.Now().UTC()
+			_, cycleEnd := usage.CurrentBillingCycle(now, 1)
+			if err := a.cache.Set(ctx, openRouterCreditsAlertGenerationKey(orgID, keyType), generation, cycleEnd.Sub(now)+openRouterCreditsAlertGrace); err != nil {
+				return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, fmt.Errorf("restore OpenRouter credits alert generation cache: %w", err)
+			}
+		}
+		return generation, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read OpenRouter credits alert generation: %w", err)
+		return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, fmt.Errorf("read OpenRouter credits alert generation: %w", err)
 	}
 	return generation, nil
 }
@@ -243,19 +275,30 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			continue
 		}
 
-		generation, err := a.readGeneration(ctx, m.OrganizationID, keyType)
-		if err != nil {
-			a.logger.ErrorContext(ctx, "read openrouter credits alert generation",
-				attr.SlogOrganizationID(m.OrganizationID), attr.SlogOpenRouterKeyType(string(keyType)), attr.SlogError(err))
-			a.recordFailure(ctx, m.OrganizationID, keyType)
+		generationAware := keyType == openrouter.KeyTypeChat && m.AccountType == string(billing.TierPayg)
+		generation := openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}
+		if generationAware {
+			loadedGeneration, err := a.readGeneration(ctx, m.OrganizationID, keyType)
+			if err != nil {
+				a.logger.ErrorContext(ctx, "read openrouter credits alert generation",
+					attr.SlogOrganizationID(m.OrganizationID), attr.SlogOpenRouterKeyType(string(keyType)), attr.SlogError(err))
+				a.recordFailure(ctx, m.OrganizationID, keyType)
+				continue
+			}
+			generation = loadedGeneration
+		}
+		if generation.OperationID != "" && generation.MonthlyCredits != m.CreditLimit {
+			a.logger.InfoContext(ctx, "skipping stale OpenRouter credits metric after cap change",
+				attr.SlogOrganizationID(m.OrganizationID), attr.SlogOpenRouterKeyType(string(keyType)))
 			continue
 		}
 
 		candidates = append(candidates, openRouterCreditsAlertCandidate{
-			orgID:      m.OrganizationID,
-			keyType:    keyType,
-			threshold:  threshold,
-			generation: generation,
+			orgID:           m.OrganizationID,
+			keyType:         keyType,
+			threshold:       threshold,
+			generation:      generation.OperationID,
+			generationAware: generationAware,
 		})
 	}
 	if len(candidates) == 0 {
@@ -349,12 +392,12 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			// Cap writes and chat-alert delivery share one per-org lock. The final
 			// generation check therefore orders an in-flight poll either wholly
 			// before the cap change, or skips it after the new ladder is installed.
-			if c.keyType == openrouter.KeyTypeChat {
+			if c.generationAware {
 				generation, err := a.readGeneration(ctx, c.orgID, c.keyType)
 				if err != nil {
 					return err
 				}
-				if generation != c.generation {
+				if generation.OperationID != c.generation {
 					return errOpenRouterCreditsAlertGenerationChanged
 				}
 			}

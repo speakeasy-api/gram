@@ -42,6 +42,11 @@ type spendCapHeartbeatFixture struct {
 	Applied              bool
 }
 
+type spendCapAlertGenerationFixture struct {
+	OperationID    string `json:"operation_id"`
+	MonthlyCredits int64  `json:"monthly_credits"`
+}
+
 type failFirstSpendCapGenerationCache struct {
 	cache.Cache
 	calls atomic.Int32
@@ -157,9 +162,10 @@ func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) 
 	require.NoError(t, err)
 	require.EqualValues(t, 250, before["monthly_credits"])
 	require.EqualValues(t, 600, after["monthly_credits"])
-	var generation string
+	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
-	require.Equal(t, "operation_retry_placeholder", generation)
+	require.Equal(t, "operation_retry_placeholder", generation.OperationID)
+	require.EqualValues(t, 600, generation.MonthlyCredits)
 }
 
 func TestSetOpenRouterSpendCapRetryReappliesWhenOriginalValueEqualsRequestedLimit(t *testing.T) {
@@ -387,9 +393,10 @@ func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerUnauditedOperation(t *te
 	require.NoError(t, err)
 	require.EqualValues(t, 600, before["monthly_credits"])
 	require.EqualValues(t, 700, after["monthly_credits"])
-	var generation string
+	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
-	require.Equal(t, "operation_second_placeholder", generation)
+	require.Equal(t, "operation_second_placeholder", generation.OperationID)
+	require.EqualValues(t, 700, generation.MonthlyCredits)
 }
 
 func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
@@ -484,9 +491,10 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
-	var generation string
+	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
-	require.Equal(t, "operation_second_placeholder", generation)
+	require.Equal(t, "operation_second_placeholder", generation.OperationID)
+	require.EqualValues(t, 700, generation.MonthlyCredits)
 }
 
 func TestSetOpenRouterSpendCapRetryRepairsAlertGeneration(t *testing.T) {
@@ -529,6 +537,13 @@ func TestSetOpenRouterSpendCapRetryRepairsAlertGeneration(t *testing.T) {
 	}
 
 	require.ErrorContains(t, run(), "re-arm OpenRouter chat credits alerts")
+	// Reconciliation can update the local mirror independently. The durable
+	// latest explicit operation still owns alert generation repair.
+	require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(t.Context(), openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		MonthlyCredits: 700,
+		OrganizationID: organizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	}))
 	require.NoError(t, run())
 	provisioner.AssertExpectations(t)
 	require.EqualValues(t, 2, generationCache.calls.Load())
@@ -536,9 +551,10 @@ func TestSetOpenRouterSpendCapRetryRepairsAlertGeneration(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count, "the cache retry must not duplicate the audit event")
-	var generation string
+	var generation spendCapAlertGenerationFixture
 	require.NoError(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
-	require.Equal(t, "operation_cache_retry_placeholder", generation)
+	require.Equal(t, "operation_cache_retry_placeholder", generation.OperationID)
+	require.EqualValues(t, 600, generation.MonthlyCredits)
 }
 
 func TestSetOpenRouterSpendCapStaleRetryCannotReplaceNewerSameLimitGeneration(t *testing.T) {
@@ -585,9 +601,10 @@ func TestSetOpenRouterSpendCapStaleRetryCannotReplaceNewerSameLimitGeneration(t 
 	require.NoError(t, run("operation_first_placeholder"))
 	provisioner.AssertExpectations(t)
 
-	var generation string
+	var generation spendCapAlertGenerationFixture
 	require.NoError(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
-	require.Equal(t, "operation_second_placeholder", generation)
+	require.Equal(t, "operation_second_placeholder", generation.OperationID)
+	require.EqualValues(t, 600, generation.MonthlyCredits)
 }
 
 func TestSetOpenRouterSpendCapRecordedRetryNoopsAfterSubscriptionLoss(t *testing.T) {
@@ -635,6 +652,6 @@ func TestSetOpenRouterSpendCapRecordedRetryNoopsAfterSubscriptionLoss(t *testing
 	require.NoError(t, run())
 	provisioner.AssertExpectations(t)
 
-	var generation string
+	var generation spendCapAlertGenerationFixture
 	require.ErrorIs(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation), redislib.ErrCacheMiss)
 }

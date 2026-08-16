@@ -142,11 +142,9 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 	}
 	if recorded {
 		// A cache failure after the durable cap mutation must be repairable on
-		// activity retry. Do not let an older retry rotate the generation after
-		// a newer operation has installed a different cap.
-		if key.MonthlyCredits != int64(args.Limit) {
-			return nil
-		}
+		// activity retry. The latest-audit check above prevents an older operation
+		// from replacing a newer generation; reconciliation never owns the alert
+		// ladder, so a local mirror drift does not suppress this repair.
 		return s.rearmCreditsAlerts(ctx, args)
 	}
 	before := key.MonthlyCredits
@@ -269,7 +267,10 @@ func (s *SetOpenRouterSpendCap) rearmCreditsAlerts(ctx context.Context, args Set
 	if err := s.cache.Set(
 		ctx,
 		openRouterCreditsAlertGenerationKey(args.OrganizationID, openrouter.KeyTypeChat),
-		args.OperationID,
+		openRouterCreditsAlertGeneration{
+			OperationID:    args.OperationID,
+			MonthlyCredits: int64(args.Limit),
+		},
 		cycleEnd.Sub(now)+openRouterCreditsAlertGrace,
 	); err != nil {
 		return fmt.Errorf("re-arm OpenRouter chat credits alerts: %w", err)
