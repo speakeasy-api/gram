@@ -698,6 +698,39 @@ describe("ChatSpendCapSection", () => {
       expect(mocks.mutate).not.toHaveBeenCalled();
     });
 
+    // Saving invalidates the credit usage and the subscription both, so the
+    // confirmation and the lock land in the same render. Two live regions at
+    // once get announced in whichever order the screen reader picks, or talk
+    // over each other, so exactly one has to be present.
+    it("announces one status when a save and a refetch overlap", () => {
+      mutationState({ isSuccess: true });
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<ChatSpendCapSection />);
+
+      const statuses = screen.getAllByRole("status");
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0]!.textContent).toMatch(/saved/i);
+      expect(screen.queryByText(/checking your subscription/i)).toBeNull();
+      // The lock still holds even though it no longer speaks for itself.
+      expect(field()!.disabled).toBe(true);
+    });
+
+    // A failed save outranks both: the amount didn't land, which is the thing
+    // the admin has to hear.
+    it("announces one message when a failed save and a refetch overlap", () => {
+      mutationState({ isError: true });
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<ChatSpendCapSection />);
+
+      expect(screen.queryAllByRole("status")).toHaveLength(0);
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /couldn't save the chat spend cap/i,
+      );
+      expect(screen.queryByText(/checking your subscription/i)).toBeNull();
+    });
+
     it("saves the same draft once the refetch settles", () => {
       const { rerender } = render(<ChatSpendCapSection />);
 

@@ -440,24 +440,63 @@ function SpendCapForm({
           <Button type="submit" disabled={mutation.isPending || locked}>
             {mutation.isPending ? "SAVING..." : "SAVE SPEND CAP"}
           </Button>
-          {/* A field that has gone quiet with no explanation reads as broken. */}
-          {locked && (
-            <Text muted small role="status">
-              Checking your subscription...
-            </Text>
-          )}
-          {mutation.isSuccess && (
-            <Text muted small role="status">
-              Saved.
-            </Text>
-          )}
-          {mutation.isError && (
-            <Text small destructive role="alert">
-              Couldn't save the chat spend cap. Try again.
-            </Text>
-          )}
+          <SpendCapFormFeedback
+            failed={mutation.isError}
+            saved={mutation.isSuccess}
+            locked={locked}
+          />
         </Stack>
       </Stack>
     </form>
   );
+}
+
+/**
+ * The one live message beside the save button.
+ *
+ * A single slot rather than three independent conditions: the save's own
+ * invalidation refetches the subscription, so "Saved." and the lock are live at
+ * the same moment, and two simultaneous live regions make a screen reader
+ * announce them in whichever order it pleases — or talk over itself.
+ *
+ * The order is what the admin most needs to hear. A failed save first, because
+ * their amount did not land. Then the save they just made, which also explains
+ * the lock that follows it. The lock speaks only when there is nothing else to
+ * say, which is when it is the only reason the field has gone quiet.
+ */
+function SpendCapFormFeedback({
+  failed,
+  saved,
+  locked,
+}: {
+  failed: boolean;
+  saved: boolean;
+  locked: boolean;
+}): JSX.Element | null {
+  if (failed) {
+    return (
+      <Text small destructive role="alert">
+        Couldn't save the chat spend cap. Try again.
+      </Text>
+    );
+  }
+
+  if (saved) {
+    return (
+      <Text muted small role="status">
+        Saved.
+      </Text>
+    );
+  }
+
+  // A field that has gone quiet with no explanation reads as broken.
+  if (locked) {
+    return (
+      <Text muted small role="status">
+        Checking your subscription...
+      </Text>
+    );
+  }
+
+  return null;
 }
