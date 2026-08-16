@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -211,6 +212,37 @@ func TestSetOpenRouterSpendCapRetryAuditsWhenAppliedHeartbeatWasLost(t *testing.
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
+}
+
+func TestSetOpenRouterSpendCapRetryRejectsMissingAppliedGeneration(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKey(t, db, organizationID, 100)
+
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger())
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(setter.Do)
+	env.SetHeartbeatDetails(spendCapHeartbeatFixture{
+		BeforeMonthlyCredits: 100,
+		ObservedKeyUpdatedAt: time.Now().UTC(),
+		AppliedKeyUpdatedAt:  time.Time{},
+		Applied:              true,
+	})
+	_, err := env.ExecuteActivity(setter.Do, spendCapActivityArgs("operation_missing_generation_placeholder", organizationID, 600))
+	require.ErrorContains(t, err, "missing applied key generation")
+	var applicationErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &applicationErr)
+	require.True(t, applicationErr.NonRetryable())
+	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerUnauditedOperation(t *testing.T) {

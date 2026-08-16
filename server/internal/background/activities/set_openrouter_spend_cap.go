@@ -20,6 +20,7 @@ import (
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 )
 
 type openRouterSpendCapAuditLogger interface {
@@ -118,7 +119,14 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 		}
 		before = heartbeat.BeforeMonthlyCredits
 		if heartbeat.Applied {
-			if heartbeat.AppliedKeyUpdatedAt.IsZero() || !key.UpdatedAt.Time.Equal(heartbeat.AppliedKeyUpdatedAt) {
+			if heartbeat.AppliedKeyUpdatedAt.IsZero() {
+				return temporal.NewNonRetryableApplicationError(
+					"restore spend-cap operation heartbeat: missing applied key generation",
+					"malformed-spend-cap-heartbeat",
+					nil,
+				)
+			}
+			if !key.UpdatedAt.Time.Equal(heartbeat.AppliedKeyUpdatedAt) {
 				// Every cap application advances the mirrored key generation. A
 				// different generation means another operation won after this attempt
 				// applied the key, so this retry must not overwrite it.
