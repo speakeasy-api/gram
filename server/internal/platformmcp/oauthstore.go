@@ -69,9 +69,24 @@ func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := platformrepo.New(tx)
-	_, err = q.RevokePlatformMCPOAuthClient(ctx, platformrepo.RevokePlatformMCPOAuthClientParams{ClientID: clientID, RevokedAt: timestamp(now)})
+	client, err := q.GetPlatformMCPOAuthClientForUpdate(ctx, clientID)
 	if err != nil {
 		return mapOAuthReadError(err)
+	}
+	if client.RevokedAt.Valid {
+		return platformoauth.ErrRevoked
+	}
+	connections, err := q.ListPlatformMCPClientConnectionsForUpdate(ctx, client.ID)
+	if err != nil {
+		return fmt.Errorf("lock platform mcp client connections: %w", err)
+	}
+	for _, connection := range connections {
+		if err := markConnectionTerminal(ctx, q, connection.OrganizationID, connection.ID, connection.ActiveGeneration, platformoauth.ReauthorizationReasonClientRevoked, now); err != nil {
+			return err
+		}
+	}
+	if _, err = q.RevokePlatformMCPOAuthClient(ctx, platformrepo.RevokePlatformMCPOAuthClientParams{ClientID: clientID, RevokedAt: timestamp(now)}); err != nil {
+		return mapOAuthWriteError(err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -96,12 +111,16 @@ func (s *PostgresOAuthStore) RegisterConnection(ctx context.Context, connection 
 	if err != nil {
 		return platformoauth.ErrGeneration
 	}
+	if connection.AuthorizationExpiresAt.IsZero() {
+		return platformoauth.ErrExpired
+	}
 	_, err = platformrepo.New(s.db).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               id,
-		OrganizationID:   connection.OrganizationID,
-		SubjectUrn:       connection.Subject,
-		OauthClientID:    client.ID,
-		ActiveGeneration: generation,
+		ID:                     id,
+		OrganizationID:         connection.OrganizationID,
+		SubjectUrn:             connection.Subject,
+		OauthClientID:          client.ID,
+		ActiveGeneration:       generation,
+		AuthorizationExpiresAt: timestamp(connection.AuthorizationExpiresAt),
 	})
 	return mapOAuthWriteError(err)
 }
@@ -118,7 +137,7 @@ func (s *PostgresOAuthStore) GetConnection(ctx context.Context, organizationID, 
 	if err != nil {
 		return platformoauth.Connection{}, mapOAuthReadError(err)
 	}
-	return platformoauth.Connection{ID: row.ID.String(), ClientID: clientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ActiveGeneration.String()}, nil
+	return connectionFromRow(row, clientID), nil
 }
 
 func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input platformoauth.AuthorizeConnectionInput) (platformoauth.Connection, error) {
@@ -156,6 +175,9 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input plat
 	}
 
 	connection := input.Connection
+	if connection.AuthorizationExpiresAt.IsZero() {
+		connection.AuthorizationExpiresAt = input.Now.Add(platformoauth.AuthorizationLifetime)
+	}
 	grantConnectionID := connectionID
 	grantGeneration := generation
 	current, err := q.GetActivePlatformMCPConnection(ctx, platformrepo.GetActivePlatformMCPConnectionParams{
@@ -165,26 +187,26 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input plat
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		if _, err := q.CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-			ID:               connectionID,
-			OrganizationID:   input.Connection.OrganizationID,
-			SubjectUrn:       input.Connection.Subject,
-			OauthClientID:    client.ID,
-			ActiveGeneration: generation,
+			ID:                     connectionID,
+			OrganizationID:         input.Connection.OrganizationID,
+			SubjectUrn:             input.Connection.Subject,
+			OauthClientID:          client.ID,
+			ActiveGeneration:       generation,
+			AuthorizationExpiresAt: timestamp(connection.AuthorizationExpiresAt),
 		}); err != nil {
 			return platformoauth.Connection{}, mapOAuthWriteError(err)
 		}
 	} else if err != nil {
 		return platformoauth.Connection{}, mapOAuthReadError(err)
 	} else {
-		if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: current.OrganizationID, ConnectionID: current.ID, ConnectionGeneration: current.ActiveGeneration, RevokedAt: timestamp(input.Now)}); err != nil {
-			return platformoauth.Connection{}, fmt.Errorf("revoke reauthorized platform mcp session family: %w", err)
-		}
-		updated, err := q.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: current.ID, OrganizationID: current.OrganizationID, ActiveGeneration: generation, ReauthorizedAt: timestamp(input.Now)})
+		updated, err := q.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: current.ID, OrganizationID: current.OrganizationID, ActiveGeneration: generation, ReauthorizedAt: timestamp(input.Now), AuthorizationExpiresAt: timestamp(connection.AuthorizationExpiresAt)})
 		if err != nil {
 			return platformoauth.Connection{}, mapOAuthWriteError(err)
 		}
-		connection.ID = updated.ID.String()
-		connection.Generation = updated.ActiveGeneration.String()
+		if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: current.OrganizationID, ConnectionID: current.ID, ConnectionGeneration: current.ActiveGeneration, RevokedAt: timestamp(input.Now)}); err != nil {
+			return platformoauth.Connection{}, fmt.Errorf("revoke reauthorized platform mcp session family: %w", err)
+		}
+		connection = connectionFromRow(updated, input.Connection.ClientID)
 		grantConnectionID = updated.ID
 		grantGeneration = updated.ActiveGeneration
 	}
@@ -278,6 +300,67 @@ func (s *PostgresOAuthStore) IssueGrant(ctx context.Context, grant platformoauth
 	return mapOAuthWriteError(err)
 }
 
+func (s *PostgresOAuthStore) ValidateGrant(ctx context.Context, input platformoauth.ValidateGrantInput) (platformoauth.Grant, error) {
+	if s == nil || s.db == nil {
+		return platformoauth.Grant{}, platformoauth.ErrNotFound
+	}
+	row, err := platformrepo.New(s.db).GetPlatformMCPAuthorizationGrantForValidation(ctx, platformrepo.GetPlatformMCPAuthorizationGrantForValidationParams{OrganizationID: input.OrganizationID, AuthorizationCodeHash: opaqueHash(input.Code)})
+	if err != nil {
+		return platformoauth.Grant{}, mapOAuthReadError(err)
+	}
+	return validateGrantRow(input, grantRow{
+		ID: row.ID, OrganizationID: row.OrganizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration,
+		RedirectURI: row.RedirectUri, CodeChallenge: row.CodeChallenge, ExpiresAt: row.ExpiresAt, ConsumedAt: row.ConsumedAt,
+		RevokedAt: row.RevokedAt, Subject: row.SubjectUrn, ActiveGeneration: row.ActiveGeneration, ClientID: row.ClientID,
+		AuthorizationExpiresAt: row.EffectiveAuthorizationExpiresAt,
+	})
+}
+
+func (s *PostgresOAuthStore) ExchangeGrant(ctx context.Context, input platformoauth.ExchangeGrantInput) (platformoauth.Grant, error) {
+	if s == nil || s.db == nil {
+		return platformoauth.Grant{}, platformoauth.ErrNotFound
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return platformoauth.Grant{}, fmt.Errorf("begin exchange platform mcp grant: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := platformrepo.New(tx)
+	row, err := q.GetPlatformMCPAuthorizationGrantForConsume(ctx, platformrepo.GetPlatformMCPAuthorizationGrantForConsumeParams{OrganizationID: input.OrganizationID, AuthorizationCodeHash: opaqueHash(input.Code)})
+	if err != nil {
+		return platformoauth.Grant{}, mapOAuthReadError(err)
+	}
+	grant, err := validateGrantRow(input.ConsumeGrantInput, grantRow{
+		ID: row.ID, OrganizationID: row.OrganizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration,
+		RedirectURI: row.RedirectUri, CodeChallenge: row.CodeChallenge, ExpiresAt: row.ExpiresAt, ConsumedAt: row.ConsumedAt,
+		RevokedAt: row.RevokedAt, Subject: row.SubjectUrn, ActiveGeneration: row.ActiveGeneration, ClientID: row.ClientID,
+		AuthorizationExpiresAt: row.EffectiveAuthorizationExpiresAt,
+	})
+	if err != nil {
+		return platformoauth.Grant{}, err
+	}
+	if input.Session.ClientID != grant.ClientID || input.Session.Connection.ID != grant.Connection.ID || input.Session.Connection.ClientID != grant.Connection.ClientID || input.Session.Connection.Subject != grant.Connection.Subject || input.Session.Connection.OrganizationID != grant.Connection.OrganizationID {
+		return platformoauth.Grant{}, platformoauth.ErrClientMismatch
+	}
+	if input.Session.Connection.Generation != grant.Connection.Generation {
+		return platformoauth.Grant{}, platformoauth.ErrGeneration
+	}
+	if input.Session.ExpiresAt.After(grant.Connection.AuthorizationExpiresAt) || input.Session.RefreshExpiresAt.After(grant.Connection.AuthorizationExpiresAt) {
+		return platformoauth.Grant{}, platformoauth.ErrExpired
+	}
+	if err := s.createSessionWithQueries(ctx, q, input.Session); err != nil {
+		return platformoauth.Grant{}, err
+	}
+	if _, err := q.ConsumePlatformMCPAuthorizationGrant(ctx, platformrepo.ConsumePlatformMCPAuthorizationGrantParams{ID: row.ID, OrganizationID: input.OrganizationID, ConsumedAt: timestamp(input.Now)}); err != nil {
+		return platformoauth.Grant{}, mapOAuthWriteError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return platformoauth.Grant{}, fmt.Errorf("commit exchange platform mcp grant: %w", err)
+	}
+	return grant, nil
+}
+
 func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input platformoauth.ConsumeGrantInput) (platformoauth.Grant, error) {
 	if s == nil || s.db == nil {
 		return platformoauth.Grant{}, platformoauth.ErrNotFound
@@ -293,22 +376,13 @@ func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input platformoau
 	if err != nil {
 		return platformoauth.Grant{}, mapOAuthReadError(err)
 	}
-	if row.ClientID != input.ClientID {
-		return platformoauth.Grant{}, platformoauth.ErrClientMismatch
-	}
-	if row.RedirectUri != input.RedirectURI {
-		return platformoauth.Grant{}, platformoauth.ErrRedirectURI
-	}
-	if !row.ExpiresAt.Valid || input.Now.After(row.ExpiresAt.Time) {
-		return platformoauth.Grant{}, platformoauth.ErrExpired
-	}
-	if row.ConsumedAt.Valid || row.RevokedAt.Valid {
-		return platformoauth.Grant{}, platformoauth.ErrAlreadyUsed
-	}
-	if row.ConnectionGeneration != row.ActiveGeneration {
-		return platformoauth.Grant{}, platformoauth.ErrGeneration
-	}
-	if err := verifyPKCE(input.CodeVerifier, row.CodeChallenge); err != nil {
+	grant, err := validateGrantRow(input, grantRow{
+		ID: row.ID, OrganizationID: row.OrganizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration,
+		RedirectURI: row.RedirectUri, CodeChallenge: row.CodeChallenge, ExpiresAt: row.ExpiresAt, ConsumedAt: row.ConsumedAt,
+		RevokedAt: row.RevokedAt, Subject: row.SubjectUrn, ActiveGeneration: row.ActiveGeneration, ClientID: row.ClientID,
+		AuthorizationExpiresAt: row.EffectiveAuthorizationExpiresAt,
+	})
+	if err != nil {
 		return platformoauth.Grant{}, err
 	}
 	if _, err := q.ConsumePlatformMCPAuthorizationGrant(ctx, platformrepo.ConsumePlatformMCPAuthorizationGrantParams{ID: row.ID, OrganizationID: input.OrganizationID, ConsumedAt: timestamp(input.Now)}); err != nil {
@@ -317,7 +391,7 @@ func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input platformoau
 	if err := tx.Commit(ctx); err != nil {
 		return platformoauth.Grant{}, fmt.Errorf("commit consume platform mcp grant: %w", err)
 	}
-	return platformoauth.Grant{Code: input.Code, ClientID: row.ClientID, RedirectURI: row.RedirectUri, CodeChallenge: row.CodeChallenge, ExpiresAt: row.ExpiresAt.Time, Connection: platformoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String()}}, nil
+	return grant, nil
 }
 
 func (s *PostgresOAuthStore) CreateSession(ctx context.Context, session platformoauth.Session) error {
@@ -371,6 +445,66 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizatio
 	return true, nil
 }
 
+func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformoauth.PrepareRefreshInput) (platformoauth.Session, error) {
+	if s == nil || s.db == nil {
+		return platformoauth.Session{}, platformoauth.ErrNotFound
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return platformoauth.Session{}, fmt.Errorf("begin prepare platform mcp refresh: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := platformrepo.New(tx)
+	row, err := q.GetPlatformMCPSessionForRefreshForUpdate(ctx, platformrepo.GetPlatformMCPSessionForRefreshForUpdateParams{OrganizationID: input.OrganizationID, RefreshTokenHash: input.RefreshHash})
+	if err != nil {
+		return platformoauth.Session{}, mapOAuthReadError(err)
+	}
+	if row.ClientID != input.ClientID {
+		return platformoauth.Session{}, platformoauth.ErrClientMismatch
+	}
+	if row.RevokedAt.Valid {
+		if !row.RotatedAt.Valid {
+			return platformoauth.Session{}, platformoauth.ErrRevoked
+		}
+		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, input.Now); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return platformoauth.Session{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return platformoauth.Session{}, fmt.Errorf("commit reused platform mcp refresh: %w", err)
+		}
+		return platformoauth.Session{}, platformoauth.ErrAlreadyUsed
+	}
+	if row.ConnectionRevokedAt.Valid || row.ClientRevokedAt.Valid || row.ReauthorizationRequiredAt.Valid {
+		return platformoauth.Session{}, platformoauth.ErrRevoked
+	}
+	if row.ActiveGeneration != row.ConnectionGeneration {
+		return platformoauth.Session{}, platformoauth.ErrGeneration
+	}
+	if !row.EffectiveAuthorizationExpiresAt.Valid || !input.Now.Before(row.EffectiveAuthorizationExpiresAt.Time) {
+		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonAuthorizationExpired, input.Now); err != nil {
+			return platformoauth.Session{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp authorization: %w", err)
+		}
+		return platformoauth.Session{}, platformoauth.ErrExpired
+	}
+	if !row.RefreshExpiresAt.Valid || !input.Now.Before(row.RefreshExpiresAt.Time) {
+		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshIdleExpired, input.Now); err != nil {
+			return platformoauth.Session{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp refresh: %w", err)
+		}
+		return platformoauth.Session{}, platformoauth.ErrExpired
+	}
+	session := sessionFromRefreshRow(row)
+	if err := tx.Commit(ctx); err != nil {
+		return platformoauth.Session{}, fmt.Errorf("commit prepared platform mcp refresh: %w", err)
+	}
+	return session, nil
+}
+
 func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoauth.RotateSessionInput) (platformoauth.Session, error) {
 	if s == nil || s.db == nil {
 		return platformoauth.Session{}, platformoauth.ErrNotFound
@@ -389,24 +523,42 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 		return platformoauth.Session{}, fmt.Errorf("lock platform mcp session: %w", err)
 	}
 	if row.RevokedAt.Valid {
-		if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: input.OrganizationID, ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration, RevokedAt: timestamp(input.Now)}); err != nil {
-			return platformoauth.Session{}, fmt.Errorf("revoke reused platform mcp session family: %w", err)
+		if !row.RotatedAt.Valid {
+			return platformoauth.Session{}, platformoauth.ErrRevoked
+		}
+		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshReuse, input.Now); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return platformoauth.Session{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit reused platform mcp session family: %w", err)
 		}
 		return platformoauth.Session{}, platformoauth.ErrAlreadyUsed
 	}
-	if row.OrganizationID != input.OrganizationID || row.ClientID != input.ClientID || row.ConnectionGeneration.String() != input.Generation || row.ActiveGeneration != row.ConnectionGeneration || input.Replacement.Connection.ID != row.ConnectionID.String() {
+	if row.OrganizationID != input.OrganizationID || row.ClientID != input.ClientID || row.ConnectionGeneration.String() != input.Generation || row.ActiveGeneration != row.ConnectionGeneration || input.Replacement.Connection.ID != row.ConnectionID.String() || input.Replacement.Connection.Generation != row.ConnectionGeneration.String() {
 		return platformoauth.Session{}, platformoauth.ErrGeneration
 	}
-	if !row.RefreshExpiresAt.Valid || input.Now.After(row.RefreshExpiresAt.Time) {
-		if _, err := q.RevokePlatformMCPSession(ctx, platformrepo.RevokePlatformMCPSessionParams{ID: row.ID, OrganizationID: input.OrganizationID, RevokedAt: timestamp(input.Now)}); err != nil {
-			return platformoauth.Session{}, mapOAuthWriteError(err)
+	if row.ConnectionRevokedAt.Valid || row.ClientRevokedAt.Valid || row.ReauthorizationRequiredAt.Valid {
+		return platformoauth.Session{}, platformoauth.ErrRevoked
+	}
+	if !row.EffectiveAuthorizationExpiresAt.Valid || !input.Now.Before(row.EffectiveAuthorizationExpiresAt.Time) {
+		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonAuthorizationExpired, input.Now); err != nil {
+			return platformoauth.Session{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp authorization: %w", err)
+		}
+		return platformoauth.Session{}, platformoauth.ErrExpired
+	}
+	if !row.RefreshExpiresAt.Valid || !input.Now.Before(row.RefreshExpiresAt.Time) {
+		if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonRefreshIdleExpired, input.Now); err != nil {
+			return platformoauth.Session{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return platformoauth.Session{}, fmt.Errorf("commit expired platform mcp session: %w", err)
 		}
+		return platformoauth.Session{}, platformoauth.ErrExpired
+	}
+	if input.Replacement.ExpiresAt.After(row.EffectiveAuthorizationExpiresAt.Time) || input.Replacement.RefreshExpiresAt.After(row.EffectiveAuthorizationExpiresAt.Time) {
 		return platformoauth.Session{}, platformoauth.ErrExpired
 	}
 	if err := validateSessionConnection(ctx, q, input.Replacement); err != nil {
@@ -426,6 +578,32 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 		return platformoauth.Session{}, fmt.Errorf("commit rotate platform mcp session: %w", err)
 	}
 	return platformoauth.Session{ID: row.ID.String(), ClientID: row.ClientID, JTI: row.Jti, RefreshHash: row.RefreshTokenHash, ExpiresAt: row.ExpiresAt.Time, RefreshExpiresAt: row.RefreshExpiresAt.Time, Connection: platformoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String()}}, nil
+}
+
+func (s *PostgresOAuthStore) MarkAuthorizationLost(ctx context.Context, organizationID, connectionID, generation string, now time.Time) error {
+	if s == nil || s.db == nil {
+		return platformoauth.ErrNotFound
+	}
+	id, err := uuid.Parse(connectionID)
+	if err != nil {
+		return platformoauth.ErrNotFound
+	}
+	activeGeneration, err := uuid.Parse(generation)
+	if err != nil {
+		return platformoauth.ErrGeneration
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin mark platform mcp authorization lost: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := markConnectionTerminal(ctx, platformrepo.New(tx), organizationID, id, activeGeneration, platformoauth.ReauthorizationReasonAuthorizationLost, now); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit mark platform mcp authorization lost: %w", err)
+	}
+	return nil
 }
 
 func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (platformoauth.Session, error) {
@@ -448,8 +626,8 @@ func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, organizationID, 
 	if row.ClientID != clientID {
 		return platformoauth.Session{}, platformoauth.ErrNotFound
 	}
-	if _, err := q.RevokePlatformMCPSession(ctx, platformrepo.RevokePlatformMCPSessionParams{ID: row.ID, OrganizationID: organizationID, RevokedAt: timestamp(now)}); err != nil {
-		return platformoauth.Session{}, mapOAuthWriteError(err)
+	if err := markConnectionTerminal(ctx, q, row.OrganizationID, row.ConnectionID, row.ConnectionGeneration, platformoauth.ReauthorizationReasonConnectionRevoked, now); err != nil {
+		return platformoauth.Session{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return platformoauth.Session{}, fmt.Errorf("commit revoke platform mcp session: %w", err)
@@ -494,17 +672,17 @@ func (s *PostgresOAuthStore) RotateConnectionGeneration(ctx context.Context, org
 	if err != nil {
 		return platformoauth.Connection{}, mapOAuthReadError(err)
 	}
-	if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: id, ConnectionGeneration: current.ActiveGeneration, RevokedAt: timestamp(now)}); err != nil {
-		return platformoauth.Connection{}, fmt.Errorf("revoke old platform mcp generation: %w", err)
-	}
-	connection, err := q.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: id, OrganizationID: organizationID, ActiveGeneration: newGeneration, ReauthorizedAt: timestamp(now)})
+	connection, err := q.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: id, OrganizationID: organizationID, ActiveGeneration: newGeneration, ReauthorizedAt: timestamp(now), AuthorizationExpiresAt: timestamp(now.Add(platformoauth.AuthorizationLifetime))})
 	if err != nil {
 		return platformoauth.Connection{}, mapOAuthWriteError(err)
+	}
+	if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: id, ConnectionGeneration: current.ActiveGeneration, RevokedAt: timestamp(now)}); err != nil {
+		return platformoauth.Connection{}, fmt.Errorf("revoke old platform mcp generation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return platformoauth.Connection{}, fmt.Errorf("commit rotate platform mcp generation: %w", err)
 	}
-	return platformoauth.Connection{ID: connection.ID.String(), ClientID: current.ClientID, Subject: current.SubjectUrn, OrganizationID: current.OrganizationID, Generation: connection.ActiveGeneration.String()}, nil
+	return connectionFromRow(connection, current.ClientID), nil
 }
 
 func (s *PostgresOAuthStore) createSessionWithQueries(ctx context.Context, q *platformrepo.Queries, session platformoauth.Session) error {
@@ -550,8 +728,66 @@ func validateSessionConnection(ctx context.Context, q *platformrepo.Queries, ses
 	return nil
 }
 
+type grantRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ConnectionID           uuid.UUID
+	ConnectionGeneration   uuid.UUID
+	RedirectURI            string
+	CodeChallenge          string
+	ExpiresAt              pgtype.Timestamptz
+	ConsumedAt             pgtype.Timestamptz
+	RevokedAt              pgtype.Timestamptz
+	Subject                string
+	ActiveGeneration       uuid.UUID
+	ClientID               string
+	AuthorizationExpiresAt pgtype.Timestamptz
+}
+
+func validateGrantRow(input platformoauth.ConsumeGrantInput, row grantRow) (platformoauth.Grant, error) {
+	if row.ClientID != input.ClientID {
+		return platformoauth.Grant{}, platformoauth.ErrClientMismatch
+	}
+	if row.RedirectURI != input.RedirectURI {
+		return platformoauth.Grant{}, platformoauth.ErrRedirectURI
+	}
+	if !row.ExpiresAt.Valid || !input.Now.Before(row.ExpiresAt.Time) || !row.AuthorizationExpiresAt.Valid || !input.Now.Before(row.AuthorizationExpiresAt.Time) {
+		return platformoauth.Grant{}, platformoauth.ErrExpired
+	}
+	if row.ConsumedAt.Valid || row.RevokedAt.Valid {
+		return platformoauth.Grant{}, platformoauth.ErrAlreadyUsed
+	}
+	if row.ConnectionGeneration != row.ActiveGeneration {
+		return platformoauth.Grant{}, platformoauth.ErrGeneration
+	}
+	if err := verifyPKCE(input.CodeVerifier, row.CodeChallenge); err != nil {
+		return platformoauth.Grant{}, err
+	}
+	return platformoauth.Grant{Code: input.Code, ClientID: row.ClientID, RedirectURI: row.RedirectURI, CodeChallenge: row.CodeChallenge, ExpiresAt: row.ExpiresAt.Time, Connection: platformoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.Subject, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String(), AuthorizationExpiresAt: row.AuthorizationExpiresAt.Time}}, nil
+}
+
+func markConnectionTerminal(ctx context.Context, q *platformrepo.Queries, organizationID string, connectionID, generation uuid.UUID, reason platformoauth.ReauthorizationReason, now time.Time) error {
+	// Lock the connection before its sessions so every terminal transition uses
+	// the same connection -> session ordering as refresh and explicit revocation.
+	if _, err := q.MarkPlatformMCPConnectionReauthorizationRequired(ctx, platformrepo.MarkPlatformMCPConnectionReauthorizationRequiredParams{OrganizationID: organizationID, ConnectionID: connectionID, ConnectionGeneration: generation, ReauthorizationRequiredAt: timestamp(now), ReauthorizationReason: text(string(reason))}); err != nil {
+		return mapOAuthWriteError(err)
+	}
+	if err := q.RevokePlatformMCPSessionFamily(ctx, platformrepo.RevokePlatformMCPSessionFamilyParams{OrganizationID: organizationID, ConnectionID: connectionID, ConnectionGeneration: generation, RevokedAt: timestamp(now)}); err != nil {
+		return fmt.Errorf("revoke terminal platform mcp session family: %w", err)
+	}
+	return nil
+}
+
+func connectionFromRow(row platformrepo.PlatformMcpConnection, clientID string) platformoauth.Connection {
+	return platformoauth.Connection{ID: row.ID.String(), ClientID: clientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ActiveGeneration.String(), AuthorizationExpiresAt: row.AuthorizationExpiresAt.Time, ReauthorizationRequiredAt: timePointer(row.ReauthorizationRequiredAt), ReauthorizationReason: platformoauth.ReauthorizationReason(row.ReauthorizationReason.String), RevokedAt: timePointer(row.RevokedAt)}
+}
+
 func sessionFromRow(row platformrepo.GetPlatformMCPSessionForRefreshRow) platformoauth.Session {
 	return platformoauth.Session{ID: row.ID.String(), ClientID: row.ClientID, JTI: row.Jti, RefreshHash: row.RefreshTokenHash, ExpiresAt: row.ExpiresAt.Time, RefreshExpiresAt: row.RefreshExpiresAt.Time, Connection: platformoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String()}}
+}
+
+func sessionFromRefreshRow(row platformrepo.GetPlatformMCPSessionForRefreshForUpdateRow) platformoauth.Session {
+	return platformoauth.Session{ID: row.ID.String(), ClientID: row.ClientID, JTI: row.Jti, RefreshHash: row.RefreshTokenHash, ExpiresAt: row.ExpiresAt.Time, RefreshExpiresAt: row.RefreshExpiresAt.Time, RotatedAt: timePointer(row.RotatedAt), RevokedAt: timePointer(row.RevokedAt), Connection: platformoauth.Connection{ID: row.ConnectionID.String(), ClientID: row.ClientID, Subject: row.SubjectUrn, OrganizationID: row.OrganizationID, Generation: row.ConnectionGeneration.String(), AuthorizationExpiresAt: row.EffectiveAuthorizationExpiresAt.Time, RevokedAt: timePointer(row.ConnectionRevokedAt)}}
 }
 
 func text(value string) pgtype.Text {

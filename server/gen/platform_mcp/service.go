@@ -127,6 +127,11 @@ type PlatformMCPOnboardingState struct {
 	// Whether the authenticated user has a current authorized Platform MCP
 	// connection.
 	ConnectionAuthorized bool
+	// Bounded authorization state for the authenticated user's latest Platform MCP
+	// connection.
+	ConnectionAuthState string
+	// Bounded reason why interactive Platform MCP authorization is required again.
+	ReauthorizationReason string
 	// Whether the authenticated user's current connection has completed
 	// authenticated discovery.
 	ConnectionReady bool

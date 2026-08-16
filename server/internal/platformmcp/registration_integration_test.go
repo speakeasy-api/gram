@@ -23,6 +23,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -47,6 +48,78 @@ func TestMain(m *testing.M) {
 		log.Fatalf("cleanup test infrastructure: %v", err)
 	}
 	os.Exit(code)
+}
+
+func TestPostgresOAuthStoreRefreshReplayAfterConnectionRevocationIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_refresh_replay_revoked_connection")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP OAuth test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	store := NewPostgresOAuthStore(conn)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP OAuth test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{
+		ID:                     uuid.NewString(),
+		ClientID:               client.ID,
+		Subject:                userSubjectURN("user_" + uuid.NewString()),
+		OrganizationID:         organizationID,
+		Generation:             uuid.NewString(),
+		AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime),
+	}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+	parent := platformoauth.Session{
+		ID:               uuid.NewString(),
+		ClientID:         client.ID,
+		Connection:       connection,
+		JTI:              "jti-" + uuid.NewString(),
+		RefreshHash:      "refresh-" + uuid.NewString(),
+		ExpiresAt:        now.Add(time.Hour),
+		RefreshExpiresAt: now.Add(30 * 24 * time.Hour),
+	}
+	require.NoError(t, store.CreateSession(ctx, parent))
+	replacement := parent
+	replacement.ID = uuid.NewString()
+	replacement.JTI = "jti-" + uuid.NewString()
+	replacement.RefreshHash = "refresh-" + uuid.NewString()
+	_, err = store.RotateSession(ctx, platformoauth.RotateSessionInput{
+		OrganizationID: organizationID,
+		RefreshHash:    parent.RefreshHash,
+		ClientID:       client.ID,
+		Generation:     connection.Generation,
+		Now:            now.Add(time.Minute),
+		Replacement:    replacement,
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.RevokeConnection(ctx, organizationID, connection.ID, now.Add(2*time.Minute)))
+
+	_, err = store.PrepareRefresh(ctx, platformoauth.PrepareRefreshInput{
+		OrganizationID: organizationID,
+		RefreshHash:    parent.RefreshHash,
+		ClientID:       client.ID,
+		Now:            now.Add(3 * time.Minute),
+	})
+	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+
+	_, err = store.PrepareRefresh(ctx, platformoauth.PrepareRefreshInput{
+		OrganizationID: organizationID,
+		RefreshHash:    replacement.RefreshHash,
+		ClientID:       client.ID,
+		Now:            now.Add(3 * time.Minute),
+	})
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
 }
 
 func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
@@ -506,10 +579,11 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	oldGeneration := connectionIDFromPrincipalGeneration(t, principal)
 	newGeneration := uuid.New()
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: newGeneration,
-		ReauthorizedAt:   timestamp(time.Now().UTC()),
-		ConnectionID:     connectionID,
-		OrganizationID:   principal.OrganizationID,
+		ActiveGeneration:       newGeneration,
+		ReauthorizedAt:         timestamp(time.Now().UTC()),
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
+		ConnectionID:           connectionID,
+		OrganizationID:         principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	_, err = platformrepo.New(conn).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
@@ -548,11 +622,12 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	secondConnectionID := uuid.New()
 	secondGeneration := uuid.New()
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               secondConnectionID,
-		OrganizationID:   principal.OrganizationID,
-		SubjectUrn:       userSubjectURN(principal.UserID),
-		OauthClientID:    secondClient.ID,
-		ActiveGeneration: secondGeneration,
+		ID:                     secondConnectionID,
+		OrganizationID:         principal.OrganizationID,
+		SubjectUrn:             userSubjectURN(principal.UserID),
+		OauthClientID:          secondClient.ID,
+		ActiveGeneration:       secondGeneration,
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 	secondPrincipal := principal
@@ -600,11 +675,12 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	foreignGeneration := uuid.New()
 	foreignUserID := "user_" + uuid.NewString()
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               foreignConnectionID,
-		OrganizationID:   principal.OrganizationID,
-		SubjectUrn:       userSubjectURN(foreignUserID),
-		OauthClientID:    foreignClient.ID,
-		ActiveGeneration: foreignGeneration,
+		ID:                     foreignConnectionID,
+		OrganizationID:         principal.OrganizationID,
+		SubjectUrn:             userSubjectURN(foreignUserID),
+		OauthClientID:          foreignClient.ID,
+		ActiveGeneration:       foreignGeneration,
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 	foreignPrincipal := Principal{
@@ -752,12 +828,26 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	connectionID := uuid.New()
 	generation := uuid.New()
 	userID := "user_" + uuid.NewString()
+	now := time.Now().UTC()
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
-		ID:               connectionID,
-		OrganizationID:   organizationID,
-		SubjectUrn:       userSubjectURN(userID),
-		OauthClientID:    oauthClient.ID,
-		ActiveGeneration: generation,
+		ID:                     connectionID,
+		OrganizationID:         organizationID,
+		SubjectUrn:             userSubjectURN(userID),
+		OauthClientID:          oauthClient.ID,
+		ActiveGeneration:       generation,
+		AuthorizationExpiresAt: timestamp(now.Add(90 * 24 * time.Hour)),
+	})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{
+		ID:                   uuid.New(),
+		OrganizationID:       organizationID,
+		ConnectionID:         connectionID,
+		OauthClientID:        oauthClient.ID,
+		ConnectionGeneration: generation,
+		Jti:                  "jti-" + uuid.NewString(),
+		RefreshTokenHash:     "refresh-" + uuid.NewString(),
+		ExpiresAt:            timestamp(now.Add(time.Hour)),
+		RefreshExpiresAt:     timestamp(now.Add(30 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 

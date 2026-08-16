@@ -12,6 +12,19 @@ import (
 	"time"
 )
 
+type ReauthorizationReason string
+
+const (
+	AuthorizationLifetime                                           = 90 * 24 * time.Hour
+	ReauthorizationReasonRefreshIdleExpired   ReauthorizationReason = "refresh_idle_expired"
+	ReauthorizationReasonAuthorizationExpired ReauthorizationReason = "authorization_expired"
+	ReauthorizationReasonRefreshReuse         ReauthorizationReason = "refresh_reuse"
+	ReauthorizationReasonConnectionRevoked    ReauthorizationReason = "connection_revoked"
+	ReauthorizationReasonClientRevoked        ReauthorizationReason = "client_revoked"
+	ReauthorizationReasonAuthorizationLost    ReauthorizationReason = "authorization_lost"
+	ReauthorizationReasonSecurityReset        ReauthorizationReason = "security_reset"
+)
+
 var (
 	ErrNotFound       = errors.New("platform oauth state not found")
 	ErrRevoked        = errors.New("platform oauth state revoked")
@@ -33,12 +46,15 @@ type Client struct {
 }
 
 type Connection struct {
-	ID             string
-	ClientID       string
-	Subject        string
-	OrganizationID string
-	Generation     string
-	RevokedAt      *time.Time
+	ID                        string
+	ClientID                  string
+	Subject                   string
+	OrganizationID            string
+	Generation                string
+	AuthorizationExpiresAt    time.Time
+	ReauthorizationRequiredAt *time.Time
+	ReauthorizationReason     ReauthorizationReason
+	RevokedAt                 *time.Time
 }
 
 type Grant struct {
@@ -67,7 +83,22 @@ type Session struct {
 	RefreshHash      string
 	ExpiresAt        time.Time
 	RefreshExpiresAt time.Time
+	RotatedAt        *time.Time
 	RevokedAt        *time.Time
+}
+
+type ValidateGrantInput = ConsumeGrantInput
+
+type ExchangeGrantInput struct {
+	ConsumeGrantInput
+	Session Session
+}
+
+type PrepareRefreshInput struct {
+	OrganizationID string
+	RefreshHash    string
+	ClientID       string
+	Now            time.Time
 }
 
 type RotateSessionInput struct {
@@ -95,11 +126,15 @@ type Store interface {
 	AuthorizeConnection(ctx context.Context, input AuthorizeConnectionInput) (Connection, error)
 	RevokeConnection(ctx context.Context, organizationID, connectionID string, now time.Time) error
 	IssueGrant(ctx context.Context, grant Grant) error
+	ValidateGrant(ctx context.Context, input ValidateGrantInput) (Grant, error)
+	ExchangeGrant(ctx context.Context, input ExchangeGrantInput) (Grant, error)
 	ConsumeGrant(ctx context.Context, input ConsumeGrantInput) (Grant, error)
 	CreateSession(ctx context.Context, session Session) error
 	GetSessionByRefreshHash(ctx context.Context, organizationID, refreshHash string) (Session, error)
 	DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error)
+	PrepareRefresh(ctx context.Context, input PrepareRefreshInput) (Session, error)
 	RotateSession(ctx context.Context, input RotateSessionInput) (Session, error)
+	MarkAuthorizationLost(ctx context.Context, organizationID, connectionID, generation string, now time.Time) error
 	RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (Session, error)
 	RevokeAccessSession(ctx context.Context, organizationID, jti, clientID string, now time.Time) (Session, error)
 	RotateConnectionGeneration(ctx context.Context, organizationID, connectionID, generation string, now time.Time) (Connection, error)
@@ -161,6 +196,15 @@ func (s *InMemoryStore) RevokeClient(_ context.Context, clientID string, now tim
 	}
 	client.RevokedAt = &now
 	s.clients[clientID] = client
+	for id, connection := range s.connections {
+		if connection.ClientID != clientID || connection.RevokedAt != nil {
+			continue
+		}
+		connection.ReauthorizationRequiredAt = &now
+		connection.ReauthorizationReason = ReauthorizationReasonClientRevoked
+		s.connections[id] = connection
+		s.revokeGeneration(connection.ID, connection.Generation, now)
+	}
 	return nil
 }
 
@@ -173,6 +217,9 @@ func (s *InMemoryStore) RegisterConnection(_ context.Context, connection Connect
 	}
 	if _, exists := s.connections[connection.ID]; exists {
 		return ErrAlreadyUsed
+	}
+	if connection.AuthorizationExpiresAt.IsZero() {
+		return ErrExpired
 	}
 	if connection.RevokedAt == nil {
 		for _, existing := range s.connections {
@@ -214,12 +261,18 @@ func (s *InMemoryStore) AuthorizeConnection(_ context.Context, input AuthorizeCo
 		return Connection{}, ErrAlreadyUsed
 	}
 	connection := input.Connection
+	if connection.AuthorizationExpiresAt.IsZero() {
+		connection.AuthorizationExpiresAt = input.Now.Add(AuthorizationLifetime)
+	}
 	for id, existing := range s.connections {
 		if existing.OrganizationID != connection.OrganizationID || existing.Subject != connection.Subject || existing.ClientID != connection.ClientID || existing.RevokedAt != nil {
 			continue
 		}
 		s.revokeGeneration(id, existing.Generation, input.Now)
 		existing.Generation = connection.Generation
+		existing.AuthorizationExpiresAt = connection.AuthorizationExpiresAt
+		existing.ReauthorizationRequiredAt = nil
+		existing.ReauthorizationReason = ""
 		s.connections[id] = existing
 		connection = existing
 		break
@@ -242,6 +295,8 @@ func (s *InMemoryStore) RevokeConnection(_ context.Context, organizationID, conn
 		return ErrNotFound
 	}
 	connection.RevokedAt = &now
+	connection.ReauthorizationRequiredAt = &now
+	connection.ReauthorizationReason = ReauthorizationReasonConnectionRevoked
 	s.connections[connectionID] = connection
 	s.revokeGeneration(connectionID, connection.Generation, now)
 	return nil
@@ -264,10 +319,14 @@ func (s *InMemoryStore) IssueGrant(_ context.Context, grant Grant) error {
 	return nil
 }
 
-func (s *InMemoryStore) ConsumeGrant(_ context.Context, input ConsumeGrantInput) (Grant, error) {
+func (s *InMemoryStore) ValidateGrant(_ context.Context, input ValidateGrantInput) (Grant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.validateGrant(input)
+}
+
+func (s *InMemoryStore) validateGrant(input ValidateGrantInput) (Grant, error) {
 	grant, ok := s.grants[input.Code]
 	if !ok {
 		return Grant{}, ErrAlreadyUsed
@@ -291,6 +350,38 @@ func (s *InMemoryStore) ConsumeGrant(_ context.Context, input ConsumeGrantInput)
 	if err := s.validateConnection(grant.Connection, grant.ClientID); err != nil {
 		return Grant{}, err
 	}
+	return grant, nil
+}
+
+func (s *InMemoryStore) ExchangeGrant(_ context.Context, input ExchangeGrantInput) (Grant, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	grant, err := s.validateGrant(input.ConsumeGrantInput)
+	if err != nil {
+		return Grant{}, err
+	}
+	if input.Session.ClientID != grant.ClientID || input.Session.Connection.ID != grant.Connection.ID || input.Session.Connection.ClientID != grant.Connection.ClientID || input.Session.Connection.Subject != grant.Connection.Subject || input.Session.Connection.OrganizationID != grant.Connection.OrganizationID {
+		return Grant{}, ErrClientMismatch
+	}
+	if input.Session.Connection.Generation != grant.Connection.Generation {
+		return Grant{}, ErrGeneration
+	}
+	if err := s.createSession(input.Session); err != nil {
+		return Grant{}, err
+	}
+	delete(s.grants, input.Code)
+	return grant, nil
+}
+
+func (s *InMemoryStore) ConsumeGrant(_ context.Context, input ConsumeGrantInput) (Grant, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	grant, err := s.validateGrant(input)
+	if err != nil {
+		return Grant{}, err
+	}
 	delete(s.grants, input.Code)
 	return grant, nil
 }
@@ -299,6 +390,10 @@ func (s *InMemoryStore) CreateSession(_ context.Context, session Session) error 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.createSession(session)
+}
+
+func (s *InMemoryStore) createSession(session Session) error {
 	if err := s.validateConnection(session.Connection, session.ClientID); err != nil {
 		return err
 	}
@@ -340,6 +435,54 @@ func (s *InMemoryStore) DetectRefreshReuse(_ context.Context, organizationID, re
 	return true, nil
 }
 
+func (s *InMemoryStore) PrepareRefresh(_ context.Context, input PrepareRefreshInput) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[input.RefreshHash]
+	if !ok || session.Connection.OrganizationID != input.OrganizationID {
+		return Session{}, ErrNotFound
+	}
+	if session.ClientID != input.ClientID {
+		return Session{}, ErrClientMismatch
+	}
+	connection, ok := s.connections[session.Connection.ID]
+	if !ok || connection.OrganizationID != input.OrganizationID {
+		return Session{}, ErrNotFound
+	}
+	if session.RevokedAt != nil {
+		if session.RotatedAt != nil {
+			s.markGenerationTerminal(connection, ReauthorizationReasonRefreshReuse, input.Now)
+			return Session{}, ErrAlreadyUsed
+		}
+		return Session{}, ErrRevoked
+	}
+	if connection.RevokedAt != nil {
+		return Session{}, ErrRevoked
+	}
+	client, ok := s.clients[input.ClientID]
+	if !ok {
+		return Session{}, ErrNotFound
+	}
+	if client.RevokedAt != nil {
+		s.markGenerationTerminal(connection, ReauthorizationReasonClientRevoked, input.Now)
+		return Session{}, ErrRevoked
+	}
+	if connection.Generation != session.Connection.Generation {
+		return Session{}, ErrGeneration
+	}
+	if !input.Now.Before(connection.AuthorizationExpiresAt) {
+		s.markGenerationTerminal(connection, ReauthorizationReasonAuthorizationExpired, input.Now)
+		return Session{}, ErrExpired
+	}
+	if !input.Now.Before(session.RefreshExpiresAt) {
+		s.markGenerationTerminal(connection, ReauthorizationReasonRefreshIdleExpired, input.Now)
+		return Session{}, ErrExpired
+	}
+	session.Connection = connection
+	return session, nil
+}
+
 func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInput) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -357,16 +500,26 @@ func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInpu
 	if session.Connection.ID != input.Replacement.Connection.ID || session.Connection.Generation != input.Generation || input.Replacement.Connection.Generation != input.Generation {
 		return Session{}, ErrGeneration
 	}
-	if _, err := s.validateConnectionRevocation(session.Connection, input.ClientID); err != nil {
+	connection, err := s.validateConnectionRevocation(session.Connection, input.ClientID)
+	if err != nil {
 		return Session{}, err
 	}
 	if session.RevokedAt != nil {
-		s.revokeGeneration(session.Connection.ID, session.Connection.Generation, input.Now)
-		return Session{}, ErrAlreadyUsed
+		if session.RotatedAt != nil {
+			s.markGenerationTerminal(connection, ReauthorizationReasonRefreshReuse, input.Now)
+			return Session{}, ErrAlreadyUsed
+		}
+		return Session{}, ErrRevoked
+	}
+	if !input.Now.Before(connection.AuthorizationExpiresAt) {
+		s.markGenerationTerminal(connection, ReauthorizationReasonAuthorizationExpired, input.Now)
+		return Session{}, ErrExpired
 	}
 	if !input.Now.Before(session.RefreshExpiresAt) {
-		session.RevokedAt = &input.Now
-		s.sessions[input.RefreshHash] = session
+		s.markGenerationTerminal(connection, ReauthorizationReasonRefreshIdleExpired, input.Now)
+		return Session{}, ErrExpired
+	}
+	if input.Replacement.ExpiresAt.After(connection.AuthorizationExpiresAt) || input.Replacement.RefreshExpiresAt.After(connection.AuthorizationExpiresAt) {
 		return Session{}, ErrExpired
 	}
 	if input.Replacement.RefreshHash == input.RefreshHash {
@@ -379,10 +532,26 @@ func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInpu
 		return Session{}, ErrAlreadyUsed
 	}
 
+	session.RotatedAt = &input.Now
 	session.RevokedAt = &input.Now
 	s.sessions[input.RefreshHash] = session
 	s.sessions[input.Replacement.RefreshHash] = input.Replacement
 	return session, nil
+}
+
+func (s *InMemoryStore) MarkAuthorizationLost(_ context.Context, organizationID, connectionID, generation string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	connection, ok := s.connections[connectionID]
+	if !ok || connection.OrganizationID != organizationID {
+		return ErrNotFound
+	}
+	if connection.Generation != generation {
+		return ErrGeneration
+	}
+	s.markGenerationTerminal(connection, ReauthorizationReasonAuthorizationLost, now)
+	return nil
 }
 
 func (s *InMemoryStore) RevokeSession(_ context.Context, organizationID, refreshHash, clientID string, now time.Time) (Session, error) {
@@ -393,8 +562,8 @@ func (s *InMemoryStore) RevokeSession(_ context.Context, organizationID, refresh
 	if !ok || session.Connection.OrganizationID != organizationID || session.ClientID != clientID {
 		return Session{}, ErrNotFound
 	}
-	session.RevokedAt = &now
-	s.sessions[refreshHash] = session
+	connection := s.connections[session.Connection.ID]
+	s.markGenerationTerminal(connection, ReauthorizationReasonConnectionRevoked, now)
 	return session, nil
 }
 
@@ -431,8 +600,18 @@ func (s *InMemoryStore) RotateConnectionGeneration(_ context.Context, organizati
 	}
 	s.revokeGeneration(connectionID, connection.Generation, now)
 	connection.Generation = generation
+	connection.AuthorizationExpiresAt = now.Add(AuthorizationLifetime)
+	connection.ReauthorizationRequiredAt = nil
+	connection.ReauthorizationReason = ""
 	s.connections[connectionID] = connection
 	return connection, nil
+}
+
+func (s *InMemoryStore) markGenerationTerminal(connection Connection, reason ReauthorizationReason, now time.Time) {
+	connection.ReauthorizationRequiredAt = &now
+	connection.ReauthorizationReason = reason
+	s.connections[connection.ID] = connection
+	s.revokeGeneration(connection.ID, connection.Generation, now)
 }
 
 func (s *InMemoryStore) revokeGeneration(connectionID, generation string, now time.Time) {

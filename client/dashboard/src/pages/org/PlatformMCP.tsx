@@ -279,7 +279,22 @@ export function PlatformMCPOnboardingContent({
     );
   }
 
-  const state = onboarding.data;
+  // The server/OpenAPI contract already includes these fields. Keep this narrow
+  // intersection only until local SDK generation is unblocked by certificate trust.
+  const state = onboarding.data as PlatformMCPOnboardingState & {
+    connectionAuthState:
+      | "not_connected"
+      | "active"
+      | "reauthorization_required";
+    reauthorizationReason:
+      | ""
+      | "idle_expired"
+      | "authorization_expired"
+      | "refresh_invalidated"
+      | "authorization_changed"
+      | "revoked"
+      | "security_reset";
+  };
   if (!state.enabled) {
     const unavailable = (
       <PlatformMCPUnavailable
@@ -313,6 +328,8 @@ export function PlatformMCPOnboardingContent({
   // Earlier evidence, including an authenticated connection, is setup progress
   // rather than completion and must not unlock organization management.
   const setupComplete = state.distributionAttached;
+  const reconnectRequired =
+    state.connectionAuthState === "reauthorization_required";
   // The project wizard remains an onboarding surface even if this organization
   // already completed Platform MCP setup elsewhere. Management belongs only on
   // the standalone organization route.
@@ -511,6 +528,14 @@ export function PlatformMCPOnboardingContent({
         ) : null}
       </Page.Section>
 
+      {reconnectRequired ? (
+        <PlatformMCPReconnect
+          reason={state.reauthorizationReason}
+          isMutating={isMutating}
+          onReconnect={openSetupFlow}
+        />
+      ) : null}
+
       <section
         className="border bg-card p-6"
         aria-labelledby="platform-mcp-setup"
@@ -670,6 +695,57 @@ function PlatformMCPUnavailable({
   );
 }
 
+function PlatformMCPReconnect({
+  reason,
+  isMutating,
+  onReconnect,
+}: {
+  reason:
+    | ""
+    | "idle_expired"
+    | "authorization_expired"
+    | "refresh_invalidated"
+    | "authorization_changed"
+    | "revoked"
+    | "security_reset";
+  isMutating: boolean;
+  onReconnect: () => void;
+}): JSX.Element {
+  const messages = {
+    idle_expired:
+      "This connection was not refreshed for 30 days. Reconnect to start a new authorization period.",
+    authorization_expired:
+      "This connection reached its 90-day authorization limit. Reconnect to continue using Platform MCP.",
+    refresh_invalidated:
+      "This connection was reset because a refresh credential could not be safely accepted. Reconnect to continue.",
+    authorization_changed:
+      "Your current organization authorization no longer matches this connection. Reconnect after confirming your access.",
+    revoked:
+      "This connection or its OAuth client was revoked. Reconnect with a supported client to continue.",
+    security_reset:
+      "This connection was reset for security. Reconnect before using Platform MCP again.",
+    "": "This connection can no longer refresh silently. Reconnect to continue using Platform MCP.",
+  } as const;
+
+  return (
+    <Alert variant="warning">
+      <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <AlertTitle>Reconnect Platform MCP</AlertTitle>
+          <AlertDescription>{messages[reason]}</AlertDescription>
+        </div>
+        <Button
+          className="shrink-0 self-start"
+          disabled={isMutating}
+          onClick={onReconnect}
+        >
+          <Button.Text>Reconnect Platform MCP</Button.Text>
+        </Button>
+      </div>
+    </Alert>
+  );
+}
+
 function PlatformMCPManagement({
   state,
   isMutating,
@@ -681,16 +757,23 @@ function PlatformMCPManagement({
   accessError: string | null;
   onDisable: () => void;
 }): JSX.Element {
-  const connectionStatus = state.connectionReady
-    ? "Ready"
-    : state.connectionAuthorized
-      ? "Authorized"
-      : "Not connected";
-  const connectionVariant = state.connectionReady
-    ? "success"
-    : state.connectionAuthorized
-      ? "information"
-      : "warning";
+  const reconnectRequired =
+    "connectionAuthState" in state &&
+    state.connectionAuthState === "reauthorization_required";
+  const connectionStatus = reconnectRequired
+    ? "Reconnect required"
+    : state.connectionReady
+      ? "Ready"
+      : state.connectionAuthorized
+        ? "Authorized"
+        : "Not connected";
+  const connectionVariant = reconnectRequired
+    ? "warning"
+    : state.connectionReady
+      ? "success"
+      : state.connectionAuthorized
+        ? "information"
+        : "warning";
   const selectedProject =
     state.selectedProjectName || state.selectedProjectSlug;
 

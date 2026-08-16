@@ -96,10 +96,11 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	connectionID := connectionIDFromPrincipal(t, principal)
 	newGeneration := uuid.New()
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: newGeneration,
-		ReauthorizedAt:   timestamp(time.Now().UTC()),
-		ConnectionID:     connectionID,
-		OrganizationID:   principal.OrganizationID,
+		ActiveGeneration:       newGeneration,
+		ReauthorizedAt:         timestamp(time.Now().UTC()),
+		AuthorizationExpiresAt: timestamp(time.Now().UTC().Add(90 * 24 * time.Hour)),
+		ConnectionID:           connectionID,
+		OrganizationID:         principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	principal.Generation = newGeneration.String()
