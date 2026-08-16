@@ -175,7 +175,12 @@ function PaygSpendCapGate(): JSX.Element {
     );
   }
 
-  if (data === undefined) {
+  // An in-flight read is an unknown state, cache or no cache: the answer that
+  // is on its way is exactly the one that decides whether a cap can be set, and
+  // the refetches that matter here are the ones that follow a conversion or a
+  // cancellation. So the form closes until the read settles rather than staying
+  // open on an answer that is already being replaced.
+  if (data === undefined || isFetching) {
     return (
       <div className="max-w-md space-y-4">
         <Skeleton className="h-9 w-full" />

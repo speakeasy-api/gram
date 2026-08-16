@@ -22,14 +22,41 @@ const ERROR_MESSAGE = "Couldn't cancel the subscription. Try again.";
  * that. Naming the end date turns "the current billing period" into something
  * the admin can check against their own calendar.
  */
-function cancellationDescription(endsOn: Date | null): string {
+function paidCancellationDescription(endsOn: Date | null): string {
+  const outcome =
+    "A final invoice for the usage in that period follows. After the period ends, access to this organization is revoked.";
   const formatted = formatBillingDate(endsOn);
-  const period =
-    formatted === null
-      ? "Your service continues through the current billing period."
-      : `Your service continues through the current billing period, which ends on ${formatted}.`;
 
-  return `${period} A final invoice for the usage in that period follows. After the period ends, access to this organization is revoked.`;
+  if (formatted === null) {
+    return `Your service continues through the current billing period. ${outcome}`;
+  }
+  return `Your service continues through the current billing period, which ends on ${formatted}. ${outcome}`;
+}
+
+/**
+ * The same agreement for a subscription Stripe is still trialing.
+ *
+ * Canceling a trial stops it from ever converting, so no pay-as-you-go period
+ * is ever billed. The paid copy's promise of a final invoice would have the
+ * customer waiting on a charge that never arrives.
+ */
+function trialCancellationDescription(endsOn: Date | null): string {
+  const outcome =
+    "Pay as you go never starts, so you won't be invoiced. After the trial ends, access to this organization is revoked.";
+  const formatted = formatBillingDate(endsOn);
+
+  if (formatted === null) {
+    return `Your trial continues through the end of the trial period. ${outcome}`;
+  }
+  return `Your trial continues through ${formatted}. ${outcome}`;
+}
+
+function cancellationDescription(
+  endsOn: Date | null,
+  trialing: boolean,
+): string {
+  if (trialing) return trialCancellationDescription(endsOn);
+  return paidCancellationDescription(endsOn);
 }
 
 /**
@@ -42,8 +69,11 @@ function cancellationDescription(endsOn: Date | null): string {
  */
 export function CancelPaygDialog({
   endsOn,
+  trialing = false,
 }: {
   endsOn: Date | null;
+  /** Whether Stripe is still trialing the subscription being canceled. */
+  trialing?: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -79,7 +109,7 @@ export function CancelPaygDialog({
         <Dialog.Header>
           <Dialog.Title>Cancel pay as you go?</Dialog.Title>
           <Dialog.Description>
-            {cancellationDescription(endsOn)}
+            {cancellationDescription(endsOn, trialing)}
           </Dialog.Description>
         </Dialog.Header>
         <Stack gap={3}>

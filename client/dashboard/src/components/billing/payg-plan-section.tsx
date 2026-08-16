@@ -170,7 +170,9 @@ function PaygPlanDetails({
         <Stack direction="horizontal" gap={3} align="start" wrap="wrap">
           <PaygPortalButton />
           {canResumePaygPlan(state) && <ResumePaygButton />}
-          {canCancelPaygPlan(state) && <CancelPaygDialog endsOn={state.date} />}
+          {canCancelPaygPlan(state) && (
+            <CancelPaygDialog endsOn={state.date} trialing={state.trialing} />
+          )}
         </Stack>
       </RequireScope>
     </Stack>
@@ -188,11 +190,22 @@ function activeDetail(on: string | null): string {
   return `${base} The current period ends on ${on}.`;
 }
 
-function endingHeadline(on: string | null): string {
+function endingHeadline(on: string | null, trialing: boolean): string {
+  const subject = trialing ? "Trial" : "Pay as you go";
   if (on === null) {
-    return "Pay as you go — ends at the end of the current billing period";
+    return `${subject} — ends at the end of the current billing period`;
   }
-  return `Pay as you go — ends on ${on}`;
+  return `${subject} — ends on ${on}`;
+}
+
+// A trial that is set to cancel never converts, so nothing is ever billed for
+// it. Promising the final invoice the paid path gets would be telling a
+// customer to expect a charge that isn't coming.
+function endingDetail(trialing: boolean): string {
+  if (trialing) {
+    return "Your trial runs until then and pay as you go never starts, so there is nothing to invoice. Resume to convert to pay as you go when the trial ends.";
+  }
+  return "Your service continues until then and a final invoice follows. Resume to keep pay as you go running.";
 }
 
 /** The headline and supporting line for each plan state. */
@@ -210,9 +223,8 @@ function planCopy(state: PaygPlanState): { headline: string; detail: string } {
       return { headline: "Pay as you go", detail: activeDetail(on) };
     case "ending":
       return {
-        headline: endingHeadline(on),
-        detail:
-          "Your service continues until then and a final invoice follows. Resume to keep pay as you go running.",
+        headline: endingHeadline(on, state.trialing),
+        detail: endingDetail(state.trialing),
       };
     case "ended":
       return {

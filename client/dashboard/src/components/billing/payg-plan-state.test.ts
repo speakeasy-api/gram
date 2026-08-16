@@ -109,6 +109,36 @@ describe("paygPlanState", () => {
     expect(state.date).toBe(CANCEL_AT);
   });
 
+  // `ending` covers a paid subscription winding down and a trial that will
+  // never convert. Only the first produces a final invoice, so the state has to
+  // carry the difference — copy can't read it off the kind.
+  it("marks an ending trial as trialing and an ending subscription as not", () => {
+    const endingTrial = paygPlanState(
+      subscription({ status: "trialing", cancelAtPeriodEnd: true }),
+    );
+    const endingPaid = paygPlanState(
+      subscription({ status: "active", cancelAtPeriodEnd: true }),
+    );
+
+    expect(endingTrial.kind).toBe("ending");
+    expect(endingTrial.trialing).toBe(true);
+    expect(endingPaid.kind).toBe("ending");
+    expect(endingPaid.trialing).toBe(false);
+  });
+
+  it.each([
+    ["trialing", true],
+    ["active", false],
+    ["past_due", false],
+    ["canceled", false],
+    ["paused", false],
+  ] as Array<[string, boolean]>)(
+    "carries the trialing flag for a %s subscription",
+    (status, trialing) => {
+      expect(paygPlanState(subscription({ status })).trialing).toBe(trialing);
+    },
+  );
+
   it.each(["canceled", "unpaid", "incomplete_expired"])(
     "reports %s as ended, with nothing left to act on",
     (status) => {
@@ -199,6 +229,29 @@ describe("isStripeBilling", () => {
 describe("formatBillingDate", () => {
   it("writes the date out in US English", () => {
     expect(formatBillingDate(PERIOD_END)).toBe("September 1, 2026");
+  });
+
+  // Stripe's period and trial boundaries are UTC instants. Formatted in the
+  // viewer's zone they move a day for anyone far enough east or west — "ends on
+  // August 31" against a subscription that bills through September 1. These two
+  // instants share a UTC day but fall on different local days in every non-zero
+  // offset, so they render identically only if the formatter is pinned to UTC.
+  it("renders a UTC instant in UTC, whichever zone the viewer is in", () => {
+    const justAfterMidnight = new Date("2026-09-01T00:30:00.000Z");
+    const justBeforeMidnight = new Date("2026-09-01T23:30:00.000Z");
+
+    expect(formatBillingDate(justAfterMidnight)).toBe("September 1, 2026");
+    expect(formatBillingDate(justBeforeMidnight)).toBe("September 1, 2026");
+    expect(formatBillingDate(justAfterMidnight)).toBe(
+      formatBillingDate(justBeforeMidnight),
+    );
+  });
+
+  // The boundary Stripe actually sends for a period end: exact midnight UTC.
+  it("keeps a midnight UTC boundary on its own day", () => {
+    expect(formatBillingDate(new Date("2026-09-01T00:00:00.000Z"))).toBe(
+      "September 1, 2026",
+    );
   });
 
   // Copy falls back to a sentence that names no date rather than printing

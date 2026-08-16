@@ -198,6 +198,18 @@ describe("PaygPlanSection", () => {
       expect(cancelTrigger()).not.toBeNull();
       expect(resumeButton()).toBeNull();
     });
+
+    // Canceling a trial stops it converting, so no period is ever billed. The
+    // confirmation has to be told which lifecycle it is ending.
+    it("confirms cancellation without promising an invoice", () => {
+      render(<PaygPlanSection />);
+
+      fireEvent.click(cancelTrigger()!);
+
+      const description = screen.getByRole("dialog").textContent ?? "";
+      expect(description).toMatch(/pay as you go never starts/i);
+      expect(description).not.toMatch(/final invoice/i);
+    });
   });
 
   describe("while pay as you go is active", () => {
@@ -250,6 +262,13 @@ describe("PaygPlanSection", () => {
       ).toBeTruthy();
     });
 
+    // The period already started, so its usage is billed after it closes.
+    it("promises the final invoice a paid period still produces", () => {
+      render(<PaygPlanSection />);
+
+      expect(screen.getByText(/a final invoice follows/i)).toBeTruthy();
+    });
+
     // Canceling twice is meaningless; resuming is the only move left.
     it("offers resume in place of cancellation", () => {
       render(<PaygPlanSection />);
@@ -264,6 +283,44 @@ describe("PaygPlanSection", () => {
       fireEvent.click(resumeButton()!);
 
       expect(mocks.resumeMutate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // A trial set to cancel never converts, so no pay-as-you-go period is ever
+  // billed. Reusing the paid copy would have the customer waiting on a charge
+  // that isn't coming.
+  describe("once a trial is scheduled to cancel", () => {
+    beforeEach(() => {
+      queryState({
+        data: subscription({
+          status: "trialing",
+          trialEnd: TRIAL_END,
+          cancelAtPeriodEnd: true,
+          cancelAt: TRIAL_END,
+        }),
+      });
+    });
+
+    it("says the trial ends rather than pay as you go", () => {
+      render(<PaygPlanSection />);
+
+      expect(
+        screen.getByText(/^trial — ends on August 20, 2026$/i),
+      ).toBeTruthy();
+    });
+
+    it("promises no final invoice", () => {
+      render(<PaygPlanSection />);
+
+      expect(screen.queryByText(/final invoice/i)).toBeNull();
+      expect(screen.getByText(/nothing to invoice/i)).toBeTruthy();
+    });
+
+    it("offers resume in place of cancellation", () => {
+      render(<PaygPlanSection />);
+
+      expect(resumeButton()).not.toBeNull();
+      expect(cancelTrigger()).toBeNull();
     });
   });
 

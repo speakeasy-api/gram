@@ -95,6 +95,9 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, ca
 	if err != nil {
 		return nil, err
 	}
+	if !canManageStripeSubscriptionLifecycle(state.Status) {
+		return nil, oops.E(oops.CodeConflict, nil, "the Stripe subscription is not active and cannot be changed")
+	}
 
 	updated, err := s.stripeClient.SetSubscriptionCancelAtPeriodEnd(ctx, stripeclient.SetSubscriptionCancelAtPeriodEndInput{
 		SubscriptionID:    state.ID,
@@ -118,6 +121,15 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, ca
 		return nil, err
 	}
 	return buildStripeSubscriptionView(updated), nil
+}
+
+func canManageStripeSubscriptionLifecycle(status string) bool {
+	switch status {
+	case "trialing", "active", "past_due":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) getStripeBillingState(ctx context.Context, organizationID string) (repo.BillingMetadatum, *stripeclient.SubscriptionState, error) {

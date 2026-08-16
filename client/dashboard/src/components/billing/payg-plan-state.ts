@@ -30,17 +30,21 @@ export type StripeSubscriptionLike = {
  *   (incomplete) or is paused. There is no in-product action for either; the
  *   customer portal is where they get resolved.
  */
-export type PaygPlanKind =
-  | "trialing"
-  | "active"
-  | "ending"
-  | "ended"
-  | "inactive";
+type PaygPlanKind = "trialing" | "active" | "ending" | "ended" | "inactive";
 
 export type PaygPlanState = {
   kind: PaygPlanKind;
   /** The date the copy for `kind` refers to, when Stripe supplied a usable one. */
   date: Date | null;
+  /**
+   * Whether Stripe is still trialing this subscription.
+   *
+   * Load-bearing for `ending`, which covers both a paid subscription winding
+   * down and a trial that will never convert. Only the first one produces a
+   * final invoice, so copy that promises one has to read this rather than the
+   * kind alone.
+   */
+  trialing: boolean;
   /** Stripe reports the subscription or its latest invoice as unpaid. */
   paymentFailed: boolean;
 };
@@ -112,30 +116,36 @@ export function paygPlanState(
     return {
       kind: ENDED_STATUSES.has(status) ? "ended" : "inactive",
       date: null,
+      trialing: false,
       paymentFailed: false,
     };
   }
 
   const paymentFailed = subscription.paymentFailed === true;
+  const trialing = status === "trialing";
 
   if (subscription.cancelAtPeriodEnd === true) {
     return {
       kind: "ending",
+      // A trial that is set to cancel stops at the trial end, which is the
+      // period end Stripe reports for it.
       date: firstUsableDate(
         subscription.cancelAt,
         subscription.currentPeriodEnd,
       ),
+      trialing,
       paymentFailed,
     };
   }
 
-  if (status === "trialing") {
+  if (trialing) {
     return {
       kind: "trialing",
       date: firstUsableDate(
         subscription.trialEnd,
         subscription.currentPeriodEnd,
       ),
+      trialing,
       paymentFailed,
     };
   }
@@ -143,6 +153,7 @@ export function paygPlanState(
   return {
     kind: "active",
     date: firstUsableDate(subscription.currentPeriodEnd),
+    trialing,
     paymentFailed,
   };
 }
@@ -158,7 +169,14 @@ export function canResumePaygPlan(state: PaygPlanState): boolean {
 }
 
 // Hoisted so a formatter isn't constructed on every render.
+//
+// UTC, not the viewer's zone: Stripe's period and trial boundaries are UTC
+// instants, and rendering one in local time moves it a day for anyone far
+// enough east or west of it. "Ends on August 31" against a subscription that
+// bills through September 1 is the kind of error a customer only finds after
+// their access is gone.
 const BILLING_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
   month: "long",
   day: "numeric",
   year: "numeric",

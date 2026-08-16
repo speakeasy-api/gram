@@ -231,6 +231,40 @@ func TestCancelStripeSubscriptionRetriesAppliedChangeAndAudits(t *testing.T) {
 	require.Equal(t, baseline+1, after)
 }
 
+func TestStripeSubscriptionLifecycleRejectsTerminalState(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []string{"canceled", "unpaid", "incomplete", "incomplete_expired", "paused"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+
+			for _, operation := range []struct {
+				name string
+				run  func(*stripeCheckoutTestInstance) error
+			}{
+				{name: "cancel", run: func(ti *stripeCheckoutTestInstance) error {
+					_, err := ti.service.CancelStripeSubscription(ti.adminContext(t), &gen.CancelStripeSubscriptionPayload{})
+					return err
+				}},
+				{name: "resume", run: func(ti *stripeCheckoutTestInstance) error {
+					_, err := ti.service.ResumeStripeSubscription(ti.adminContext(t), &gen.ResumeStripeSubscriptionPayload{})
+					return err
+				}},
+			} {
+				t.Run(operation.name, func(t *testing.T) {
+					ti := newStripeCheckoutTestInstance(t)
+					configureStripeSubscription(t, ti, operation.name == "resume")
+					ti.stripe.subscriptionState.Status = status
+
+					err := operation.run(ti)
+					requireOopsCode(t, err, oops.CodeConflict)
+					require.Empty(t, ti.stripe.subscriptionUpdates)
+				})
+			}
+		})
+	}
+}
+
 func TestCancelStripeSubscriptionRejectsRemoteIdentityMismatch(t *testing.T) {
 	t.Parallel()
 

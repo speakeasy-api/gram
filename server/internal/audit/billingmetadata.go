@@ -89,28 +89,7 @@ type LogBillingMetadataResumeStripeSubscriptionEvent struct {
 }
 
 func (l *Logger) LogBillingMetadataCreateStripeCheckout(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripeCheckoutEvent) error {
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(ActionBillingMetadataCreateStripeCheckout),
-
-		SubjectID:          event.BillingMetadataURN.ID.String(),
-		SubjectType:        string(subjectTypeBillingMetadata),
-		SubjectDisplayName: conv.ToPGTextEmpty("Billing metadata"),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
-
-		Metadata:       nil,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.BillingMetadataV1})
+	return l.logBillingMetadataAction(ctx, dbtx, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.BillingMetadataURN, ActionBillingMetadataCreateStripeCheckout)
 }
 
 func (l *Logger) LogBillingMetadataCreateStripePortal(ctx context.Context, dbtx repo.DBTX, event LogBillingMetadataCreateStripePortalEvent) error {

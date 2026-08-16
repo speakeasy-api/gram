@@ -66,6 +66,7 @@ interface StripePortalConfiguration {
       enabled?: boolean;
       mode?: string;
       proration_behavior?: string;
+      cancellation_reason?: { enabled?: boolean };
     };
     subscription_update?: { enabled?: boolean };
   };
@@ -203,6 +204,12 @@ function assertPortalConfiguration(configuration: StripePortalConfiguration) {
         "features.subscription_cancel.proration_behavior",
         configuration.features?.subscription_cancel?.proration_behavior,
         "none",
+      ],
+      [
+        "features.subscription_cancel.cancellation_reason.enabled",
+        configuration.features?.subscription_cancel?.cancellation_reason
+          ?.enabled,
+        false,
       ],
       [
         "features.subscription_update.enabled",

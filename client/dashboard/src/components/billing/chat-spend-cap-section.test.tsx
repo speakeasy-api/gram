@@ -661,6 +661,33 @@ describe("ChatSpendCapSection", () => {
       expect(mocks.query).not.toHaveBeenCalled();
     });
 
+    // A refetch is in flight precisely when the state is about to change —
+    // after a conversion, a cancellation, or a window refocus. The cached
+    // answer is the one being replaced, so it can't hold the form open.
+    it("closes the form while a background refetch is pending", () => {
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()).toBeNull();
+      expect(saveButton()).toBeNull();
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    it("reopens the form once the refetch settles", () => {
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+
+      const { rerender } = render(<ChatSpendCapSection />);
+      expect(field()).toBeNull();
+
+      billingSubscription();
+      rerender(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(false);
+      expect(saveButton()).not.toBeNull();
+    });
+
     // The pay-as-you-go tier predates Stripe, so an organization can hold it
     // without a Stripe subscription behind it. There is no cap to set and
     // nothing a recheck would find, so the copy has to say so and stop.

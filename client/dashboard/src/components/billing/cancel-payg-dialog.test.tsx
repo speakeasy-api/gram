@@ -113,6 +113,53 @@ describe("CancelPaygDialog", () => {
     expect(description).toMatch(/access to this organization is revoked/i);
   });
 
+  // Canceling a trial stops it from ever converting, so no pay-as-you-go
+  // period is ever billed. The paid copy's promise of a final invoice would
+  // have the customer waiting on a charge that never arrives.
+  describe("while Stripe is still trialing", () => {
+    it("spells out that nothing will be billed", () => {
+      renderDialog(<CancelPaygDialog endsOn={PERIOD_END} trialing />);
+      openDialog();
+
+      const description = dialog()!.textContent ?? "";
+      expect(description).toMatch(/your trial continues through/i);
+      expect(description).toMatch(/September 1, 2026/);
+      expect(description).toMatch(/pay as you go never starts/i);
+      expect(description).toMatch(/won't be invoiced/i);
+      expect(description).toMatch(/access to this organization is revoked/i);
+    });
+
+    it("promises no final invoice", () => {
+      renderDialog(<CancelPaygDialog endsOn={PERIOD_END} trialing />);
+      openDialog();
+
+      expect(dialog()!.textContent ?? "").not.toMatch(/final invoice/i);
+    });
+
+    it("keeps the copy readable without a trial end", () => {
+      renderDialog(<CancelPaygDialog endsOn={null} trialing />);
+      openDialog();
+
+      const description = dialog()!.textContent ?? "";
+      expect(description).toMatch(
+        /trial continues through the end of the trial period/i,
+      );
+      expect(description).not.toMatch(/invalid date/i);
+      expect(description).not.toMatch(/final invoice/i);
+    });
+
+    it("cancels through the same mutation", () => {
+      resolves();
+      renderDialog(<CancelPaygDialog endsOn={PERIOD_END} trialing />);
+      openDialog();
+
+      fireEvent.click(confirm()!);
+
+      expect(mocks.mutate).toHaveBeenCalledTimes(1);
+      expect(dialog()).toBeNull();
+    });
+  });
+
   // Stripe doesn't always hand back a usable date, and "Invalid Date" beside a
   // cancellation is worse than a sentence that names no date at all.
   it("keeps the copy readable without a period end", () => {
