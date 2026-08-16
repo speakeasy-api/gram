@@ -68,6 +68,20 @@ describe("FullBleedBanner", () => {
     expect(frame.firstElementChild!.className).toContain("vt-content");
   });
 
+  // Two text sizes on one element resolve by stylesheet order rather than by
+  // intent, so whichever the banner asks for has to be the only one there.
+  it("sizes the headline and copy with a single utility each", () => {
+    renderBanner();
+
+    for (const text of ["Finish setup", "One line of supporting copy."]) {
+      const sizes = screen
+        .getByText(text)
+        .className.split(/\s+/)
+        .filter((c) => /^text-(xs|sm|base|md|lg|xl|\dxl)$/.test(c));
+      expect(sizes).toHaveLength(1);
+    }
+  });
+
   it("lets the caller restyle the supporting copy", () => {
     renderBanner({ descriptionClassName: "hidden sm:line-clamp-2" });
 

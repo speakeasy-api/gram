@@ -26,7 +26,7 @@ export function OnboardingBanner(): JSX.Element | null {
       description="Set up Single Sign-On, Directory Sync, Plugin Marketplace, Agent Platforms, and Policies for your organization."
       // The setup list is long enough to crowd out the actions on a narrow
       // screen, where the heading alone still says what the banner is for.
-      descriptionClassName="hidden max-w-10/12 text-sm sm:line-clamp-2"
+      descriptionClassName="hidden max-w-10/12 sm:line-clamp-2"
       className={ONBOARDING_CTA_VT_CLASS}
       contentClassName={ONBOARDING_CTA_CONTENT_VT_CLASS}
       actions={

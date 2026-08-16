@@ -61,3 +61,19 @@ func TestCreditUsageDeniesWithoutOrgRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Zero(t, provisioner.calls)
 }
+
+func TestCreditUsageRejectsMissingActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &creditUsageProvisioner{creditsUsed: 12.5, creditLimit: 50}
+	ti := newTestChatServiceWithProvisioner(t, provisioner)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ActiveOrganizationID = ""
+
+	result, err := ti.service.CreditUsage(ctx, &gen.CreditUsagePayload{SessionToken: nil})
+	require.Nil(t, result)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.Zero(t, provisioner.calls)
+}

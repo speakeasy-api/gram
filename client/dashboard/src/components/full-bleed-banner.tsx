@@ -19,7 +19,7 @@ export function FullBleedBanner({
   role,
   title,
   description,
-  descriptionClassName = "max-w-10/12 text-sm",
+  descriptionClassName = "max-w-10/12",
   actions,
   className,
   contentClassName,
@@ -54,13 +54,13 @@ export function FullBleedBanner({
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <Text
-            variant="subheading"
+            variant="small"
             as="span"
-            className="text-foreground text-sm leading-tight font-semibold"
+            className="text-foreground leading-tight font-semibold"
           >
             {title}
           </Text>
-          <Text small muted className={descriptionClassName}>
+          <Text variant="small" muted className={descriptionClassName}>
             {description}
           </Text>
         </div>
