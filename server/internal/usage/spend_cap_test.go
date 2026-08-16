@@ -14,8 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type captureSpendCapScheduler struct {
@@ -34,12 +36,30 @@ func (c *captureSpendCapScheduler) SetOpenRouterSpendCap(_ context.Context, oper
 	return c.err
 }
 
+func configureSpendCapSubscription(t *testing.T, service *Service, db repo.DBTX, organizationID, status string) {
+	t.Helper()
+
+	require.NoError(t, repo.New(db).CreateStripeSubscriptionBillingMetadataFixture(t.Context(), repo.CreateStripeSubscriptionBillingMetadataFixtureParams{
+		OrganizationID:       organizationID,
+		StripeCustomerID:     pgtype.Text{String: "cus_spend_cap", Valid: true},
+		StripeSubscriptionID: pgtype.Text{String: "sub_spend_cap", Valid: true},
+	}))
+	service.stripeClient = &checkoutStripeClient{subscriptionState: &stripeclient.SubscriptionState{
+		ID:                 "sub_spend_cap",
+		CustomerID:         "cus_spend_cap",
+		Status:             status,
+		CurrentPeriodStart: time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+		CurrentPeriodEnd:   time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC),
+	}}
+}
+
 func TestSetSpendCapWaitsForDedicatedOperation(t *testing.T) {
 	t.Parallel()
 
 	organizationID := "org-spend-cap-success"
 	service, db, _, _ := newTUMTestService(t, organizationID)
 	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "active")
 	scheduler := &captureSpendCapScheduler{}
 	service.keyRefresher = scheduler
 
@@ -50,6 +70,55 @@ func TestSetSpendCapWaitsForDedicatedOperation(t *testing.T) {
 	require.Equal(t, organizationID, scheduler.organizationID)
 	require.Equal(t, 600, scheduler.limit)
 	require.Equal(t, "user-billing-email-admin", scheduler.actor.ID)
+}
+
+func TestSetSpendCapRejectsStripeTrial(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-spend-cap-stripe-trial"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "trialing")
+	service.keyRefresher = &captureSpendCapScheduler{}
+
+	_, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{MonthlyCredits: 200})
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestSetSpendCapRejectsInactiveStripeSubscription(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []string{"canceled", "unpaid", "incomplete", "incomplete_expired", "paused"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+
+			organizationID := "org-spend-cap-" + status
+			service, db, _, _ := newTUMTestService(t, organizationID)
+			setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+			configureSpendCapSubscription(t, service, db, organizationID, status)
+			scheduler := &captureSpendCapScheduler{}
+			service.keyRefresher = scheduler
+
+			_, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{MonthlyCredits: 200})
+			requireOopsCode(t, err, oops.CodeConflict)
+			require.Empty(t, scheduler.operationID)
+		})
+	}
+}
+
+func TestSetSpendCapAllowsPastDueStripeSubscription(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-spend-cap-past-due"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "past_due")
+	scheduler := &captureSpendCapScheduler{}
+	service.keyRefresher = scheduler
+
+	_, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{MonthlyCredits: 200})
+	require.NoError(t, err)
+	require.Equal(t, organizationID, scheduler.organizationID)
 }
 
 func TestSetSpendCapRejectsActiveTrial(t *testing.T) {
@@ -114,6 +183,7 @@ func TestSetSpendCapDoesNotAuditFailedScheduling(t *testing.T) {
 	organizationID := "org-spend-cap-schedule-failure"
 	service, db, _, _ := newTUMTestService(t, organizationID)
 	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "active")
 	service.keyRefresher = &captureSpendCapScheduler{err: errors.New("scheduler unavailable")}
 
 	_, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{MonthlyCredits: 200})

@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
 import { ChatSpendCapSection } from "@/components/billing/chat-spend-cap-section";
+import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
@@ -69,6 +70,8 @@ function BillingInner() {
     <>
       <StartPaygCheckoutCTA />
       <UsageSection />
+      {/* Renders only for pay as you go — the section owns that rule. */}
+      <PaygPlanSection />
       {/* Renders only for pay as you go — the section owns that rule. */}
       <ChatSpendCapSection />
       {/* Only pay-as-you-go organizations get product billing notifications;

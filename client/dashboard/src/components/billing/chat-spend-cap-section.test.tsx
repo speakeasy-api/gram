@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   reset: vi.fn(),
   hasAnyScope: vi.fn(),
   invalidate: vi.fn(),
+  subscription: vi.fn(),
+  subscriptionRefetch: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -41,6 +43,13 @@ vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
 vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
   useSetSpendCapMutation: (options?: { onSuccess?: () => void }) =>
     mocks.mutation(options),
+}));
+
+// The shared subscription read is mocked at the wrapper: what the cap does
+// with the live Stripe state is this file's subject, and the wrapper's own
+// query options are covered by `use-stripe-subscription.test.ts`.
+vi.mock("@/components/billing/use-stripe-subscription", () => ({
+  useStripeSubscription: () => mocks.subscription(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -98,6 +107,54 @@ function queryState({
 /** A loaded cap of `monthlyCredits`, as the query reports it. */
 function loadedCap(monthlyCredits: number) {
   queryState({ data: { creditsUsed: 12, monthlyCredits } });
+}
+
+// Midday UTC so the formatted day can't slide either side of the date line in
+// whichever time zone the tests happen to run in.
+const TRIAL_END = new Date("2026-08-20T12:00:00.000Z");
+
+type Subscription = {
+  status: string;
+  trialEnd?: Date;
+  cancelAtPeriodEnd?: boolean;
+};
+
+type SubscriptionState = {
+  data?: Subscription | undefined;
+  error?: unknown;
+  isError?: boolean;
+  isFetching?: boolean;
+};
+
+/**
+ * The live Stripe subscription the cap gates on. No `data` is a read that never
+ * resolved — the loading state, or a load that failed outright.
+ */
+function subscriptionState({
+  data,
+  error,
+  isError = false,
+  isFetching = false,
+}: SubscriptionState = {}) {
+  mocks.subscription.mockReturnValue({
+    data,
+    error,
+    isError,
+    isFetching,
+    refetch: mocks.subscriptionRefetch,
+  });
+}
+
+/** Shaped like the SDK's 404 rejection, which is what the branch keys on. */
+function notFound(): Error {
+  return Object.assign(new Error("subscription not found"), {
+    statusCode: 404,
+  });
+}
+
+/** Stripe has converted the trial and is billing the organization. */
+function billingSubscription() {
+  subscriptionState({ data: { status: "active" } });
 }
 
 type MutationState = {
@@ -166,6 +223,7 @@ describe("ChatSpendCapSection", () => {
     mocks.session.mockReturnValue({ trial: null });
     mocks.hasAnyScope.mockReturnValue(true);
     loadedCap(250);
+    billingSubscription();
     mutationState();
   });
 
@@ -483,11 +541,259 @@ describe("ChatSpendCapSection", () => {
         expect(saveButton()).toBeNull();
         expect(mocks.mutation).not.toHaveBeenCalled();
         expect(mocks.mutate).not.toHaveBeenCalled();
-        // The locked state is self-contained copy — no cap to read yet.
+        // The locked state is self-contained copy — no cap to read yet, and
+        // no subscription to ask about either.
         expect(mocks.query).not.toHaveBeenCalled();
+        expect(mocks.subscription).not.toHaveBeenCalled();
       });
     },
   );
+
+  // Checkout marks the product trial converted and drops it from the session
+  // while Stripe can keep trialing the subscription for days. So a PAYG
+  // organization with no product trial left is not necessarily being billed:
+  // from here on the live Stripe status is what decides, and it fails closed.
+  describe("once the product trial has been converted", () => {
+    it("locks the cap while Stripe is still trialing", () => {
+      subscriptionState({ data: { status: "trialing", trialEnd: TRIAL_END } });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(true);
+      expect(saveButton()).toBeNull();
+      expect(
+        screen.getByText(
+          /starts when pay as you go begins on August 20, 2026/i,
+        ),
+      ).toBeTruthy();
+    });
+
+    it("never reaches the cap endpoint while Stripe is trialing", () => {
+      subscriptionState({ data: { status: "trialing" } });
+
+      render(<ChatSpendCapSection />);
+
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    // A trial on its way out is still a trial: there is no pay-as-you-go bill
+    // for a cap to apply to until it converts.
+    it("keeps a trial that is set to cancel locked", () => {
+      subscriptionState({
+        data: {
+          status: "trialing",
+          trialEnd: TRIAL_END,
+          cancelAtPeriodEnd: true,
+        },
+      });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(true);
+    });
+
+    it("opens the form once Stripe is billing", () => {
+      render(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(false);
+      expect(field()!.value).toBe("250");
+      expect(saveButton()).not.toBeNull();
+    });
+
+    // Only a subscription Stripe is actually billing has a bill for a cap to
+    // apply to. `past_due` counts: the bill exists and Stripe is retrying it.
+    it.each(["active", "past_due"])(
+      "opens the form for a %s subscription",
+      (status) => {
+        subscriptionState({ data: { status } });
+
+        render(<ChatSpendCapSection />);
+
+        expect(field()!.disabled).toBe(false);
+        expect(saveButton()).not.toBeNull();
+      },
+    );
+
+    // Service and billing both run to the end of the period, so a scheduled
+    // cancellation leaves the cap editable for as long as it applies.
+    it("keeps the form through a scheduled cancellation", () => {
+      subscriptionState({
+        data: { status: "active", cancelAtPeriodEnd: true },
+      });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(false);
+      expect(saveButton()).not.toBeNull();
+    });
+
+    // Every status with no bill behind it locks, rather than leaving an admin
+    // to set a cap that applies to nothing.
+    it.each([
+      "canceled",
+      "unpaid",
+      "incomplete",
+      "incomplete_expired",
+      "paused",
+    ])("locks the cap for a %s subscription", (status) => {
+      subscriptionState({ data: { status } });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(true);
+      expect(saveButton()).toBeNull();
+      expect(screen.getByText(/subscription isn't billing/i)).toBeTruthy();
+      // No bill to read a cap from, and nothing to write one to.
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(mocks.mutate).not.toHaveBeenCalled();
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    // Nothing is known yet, so nothing is editable yet.
+    it("locks the cap while the subscription read is in flight", () => {
+      subscriptionState();
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()).toBeNull();
+      expect(saveButton()).toBeNull();
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    // The pay-as-you-go tier predates Stripe, so an organization can hold it
+    // without a Stripe subscription behind it. There is no cap to set and
+    // nothing a recheck would find, so the copy has to say so and stop.
+    describe("with no Stripe subscription behind the tier", () => {
+      beforeEach(() => {
+        subscriptionState({ isError: true, error: notFound() });
+      });
+
+      it("says why the cap can't be set", () => {
+        render(<ChatSpendCapSection />);
+
+        expect(heading()).not.toBeNull();
+        expect(
+          screen.getByText(/this organization has no stripe subscription/i),
+        ).toBeTruthy();
+        expect(
+          screen.queryByText(/couldn't check your subscription/i),
+        ).toBeNull();
+      });
+
+      it("keeps the cap locked and unwritable", () => {
+        render(<ChatSpendCapSection />);
+
+        expect(field()!.disabled).toBe(true);
+        expect(saveButton()).toBeNull();
+        expect(mocks.mutation).not.toHaveBeenCalled();
+        expect(mocks.mutate).not.toHaveBeenCalled();
+        expect(mocks.query).not.toHaveBeenCalled();
+      });
+
+      it("offers nothing to recheck", () => {
+        render(<ChatSpendCapSection />);
+
+        expect(screen.queryByRole("button", { name: /recheck/i })).toBeNull();
+        expect(mocks.subscriptionRefetch).not.toHaveBeenCalled();
+      });
+
+      // The answer is definitive, so it outranks whatever the cache still
+      // holds — and it stays fail-closed either way.
+      it("outranks a cached subscription", () => {
+        subscriptionState({
+          data: { status: "active" },
+          isError: true,
+          error: notFound(),
+        });
+
+        render(<ChatSpendCapSection />);
+
+        expect(field()!.disabled).toBe(true);
+        expect(saveButton()).toBeNull();
+        expect(
+          screen.getByText(/this organization has no stripe subscription/i),
+        ).toBeTruthy();
+      });
+    });
+
+    it("locks the cap when the subscription can't be read", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()).toBeNull();
+      expect(saveButton()).toBeNull();
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /couldn't check your subscription/i,
+      );
+    });
+
+    // The cached copy goes stale across exactly the moment that matters — a
+    // trial converting, or a subscription ending — so a read that is failing
+    // right now must not re-open the form on the strength of it.
+    it("keeps the cap locked when a failing read still holds a cached subscription", () => {
+      subscriptionState({
+        data: { status: "active" },
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      render(<ChatSpendCapSection />);
+
+      expect(field()).toBeNull();
+      expect(saveButton()).toBeNull();
+      expect(mocks.mutation).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /couldn't check your subscription/i,
+      );
+    });
+
+    it("rechecks the subscription in place", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      render(<ChatSpendCapSection />);
+
+      fireEvent.click(screen.getByRole("button", { name: /^recheck$/i }));
+
+      expect(mocks.subscriptionRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables the recheck while it is in flight", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+        isFetching: true,
+      });
+
+      render(<ChatSpendCapSection />);
+
+      const button = screen.getByRole("button", { name: /rechecking/i });
+      expect(button.hasAttribute("disabled")).toBe(true);
+    });
+
+    it("returns the form once a recheck succeeds", () => {
+      subscriptionState({
+        isError: true,
+        error: new Error("stripe unavailable"),
+      });
+
+      const { rerender } = render(<ChatSpendCapSection />);
+      expect(field()).toBeNull();
+
+      billingSubscription();
+      rerender(<ChatSpendCapSection />);
+
+      expect(field()!.disabled).toBe(false);
+      expect(saveButton()).not.toBeNull();
+    });
+  });
 
   // Only an *active* trial locks the cap. Once it is over, a PAYG org has the
   // bill the cap applies to and gets the form back.

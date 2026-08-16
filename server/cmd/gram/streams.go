@@ -165,6 +165,12 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "The Stripe TUM meter event name",
 			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
 		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-portal-configuration-id",
+			Aliases: []string{"stripe.portal_configuration_id"},
+			Usage:   "The controlled Stripe customer portal configuration ID",
+			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
+		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",

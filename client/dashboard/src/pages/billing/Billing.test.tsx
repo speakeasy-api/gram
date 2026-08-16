@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
   hasScope: vi.fn(),
   session: vi.fn(),
+  subscription: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -39,6 +40,38 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
+}));
+
+// The plan section and the spend cap both read the live subscription; the
+// shared wrapper is stubbed so this file stays about which sections the page
+// composes for a given tier.
+vi.mock("@/components/billing/use-stripe-subscription", () => ({
+  useStripeSubscription: () => mocks.subscription(),
+}));
+
+vi.mock("@gram/client/react-query/createStripePortalSession.js", () => ({
+  useCreateStripePortalSessionMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/cancelStripeSubscription.js", () => ({
+  useCancelStripeSubscriptionMutation: () => ({
+    mutate: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/resumeStripeSubscription.js", () => ({
+  useResumeStripeSubscriptionMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/getStripeSubscription.js", () => ({
+  invalidateAllGetStripeSubscription: vi.fn(),
 }));
 
 // The usage meters and the TUM view own their own data; this test is only
@@ -122,6 +155,11 @@ const billingEmailField = () =>
 const spendCapSection = () =>
   screen.queryByRole("heading", { name: /chat spend cap/i });
 
+const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
+
+const portalButton = () =>
+  screen.queryByRole("button", { name: /manage payment method and invoices/i });
+
 /** The billing email section invalidates its query through the client. */
 function renderBilling() {
   const client = new QueryClient({
@@ -145,6 +183,16 @@ describe("Billing", () => {
         startedAt: new Date(Date.now() - 2 * DAY),
         endsAt: new Date(Date.now() + 12 * DAY),
       },
+    });
+    mocks.subscription.mockReturnValue({
+      data: {
+        status: "active",
+        cancelAtPeriodEnd: false,
+        paymentFailed: false,
+      },
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
     });
   });
 
@@ -211,6 +259,56 @@ describe("Billing", () => {
       expect(spendCapSection()).not.toBeNull();
     },
   );
+
+  // The plan section is where a converted organization manages its card,
+  // invoices, and cancellation, so it belongs to the pay-as-you-go view only.
+  it("places the pay as you go plan on the payg view", () => {
+    mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+
+    renderBilling();
+
+    expect(planSection()).not.toBeNull();
+    expect(portalButton()).not.toBeNull();
+  });
+
+  // The account type can read as PAYG while a product trial is still running.
+  // Checkout is what creates the subscription, so the CTA owns that view — a
+  // plan section beside it would be reporting on something that doesn't exist.
+  it("keeps a trialing payg org on the checkout CTA alone", () => {
+    mocks.productTier.mockReturnValue("payg");
+
+    renderBilling();
+
+    expect(cta()).not.toBeNull();
+    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
+  });
+
+  it.each<ProductTier>([
+    "base",
+    "base_PAID",
+    "__deprecated__pro",
+    "enterprise",
+  ])("shows no pay as you go plan on the %s view", (tier) => {
+    mocks.productTier.mockReturnValue(tier);
+
+    renderBilling();
+
+    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
+  });
+
+  // A pre-card trial converts through the checkout CTA, not the plan section:
+  // there is no subscription to manage until checkout creates one.
+  it("keeps the trialing view on the checkout CTA", () => {
+    mocks.productTier.mockReturnValue("enterprise");
+
+    renderBilling();
+
+    expect(cta()).not.toBeNull();
+    expect(planSection()).toBeNull();
+  });
 
   it("shows no chat spend cap on the pre-checkout view", () => {
     mocks.productTier.mockReturnValue("base");

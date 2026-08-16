@@ -25,39 +25,40 @@ func TestCatalogValidate(t *testing.T) {
 		{
 			name: "valid",
 			catalog: Catalog{
-				PriceIDTUM:     "price_test",
-				MeterIDTUM:     "mtr_test",
-				MeterEventName: "tum",
+				PriceIDTUM:            "price_test",
+				MeterIDTUM:            "mtr_test",
+				MeterEventName:        "tum",
+				PortalConfigurationID: "bpc_test",
 			},
 		},
 		{
 			name:    "missing price",
-			catalog: Catalog{MeterIDTUM: "mtr_test", MeterEventName: "tum"},
+			catalog: Catalog{MeterIDTUM: "mtr_test", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM price id",
 		},
 		{
 			name:    "missing meter",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterEventName: "tum"},
+			catalog: Catalog{PriceIDTUM: "price_test", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM meter id",
 		},
 		{
 			name:    "missing meter event name",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test"},
+			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing meter event name",
 		},
 		{
 			name:    "unset price",
-			catalog: Catalog{PriceIDTUM: "unset", MeterIDTUM: "mtr_test", MeterEventName: "tum"},
+			catalog: Catalog{PriceIDTUM: "unset", MeterIDTUM: "mtr_test", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM price id",
 		},
 		{
 			name:    "unset meter",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "unset", MeterEventName: "tum"},
+			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "unset", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM meter id",
 		},
 		{
 			name:    "unset meter event name",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", MeterEventName: "unset"},
+			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", MeterEventName: "unset", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing meter event name",
 		},
 	}
@@ -91,23 +92,28 @@ func TestSDKPinsExpectedAPIVersion(t *testing.T) {
 }
 
 type fakeStripeAPI struct {
-	customerParams         *stripesdk.CustomerCreateParams
-	checkoutSessionParams  *stripesdk.CheckoutSessionCreateParams
-	checkoutRetrieveParams *stripesdk.CheckoutSessionRetrieveParams
-	checkoutSession        *stripesdk.CheckoutSession
-	meterEventParams       *stripesdk.BillingMeterEventCreateParams
-	meterSummaryParams     *stripesdk.BillingMeterEventSummaryListParams
-	meterSummaries         []*stripesdk.BillingMeterEventSummary
-	invoiceRetrieveParams  *stripesdk.InvoiceRetrieveParams
-	invoice                *stripesdk.Invoice
-	invoiceItemParams      *stripesdk.InvoiceItemCreateParams
-	invoiceItemListParams  *stripesdk.InvoiceItemListParams
-	invoiceItems           []*stripesdk.InvoiceItem
-	creditNoteParams       *stripesdk.CreditNoteCreateParams
-	creditNoteListParams   *stripesdk.CreditNoteListParams
-	creditNotes            []*stripesdk.CreditNote
-	calls                  int
-	err                    error
+	customerParams             *stripesdk.CustomerCreateParams
+	checkoutSessionParams      *stripesdk.CheckoutSessionCreateParams
+	checkoutRetrieveParams     *stripesdk.CheckoutSessionRetrieveParams
+	checkoutSession            *stripesdk.CheckoutSession
+	subscriptionRetrieveParams *stripesdk.SubscriptionRetrieveParams
+	subscriptionUpdateParams   *stripesdk.SubscriptionUpdateParams
+	subscription               *stripesdk.Subscription
+	portalSessionParams        *stripesdk.BillingPortalSessionCreateParams
+	portalSession              *stripesdk.BillingPortalSession
+	meterEventParams           *stripesdk.BillingMeterEventCreateParams
+	meterSummaryParams         *stripesdk.BillingMeterEventSummaryListParams
+	meterSummaries             []*stripesdk.BillingMeterEventSummary
+	invoiceRetrieveParams      *stripesdk.InvoiceRetrieveParams
+	invoice                    *stripesdk.Invoice
+	invoiceItemParams          *stripesdk.InvoiceItemCreateParams
+	invoiceItemListParams      *stripesdk.InvoiceItemListParams
+	invoiceItems               []*stripesdk.InvoiceItem
+	creditNoteParams           *stripesdk.CreditNoteCreateParams
+	creditNoteListParams       *stripesdk.CreditNoteListParams
+	creditNotes                []*stripesdk.CreditNote
+	calls                      int
+	err                        error
 }
 
 func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error) {
@@ -126,6 +132,24 @@ func (f *fakeStripeAPI) retrieveCheckoutSession(_ context.Context, _ string, par
 	f.calls++
 	f.checkoutRetrieveParams = params
 	return f.checkoutSession, f.err
+}
+
+func (f *fakeStripeAPI) retrieveSubscription(_ context.Context, _ string, params *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error) {
+	f.calls++
+	f.subscriptionRetrieveParams = params
+	return f.subscription, f.err
+}
+
+func (f *fakeStripeAPI) updateSubscription(_ context.Context, _ string, params *stripesdk.SubscriptionUpdateParams) (*stripesdk.Subscription, error) {
+	f.calls++
+	f.subscriptionUpdateParams = params
+	return f.subscription, f.err
+}
+
+func (f *fakeStripeAPI) createPortalSession(_ context.Context, params *stripesdk.BillingPortalSessionCreateParams) (*stripesdk.BillingPortalSession, error) {
+	f.calls++
+	f.portalSessionParams = params
+	return f.portalSession, f.err
 }
 
 func (f *fakeStripeAPI) createMeterEvent(_ context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
@@ -203,6 +227,152 @@ func (f *fakeStripeAPI) listCreditNotes(_ context.Context, params *stripesdk.Cre
 	}
 }
 
+func testSubscription() *stripesdk.Subscription {
+	return &stripesdk.Subscription{
+		ID:                "sub_test",
+		Customer:          &stripesdk.Customer{ID: "cus_test"},
+		Status:            stripesdk.SubscriptionStatusPastDue,
+		CancelAtPeriodEnd: true,
+		CancelAt:          time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC).Unix(),
+		CanceledAt:        time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC).Unix(),
+		TrialStart:        time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).Unix(),
+		TrialEnd:          time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC).Unix(),
+		Items: &stripesdk.SubscriptionItemList{Data: []*stripesdk.SubscriptionItem{
+			{
+				Price:              &stripesdk.Price{ID: "price_tum"},
+				CurrentPeriodStart: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC).Unix(),
+				CurrentPeriodEnd:   time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC).Unix(),
+			},
+		}},
+		LatestInvoice: &stripesdk.Invoice{
+			ID:              "in_test",
+			Status:          stripesdk.InvoiceStatusOpen,
+			AmountRemaining: 4200,
+		},
+	}
+}
+
+func TestGetSubscriptionReturnsLiveLifecycleState(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{subscription: testSubscription()}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+
+	state, err := c.GetSubscription(t.Context(), "sub_test")
+	require.NoError(t, err)
+	require.Equal(t, "sub_test", state.ID)
+	require.Equal(t, "cus_test", state.CustomerID)
+	require.Equal(t, "past_due", state.Status)
+	require.Equal(t, time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC), state.CurrentPeriodStart)
+	require.Equal(t, time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC), state.CurrentPeriodEnd)
+	require.True(t, state.CancelAtPeriodEnd)
+	require.True(t, state.PaymentFailed)
+	require.Equal(t, "in_test", state.LatestInvoiceID)
+	require.Equal(t, "open", state.LatestInvoiceStatus)
+	require.EqualValues(t, 4200, state.LatestInvoiceAmountRemaining)
+	require.Len(t, api.subscriptionRetrieveParams.Expand, 1)
+	require.Equal(t, "latest_invoice", stripesdk.StringValue(api.subscriptionRetrieveParams.Expand[0]))
+}
+
+func TestGetSubscriptionPaymentFailed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		subscription    stripesdk.SubscriptionStatus
+		invoice         stripesdk.InvoiceStatus
+		amountRemaining int64
+		want            bool
+	}{
+		{name: "past due with unpaid open invoice", subscription: stripesdk.SubscriptionStatusPastDue, invoice: stripesdk.InvoiceStatusOpen, amountRemaining: 1, want: true},
+		{name: "past due with paid invoice", subscription: stripesdk.SubscriptionStatusPastDue, invoice: stripesdk.InvoiceStatusPaid, amountRemaining: 0},
+		{name: "past due with zero remaining", subscription: stripesdk.SubscriptionStatusPastDue, invoice: stripesdk.InvoiceStatusOpen, amountRemaining: 0},
+		{name: "active while invoice is open", subscription: stripesdk.SubscriptionStatusActive, invoice: stripesdk.InvoiceStatusOpen, amountRemaining: 1},
+		{name: "incomplete while invoice is open", subscription: stripesdk.SubscriptionStatusIncomplete, invoice: stripesdk.InvoiceStatusOpen, amountRemaining: 1},
+		{name: "unpaid while invoice is open", subscription: stripesdk.SubscriptionStatusUnpaid, invoice: stripesdk.InvoiceStatusOpen, amountRemaining: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			subscription := testSubscription()
+			subscription.Status = tt.subscription
+			subscription.LatestInvoice.Status = tt.invoice
+			subscription.LatestInvoice.AmountRemaining = tt.amountRemaining
+			api := &fakeStripeAPI{subscription: subscription}
+			client := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum"}}
+
+			state, err := client.GetSubscription(t.Context(), "sub_test")
+			require.NoError(t, err)
+			require.Equal(t, tt.want, state.PaymentFailed)
+		})
+	}
+}
+
+func TestGetSubscriptionRequiresConfiguredTUMItem(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{subscription: testSubscription()}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_other", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+
+	_, err := c.GetSubscription(t.Context(), "sub_test")
+	require.ErrorContains(t, err, "missing the configured TUM service period")
+}
+
+func TestSetSubscriptionCancelAtPeriodEndReturnsUpdatedState(t *testing.T) {
+	t.Parallel()
+
+	subscription := testSubscription()
+	subscription.CancelAtPeriodEnd = false
+	api := &fakeStripeAPI{subscription: subscription}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+
+	state, err := c.SetSubscriptionCancelAtPeriodEnd(t.Context(), SetSubscriptionCancelAtPeriodEndInput{
+		SubscriptionID:    "sub_test",
+		CancelAtPeriodEnd: false,
+	})
+	require.NoError(t, err)
+	require.False(t, state.CancelAtPeriodEnd)
+	require.NotNil(t, api.subscriptionUpdateParams.CancelAtPeriodEnd)
+	require.False(t, stripesdk.BoolValue(api.subscriptionUpdateParams.CancelAtPeriodEnd))
+}
+
+func TestCreatePortalSessionUsesControlledConfiguration(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{portalSession: &stripesdk.BillingPortalSession{
+		ID:       "bps_test",
+		Customer: "cus_test",
+		URL:      "https://billing.stripe.test/session",
+	}}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+
+	session, err := c.CreatePortalSession(t.Context(), CreatePortalSessionInput{
+		CustomerID: "cus_test",
+		ReturnURL:  "https://app.example.test/customer/billing",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "bps_test", session.ID)
+	require.Equal(t, "bpc_test", stripesdk.StringValue(api.portalSessionParams.Configuration))
+	require.Equal(t, "cus_test", stripesdk.StringValue(api.portalSessionParams.Customer))
+	require.Equal(t, "https://app.example.test/customer/billing", stripesdk.StringValue(api.portalSessionParams.ReturnURL))
+}
+
+func TestCreatePortalSessionRequiresControlledConfiguration(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{}}
+
+	_, err := c.CreatePortalSession(t.Context(), CreatePortalSessionInput{
+		CustomerID: "cus_test",
+		ReturnURL:  "https://app.example.test/customer/billing",
+	})
+	require.ErrorContains(t, err, "portal configuration id is required")
+	require.Zero(t, api.calls)
+}
+
 func TestCreateCustomerPropagatesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
@@ -239,9 +409,10 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	c := &client{
 		api: api,
 		catalog: Catalog{
-			PriceIDTUM:     "price_tum",
-			MeterIDTUM:     "mtr_tum",
-			MeterEventName: "tum",
+			PriceIDTUM:            "price_tum",
+			MeterIDTUM:            "mtr_tum",
+			MeterEventName:        "tum",
+			PortalConfigurationID: "bpc_test",
 		},
 	}
 	billingCycleAnchor := time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC)
@@ -288,7 +459,7 @@ func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum"}}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		CustomerID:         "",
@@ -378,7 +549,7 @@ func TestCreateMeterEventPropagatesIdempotencyKey(t *testing.T) {
 	api := &fakeStripeAPI{}
 	c := &client{
 		api:     api,
-		catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum"},
+		catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum", PortalConfigurationID: ""},
 	}
 	timestamp := time.Date(2026, time.August, 14, 10, 0, 0, 0, time.UTC)
 
@@ -434,9 +605,10 @@ func TestGetMeterEventSummaryAggregatesSDKSequence(t *testing.T) {
 	c := &client{
 		api: api,
 		catalog: Catalog{
-			PriceIDTUM:     "",
-			MeterIDTUM:     "mtr_tum",
-			MeterEventName: "",
+			PriceIDTUM:            "",
+			MeterIDTUM:            "mtr_tum",
+			MeterEventName:        "",
+			PortalConfigurationID: "",
 		},
 	}
 	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
@@ -531,7 +703,7 @@ func TestWritesWrapStripeErrors(t *testing.T) {
 
 	apiErr := errors.New("request failed")
 	api := &fakeStripeAPI{err: apiErr}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum"}}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum", PortalConfigurationID: ""}}
 
 	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{IdempotencyKey: "customer"})
 	require.ErrorIs(t, err, apiErr)

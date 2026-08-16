@@ -47,6 +47,20 @@ func (s *Service) SetSpendCap(ctx context.Context, payload *gen.SetSpendCapPaylo
 	if err := s.requirePaygOrganization(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
+	_, subscription, err := s.getStripeBillingState(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	switch subscription.Status {
+	case "trialing":
+		return nil, oops.E(oops.CodeConflict, nil, "the chat spend cap cannot be changed before pay as you go billing starts")
+	case "active", "past_due":
+		// Both states represent a live paid subscription. A past-due invoice is
+		// recoverable through Stripe retries and must not prevent an admin from
+		// changing the cap while service remains active.
+	default:
+		return nil, oops.E(oops.CodeConflict, nil, "the chat spend cap cannot be changed without an active pay as you go subscription")
+	}
 
 	requestedLimit := payload.MonthlyCredits
 	if err := s.keyRefresher.SetOpenRouterSpendCap(

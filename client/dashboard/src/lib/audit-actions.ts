@@ -27,7 +27,10 @@ export const AUDIT_ACTIONS = [
   "aws_kms_key:create",
   "aws_kms_key:delete",
   "aws_kms_key:update",
+  "billing_metadata:cancel_stripe_subscription",
   "billing_metadata:create_stripe_checkout",
+  "billing_metadata:create_stripe_portal",
+  "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
   "chat_analysis_settings:upsert",
   "chat_session:access",
@@ -265,6 +268,12 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "billing_metadata:create_stripe_checkout":
       return "started Stripe checkout for";
+    case "billing_metadata:create_stripe_portal":
+      return "opened Stripe billing portal for";
+    case "billing_metadata:cancel_stripe_subscription":
+      return "canceled Stripe subscription for";
+    case "billing_metadata:resume_stripe_subscription":
+      return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
     case "chat_analysis_settings:upsert":

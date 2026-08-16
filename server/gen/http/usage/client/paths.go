@@ -57,6 +57,26 @@ func CreateStripeCheckoutUsagePath() string {
 	return "/rpc/usage.createStripeCheckout"
 }
 
+// GetStripeSubscriptionUsagePath returns the URL path to the usage service getStripeSubscription HTTP endpoint.
+func GetStripeSubscriptionUsagePath() string {
+	return "/rpc/usage.getStripeSubscription"
+}
+
+// CreateStripePortalSessionUsagePath returns the URL path to the usage service createStripePortalSession HTTP endpoint.
+func CreateStripePortalSessionUsagePath() string {
+	return "/rpc/usage.createStripePortalSession"
+}
+
+// CancelStripeSubscriptionUsagePath returns the URL path to the usage service cancelStripeSubscription HTTP endpoint.
+func CancelStripeSubscriptionUsagePath() string {
+	return "/rpc/usage.cancelStripeSubscription"
+}
+
+// ResumeStripeSubscriptionUsagePath returns the URL path to the usage service resumeStripeSubscription HTTP endpoint.
+func ResumeStripeSubscriptionUsagePath() string {
+	return "/rpc/usage.resumeStripeSubscription"
+}
+
 // CreateTopUpCheckoutUsagePath returns the URL path to the usage service createTopUpCheckout HTTP endpoint.
 func CreateTopUpCheckoutUsagePath() string {
 	return "/rpc/usage.createTopUpCheckout"

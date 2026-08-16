@@ -37,6 +37,17 @@ type Service interface {
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
 	// Create a Stripe Checkout link for starting PAYG billing
 	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
+	// Get the live lifecycle state of the organization's Stripe PAYG subscription
+	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *StripeSubscription, err error)
+	// Create a Stripe customer portal session for the organization's PAYG
+	// subscription
+	CreateStripePortalSession(context.Context, *CreateStripePortalSessionPayload) (res string, err error)
+	// Schedule the organization's Stripe PAYG subscription to cancel at the end of
+	// its current period
+	CancelStripeSubscription(context.Context, *CancelStripeSubscriptionPayload) (res *StripeSubscription, err error)
+	// Remove a scheduled end-of-period cancellation from the organization's Stripe
+	// PAYG subscription
+	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *StripeSubscription, err error)
 	// Create a checkout link for a one-time credit top-up purchase
 	CreateTopUpCheckout(context.Context, *CreateTopUpCheckoutPayload) (res string, err error)
 }
@@ -61,13 +72,19 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
+var MethodNames = [15]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
 	// The configured billing notification email. Omitted when organization
 	// administrators receive billing notifications.
 	Email *string
+}
+
+// CancelStripeSubscriptionPayload is the payload type of the usage service
+// cancelStripeSubscription method.
+type CancelStripeSubscriptionPayload struct {
+	SessionToken *string
 }
 
 // CreateCheckoutPayload is the payload type of the usage service
@@ -88,6 +105,12 @@ type CreateStripeCheckoutPayload struct {
 	SessionToken *string
 }
 
+// CreateStripePortalSessionPayload is the payload type of the usage service
+// createStripePortalSession method.
+type CreateStripePortalSessionPayload struct {
+	SessionToken *string
+}
+
 // CreateTopUpCheckoutPayload is the payload type of the usage service
 // createTopUpCheckout method.
 type CreateTopUpCheckoutPayload struct {
@@ -103,6 +126,12 @@ type GetBillingEmailPayload struct {
 // GetPeriodUsagePayload is the payload type of the usage service
 // getPeriodUsage method.
 type GetPeriodUsagePayload struct {
+	SessionToken *string
+}
+
+// GetStripeSubscriptionPayload is the payload type of the usage service
+// getStripeSubscription method.
+type GetStripeSubscriptionPayload struct {
 	SessionToken *string
 }
 
@@ -130,6 +159,12 @@ type PeriodUsage struct {
 	IncludedCredits int
 	// Whether the project has an active subscription
 	HasActiveSubscription bool
+}
+
+// ResumeStripeSubscriptionPayload is the payload type of the usage service
+// resumeStripeSubscription method.
+type ResumeStripeSubscriptionPayload struct {
+	SessionToken *string
 }
 
 // SetBillingEmailPayload is the payload type of the usage service
@@ -167,6 +202,29 @@ type SetSpendCapPayload struct {
 type SpendCap struct {
 	// The monthly chat spend cap in USD
 	MonthlyCredits int
+}
+
+// StripeSubscription is the result type of the usage service
+// getStripeSubscription method.
+type StripeSubscription struct {
+	// The live Stripe subscription status
+	Status string
+	// Start of the current Stripe service period
+	CurrentPeriodStart string
+	// End of the current Stripe service period (exclusive)
+	CurrentPeriodEnd string
+	// Start of the Stripe trial, when the subscription is trialing
+	TrialStart *string
+	// End of the Stripe trial, when one is configured
+	TrialEnd *string
+	// Whether Stripe will cancel the subscription at the end of the current period
+	CancelAtPeriodEnd bool
+	// Scheduled cancellation time, when present
+	CancelAt *string
+	// Time cancellation was requested or completed, when present
+	CanceledAt *string
+	// Whether the live subscription or latest invoice indicates a failed payment
+	PaymentFailed bool
 }
 
 type TUMPeriod struct {

@@ -110,6 +110,36 @@ var SpendCap = Type("SpendCap", func() {
 	Required("monthly_credits")
 })
 
+// StripeSubscription reports the live lifecycle state of the organization's
+// Stripe PAYG subscription.
+var StripeSubscription = Type("StripeSubscription", func() {
+	Attribute("status", String, "The live Stripe subscription status", func() {
+		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
+	})
+	Attribute("current_period_start", String, "Start of the current Stripe service period", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("current_period_end", String, "End of the current Stripe service period (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("trial_start", String, "Start of the Stripe trial, when the subscription is trialing", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("trial_end", String, "End of the Stripe trial, when one is configured", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("cancel_at_period_end", Boolean, "Whether Stripe will cancel the subscription at the end of the current period")
+	Attribute("cancel_at", String, "Scheduled cancellation time, when present", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("canceled_at", String, "Time cancellation was requested or completed, when present", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("payment_failed", Boolean, "Whether the live subscription or latest invoice indicates a failed payment")
+
+	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -333,6 +363,86 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "createStripeCheckout")
 		Meta("openapi:extension:x-speakeasy-name-override", "createStripeCheckout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripeCheckout"}`)
+	})
+
+	Method("getStripeSubscription", func() {
+		Description("Get the live lifecycle state of the organization's Stripe PAYG subscription")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(StripeSubscription)
+
+		HTTP(func() {
+			GET("/rpc/usage.getStripeSubscription")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-name-override", "getStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getStripeSubscription"}`)
+	})
+
+	Method("createStripePortalSession", func() {
+		Description("Create a Stripe customer portal session for the organization's PAYG subscription")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createStripePortalSession")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createStripePortalSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "createStripePortalSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripePortalSession"}`)
+	})
+
+	Method("cancelStripeSubscription", func() {
+		Description("Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(StripeSubscription)
+
+		HTTP(func() {
+			POST("/rpc/usage.cancelStripeSubscription")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "cancelStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-name-override", "cancelStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "cancelStripeSubscription"}`)
+	})
+
+	Method("resumeStripeSubscription", func() {
+		Description("Remove a scheduled end-of-period cancellation from the organization's Stripe PAYG subscription")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(StripeSubscription)
+
+		HTTP(func() {
+			POST("/rpc/usage.resumeStripeSubscription")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "resumeStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-name-override", "resumeStripeSubscription")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "resumeStripeSubscription"}`)
 	})
 
 	Method("createTopUpCheckout", func() {

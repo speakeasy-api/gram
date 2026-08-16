@@ -561,9 +561,10 @@ func newStripeClient(
 	}
 
 	catalog := stripeclient.Catalog{
-		PriceIDTUM:     c.String("stripe-price-id-tum"),
-		MeterIDTUM:     c.String("stripe-meter-id-tum"),
-		MeterEventName: c.String("stripe-meter-event-name"),
+		PriceIDTUM:            c.String("stripe-price-id-tum"),
+		MeterIDTUM:            c.String("stripe-meter-id-tum"),
+		MeterEventName:        c.String("stripe-meter-event-name"),
+		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid Stripe catalog configuration: %w", err)

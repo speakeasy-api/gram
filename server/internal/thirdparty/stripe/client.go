@@ -47,6 +47,9 @@ type Catalog struct {
 
 	// MeterEventName identifies the event stream used when reporting TUM deltas.
 	MeterEventName string
+
+	// PortalConfigurationID identifies the controlled Stripe customer portal configuration.
+	PortalConfigurationID string
 }
 
 // Validate checks that every required Stripe catalog value is configured.
@@ -73,6 +76,9 @@ type Client interface {
 	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
+	GetSubscription(context.Context, string) (*SubscriptionState, error)
+	SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error)
+	CreatePortalSession(context.Context, CreatePortalSessionInput) (*PortalSession, error)
 	CreateMeterEvent(context.Context, CreateMeterEventInput) error
 	GetMeterEventSummary(context.Context, GetMeterEventSummaryInput) (float64, error)
 	GetInvoice(context.Context, string) (*InvoiceState, error)
@@ -145,6 +151,82 @@ type CheckoutSessionState struct {
 	SubscriptionCustomerID string
 	SubscriptionStatus     string
 	BillingCycleAnchor     time.Time
+}
+
+// SubscriptionState is the live Stripe subscription data needed by billing callers.
+type SubscriptionState struct {
+	// ID is Stripe's stable subscription identifier.
+	ID string
+
+	// CustomerID identifies the Stripe customer that owns the subscription.
+	CustomerID string
+
+	// Status is Stripe's current subscription lifecycle status.
+	Status string
+
+	// CurrentPeriodStart is the inclusive service-period boundary for the TUM item.
+	CurrentPeriodStart time.Time
+
+	// CurrentPeriodEnd is the exclusive service-period boundary for the TUM item.
+	CurrentPeriodEnd time.Time
+
+	// TrialStart is the start of the subscription trial, when present.
+	TrialStart time.Time
+
+	// TrialEnd is the end of the subscription trial, when present.
+	TrialEnd time.Time
+
+	// CancelAtPeriodEnd reports whether cancellation is scheduled at the period boundary.
+	CancelAtPeriodEnd bool
+
+	// CancelAt is Stripe's scheduled cancellation timestamp, when present.
+	CancelAt time.Time
+
+	// CanceledAt is when cancellation was requested or completed, when present.
+	CanceledAt time.Time
+
+	// LatestInvoiceID identifies the most recent invoice, when one exists.
+	LatestInvoiceID string
+
+	// LatestInvoiceStatus is the live status of the most recent invoice, when one exists.
+	LatestInvoiceStatus string
+
+	// LatestInvoiceAmountRemaining is the unpaid amount in Stripe minor units.
+	LatestInvoiceAmountRemaining int64
+
+	// PaymentFailed reports whether a past-due subscription has an unpaid open invoice.
+	PaymentFailed bool
+}
+
+// SetSubscriptionCancelAtPeriodEndInput changes scheduled cancellation without
+// immediately terminating service.
+type SetSubscriptionCancelAtPeriodEndInput struct {
+	// SubscriptionID identifies the subscription to update.
+	SubscriptionID string
+
+	// CancelAtPeriodEnd schedules cancellation when true and resumes renewal when false.
+	CancelAtPeriodEnd bool
+}
+
+// CreatePortalSessionInput describes one short-lived Stripe customer portal session.
+type CreatePortalSessionInput struct {
+	// CustomerID identifies the Stripe customer entering the portal.
+	CustomerID string
+
+	// ReturnURL is the Gram billing page Stripe returns the customer to.
+	ReturnURL string
+}
+
+// PortalSession is the Stripe customer portal data needed by callers.
+type PortalSession struct {
+	// ID is Stripe's stable portal session identifier.
+	ID string
+
+	// CustomerID identifies the Stripe customer the portal session belongs to.
+	CustomerID string
+
+	// URL is the short-lived hosted Stripe portal URL.
+	URL string
 }
 
 // CreateMeterEventInput reports a TUM delta for one Stripe customer.
@@ -264,6 +346,9 @@ type stripeAPI interface {
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
 	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	retrieveCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error)
+	retrieveSubscription(context.Context, string, *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error)
+	updateSubscription(context.Context, string, *stripesdk.SubscriptionUpdateParams) (*stripesdk.Subscription, error)
+	createPortalSession(context.Context, *stripesdk.BillingPortalSessionCreateParams) (*stripesdk.BillingPortalSession, error)
 	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
 	listMeterEventSummaries(context.Context, *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error]
 	retrieveInvoice(context.Context, string, *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error)
@@ -297,6 +382,30 @@ func (s *sdkAPI) retrieveCheckoutSession(ctx context.Context, id string, params 
 	session, err := s.client.V1CheckoutSessions.Retrieve(ctx, id, params)
 	if err != nil {
 		return nil, fmt.Errorf("stripe SDK retrieve Checkout session: %w", err)
+	}
+	return session, nil
+}
+
+func (s *sdkAPI) retrieveSubscription(ctx context.Context, id string, params *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error) {
+	subscription, err := s.client.V1Subscriptions.Retrieve(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK retrieve subscription: %w", err)
+	}
+	return subscription, nil
+}
+
+func (s *sdkAPI) updateSubscription(ctx context.Context, id string, params *stripesdk.SubscriptionUpdateParams) (*stripesdk.Subscription, error) {
+	subscription, err := s.client.V1Subscriptions.Update(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK update subscription: %w", err)
+	}
+	return subscription, nil
+}
+
+func (s *sdkAPI) createPortalSession(ctx context.Context, params *stripesdk.BillingPortalSessionCreateParams) (*stripesdk.BillingPortalSession, error) {
+	session, err := s.client.V1BillingPortalSessions.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create billing portal session: %w", err)
 	}
 	return session, nil
 }
@@ -477,6 +586,120 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 	}
 
 	return state, nil
+}
+
+func (c *client) GetSubscription(ctx context.Context, id string) (*SubscriptionState, error) {
+	if id == "" {
+		return nil, errors.New("subscription id is required")
+	}
+
+	params := new(stripesdk.SubscriptionRetrieveParams)
+	params.AddExpand("latest_invoice")
+	subscription, err := c.api.retrieveSubscription(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve Stripe subscription: %w", err)
+	}
+	return c.subscriptionState(subscription)
+}
+
+func (c *client) SetSubscriptionCancelAtPeriodEnd(ctx context.Context, input SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error) {
+	if input.SubscriptionID == "" {
+		return nil, errors.New("subscription id is required")
+	}
+
+	params := new(stripesdk.SubscriptionUpdateParams)
+	params.CancelAtPeriodEnd = new(input.CancelAtPeriodEnd)
+	params.AddExpand("latest_invoice")
+	subscription, err := c.api.updateSubscription(ctx, input.SubscriptionID, params)
+	if err != nil {
+		return nil, fmt.Errorf("update Stripe subscription cancellation: %w", err)
+	}
+	return c.subscriptionState(subscription)
+}
+
+func (c *client) CreatePortalSession(ctx context.Context, input CreatePortalSessionInput) (*PortalSession, error) {
+	if input.CustomerID == "" {
+		return nil, errors.New("customer id is required")
+	}
+	if input.ReturnURL == "" {
+		return nil, errors.New("portal return URL is required")
+	}
+	if !IsConfigured(c.catalog.PortalConfigurationID) {
+		return nil, errors.New("portal configuration id is required")
+	}
+
+	params := new(stripesdk.BillingPortalSessionCreateParams)
+	params.Configuration = stripesdk.String(c.catalog.PortalConfigurationID)
+	params.Customer = stripesdk.String(input.CustomerID)
+	params.ReturnURL = stripesdk.String(input.ReturnURL)
+	session, err := c.api.createPortalSession(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create Stripe billing portal session: %w", err)
+	}
+	if session == nil || session.ID == "" || session.Customer == "" || session.URL == "" {
+		return nil, errors.New("create Stripe billing portal session: incomplete response")
+	}
+	return &PortalSession{ID: session.ID, CustomerID: session.Customer, URL: session.URL}, nil
+}
+
+func (c *client) subscriptionState(subscription *stripesdk.Subscription) (*SubscriptionState, error) {
+	if subscription == nil || subscription.ID == "" {
+		return nil, errors.New("stripe subscription response is empty")
+	}
+
+	customerID := ""
+	if subscription.Customer != nil {
+		customerID = subscription.Customer.ID
+	}
+
+	var tumItem *stripesdk.SubscriptionItem
+	if subscription.Items != nil {
+		for _, item := range subscription.Items.Data {
+			if item != nil && item.Price != nil && item.Price.ID == c.catalog.PriceIDTUM {
+				tumItem = item
+				break
+			}
+		}
+	}
+	if tumItem == nil || tumItem.CurrentPeriodStart <= 0 || tumItem.CurrentPeriodEnd <= tumItem.CurrentPeriodStart {
+		return nil, errors.New("stripe subscription is missing the configured TUM service period")
+	}
+
+	latestInvoiceID := ""
+	latestInvoiceStatus := ""
+	var latestInvoiceAmountRemaining int64
+	if subscription.LatestInvoice != nil {
+		latestInvoiceID = subscription.LatestInvoice.ID
+		latestInvoiceStatus = string(subscription.LatestInvoice.Status)
+		latestInvoiceAmountRemaining = subscription.LatestInvoice.AmountRemaining
+	}
+
+	status := string(subscription.Status)
+	paymentFailed := status == "past_due" && latestInvoiceStatus == "open" && latestInvoiceAmountRemaining > 0
+
+	return &SubscriptionState{
+		ID:                           subscription.ID,
+		CustomerID:                   customerID,
+		Status:                       status,
+		CurrentPeriodStart:           time.Unix(tumItem.CurrentPeriodStart, 0).UTC(),
+		CurrentPeriodEnd:             time.Unix(tumItem.CurrentPeriodEnd, 0).UTC(),
+		TrialStart:                   unixTime(subscription.TrialStart),
+		TrialEnd:                     unixTime(subscription.TrialEnd),
+		CancelAtPeriodEnd:            subscription.CancelAtPeriodEnd,
+		CancelAt:                     unixTime(subscription.CancelAt),
+		CanceledAt:                   unixTime(subscription.CanceledAt),
+		LatestInvoiceID:              latestInvoiceID,
+		LatestInvoiceStatus:          latestInvoiceStatus,
+		LatestInvoiceAmountRemaining: latestInvoiceAmountRemaining,
+		PaymentFailed:                paymentFailed,
+	}, nil
+}
+
+func unixTime(seconds int64) time.Time {
+	if seconds <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(seconds, 0).UTC()
 }
 
 func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInput) error {
@@ -793,6 +1016,18 @@ func (s *stubClient) GetCheckoutSession(context.Context, string) (*CheckoutSessi
 	return nil, errors.New("retrieve Stripe Checkout session is unavailable locally")
 }
 
+func (s *stubClient) GetSubscription(context.Context, string) (*SubscriptionState, error) {
+	return nil, errors.New("retrieve Stripe subscription is unavailable locally")
+}
+
+func (s *stubClient) SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error) {
+	return nil, errors.New("update Stripe subscription is unavailable locally")
+}
+
+func (s *stubClient) CreatePortalSession(context.Context, CreatePortalSessionInput) (*PortalSession, error) {
+	return nil, errors.New("create Stripe billing portal session is unavailable locally")
+}
+
 func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {
 	s.logger.DebugContext(ctx, "stub Stripe meter event skipped")
 	return nil
@@ -841,8 +1076,9 @@ func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
 
 func (s *stubClient) Catalog() Catalog {
 	return Catalog{
-		PriceIDTUM:     "",
-		MeterIDTUM:     "",
-		MeterEventName: "",
+		PriceIDTUM:            "",
+		MeterIDTUM:            "",
+		MeterEventName:        "",
+		PortalConfigurationID: "",
 	}
 }
