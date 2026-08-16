@@ -7,6 +7,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
+import { PaygCapPausedBanner } from "./billing/billing-banners.tsx";
 import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { OnboardingBanner } from "./onboarding-banner.tsx";
@@ -41,6 +42,10 @@ function PageHeaderComponent({
           divides the main panel's header from its content on the right side. */}
       <BrandGradientLine />
       <OnboardingBanner />
+      {/* Chat stopping is felt on whichever page the user was working on, so
+          the reason for it rides the header rather than waiting on the billing
+          page. The banner owns its own tier and scope rules. */}
+      <PaygCapPausedBanner />
     </>
   );
 }

@@ -24,6 +24,7 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
+import { PaygPaymentFailedBanner } from "@/components/billing/billing-banners";
 import { ChatSpendCapSection } from "@/components/billing/chat-spend-cap-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygUsageSection } from "@/components/billing/payg-usage-section";
@@ -38,6 +39,12 @@ export default function Billing(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
+      {/* A failed payment is what stops the whole account, so it heads the page
+          rather than sitting in the plan section further down. The banner owns
+          its own tier and scope rules. */}
+      <Page.Banner>
+        <PaygPaymentFailedBanner />
+      </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
           <BillingInner />

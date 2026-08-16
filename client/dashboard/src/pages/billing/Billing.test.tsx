@@ -145,6 +145,7 @@ vi.mock("@/components/page-layout", () => {
   Section.CTA = ({ children }: { children: ReactNode }) => <>{children}</>;
   const Page = ({ children }: { children: ReactNode }) => <>{children}</>;
   Page.Header = Header;
+  Page.Banner = ({ children }: { children: ReactNode }) => <>{children}</>;
   Page.Body = ({ children }: { children: ReactNode }) => <>{children}</>;
   Page.Section = Section;
   return { Page };

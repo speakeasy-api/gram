@@ -1,3 +1,4 @@
+import { CHAT_SPEND_CAP_ANCHOR } from "@/components/billing/chat-spend-cap";
 import {
   formatBillingDate,
   isStripeBilling,
@@ -116,21 +117,28 @@ export function ChatSpendCapSection(): JSX.Element | null {
   if (mode === "hidden") return null;
 
   return (
-    <Page.Section>
-      {/* Secondary section below Usage: suppress the area eyebrow. */}
-      <Page.Section.Title area="">Chat spend cap</Page.Section.Title>
-      <Page.Section.Description>
-        Limit what this organization can spend each month on chat and the other
-        AI-powered dashboard experiences.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        {mode === "product-trial" ? (
-          <LockedSpendCap note={PRODUCT_TRIAL_NOTE} />
-        ) : (
-          <PaygSpendCapGate />
-        )}
-      </Page.Section.Body>
-    </Page.Section>
+    // The banner that reports a paused organization links straight here, so
+    // the anchor sits on the section rather than the field: whichever variant
+    // the organization gets — the editor, or a note saying why there is none —
+    // the link lands on the explanation for it. `scroll-mt` clears the sticky
+    // page header, which would otherwise cover what was jumped to.
+    <div id={CHAT_SPEND_CAP_ANCHOR} className="scroll-mt-24">
+      <Page.Section>
+        {/* Secondary section below Usage: suppress the area eyebrow. */}
+        <Page.Section.Title area="">Chat spend cap</Page.Section.Title>
+        <Page.Section.Description>
+          Limit what this organization can spend each month on chat and the
+          other AI-powered dashboard experiences.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          {mode === "product-trial" ? (
+            <LockedSpendCap note={PRODUCT_TRIAL_NOTE} />
+          ) : (
+            <PaygSpendCapGate />
+          )}
+        </Page.Section.Body>
+      </Page.Section>
+    </div>
   );
 }
 

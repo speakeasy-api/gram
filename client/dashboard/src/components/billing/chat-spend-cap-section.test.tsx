@@ -75,6 +75,7 @@ vi.mock("@/components/page-layout", () => {
   return { Page: { Section } };
 });
 
+import { CHAT_SPEND_CAP_ANCHOR } from "./chat-spend-cap";
 import { ChatSpendCapSection } from "./chat-spend-cap-section";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -228,6 +229,14 @@ describe("ChatSpendCapSection", () => {
   });
 
   afterEach(cleanup);
+
+  // The banner that reports a paused organization links straight at this
+  // anchor, so it has to survive edits to the section that carries it.
+  it("carries the anchor the paused-chat banner links to", () => {
+    const { container } = render(<ChatSpendCapSection />);
+
+    expect(container.querySelector(`#${CHAT_SPEND_CAP_ANCHOR}`)).not.toBeNull();
+  });
 
   it("seeds the field from the cap the usage meters read", () => {
     render(<ChatSpendCapSection />);

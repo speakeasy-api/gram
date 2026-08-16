@@ -63,17 +63,22 @@ type chatTestInstance struct {
 // newTestChatService builds a chat service with RBAC enforcement.
 func newTestChatService(t *testing.T) *chatTestInstance {
 	t.Helper()
-	return newTestChatServiceWithOptions(t, nil)
+	return newTestChatServiceWithOptions(t, nil, nil)
 }
 
 // newTestChatServiceWithCompletion builds a chat service with a custom
 // OpenRouter completion client (e.g. a mock for summarize tests).
 func newTestChatServiceWithCompletion(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
 	t.Helper()
-	return newTestChatServiceWithOptions(t, completionClient)
+	return newTestChatServiceWithOptions(t, completionClient, nil)
 }
 
-func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
+func newTestChatServiceWithProvisioner(t *testing.T, provisioner openrouter.Provisioner) *chatTestInstance {
+	t.Helper()
+	return newTestChatServiceWithOptions(t, nil, provisioner)
+}
+
+func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.CompletionClient, provisioner openrouter.Provisioner) *chatTestInstance {
 	t.Helper()
 
 	ctx := t.Context()
@@ -110,7 +115,7 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
+	svc := chat.NewService(logger, tp, conn, mgr, nil, provisioner, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
 
 	return &chatTestInstance{
 		service:   svc,
