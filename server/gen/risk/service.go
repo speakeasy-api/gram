@@ -1177,10 +1177,11 @@ type RiskSignalsResult struct {
 	// Organization risk score computed the same way over the equal-length window
 	// immediately before from.
 	PreviousOrgRiskScore float64
-	// Deduplicated findings in the 24 hours ending at to.
-	Findings24h int64
-	// Deduplicated findings in the 24 hours before that.
-	PreviousFindings24h int64
+	// Deduplicated live findings in the window.
+	Findings int64
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings int64
 	// Signals with at least one live finding in the window.
 	OpenSignals int64
 	// Signals rated critical in the window.
