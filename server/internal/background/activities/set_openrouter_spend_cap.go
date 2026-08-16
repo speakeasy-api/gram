@@ -225,7 +225,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	auditQueries := auditrepo.New(dbtx)
+	auditQueries = auditrepo.New(dbtx)
 	recorded, err = auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
 		SubjectID:      subject.ID,

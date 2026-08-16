@@ -607,7 +607,7 @@ func TestSetOpenRouterSpendCapStaleRetryCannotReplaceNewerSameLimitGeneration(t 
 	require.EqualValues(t, 600, generation.MonthlyCredits)
 }
 
-func TestSetOpenRouterSpendCapRecordedRetryNoopsAfterSubscriptionLoss(t *testing.T) {
+func TestSetOpenRouterSpendCapRecordedRetryNoopsWhenKeyIsDisabled(t *testing.T) {
 	t.Parallel()
 
 	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(

@@ -54,6 +54,7 @@ SELECT COALESCE((
   ORDER BY seq DESC
   LIMIT 1
 ), '') = @operation_id::text AS latest;
+
 -- name: GetLatestOpenRouterSpendCapAuditOperation :one
 SELECT
   COALESCE(latest.operation_id, '')::text AS operation_id,
@@ -71,6 +72,7 @@ LEFT JOIN LATERAL (
   ORDER BY seq DESC
   LIMIT 1
 ) AS latest ON TRUE;
+
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform
