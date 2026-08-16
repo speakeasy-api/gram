@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/stretchr/testify/require"
 )
 
@@ -980,6 +982,71 @@ func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
 	require.Equal(t, "acme-custom", codexManifest.Name)
 }
 
+// TestGenerateCopilotMarketplaceManifest pins the two things Copilot resolves
+// an entry by. It probes marketplace.json before .claude-plugin/marketplace.json,
+// so the root file must exist or Copilot silently falls through to Claude's
+// entries and loads the Claude packages (whose `"matcher": ""` hooks are a
+// validation error that discards the whole hook config). And it looks the
+// installed package up by the entry name, so every entry name must equal the
+// name inside that package's own plugin.json.
+func TestGenerateCopilotMarketplaceManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "Eng MCP servers.",
+		Servers: []PluginServerInfo{{
+			DisplayName: "eng",
+			Policy:      "required",
+			MCPURL:      "https://example.com/mcp",
+			IsPublic:    true,
+		}},
+	}}
+	cfg := GenerateConfig{
+		OrgName:          "Acme Corp",
+		ServerURL:        "https://app.getgram.ai",
+		HooksAPIKey:      "hk_test",
+		IsDefaultProject: true,
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	var copilot marketplaceManifest
+	require.NoError(t, json.Unmarshal(files["marketplace.json"], &copilot))
+	require.Equal(t, resolveMarketplaceName(cfg), copilot.Name)
+	// owner is a required field in Copilot's marketplace schema; an absent one
+	// fails `copilot plugin marketplace add` outright.
+	require.Equal(t, "Acme Corp", copilot.Owner.Name)
+	require.Len(t, copilot.Plugins, 2)
+
+	// Every source must resolve to a directory the generator actually wrote, and
+	// its plugin.json name must equal the entry name.
+	for _, entry := range copilot.Plugins {
+		dir := strings.TrimPrefix(entry.Source, "./")
+		raw, ok := files[path.Join(dir, "plugin.json")]
+		require.True(t, ok, "entry %q points at %q, which has no plugin.json", entry.Name, entry.Source)
+		var meta struct {
+			Name string `json:"name"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &meta))
+		require.Equal(t, entry.Name, meta.Name)
+	}
+
+	require.Equal(t, CopilotObservabilitySlug(cfg), copilot.Plugins[0].Name)
+	require.Equal(t, "engineering-tools", copilot.Plugins[1].Name)
+	require.Equal(t, "./agent-plugins/engineering-tools", copilot.Plugins[1].Source)
+
+	// No hooks key: no observability package is generated, so no entry for it.
+	cfg.HooksAPIKey = ""
+	withoutHooks, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+	var bare marketplaceManifest
+	require.NoError(t, json.Unmarshal(withoutHooks["marketplace.json"], &bare))
+	require.Len(t, bare.Plugins, 1)
+	require.Equal(t, "engineering-tools", bare.Plugins[0].Name)
+}
+
 func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
@@ -1189,10 +1256,9 @@ func TestGenerateCopilotObservabilityPluginRegistersBootstrapCommands(t *testing
 	}
 }
 
-// An empty matcher is a Copilot config validation error that discards this
-// plugin's ENTIRE hook config — silently, save for one CLI log line — so the
-// house `"matcher": ""` pattern would disable every Gram hook. Absent means
-// match-all. Assert on the raw bytes: the failure mode leaves no other trace.
+// An empty matcher is fatal to the whole hook config — see
+// package-format.md#copilot-observability. Assert on the raw bytes: the failure
+// mode leaves no other trace.
 func TestGenerateCopilotObservabilityPluginEmitsNoMatcherKey(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -2640,4 +2706,47 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")
 	require.NotEqual(t, withSkill["plugin-a"], withNewVersion["plugin-a"], "a new resolved skill version must change the plugin's fingerprint")
 	require.Equal(t, base["plugin-b"], withSkill["plugin-b"], "plugins not carrying the skill must be untouched")
+}
+
+// TestCopilotObservabilitySlugMatchesDeviceAgentCandidate pins the cross-repo
+// naming contract. The plugin policy the device agent fetches is tool-agnostic:
+// it carries naming.ObservabilitySlug(org) and nothing Copilot-specific. The
+// agent's core/copilot resolver therefore probes "<policy slug>-copilot"
+// against this manifest, exactly as it probes "-cursor" and "-codex". If this
+// suffix ever drifts the agent resolves nothing, registers the marketplace,
+// enables no plugin and reports no error — a silent enforcement no-op.
+func TestCopilotObservabilitySlugMatchesDeviceAgentCandidate(t *testing.T) {
+	t.Parallel()
+	for _, orgName := range []string{"Acme Corp", "acme", "Ünïcode & Co."} {
+		cfg := GenerateConfig{OrgName: orgName}
+		require.Equal(t, naming.ObservabilitySlug(orgName)+"-copilot", CopilotObservabilitySlug(cfg),
+			"device agent probes <policy slug>-copilot for org %q", orgName)
+	}
+	// HooksOrgName pins the slug to the published subtree across a rename, the
+	// same way the other platforms' slugs do.
+	renamed := GenerateConfig{OrgName: "New Name", HooksOrgName: "Old Name"}
+	require.Equal(t, naming.ObservabilitySlug("Old Name")+"-copilot", CopilotObservabilitySlug(renamed))
+}
+
+// TestDogfoodPluginFilesIncludesCopilot guards the interaction the dogfood
+// renderer's comment calls out: the manifest sweep deletes every path under a
+// vendor subdirectory, and Copilot's plugin.json is the one that sits at the
+// package root. Sweeping it would leave `copilot --plugin-dir plugin-copilot`
+// with nothing to load.
+func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+
+	pluginJSON, ok := files["plugin-copilot/plugin.json"]
+	require.True(t, ok, "plugin-copilot/plugin.json swept away; copilot --plugin-dir cannot load the package")
+	var meta copilotPluginMeta
+	require.NoError(t, json.Unmarshal(pluginJSON, &meta))
+	require.Equal(t, "plugin-copilot", meta.Name)
+
+	var cfg copilotHooksConfig
+	require.NoError(t, json.Unmarshal(files["plugin-copilot/hooks/hooks.json"], &cfg))
+	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
+	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
+	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }

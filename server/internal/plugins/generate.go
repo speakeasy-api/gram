@@ -560,16 +560,6 @@ var CopilotObservabilityHookEvents = []string{
 	"notification",
 }
 
-// copilotHookTimeout is the per-event hook timeout in seconds. sessionStart
-// carries the cold-install download, so it gets the same headroom Cursor's
-// does; Copilot's own default is 30s, which is not enough.
-func copilotHookTimeout(event string) int {
-	if event == "sessionStart" {
-		return 330
-	}
-	return 60
-}
-
 // cursorPluginRoot is the subdirectory under which all Cursor plugins are
 // grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
 // so plugin sources can be referenced by bare name relative to this root.
@@ -731,6 +721,7 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	claudePlugins := make([]marketplaceEntry, 0)
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
+	copilotPlugins := make([]marketplaceEntry, 0)
 
 	if cfg.HooksAPIKey != "" {
 		claudeObservability := ClaudeObservabilitySlug(cfg)
@@ -758,6 +749,13 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Installation:   "INSTALLED_BY_DEFAULT",
 				Authentication: "ON_USE",
 			},
+		})
+		copilotObservability := CopilotObservabilitySlug(cfg)
+		copilotPlugins = append(copilotPlugins, marketplaceEntry{
+			Name:        copilotObservability,
+			DisplayName: cfg.OrgName + " Observability",
+			Source:      "./" + copilotObservability,
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 	}
 
@@ -794,6 +792,19 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Authentication: codexAuthPolicy(p, cfg),
 			},
 		})
+		// Copilot consumes feature plugins through the portable Agent Plugins 1.0
+		// package, which generateMCPFiles omits for plugins that fail the
+		// portability gate. Re-run the same classification here so the manifest
+		// never advertises a directory that was never written — Copilot resolves
+		// an entry's source eagerly and a dangling one breaks the whole catalog.
+		if classifyAgentPlugin(p).Compatible {
+			copilotPlugins = append(copilotPlugins, marketplaceEntry{
+				Name:        p.Slug,
+				DisplayName: p.Name,
+				Source:      "./" + path.Join(agentPluginRoot, p.Slug),
+				Description: p.Description,
+			})
+		}
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
@@ -830,6 +841,27 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 		return nil, fmt.Errorf("marshal codex marketplace.json: %w", err)
 	}
 	files[".agents/plugins/marketplace.json"] = codexManifest
+
+	// Copilot's manifest lives at the repo ROOT. Copilot probes, in order,
+	// marketplace.json, .plugin/marketplace.json, .github/plugin/marketplace.json
+	// and .claude-plugin/marketplace.json — so without a root file it would fall
+	// through to Claude's, whose entries point at the Claude packages. Those load
+	// (Copilot reads .claude-plugin/plugin.json too), but their hooks.json is
+	// Claude dialect, whose `"matcher": ""` silently kills telemetry on Copilot
+	// — see package-format.md#copilot-observability. The root file claims
+	// the highest-priority slot before that can happen. Entry names must equal
+	// the package's own plugin.json name — Copilot resolves
+	// installed-plugins/<marketplace>/<name>/ by it and skips a mismatch.
+	copilotManifest, err := marshalJSON(marketplaceManifest{
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: nil,
+		Plugins:  copilotPlugins,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal copilot marketplace.json: %w", err)
+	}
+	files["marketplace.json"] = copilotManifest
 
 	files["README.md"] = generateReadme(plugins, cfg)
 
@@ -1495,7 +1527,12 @@ func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir str
 
 	hookEvents := make(map[string][]copilotHookCommand, len(CopilotObservabilityHookEvents))
 	for _, event := range CopilotObservabilityHookEvents {
-		timeoutSeconds := copilotHookTimeout(event)
+		// sessionStart carries the cold-install download, so it gets the same
+		// headroom Cursor's does; Copilot's own default is 30s, not enough.
+		timeoutSeconds := 60
+		if event == "sessionStart" {
+			timeoutSeconds = 330
+		}
 		hookEvents[event] = []copilotHookCommand{{
 			Type:       "command",
 			Bash:       hooksBootstrapCommand(`$COPILOT_PLUGIN_ROOT`, "copilot", timeoutSeconds, false),
@@ -2634,13 +2671,11 @@ type copilotHooksConfig struct {
 
 // copilotHookCommand is one Copilot hook entry. Two deliberate omissions:
 //
-//   - No matcher field. An empty matcher is a validation error that discards
-//     this plugin's ENTIRE hook config, so copying the `"matcher": ""` pattern
-//     the other dialects use would silently disable every Gram hook. An absent
-//     matcher means match-all, which is the semantic those empty matchers were
-//     reaching for.
+//   - No matcher field. Absent means match-all; an empty one is fatal.
 //   - No failClosed field. Copilot fixes the posture per event: preToolUse is
 //     fail-closed on any non-timeout error, everything else fails open.
+//
+// see package-format.md#copilot-observability
 //
 // bash and powershell are native per-entry fields, so unlike Codex the Windows
 // command needs no base64 -EncodedCommand wrapping.

@@ -750,9 +750,8 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				require.Equal(t, true, entries[0]["failClosed"])
 			}
 			if tt.provider == "copilot" {
-				// An empty matcher is a validation error that discards this
-				// plugin's ENTIRE hook config, and the only symptom is a CLI
-				// log line — so assert the key is absent everywhere.
+				// An empty matcher is fatal to the whole hook config — see
+				// package-format.md#copilot-observability.
 				require.NotContains(t, string(b), `"matcher"`)
 				var entries []map[string]any
 				require.NoError(t, json.Unmarshal(doc.Hooks["preToolUse"], &entries))

@@ -1266,25 +1266,6 @@ function shadowMCPPrompt(args) {
     `If Gram blocks the tool call, reply exactly: GRAM_HOOKS_E2E_BLOCKED ${marker}`,
   ].join(" ");
 }
-// Copilot is the cheapest provider in the harness: --plugin-dir loads the
-// rendered package for the session, with no install/uninstall cycle and no
-// config file to overlay. --allow-all is required for non-interactive runs
-// (hooks still fire under it) and --no-ask-user keeps a headless turn from
-// stalling on a question. JSON output is JSONL, one event per line.
-function copilotArgs(prompt, pluginDir) {
-  return [
-    "-p",
-    prompt,
-    "--allow-all",
-    "--no-ask-user",
-    "--no-color",
-    "--disable-builtin-mcps",
-    "--output-format",
-    "json",
-    "--plugin-dir",
-    pluginDir,
-  ];
-}
 async function runProviderScenario(args) {
   const prompt = providerPrompt(
     args.runId,
@@ -1358,9 +1339,25 @@ async function runProviderScenario(args) {
     return res;
   }
   if (args.provider === "copilot") {
+    // Copilot is the cheapest provider in the harness: --plugin-dir loads the
+    // rendered package for the session, with no install/uninstall cycle and no
+    // config file to overlay. --allow-all is required for non-interactive runs
+    // (hooks still fire under it) and --no-ask-user keeps a headless turn from
+    // stalling on a question. JSON output is JSONL, one event per line.
     const res = await runProcess(
       "copilot",
-      copilotArgs(prompt, args.pluginDir),
+      [
+        "-p",
+        prompt,
+        "--allow-all",
+        "--no-ask-user",
+        "--no-color",
+        "--disable-builtin-mcps",
+        "--output-format",
+        "json",
+        "--plugin-dir",
+        args.pluginDir,
+      ],
       { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
     );
     res.provider = args.provider;

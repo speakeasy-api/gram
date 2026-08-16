@@ -14,6 +14,8 @@ When plugins are published, all platform configs land in a single repo. The root
 <project-slug>-plugins/
 ├── README.md
 │
+├── marketplace.json              # Copilot marketplace manifest (root — see below)
+│
 ├── .claude-plugin/
 │   └── marketplace.json          # Claude marketplace manifest
 │
@@ -385,6 +387,43 @@ The hook config ships at `hooks/hooks.json` **only**. Copilot parses both `<root
 **Surface support.** Hooks run in Copilot CLI only. VS Code and the Copilot app load the plugin — MCP servers and skills work there — but never fire its hooks. Copilot's cloud agent reads hooks from `.github/hooks/*.json` in the repository and is not targeted by this package.
 
 **Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Gram's entry suppresses Gram's telemetry for that call.
+
+### Copilot marketplace manifest
+
+Path: **`marketplace.json` at the repo root** — not a vendor subdirectory.
+
+Copilot probes four locations in order: `marketplace.json`, `.plugin/marketplace.json`, `.github/plugin/marketplace.json`, `.claude-plugin/marketplace.json`. The last one is Claude's, and Copilot happily loads Claude-shaped packages (it reads `.claude-plugin/plugin.json` too) — so **without a root manifest Copilot falls through to Claude's entries and installs the Claude packages**. Those packages' `hooks/hooks.json` is Claude dialect, whose `"matcher": ""` is a validation error that discards the plugin's entire hook config: skills and MCP would appear to work while telemetry was silently dead. The root file claims the highest-priority slot before that can happen.
+
+```json
+{
+  "name": "<marketplace-name>",
+  "owner": { "name": "Org Name", "email": "it@org.example" },
+  "plugins": [
+    {
+      "name": "<org-slug>-observability-copilot",
+      "displayName": "Org Name Observability",
+      "source": "./<org-slug>-observability-copilot",
+      "description": "Required: Speakeasy observability hooks for Org Name."
+    },
+    {
+      "name": "<plugin-slug>",
+      "displayName": "Plugin Name",
+      "source": "./agent-plugins/<plugin-slug>",
+      "description": "..."
+    }
+  ]
+}
+```
+
+Three constraints, each verified against Copilot CLI 1.0.80:
+
+| Constraint                                                     | Why                                                                                                                                                                                                                    |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `owner` is required                                            | A manifest without it fails `copilot plugin marketplace add` outright with `Invalid marketplace.json: owner: Required`.                                                                                                |
+| Entry `name` must equal the package's own `plugin.json` `name` | Copilot installs to `~/.copilot/installed-plugins/<marketplace>/<name>/` and resolves the plugin by that name. A mismatch installs cleanly and is then never loaded.                                                   |
+| Only Agent-Plugins-compatible plugins get an entry             | Feature plugins reach Copilot solely through `agent-plugins/<plugin-slug>/`, which the generator omits for plugins failing the portability gate. Listing one anyway would point at a directory that was never written. |
+
+Copilot will not install a plugin that is absent from the manifest, even if its files are already present under `installed-plugins/` and it is listed in `enabledPlugins` — the manifest is the authority, not the filesystem.
 
 ### MCP servers and skills on Copilot
 

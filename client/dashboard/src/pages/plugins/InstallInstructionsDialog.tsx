@@ -37,6 +37,53 @@ const CLAUDE_CODE_SETTINGS_DOCS_URL =
 
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
 
+/**
+ * Downloads the server-generated observability plugin ZIP. opencode and copilot
+ * differ only in the `platform` query value and the fallback filename.
+ */
+function useObservabilityPluginDownload(
+  platform: string,
+  fallbackName: string,
+) {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const download = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return { isDownloading, download };
+}
+
 type ContentProps = {
   repoOwner: string;
   repoName: string;
@@ -665,8 +712,8 @@ function CodexInstallContent({
  * hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("opencode", "observability-opencode.zip");
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
@@ -686,39 +733,6 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
     }
   }
 }`;
-
-  const handleDownloadPlugin = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -809,41 +823,8 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
  * show the same instructions without a second copy of them.
  */
 export function CopilotInstallContent(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const handleDownloadPlugin = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        "/rpc/plugins.downloadObservabilityPlugin?platform=copilot",
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? "observability-copilot.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("copilot", "observability-copilot.zip");
 
   return (
     <div className="min-w-0 space-y-6">
