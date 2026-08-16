@@ -51,9 +51,6 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, _ *gen.GetPaygBilli
 	if err != nil {
 		return nil, err
 	}
-	if tumTokens > maxJSONSafeInteger || tumTokens < -maxJSONSafeInteger {
-		return nil, oops.E(oops.CodeUnexpected, nil, "tokens under management exceed the safe API range").LogError(ctx, s.logger)
-	}
 
 	completedBefore := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	costs, err := s.repo.GetPaygBillingSummaryCosts(ctx, repo.GetPaygBillingSummaryCostsParams{
@@ -113,6 +110,10 @@ func (s *Service) getTokensUnderManagementForPeriod(ctx context.Context, organiz
 
 	var tokens int64
 	for _, day := range days {
+		if (day.Tokens > 0 && tokens > maxJSONSafeInteger-day.Tokens) ||
+			(day.Tokens < 0 && tokens < -maxJSONSafeInteger-day.Tokens) {
+			return 0, oops.E(oops.CodeUnexpected, nil, "tokens under management exceed the safe API range").LogError(ctx, s.logger)
+		}
 		tokens += day.Tokens
 	}
 	return tokens, nil

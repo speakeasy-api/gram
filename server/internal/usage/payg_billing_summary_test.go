@@ -274,6 +274,21 @@ func TestGetPaygBillingSummaryRejectsUnsafeJSONTokenCount(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
+func TestGetPaygBillingSummaryRejectsUnsafeJSONTokenSum(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.start, maxJSONSafeInteger)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.start.AddDate(0, 0, 1), 1)
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
 func TestGetPaygBillingSummaryRejectsNonPaygOrganization(t *testing.T) {
 	t.Parallel()
 
