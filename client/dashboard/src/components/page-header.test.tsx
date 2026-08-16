@@ -1,4 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render as rtlRender, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ui/Sidebar", () => ({
@@ -26,15 +28,19 @@ vi.mock("@/contexts/Auth.tsx", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => false }),
 }));
-vi.mock("react-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
-  useLocation: () => ({ pathname: "/" }),
-  useParams: () => ({}),
-}));
-
 import { PageHeader } from "./page-header";
 
 afterEach(cleanup);
+
+// The route the header sits on is what decides whether the cap banner shows,
+// so the real router resolves it — a stubbed `useLocation` would let a suffix
+// check pass for a path the router would never match.
+function render(
+  ui: ReactNode,
+  { at = "/placeholder-organization/projects" }: { at?: string } = {},
+) {
+  return rtlRender(<MemoryRouter initialEntries={[at]}>{ui}</MemoryRouter>);
+}
 
 describe("PageHeader.Actions", () => {
   it("renders action children in the toolbar", () => {
@@ -57,6 +63,35 @@ describe("PageHeader", () => {
       <PageHeader>
         <span>crumbs</span>
       </PageHeader>,
+    );
+
+    expect(screen.getByTestId("cap-paused-banner")).toBeTruthy();
+  });
+
+  it("leaves billing-page banner ordering to the billing page", () => {
+    render(
+      <PageHeader>
+        <span>crumbs</span>
+      </PageHeader>,
+      { at: "/placeholder-organization/billing" },
+    );
+
+    expect(screen.queryByTestId("cap-paused-banner")).toBeNull();
+  });
+
+  // Only the org billing route hands its banners to the page. A project path
+  // that happens to end in the same segment is a different page, and dropping
+  // the banner there would hide a paused organization from the work it was
+  // interrupting.
+  it.each([
+    "/placeholder-organization/projects/billing",
+    "/placeholder-organization/projects/placeholder-project/billing",
+  ])("keeps the banner on %s", (at) => {
+    render(
+      <PageHeader>
+        <span>crumbs</span>
+      </PageHeader>,
+      { at },
     );
 
     expect(screen.getByTestId("cap-paused-banner")).toBeTruthy();

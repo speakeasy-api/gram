@@ -234,6 +234,18 @@ describe("PaygCapPausedBanner", () => {
     );
   });
 
+  it("tells a member who can raise the cap instead of linking the editor", () => {
+    mocks.hasScope.mockImplementation((scope: Scope) => scope === "org:read");
+
+    render(<PaygCapPausedBanner />);
+
+    expect(capBanner()).not.toBeNull();
+    expect(screen.queryByTestId("cap-cta")).toBeNull();
+    expect(
+      screen.getByText(/ask an organization admin to raise the spend cap/i),
+    ).toBeTruthy();
+  });
+
   it("clears once the cap is raised above what's been spent", () => {
     const { rerender } = render(<PaygCapPausedBanner />);
     expect(capBanner()).not.toBeNull();

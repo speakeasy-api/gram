@@ -6,7 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { ProductTier } from "@/hooks/useProductTier";
@@ -182,13 +182,13 @@ function mutationState({
  * The section reaches for the query client to invalidate after a save, and the
  * form links to the in-app sales gate through the router.
  */
-function render(ui: ReactNode) {
+function render(ui: ReactNode, { at = "/acme/billing" }: { at?: string } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const wrap = (node: ReactNode) => (
     <QueryClientProvider client={client}>
-      <MemoryRouter>{node}</MemoryRouter>
+      <MemoryRouter initialEntries={[at]}>{node}</MemoryRouter>
     </QueryClientProvider>
   );
   const result = rtlRender(wrap(ui));
@@ -209,6 +209,52 @@ const saveButton = () =>
 const heading = () =>
   screen.queryByRole("heading", { name: /chat spend cap/i });
 
+// jsdom has no layout, so `scrollIntoView` isn't implemented on the prototype.
+// The stub records both the options and which element was scrolled, since
+// landing on the right element is the whole point.
+const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
+const scrolledElements: HTMLElement[] = [];
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
+
+function scrolledElementIds(): string[] {
+  return scrolledElements.map((element) => element.id);
+}
+
+/**
+ * Stands in for the banner's link: a real router navigation, so repeats of the
+ * same URL get the fresh location the effect has to notice.
+ */
+function AnchorNavigator({ to }: { to: string }): JSX.Element {
+  const navigate = useNavigate();
+
+  return (
+    <button
+      onClick={() => {
+        void navigate(to);
+      }}
+    >
+      Go to the cap
+    </button>
+  );
+}
+
+/**
+ * Waits out the animation frame the scroll is deferred by, so "nothing was
+ * scrolled" is a settled answer rather than a race the assertion won.
+ */
+function settleFrames(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
 /** The cap the save handler sent, unwrapped from the request envelope. */
 function sentCap() {
   const variables = mocks.mutate.mock.calls.at(-1)?.[0] as {
@@ -226,9 +272,30 @@ describe("ChatSpendCapSection", () => {
     loadedCap(250);
     billingSubscription();
     mutationState();
+
+    scrollIntoView.mockReset();
+    scrolledElements.length = 0;
+    HTMLElement.prototype.scrollIntoView = function (
+      this: HTMLElement,
+      options?: boolean | ScrollIntoViewOptions,
+    ): void {
+      scrolledElements.push(this);
+      scrollIntoView(options as ScrollIntoViewOptions | undefined);
+    };
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    if (originalScrollIntoView) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "scrollIntoView",
+        originalScrollIntoView,
+      );
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
 
   // The banner that reports a paused organization links straight at this
   // anchor, so it has to survive edits to the section that carries it.
@@ -236,6 +303,79 @@ describe("ChatSpendCapSection", () => {
     const { container } = render(<ChatSpendCapSection />);
 
     expect(container.querySelector(`#${CHAT_SPEND_CAP_ANCHOR}`)).not.toBeNull();
+  });
+
+  // The dashboard's router doesn't scroll to fragments, so arriving on the
+  // anchor without this leaves the cap below the fold — which is the whole
+  // point of the link that sent them.
+  describe("arriving on the anchor", () => {
+    const anchored = `/acme/billing#${CHAT_SPEND_CAP_ANCHOR}`;
+
+    it("scrolls the section into view", async () => {
+      render(<ChatSpendCapSection />, { at: anchored });
+
+      await vi.waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          behavior: "smooth",
+          block: "start",
+        }),
+      );
+      expect(scrolledElementIds()).toEqual([CHAT_SPEND_CAP_ANCHOR]);
+    });
+
+    it("leaves the page alone with no hash", async () => {
+      render(<ChatSpendCapSection />);
+
+      await settleFrames();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it("leaves the page alone for another section's hash", async () => {
+      render(<ChatSpendCapSection />, { at: "/acme/billing#billing-email" });
+
+      await settleFrames();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    // Following the link, scrolling away, then following it again is a fresh
+    // navigation to a URL that hasn't changed. Reading the hash alone would
+    // report nothing happened and leave the second request unanswered.
+    it("scrolls again when the same anchor is followed twice", async () => {
+      render(
+        <>
+          <AnchorNavigator to={anchored} />
+          <ChatSpendCapSection />
+        </>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /go to the cap/i }));
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole("button", { name: /go to the cap/i }));
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+
+      expect(scrolledElementIds()).toEqual([
+        CHAT_SPEND_CAP_ANCHOR,
+        CHAT_SPEND_CAP_ANCHOR,
+      ]);
+    });
+
+    // The anchor arrives with the navigation but the section behind it appears
+    // only once the tier resolves, so a scroll fired on arrival would have
+    // nothing to land on.
+    it("waits for a section that mounts after the navigation", async () => {
+      mocks.productTier.mockReturnValue("base");
+      const { rerender } = render(<ChatSpendCapSection />, { at: anchored });
+
+      await settleFrames();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      mocks.productTier.mockReturnValue("payg");
+      rerender(<ChatSpendCapSection />);
+
+      await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrolledElementIds()).toEqual([CHAT_SPEND_CAP_ANCHOR]);
+    });
   });
 
   it("seeds the field from the cap the usage meters read", () => {

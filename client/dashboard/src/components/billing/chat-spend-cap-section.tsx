@@ -27,8 +27,8 @@ import {
 } from "@gram/client/react-query/getCreditUsage.js";
 import { useSetSpendCapMutation } from "@gram/client/react-query/setSpendCap.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
+import { type FormEvent, useEffect, useState } from "react";
+import { Link, useLocation } from "react-router";
 
 /** The bounds the API accepts for a monthly chat spend cap, in whole USD. */
 const MIN_SPEND_CAP_USD = 1;
@@ -96,6 +96,47 @@ function stripeTrialNote(convertsOn: Date | null | undefined): string {
 }
 
 /**
+ * Scrolls the section into view when the URL is pointing at it.
+ *
+ * The dashboard's router doesn't scroll to fragments, so an anchor link into
+ * this page lands at the top of the billing page with the cap still below the
+ * fold — which is the entire point of the banner's link.
+ *
+ * `mounted` is what makes this land on a section that isn't there yet. The
+ * anchor arrives with the navigation, but the section behind it only appears
+ * once the tier and the trial clock have resolved, so the scroll has to wait
+ * for the render that puts the element in the document rather than fire once on
+ * arrival and miss.
+ *
+ * The location key is what makes it land twice. Following the banner's link
+ * again after scrolling away is a fresh navigation to a URL that hasn't
+ * changed, so the hash alone would report nothing happened and leave the
+ * request unanswered. The key is the router's own identity for a navigation, so
+ * it moves for exactly the repeats that need serving and stays put through the
+ * re-renders that resolve the tier.
+ */
+function useScrollToSpendCapHash(mounted: boolean): void {
+  const { hash, key } = useLocation();
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (hash.replace("#", "") !== CHAT_SPEND_CAP_ANCHOR) return;
+
+    // A frame's grace so the section's own body — a skeleton on the first
+    // paint — has been laid out and the scroll lands on its settled position.
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(CHAT_SPEND_CAP_ANCHOR)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+    // `key` is a trigger rather than an input: it identifies the navigation
+    // being answered, so a repeat of the same one re-runs the scroll.
+  }, [hash, key, mounted]);
+}
+
+/**
  * The monthly ceiling on what an organization can spend on chat and the other
  * AI-powered dashboard experiences.
  *
@@ -113,6 +154,7 @@ export function ChatSpendCapSection(): JSX.Element | null {
     productTier,
     getTrialLifecycleFromDates(trial, now),
   );
+  useScrollToSpendCapHash(mode !== "hidden");
 
   if (mode === "hidden") return null;
 

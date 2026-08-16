@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { ProductTier } from "@/hooks/useProductTier";
@@ -125,6 +126,13 @@ vi.mock("@/components/billing/tum-admin-section", () => ({
   TumAdminSection: () => <div>tum admin</div>,
 }));
 
+// Banner behavior is covered in billing-banners.test.tsx. This page test owns
+// their placement and destructive-before-warning order.
+vi.mock("@/components/billing/billing-banners", () => ({
+  PaygPaymentFailedBanner: () => <div data-testid="payment-banner" />,
+  PaygCapPausedBanner: () => <div data-testid="cap-banner" />,
+}));
+
 // Scope gating is exercised by the CTA's own RBAC check; the page frame here
 // just has to render its children.
 vi.mock("@/components/require-scope", () => ({
@@ -177,14 +185,20 @@ const polarUsageSection = () =>
 const portalButton = () =>
   screen.queryByRole("button", { name: /manage payment method and invoices/i });
 
-/** The billing email section invalidates its query through the client. */
+/**
+ * The billing email section invalidates its query through the client, and the
+ * spend cap section reads the route it was linked to for the anchor it scrolls
+ * to.
+ */
 function renderBilling() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <Billing />
+      <MemoryRouter initialEntries={["/placeholder-organization/billing"]}>
+        <Billing />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -218,10 +232,20 @@ describe("Billing", () => {
     });
   });
 
+  it("places payment failure before the spend cap warning", () => {
+    renderBilling();
+
+    const payment = screen.getByTestId("payment-banner");
+    const cap = screen.getByTestId("cap-banner");
+    expect(
+      payment.compareDocumentPosition(cap) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   afterEach(cleanup);
 
   it("offers pay as you go to a trialing admin on the self-serve view", () => {
-    render(<Billing />);
+    renderBilling();
 
     expect(cta()).not.toBeNull();
   });
@@ -231,7 +255,7 @@ describe("Billing", () => {
   it("offers pay as you go on the enterprise TUM view", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
-    render(<Billing />);
+    renderBilling();
 
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(cta()).not.toBeNull();
@@ -241,7 +265,7 @@ describe("Billing", () => {
     mocks.productTier.mockReturnValue("enterprise");
     mocks.hasScope.mockReturnValue(false);
 
-    render(<Billing />);
+    renderBilling();
 
     expect(screen.getByText("tum usage")).toBeTruthy();
     expect(cta()).toBeNull();
@@ -399,7 +423,7 @@ describe("Billing", () => {
       },
     });
 
-    render(<Billing />);
+    renderBilling();
 
     expect(cta()).toBeNull();
   });
