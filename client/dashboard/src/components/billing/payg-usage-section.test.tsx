@@ -107,8 +107,11 @@ const DEFAULT_CREDIT_USAGE: CreditUsage = {
   monthlyCredits: 100,
 };
 
-function creditUsageQuery(data: CreditUsage = DEFAULT_CREDIT_USAGE) {
-  mocks.creditUsage.mockReturnValue({ data });
+function creditUsageQuery(
+  data: CreditUsage | undefined = DEFAULT_CREDIT_USAGE,
+  isError = false,
+) {
+  mocks.creditUsage.mockReturnValue({ data, isError });
 }
 
 /** The options the estimate passed to its generated query hook. */
@@ -354,6 +357,16 @@ describe("PaygUsageSection", () => {
       render(<PaygUsageSection />);
 
       expect(meter()).toBeNull();
+    });
+
+    it("renders no meter when credit usage fails", () => {
+      creditUsageQuery(undefined, true);
+
+      render(<PaygUsageSection />);
+
+      expect(meter()).toBeNull();
+      expect(screen.queryByText(/Chat spend this calendar month/)).toBeNull();
+      expect(screen.queryByTestId("skeleton")).toBeNull();
     });
   });
 });

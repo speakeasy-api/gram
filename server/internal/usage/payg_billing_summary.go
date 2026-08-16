@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
+const maxJSONSafeInteger = int64(1<<53 - 1)
+
 func (s *Service) GetPaygBillingSummary(ctx context.Context, _ *gen.GetPaygBillingSummaryPayload) (*gen.PaygBillingSummary, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -48,6 +50,9 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, _ *gen.GetPaygBilli
 	tumTokens, err := s.getTokensUnderManagementForPeriod(ctx, authCtx.ActiveOrganizationID, periodStart, periodEnd)
 	if err != nil {
 		return nil, err
+	}
+	if tumTokens > maxJSONSafeInteger || tumTokens < -maxJSONSafeInteger {
+		return nil, oops.E(oops.CodeUnexpected, nil, "tokens under management exceed the safe API range").LogError(ctx, s.logger)
 	}
 
 	completedBefore := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)

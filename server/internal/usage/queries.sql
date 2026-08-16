@@ -22,9 +22,9 @@ WITH inputs AS (
   FROM openrouter_spend_daily
   WHERE organization_id = sqlc.arg(organization_id)::text
     AND key_type = 'chat'
-    AND day >= sqlc.arg(period_start)::timestamptz::date
-    AND day < sqlc.arg(period_end)::timestamptz::date
-    AND day < sqlc.arg(completed_before)::timestamptz::date
+    AND day >= (sqlc.arg(period_start)::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < (sqlc.arg(period_end)::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < (sqlc.arg(completed_before)::timestamptz AT TIME ZONE 'UTC')::date
 )
 SELECT
     inputs.tum_unit_price_usd::text AS tum_unit_price_usd

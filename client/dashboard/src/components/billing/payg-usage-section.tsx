@@ -193,9 +193,11 @@ function estimatedTotalDescription(recordedThrough: string | null): string {
  * be read as the cycle's chat spend, which is the number sitting beside it.
  */
 function ChatSpendCapMeter(): JSX.Element | null {
-  const { data } = useGetCreditUsage(undefined, undefined, {
+  const { data, isError } = useGetCreditUsage(undefined, undefined, {
     throwOnError: false,
   });
+
+  if (isError) return null;
 
   if (data === undefined) {
     return (

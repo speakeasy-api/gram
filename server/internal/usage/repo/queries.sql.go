@@ -792,9 +792,9 @@ WITH inputs AS (
   FROM openrouter_spend_daily
   WHERE organization_id = $3::text
     AND key_type = 'chat'
-    AND day >= $4::timestamptz::date
-    AND day < $5::timestamptz::date
-    AND day < $6::timestamptz::date
+    AND day >= ($4::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < ($5::timestamptz AT TIME ZONE 'UTC')::date
+    AND day < ($6::timestamptz AT TIME ZONE 'UTC')::date
 )
 SELECT
     inputs.tum_unit_price_usd::text AS tum_unit_price_usd

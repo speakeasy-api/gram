@@ -129,22 +129,18 @@ func TestGetPaygBillingSummaryReturnsExactCycleAlignedEstimate(t *testing.T) {
 	upsertPaygSummarySpend(t, ti.db, ti.orgID, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), "88.000000")
 
 	ctx := ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID))
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, ti.start.Format(time.RFC3339), result.PeriodStart)
-		assert.Equal(c, ti.end.Format(time.RFC3339), result.PeriodEnd)
-		assert.Equal(c, int64(1_000_000), result.TumTokens)
-		assert.Equal(c, "0.00000035", result.TumUnitPriceUsd)
-		assert.Equal(c, "0.35000000", result.TumCostUsd)
-		assert.Equal(c, "3.545679", result.ChatSpendUsd)
-		if assert.NotNil(c, result.RecordedThrough) {
-			assert.Equal(c, ti.start.AddDate(0, 0, 2).Format(time.DateOnly), *result.RecordedThrough)
-		}
-		assert.Equal(c, "3.89567900", result.EstimatedTotalUsd)
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
+	require.NoError(t, err)
+	assert.Equal(t, ti.start.Format(time.RFC3339), result.PeriodStart)
+	assert.Equal(t, ti.end.Format(time.RFC3339), result.PeriodEnd)
+	assert.Equal(t, int64(1_000_000), result.TumTokens)
+	assert.Equal(t, "0.00000035", result.TumUnitPriceUsd)
+	assert.Equal(t, "0.35000000", result.TumCostUsd)
+	assert.Equal(t, "3.545679", result.ChatSpendUsd)
+	if assert.NotNil(t, result.RecordedThrough) {
+		assert.Equal(t, ti.start.AddDate(0, 0, 2).Format(time.DateOnly), *result.RecordedThrough)
+	}
+	assert.Equal(t, "3.89567900", result.EstimatedTotalUsd)
 }
 
 func TestGetPaygBillingSummaryRejectsTrialingSubscription(t *testing.T) {
@@ -234,13 +230,23 @@ func TestGetPaygBillingSummaryUsesExactPeriodBoundaries(t *testing.T) {
 	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.end, 40)
 
 	ctx := ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID))
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Equal(c, int64(50), result.TumTokens)
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
+	require.NoError(t, err)
+	assert.Equal(t, int64(50), result.TumTokens)
+}
+
+func TestGetPaygBillingSummaryRejectsUnsafeJSONTokenCount(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.start, maxJSONSafeInteger+1)
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
 func TestGetPaygBillingSummaryRejectsNonPaygOrganization(t *testing.T) {
