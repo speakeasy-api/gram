@@ -119,14 +119,12 @@ func TestGetPaygBillingSummaryReturnsExactCycleAlignedEstimate(t *testing.T) {
 	t.Parallel()
 
 	ti := newPaygBillingSummaryTestInstance(t)
-	now := time.Now().UTC()
-	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), now.Add(-time.Hour), 1_000_000)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.start.Add(time.Hour), 1_000_000)
 
 	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start.AddDate(0, 0, -1), "99.000000")
 	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start, "1.200000")
 	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start.AddDate(0, 0, 1), "2.345678")
 	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start.AddDate(0, 0, 2), "0.000001")
-	upsertPaygSummarySpend(t, ti.db, ti.orgID, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), "88.000000")
 
 	ctx := ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID))
 	result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
@@ -141,6 +139,33 @@ func TestGetPaygBillingSummaryReturnsExactCycleAlignedEstimate(t *testing.T) {
 		assert.Equal(t, ti.start.AddDate(0, 0, 2).Format(time.DateOnly), *result.RecordedThrough)
 	}
 	assert.Equal(t, "3.89567900", result.EstimatedTotalUsd)
+}
+
+func TestGetPaygBillingSummaryCostsUsesCompletedDaysWithinPeriod(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	periodStart := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	completedBefore := time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC)
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, periodStart.AddDate(0, 0, -1), "99.000000")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, periodStart, "1.200000")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, completedBefore.AddDate(0, 0, -1), "2.345678")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, completedBefore, "88.000000")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, periodEnd, "77.000000")
+
+	costs, err := repo.New(ti.db).GetPaygBillingSummaryCosts(t.Context(), repo.GetPaygBillingSummaryCostsParams{
+		TumTokens:       0,
+		TumUnitPriceUsd: TUMUnitPriceUSD,
+		OrganizationID:  ti.orgID,
+		PeriodStart:     finiteTimestamptz(periodStart),
+		PeriodEnd:       finiteTimestamptz(periodEnd),
+		CompletedBefore: finiteTimestamptz(completedBefore),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "3.545678", costs.ChatSpendUsd)
+	assert.True(t, costs.RecordedThrough.Valid)
+	assert.Equal(t, completedBefore.AddDate(0, 0, -1), costs.RecordedThrough.Time.UTC())
 }
 
 func TestGetPaygBillingSummaryRejectsTrialingSubscription(t *testing.T) {
@@ -177,9 +202,9 @@ func TestGetPaygBillingSummaryRejectsPreAnchorActiveSubscription(t *testing.T) {
 
 	ti := newPaygBillingSummaryTestInstance(t)
 	now := time.Now().UTC()
-	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
-	ti.stripe.subscriptionState.CurrentPeriodStart = tomorrow
-	ti.stripe.subscriptionState.CurrentPeriodEnd = tomorrow.AddDate(0, 1, 0)
+	futureAnchor := time.Date(now.Year(), now.Month(), now.Day()+2, 0, 0, 0, 0, time.UTC)
+	ti.stripe.subscriptionState.CurrentPeriodStart = futureAnchor
+	ti.stripe.subscriptionState.CurrentPeriodEnd = futureAnchor.AddDate(0, 1, 0)
 
 	_, err := ti.service.GetPaygBillingSummary(
 		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),

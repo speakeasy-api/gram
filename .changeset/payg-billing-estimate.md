@@ -1,6 +1,6 @@
 ---
 "dashboard": patch
-"server": patch
+"server": minor
 ---
 
 Show pay-as-you-go organizations their current billing cycle on Billing: tokens
