@@ -26,6 +26,10 @@ func (o *Development) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyT
 	return 0, nil
 }
 
+func (o *Development) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	return 0, nil
+}
+
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
 }

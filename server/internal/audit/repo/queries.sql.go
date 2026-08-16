@@ -12,27 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getLatestOpenRouterSpendCapAuditSeq = `-- name: GetLatestOpenRouterSpendCapAuditSeq :one
-SELECT COALESCE(MAX(seq), 0)::bigint AS latest_seq
-FROM audit_logs
-WHERE organization_id = $1
-  AND project_id IS NULL
-  AND action = 'openrouter-key:set_spend_cap'
-  AND subject_id = $2
-`
-
-type GetLatestOpenRouterSpendCapAuditSeqParams struct {
-	OrganizationID string
-	SubjectID      string
-}
-
-func (q *Queries) GetLatestOpenRouterSpendCapAuditSeq(ctx context.Context, arg GetLatestOpenRouterSpendCapAuditSeqParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getLatestOpenRouterSpendCapAuditSeq, arg.OrganizationID, arg.SubjectID)
-	var latest_seq int64
-	err := row.Scan(&latest_seq)
-	return latest_seq, err
-}
-
 const hasOpenRouterSpendCapAuditOperation = `-- name: HasOpenRouterSpendCapAuditOperation :one
 SELECT EXISTS (
   SELECT 1

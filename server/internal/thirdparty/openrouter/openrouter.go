@@ -520,6 +520,16 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 }
 
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.refreshAPIKeyLimit(ctx, orgID, keyType, limit, false)
+}
+
+// ReinstateAPIKeyLimit refreshes a key while explicitly allowing a disabled
+// key to come back when its caller needs the policy default resolved from nil.
+func (o *OpenRouter) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.refreshAPIKeyLimit(ctx, orgID, keyType, limit, true)
+}
+
+func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int, reinstate bool) (int, error) {
 	keyType = keyType.OrDefault()
 	if err := keyType.Validate(); err != nil {
 		return 0, fmt.Errorf("refresh openrouter key limit: %w", err)
@@ -535,7 +545,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if key.MonthlyCredits == 0 && !key.Disabled {
 		return 0, errors.New("cannot make an update to monthly credits of 0")
 	}
-	if limit == nil && keyType == KeyTypeChat && key.Disabled {
+	if limit == nil && keyType == KeyTypeChat && key.Disabled && !reinstate {
 		// Generic refreshes must never undo a billing lockdown. An explicit
 		// activation or re-subscription passes a non-nil cap and is the only
 		// path allowed to reinstate the customer-facing chat key.
@@ -546,7 +556,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	if limit == nil && keyType == KeyTypeChat && org.GramAccountType == string(billing.TierPayg) {
+	if limit == nil && keyType == KeyTypeChat && org.GramAccountType == string(billing.TierPayg) && !reinstate {
 		// OpenRouter is the authority for a PAYG customer's chosen chat cap.
 		// Generic tier refreshes preserve both the mirrored value and the key's
 		// disabled state without touching upstream or rewriting the row. Only an
@@ -585,8 +595,9 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
-		// Not an unconditional clear: that would drop a lockdown committed
-		// after the read above.
+		// This matches the upstream PATCH above. A lockdown committed after the
+		// read is preserved because key.Disabled was false at the read and this
+		// value therefore remains false.
 		Reinstate: key.Disabled,
 	})
 	if err != nil {

@@ -31,7 +31,8 @@ WHERE organization_id = @organization_id
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,
-    disabled = disabled AND NOT @reinstate::boolean
+    disabled = disabled AND NOT @reinstate::boolean,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
@@ -80,7 +81,8 @@ WHERE organization_id = @organization_id
 -- OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
 -- key-provisioning write path and also mutates key/key_hash.
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits
+SET monthly_credits = @monthly_credits,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;

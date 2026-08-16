@@ -64,9 +64,10 @@ type Service struct {
 	audit *audit.Logger
 }
 
-// TrialKeyReviver is the one method of openrouter.Provisioner a re-arm needs.
+// TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
 type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
 // ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
@@ -76,6 +77,10 @@ var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrKeyRevivalUnavailable
+}
+
+func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrKeyRevivalUnavailable
 }
 
@@ -929,7 +934,7 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, orga
 			uncapped = append(uncapped, keyType)
 		}
 		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+		_, err = s.openRouter.ReinstateAPIKeyLimit(ctx, organizationID, keyType, limit)
 		switch {
 		case errors.Is(err, ErrKeyRevivalUnavailable):
 			// CodeInvalid and not CodeGatewayError: the admin app trusts a

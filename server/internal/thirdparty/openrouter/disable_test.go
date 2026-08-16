@@ -382,3 +382,35 @@ func TestRefreshAPIKeyLimit_NilPreservesDisabledChatKeyAfterTierTransition(t *te
 	require.True(t, row.Disabled)
 	require.Equal(t, int64(raisedCap), row.MonthlyCredits)
 }
+
+func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		MonthlyCredits: 0,
+	}))
+	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+
+	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
+	require.NoError(t, err)
+	require.Positive(t, refreshed)
+	patches := upstream.recorded()
+	require.Len(t, patches, 2, "trial rearm must explicitly PATCH the disabled legacy key")
+	require.Contains(t, patches[1], `"disabled":false`)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.False(t, row.Disabled)
+	require.EqualValues(t, refreshed, row.MonthlyCredits)
+}

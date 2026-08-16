@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,7 +52,8 @@ type SetOpenRouterSpendCapArgs struct {
 
 type setOpenRouterSpendCapHeartbeat struct {
 	BeforeMonthlyCredits int64
-	LatestAuditSeq       int64
+	ObservedKeyUpdatedAt time.Time
+	AppliedKeyUpdatedAt  time.Time
 	Applied              bool
 }
 
@@ -107,15 +109,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 	if key.Disabled {
 		return errors.New("cannot set spend cap while the chat key is disabled")
 	}
-	auditQueries := auditrepo.New(s.db)
 	before := key.MonthlyCredits
-	latestAuditSeq, err := auditQueries.GetLatestOpenRouterSpendCapAuditSeq(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditSeqParams{
-		OrganizationID: args.OrganizationID,
-		SubjectID:      subject.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("read latest spend-cap audit sequence: %w", err)
-	}
 	applied := false
 	if activity.HasHeartbeatDetails(ctx) {
 		var heartbeat setOpenRouterSpendCapHeartbeat
@@ -123,13 +117,28 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 			return fmt.Errorf("restore spend-cap operation heartbeat: %w", err)
 		}
 		before = heartbeat.BeforeMonthlyCredits
-		if latestAuditSeq > heartbeat.LatestAuditSeq {
-			// Another operation completed after this attempt began. Retrying this
-			// older request must not overwrite the newer cap or audit trail.
-			s.logger.WarnContext(ctx, "skipping superseded spend-cap retry")
-			return nil
+		if heartbeat.Applied {
+			if heartbeat.AppliedKeyUpdatedAt.IsZero() || !key.UpdatedAt.Time.Equal(heartbeat.AppliedKeyUpdatedAt) {
+				// Every cap application advances the mirrored key generation. A
+				// different generation means another operation won after this attempt
+				// applied the key, so this retry must not overwrite it.
+				s.logger.WarnContext(ctx, "skipping superseded spend-cap retry")
+				return nil
+			}
+			applied = true
+		} else if heartbeat.ObservedKeyUpdatedAt.IsZero() {
+			return errors.New("restore spend-cap operation heartbeat: missing observed key generation")
+		} else if !key.UpdatedAt.Time.Equal(heartbeat.ObservedKeyUpdatedAt) {
+			if key.MonthlyCredits != int64(args.Limit) {
+				// The mirror advanced to another cap while this attempt was down.
+				s.logger.WarnContext(ctx, "skipping superseded spend-cap retry")
+				return nil
+			}
+			// The upstream PATCH and mirror write completed, but the applied
+			// heartbeat was lost. The advanced generation distinguishes this from
+			// an initial mirror that already happened to equal the requested cap.
+			applied = true
 		}
-		applied = heartbeat.Applied || key.MonthlyCredits == int64(args.Limit)
 	} else {
 		// The heartbeat is durable across activity retries. Recording the value
 		// before the upstream PATCH preserves the true before snapshot if the
@@ -138,7 +147,8 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 		// remains eligible and concurrent requests stay completion-ordered.
 		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
 			BeforeMonthlyCredits: before,
-			LatestAuditSeq:       latestAuditSeq,
+			ObservedKeyUpdatedAt: key.UpdatedAt.Time,
+			AppliedKeyUpdatedAt:  time.Time{},
 			Applied:              false,
 		})
 	}
@@ -149,9 +159,17 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 		if err != nil {
 			return fmt.Errorf("refresh OpenRouter chat spend cap: %w", err)
 		}
+		appliedKey, err := openrouterrepo.New(s.db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: args.OrganizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		})
+		if err != nil {
+			return fmt.Errorf("read chat key after setting spend cap: %w", err)
+		}
 		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
 			BeforeMonthlyCredits: before,
-			LatestAuditSeq:       latestAuditSeq,
+			ObservedKeyUpdatedAt: key.UpdatedAt.Time,
+			AppliedKeyUpdatedAt:  appliedKey.UpdatedAt.Time,
 			Applied:              true,
 		})
 	}
@@ -162,7 +180,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	auditQueries = auditrepo.New(dbtx)
+	auditQueries := auditrepo.New(dbtx)
 	recorded, err = auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
 		SubjectID:      subject.ID,

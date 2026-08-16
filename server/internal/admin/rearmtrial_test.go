@@ -56,6 +56,14 @@ type rearmProvisioner struct {
 var _ TrialKeyReviver = (*rearmProvisioner)(nil)
 
 func (p *rearmProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.refreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (p *rearmProvisioner) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return p.refreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
 	accountType, demoted := "", false
 	if p.conn != nil {
 		accountType, demoted = readRearmState(ctx, p.conn, orgID)

@@ -201,7 +201,8 @@ func (q *Queries) SetOpenRouterKeyEncrypted(ctx context.Context, arg SetOpenRout
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
-    disabled = disabled AND NOT $3::boolean
+    disabled = disabled AND NOT $3::boolean,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = $4
   AND key_type = $5
   AND deleted IS FALSE
@@ -243,7 +244,8 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 
 const updateOpenRouterKeyMonthlyCredits = `-- name: UpdateOpenRouterKeyMonthlyCredits :exec
 UPDATE openrouter_api_keys
-SET monthly_credits = $1
+SET monthly_credits = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = $2
   AND key_type = $3
   AND deleted IS FALSE
