@@ -661,32 +661,80 @@ describe("ChatSpendCapSection", () => {
       expect(mocks.query).not.toHaveBeenCalled();
     });
 
-    // A refetch is in flight precisely when the state is about to change —
-    // after a conversion, a cancellation, or a window refocus. The cached
-    // answer is the one being replaced, so it can't hold the form open.
-    it("closes the form while a background refetch is pending", () => {
+    // A refetch is in flight precisely when the state might be about to change
+    // — after a conversion or a cancellation — but also for reasons that have
+    // nothing to do with this admin, like a window refocus. Taking the form
+    // away would discard an amount they typed and haven't saved, so the lock
+    // stops the writing without touching what is on screen.
+    it("locks the form rather than closing it during a background refetch", () => {
       subscriptionState({ data: { status: "active" }, isFetching: true });
 
       render(<ChatSpendCapSection />);
 
-      expect(field()).toBeNull();
-      expect(saveButton()).toBeNull();
-      expect(mocks.mutation).not.toHaveBeenCalled();
-      expect(mocks.query).not.toHaveBeenCalled();
+      expect(field()!.disabled).toBe(true);
+      expect(saveButton()!.hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("status").textContent).toMatch(
+        /checking your subscription/i,
+      );
     });
 
-    it("reopens the form once the refetch settles", () => {
-      subscriptionState({ data: { status: "active" }, isFetching: true });
-
+    it("keeps an unsaved draft through a refetch and blocks saving it", () => {
       const { rerender } = render(<ChatSpendCapSection />);
-      expect(field()).toBeNull();
+
+      fireEvent.change(field()!, { target: { value: "900" } });
+
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+      rerender(<ChatSpendCapSection />);
+
+      // The draft is still there, still showing the admin's amount...
+      expect(field()!.value).toBe("900");
+      expect(field()!.disabled).toBe(true);
+
+      // ...and nothing can reach the endpoint until the state is confirmed.
+      const save = saveButton()!;
+      expect(save.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(save);
+      fireEvent.submit(save.closest("form")!);
+      expect(mocks.mutate).not.toHaveBeenCalled();
+    });
+
+    it("saves the same draft once the refetch settles", () => {
+      const { rerender } = render(<ChatSpendCapSection />);
+
+      fireEvent.change(field()!, { target: { value: "900" } });
+      subscriptionState({ data: { status: "active" }, isFetching: true });
+      rerender(<ChatSpendCapSection />);
 
       billingSubscription();
       rerender(<ChatSpendCapSection />);
 
+      expect(field()!.value).toBe("900");
       expect(field()!.disabled).toBe(false);
-      expect(saveButton()).not.toBeNull();
+      expect(screen.queryByRole("status")).toBeNull();
+
+      fireEvent.click(saveButton()!);
+
+      expect(mocks.mutate).toHaveBeenCalledTimes(1);
+      expect(sentCap()).toBe(900);
     });
+
+    // A refetch that settles somewhere the cap no longer applies takes the form
+    // with it, draft and all — there is nothing left to save it against.
+    it.each(["trialing", "canceled"])(
+      "closes the form when the refetch settles to %s",
+      (status) => {
+        const { rerender } = render(<ChatSpendCapSection />);
+
+        fireEvent.change(field()!, { target: { value: "900" } });
+
+        subscriptionState({ data: { status } });
+        rerender(<ChatSpendCapSection />);
+
+        expect(saveButton()).toBeNull();
+        expect(field()!.disabled).toBe(true);
+        expect(field()!.value).toBe("");
+      },
+    );
 
     // The pay-as-you-go tier predates Stripe, so an organization can hold it
     // without a Stripe subscription behind it. There is no cap to set and

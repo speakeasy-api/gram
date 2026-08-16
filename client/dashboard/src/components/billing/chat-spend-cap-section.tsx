@@ -136,14 +136,21 @@ export function ChatSpendCapSection(): JSX.Element | null {
 
 /**
  * The live Stripe subscription decides whether a PAYG organization is being
- * billed yet, and it fails closed: only a read that succeeded just now can
- * open the editable cap.
+ * billed yet, and it fails closed: nothing reaches the cap endpoint unless the
+ * most recent read confirmed Stripe is billing.
  *
  * A failing read keeps the form away even when the cache still holds a
  * subscription. The cached copy is exactly what goes stale across the moment
  * that matters — a trial converting, or a subscription ending — so treating it
  * as good enough would invite an admin to set a cap against a bill whose state
  * this dashboard can no longer confirm.
+ *
+ * A refetch that is merely in flight is different. Unmounting the form over one
+ * would throw away an amount the admin has typed but not saved, and refetches
+ * arrive for reasons that have nothing to do with them — a window refocus is
+ * enough. So a cached billing subscription keeps the form mounted while the
+ * read is in flight and locks it instead: the draft survives, and the endpoint
+ * stays out of reach until the fresh state confirms the bill is still there.
  */
 function PaygSpendCapGate(): JSX.Element {
   const { data, error, isError, isFetching, refetch } = useStripeSubscription();
@@ -175,12 +182,9 @@ function PaygSpendCapGate(): JSX.Element {
     );
   }
 
-  // An in-flight read is an unknown state, cache or no cache: the answer that
-  // is on its way is exactly the one that decides whether a cap can be set, and
-  // the refetches that matter here are the ones that follow a conversion or a
-  // cancellation. So the form closes until the read settles rather than staying
-  // open on an answer that is already being replaced.
-  if (data === undefined || isFetching) {
+  // Nothing has ever loaded, so there is no state to lock and no draft to
+  // protect — just the placeholder.
+  if (data === undefined) {
     return (
       <div className="max-w-md space-y-4">
         <Skeleton className="h-9 w-full" />
@@ -201,7 +205,9 @@ function PaygSpendCapGate(): JSX.Element {
     return <LockedSpendCap note={NOT_BILLING_NOTE} placeholder="" />;
   }
 
-  return <PaygSpendCap />;
+  // Same element in the same position whether or not a read is in flight, so
+  // React keeps the form — and the amount typed into it — across the refetch.
+  return <PaygSpendCap locked={isFetching} />;
 }
 
 // Nothing here is writable, so the section never mounts the mutation for an
@@ -234,7 +240,7 @@ function LockedSpendCap({
 // `getCreditUsage` is what the usage meters read the cap from, so it is the one
 // value the section shows — a second source could disagree with the meter
 // sitting directly above it.
-function PaygSpendCap(): JSX.Element {
+function PaygSpendCap({ locked }: { locked: boolean }): JSX.Element {
   // The shared query client throws everything but a 401/403 to the app error
   // boundary, which would take the whole billing page down over one section
   // and skip the branches below. This section handles its own failures, so it
@@ -257,7 +263,7 @@ function PaygSpendCap(): JSX.Element {
           level="section"
           fallback={<SpendCapReadOnly cap={data.monthlyCredits} />}
         >
-          <SpendCapForm initial={data.monthlyCredits} />
+          <SpendCapForm initial={data.monthlyCredits} locked={locked} />
         </RequireScope>
         {isError && (
           <Text muted small role="alert">
@@ -330,7 +336,19 @@ function spendCapError(value: string): string | null {
 // a cap changed elsewhere (another admin, the save's own invalidation) has to
 // reach an untouched field, but a background refetch landing mid-edit must not
 // overwrite what this admin typed.
-function SpendCapForm({ initial }: { initial: number }): JSX.Element {
+function SpendCapForm({
+  initial,
+  locked,
+}: {
+  initial: number;
+  /**
+   * Whether the subscription this cap applies to is being re-read right now.
+   *
+   * The field and its draft stay exactly where they are; only the writing
+   * stops, until the fresh state confirms there is still a bill to cap.
+   */
+  locked: boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const [cap, setCap] = useState(() => String(initial));
   // The value the field was last seeded from. Comparing against it — rather
@@ -370,6 +388,9 @@ function SpendCapForm({ initial }: { initial: number }): JSX.Element {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (validationError !== null) return;
+    // The disabled control is the visible half of the lock; this is the half
+    // that holds if a submission reaches the form some other way.
+    if (locked) return;
 
     mutation.mutate({
       request: { spendCap: { monthlyCredits: Number(cap.trim()) } },
@@ -390,6 +411,7 @@ function SpendCapForm({ initial }: { initial: number }): JSX.Element {
             step={1}
             value={cap}
             onChange={handleChange}
+            disabled={locked}
             error={validationError !== null}
           />
           {validationError === null ? (
@@ -415,9 +437,15 @@ function SpendCapForm({ initial }: { initial: number }): JSX.Element {
           </Text>
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button type="submit" disabled={mutation.isPending || locked}>
             {mutation.isPending ? "SAVING..." : "SAVE SPEND CAP"}
           </Button>
+          {/* A field that has gone quiet with no explanation reads as broken. */}
+          {locked && (
+            <Text muted small role="status">
+              Checking your subscription...
+            </Text>
+          )}
           {mutation.isSuccess && (
             <Text muted small role="status">
               Saved.
