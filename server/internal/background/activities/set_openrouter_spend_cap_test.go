@@ -264,7 +264,7 @@ func TestSetOpenRouterSpendCapRetryRejectsMissingAppliedGeneration(t *testing.T)
 	)
 	createSpendCapActivityKey(t, db, organizationID, 100)
 
-	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger())
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), newSpendCapActivityCache(t))
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(setter.Do)
