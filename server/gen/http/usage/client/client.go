@@ -61,6 +61,10 @@ type Client struct {
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
 
+	// GetPaygBillingSummary Doer is the HTTP client used to make requests to the
+	// getPaygBillingSummary endpoint.
+	GetPaygBillingSummaryDoer goahttp.Doer
+
 	// CreateStripePortalSession Doer is the HTTP client used to make requests to
 	// the createStripePortalSession endpoint.
 	CreateStripePortalSessionDoer goahttp.Doer
@@ -108,6 +112,7 @@ func NewClient(
 		CreateCheckoutDoer:            doer,
 		CreateStripeCheckoutDoer:      doer,
 		GetStripeSubscriptionDoer:     doer,
+		GetPaygBillingSummaryDoer:     doer,
 		CreateStripePortalSessionDoer: doer,
 		CancelStripeSubscriptionDoer:  doer,
 		ResumeStripeSubscriptionDoer:  doer,
@@ -374,6 +379,30 @@ func (c *Client) GetStripeSubscription() goa.Endpoint {
 		resp, err := c.GetStripeSubscriptionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetPaygBillingSummary returns an endpoint that makes HTTP requests to the
+// usage service getPaygBillingSummary server.
+func (c *Client) GetPaygBillingSummary() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPaygBillingSummaryRequest(c.encoder)
+		decodeResponse = DecodeGetPaygBillingSummaryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPaygBillingSummaryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPaygBillingSummaryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getPaygBillingSummary", err)
 		}
 		return decodeResponse(resp)
 	}

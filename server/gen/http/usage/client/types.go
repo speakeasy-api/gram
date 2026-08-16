@@ -168,6 +168,27 @@ type GetStripeSubscriptionResponseBody struct {
 	PaymentFailed *bool `form:"payment_failed,omitempty" json:"payment_failed,omitempty" xml:"payment_failed,omitempty"`
 }
 
+// GetPaygBillingSummaryResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body.
+type GetPaygBillingSummaryResponseBody struct {
+	// Start of the live paid Stripe service period
+	PeriodStart *string `form:"period_start,omitempty" json:"period_start,omitempty" xml:"period_start,omitempty"`
+	// End of the live paid Stripe service period (exclusive)
+	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
+	// Tokens under management in the live paid service period
+	TumTokens *int64 `form:"tum_tokens,omitempty" json:"tum_tokens,omitempty" xml:"tum_tokens,omitempty"`
+	// Exact flat USD price per token under management
+	TumUnitPriceUsd *string `form:"tum_unit_price_usd,omitempty" json:"tum_unit_price_usd,omitempty" xml:"tum_unit_price_usd,omitempty"`
+	// Exact estimated tokens-under-management cost in USD
+	TumCostUsd *string `form:"tum_cost_usd,omitempty" json:"tum_cost_usd,omitempty" xml:"tum_cost_usd,omitempty"`
+	// Exact durable OpenRouter chat spend in USD through recorded_through
+	ChatSpendUsd *string `form:"chat_spend_usd,omitempty" json:"chat_spend_usd,omitempty" xml:"chat_spend_usd,omitempty"`
+	// Most recent completed durable UTC spend day included in the estimate
+	RecordedThrough *string `form:"recorded_through,omitempty" json:"recorded_through,omitempty" xml:"recorded_through,omitempty"`
+	// Exact estimated current-cycle total in USD through recorded_through
+	EstimatedTotalUsd *string `form:"estimated_total_usd,omitempty" json:"estimated_total_usd,omitempty" xml:"estimated_total_usd,omitempty"`
+}
+
 // CancelStripeSubscriptionResponseBody is the type of the "usage" service
 // "cancelStripeSubscription" endpoint HTTP response body.
 type CancelStripeSubscriptionResponseBody struct {
@@ -2226,6 +2247,194 @@ type GetStripeSubscriptionUnexpectedResponseBody struct {
 // service "getStripeSubscription" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetStripeSubscriptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetPaygBillingSummaryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryForbiddenResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "forbidden" error.
+type GetPaygBillingSummaryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryBadRequestResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "bad_request" error.
+type GetPaygBillingSummaryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryNotFoundResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "not_found"
+// error.
+type GetPaygBillingSummaryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryConflictResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "conflict" error.
+type GetPaygBillingSummaryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryUnsupportedMediaResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetPaygBillingSummaryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryInvalidResponseBody is the type of the "usage" service
+// "getPaygBillingSummary" endpoint HTTP response body for the "invalid" error.
+type GetPaygBillingSummaryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryInvariantViolationResponseBody is the type of the
+// "usage" service "getPaygBillingSummary" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetPaygBillingSummaryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryUnexpectedResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "unexpected" error.
+type GetPaygBillingSummaryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPaygBillingSummaryGatewayErrorResponseBody is the type of the "usage"
+// service "getPaygBillingSummary" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetPaygBillingSummaryGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4844,6 +5053,173 @@ func NewGetStripeSubscriptionGatewayError(body *GetStripeSubscriptionGatewayErro
 	return v
 }
 
+// NewGetPaygBillingSummaryPaygBillingSummaryOK builds a "usage" service
+// "getPaygBillingSummary" endpoint result from a HTTP "OK" response.
+func NewGetPaygBillingSummaryPaygBillingSummaryOK(body *GetPaygBillingSummaryResponseBody) *usage.PaygBillingSummary {
+	v := &usage.PaygBillingSummary{
+		PeriodStart:       *body.PeriodStart,
+		PeriodEnd:         *body.PeriodEnd,
+		TumTokens:         *body.TumTokens,
+		TumUnitPriceUsd:   *body.TumUnitPriceUsd,
+		TumCostUsd:        *body.TumCostUsd,
+		ChatSpendUsd:      *body.ChatSpendUsd,
+		RecordedThrough:   body.RecordedThrough,
+		EstimatedTotalUsd: *body.EstimatedTotalUsd,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryUnauthorized builds a usage service
+// getPaygBillingSummary endpoint unauthorized error.
+func NewGetPaygBillingSummaryUnauthorized(body *GetPaygBillingSummaryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryForbidden builds a usage service
+// getPaygBillingSummary endpoint forbidden error.
+func NewGetPaygBillingSummaryForbidden(body *GetPaygBillingSummaryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryBadRequest builds a usage service
+// getPaygBillingSummary endpoint bad_request error.
+func NewGetPaygBillingSummaryBadRequest(body *GetPaygBillingSummaryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryNotFound builds a usage service
+// getPaygBillingSummary endpoint not_found error.
+func NewGetPaygBillingSummaryNotFound(body *GetPaygBillingSummaryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryConflict builds a usage service
+// getPaygBillingSummary endpoint conflict error.
+func NewGetPaygBillingSummaryConflict(body *GetPaygBillingSummaryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryUnsupportedMedia builds a usage service
+// getPaygBillingSummary endpoint unsupported_media error.
+func NewGetPaygBillingSummaryUnsupportedMedia(body *GetPaygBillingSummaryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryInvalid builds a usage service getPaygBillingSummary
+// endpoint invalid error.
+func NewGetPaygBillingSummaryInvalid(body *GetPaygBillingSummaryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryInvariantViolation builds a usage service
+// getPaygBillingSummary endpoint invariant_violation error.
+func NewGetPaygBillingSummaryInvariantViolation(body *GetPaygBillingSummaryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryUnexpected builds a usage service
+// getPaygBillingSummary endpoint unexpected error.
+func NewGetPaygBillingSummaryUnexpected(body *GetPaygBillingSummaryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPaygBillingSummaryGatewayError builds a usage service
+// getPaygBillingSummary endpoint gateway_error error.
+func NewGetPaygBillingSummaryGatewayError(body *GetPaygBillingSummaryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateStripePortalSessionUnauthorized builds a usage service
 // createStripePortalSession endpoint unauthorized error.
 func NewCreateStripePortalSessionUnauthorized(body *CreateStripePortalSessionUnauthorizedResponseBody) *goa.ServiceError {
@@ -5693,6 +6069,42 @@ func ValidateGetStripeSubscriptionResponseBody(body *GetStripeSubscriptionRespon
 	}
 	if body.CanceledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.canceled_at", *body.CanceledAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryResponseBody runs the validations defined on
+// GetPaygBillingSummaryResponseBody
+func ValidateGetPaygBillingSummaryResponseBody(body *GetPaygBillingSummaryResponseBody) (err error) {
+	if body.PeriodStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_start", "body"))
+	}
+	if body.PeriodEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_end", "body"))
+	}
+	if body.TumTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tum_tokens", "body"))
+	}
+	if body.TumUnitPriceUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tum_unit_price_usd", "body"))
+	}
+	if body.TumCostUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tum_cost_usd", "body"))
+	}
+	if body.ChatSpendUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chat_spend_usd", "body"))
+	}
+	if body.EstimatedTotalUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("estimated_total_usd", "body"))
+	}
+	if body.PeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
+	}
+	if body.PeriodEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	if body.RecordedThrough != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.recorded_through", *body.RecordedThrough, goa.FormatDate))
 	}
 	return
 }
@@ -8408,6 +8820,247 @@ func ValidateGetStripeSubscriptionUnexpectedResponseBody(body *GetStripeSubscrip
 // ValidateGetStripeSubscriptionGatewayErrorResponseBody runs the validations
 // defined on getStripeSubscription_gateway_error_response_body
 func ValidateGetStripeSubscriptionGatewayErrorResponseBody(body *GetStripeSubscriptionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryUnauthorizedResponseBody runs the validations
+// defined on getPaygBillingSummary_unauthorized_response_body
+func ValidateGetPaygBillingSummaryUnauthorizedResponseBody(body *GetPaygBillingSummaryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryForbiddenResponseBody runs the validations
+// defined on getPaygBillingSummary_forbidden_response_body
+func ValidateGetPaygBillingSummaryForbiddenResponseBody(body *GetPaygBillingSummaryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryBadRequestResponseBody runs the validations
+// defined on getPaygBillingSummary_bad_request_response_body
+func ValidateGetPaygBillingSummaryBadRequestResponseBody(body *GetPaygBillingSummaryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryNotFoundResponseBody runs the validations
+// defined on getPaygBillingSummary_not_found_response_body
+func ValidateGetPaygBillingSummaryNotFoundResponseBody(body *GetPaygBillingSummaryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryConflictResponseBody runs the validations
+// defined on getPaygBillingSummary_conflict_response_body
+func ValidateGetPaygBillingSummaryConflictResponseBody(body *GetPaygBillingSummaryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryUnsupportedMediaResponseBody runs the
+// validations defined on getPaygBillingSummary_unsupported_media_response_body
+func ValidateGetPaygBillingSummaryUnsupportedMediaResponseBody(body *GetPaygBillingSummaryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryInvalidResponseBody runs the validations
+// defined on getPaygBillingSummary_invalid_response_body
+func ValidateGetPaygBillingSummaryInvalidResponseBody(body *GetPaygBillingSummaryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryInvariantViolationResponseBody runs the
+// validations defined on
+// getPaygBillingSummary_invariant_violation_response_body
+func ValidateGetPaygBillingSummaryInvariantViolationResponseBody(body *GetPaygBillingSummaryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryUnexpectedResponseBody runs the validations
+// defined on getPaygBillingSummary_unexpected_response_body
+func ValidateGetPaygBillingSummaryUnexpectedResponseBody(body *GetPaygBillingSummaryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPaygBillingSummaryGatewayErrorResponseBody runs the validations
+// defined on getPaygBillingSummary_gateway_error_response_body
+func ValidateGetPaygBillingSummaryGatewayErrorResponseBody(body *GetPaygBillingSummaryGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

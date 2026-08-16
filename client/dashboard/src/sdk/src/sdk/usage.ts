@@ -9,6 +9,7 @@ import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js
 import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortalSession.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
+import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
@@ -19,6 +20,7 @@ import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
+import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { SpendCap } from "../models/components/spendcap.js";
 import { StripeSubscription } from "../models/components/stripesubscription.js";
@@ -52,6 +54,10 @@ import {
   GetBillingEmailRequest,
   GetBillingEmailSecurity,
 } from "../models/operations/getbillingemail.js";
+import {
+  GetPaygBillingSummaryRequest,
+  GetPaygBillingSummarySecurity,
+} from "../models/operations/getpaygbillingsummary.js";
 import {
   GetPeriodUsageRequest,
   GetPeriodUsageSecurity,
@@ -209,6 +215,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<BillingEmail> {
     return unwrapAsync(usageGetBillingEmail(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getPaygBillingSummary usage
+   *
+   * @remarks
+   * Get exact billable usage and estimated cost for the organization's live paid Stripe service period
+   */
+  async getPaygBillingSummary(
+    request?: GetPaygBillingSummaryRequest | undefined,
+    security?: GetPaygBillingSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PaygBillingSummary> {
+    return unwrapAsync(usageGetPaygBillingSummary(
       this,
       request,
       security,

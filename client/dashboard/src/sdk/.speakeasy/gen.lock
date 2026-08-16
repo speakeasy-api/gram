@@ -547,6 +547,7 @@ trackedFiles:
   src/funcs/usageCreateStripePortalSession.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
   src/funcs/usageGetBillingEmail.ts: {}
+  src/funcs/usageGetPaygBillingSummary.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetStripeSubscription.ts: {}
   src/funcs/usageGetTokensUnderManagement.ts: {}
@@ -1043,6 +1044,7 @@ trackedFiles:
   src/models/components/otelsum.ts: {}
   src/models/components/package.ts: {}
   src/models/components/packageversion.ts: {}
+  src/models/components/paygbillingsummary.ts: {}
   src/models/components/periodusage.ts: {}
   src/models/components/platformmcponboardingsetuphandoff.ts: {}
   src/models/components/platformmcponboardingstate.ts: {}
@@ -1598,6 +1600,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getotelforwardingconfig.ts: {}
+  src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
   src/models/operations/getplugin.ts: {}
@@ -2170,6 +2173,8 @@ trackedFiles:
   src/react-query/getMcpServerActivity.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
+  src/react-query/getPaygBillingSummary.core.ts: {}
+  src/react-query/getPaygBillingSummary.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
   src/react-query/getPeriodUsage.ts: {}
   src/react-query/getProjectMetricsSummary.core.ts: {}
@@ -5118,6 +5123,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getPaygBillingSummary:
+    speakeasy-default-get-payg-billing-summary:
+      responses:
+        "200":
+          application/json: {"chat_spend_usd": "<value>", "estimated_total_usd": "<value>", "period_end": "2025-04-26T08:37:28.191Z", "period_start": "2024-11-22T04:01:45.387Z", "tum_cost_usd": "<value>", "tum_tokens": 822138, "tum_unit_price_usd": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getPeriodUsage:
     speakeasy-default-get-period-usage:
       responses:

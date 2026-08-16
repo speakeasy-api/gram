@@ -52027,6 +52027,88 @@ paths:
       x-speakeasy-name-override: getBillingEmail
       x-speakeasy-react-hook:
         name: getBillingEmail
+  /rpc/usage.getPaygBillingSummary:
+    get:
+      description: Get exact billable usage and estimated cost for the organization's live paid Stripe service period
+      operationId: getPaygBillingSummary
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaygBillingSummary'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getPaygBillingSummary usage
+      tags:
+        - usage
+      x-speakeasy-name-override: getPaygBillingSummary
+      x-speakeasy-react-hook:
+        name: getPaygBillingSummary
   /rpc/usage.getPeriodUsage:
     get:
       description: Get the usage for an organization for a given period
@@ -67281,6 +67363,45 @@ components:
         - visibility
         - semver
         - created_at
+    PaygBillingSummary:
+      type: object
+      properties:
+        chat_spend_usd:
+          type: string
+          description: Exact durable OpenRouter chat spend in USD through recorded_through
+        estimated_total_usd:
+          type: string
+          description: Exact estimated current-cycle total in USD through recorded_through
+        period_end:
+          type: string
+          description: End of the live paid Stripe service period (exclusive)
+          format: date-time
+        period_start:
+          type: string
+          description: Start of the live paid Stripe service period
+          format: date-time
+        recorded_through:
+          type: string
+          description: Most recent completed durable UTC spend day included in the estimate
+          format: date
+        tum_cost_usd:
+          type: string
+          description: Exact estimated tokens-under-management cost in USD
+        tum_tokens:
+          type: integer
+          description: Tokens under management in the live paid service period
+          format: int64
+        tum_unit_price_usd:
+          type: string
+          description: Exact flat USD price per token under management
+      required:
+        - period_start
+        - period_end
+        - tum_tokens
+        - tum_unit_price_usd
+        - tum_cost_usd
+        - chat_spend_usd
+        - estimated_total_usd
     PeriodUsage:
       type: object
       properties:

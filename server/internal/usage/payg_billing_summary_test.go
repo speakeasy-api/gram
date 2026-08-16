@@ -1,0 +1,261 @@
+package usage
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/usage/repo"
+)
+
+type paygBillingSummaryTestInstance struct {
+	service    *Service
+	db         *pgxpool.Pool
+	clickhouse driver.Conn
+	stripe     *checkoutStripeClient
+	orgID      string
+	projectID  uuid.UUID
+	start      time.Time
+	end        time.Time
+}
+
+func newPaygBillingSummaryTestInstance(t *testing.T) *paygBillingSummaryTestInstance {
+	t.Helper()
+
+	orgID := "org-summary-" + uuid.NewString()[:8]
+	service, db, clickhouse, projectID := newTUMTestService(t, orgID)
+	require.NoError(t, orgrepo.New(db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		GramAccountType: "payg",
+		ID:              orgID,
+	}))
+	require.NoError(t, repo.New(db).CreateStripeSubscriptionBillingMetadataFixture(t.Context(), repo.CreateStripeSubscriptionBillingMetadataFixtureParams{
+		OrganizationID:       orgID,
+		StripeCustomerID:     pgtype.Text{String: "cus_summary", Valid: true},
+		StripeSubscriptionID: pgtype.Text{String: "sub_summary", Valid: true},
+	}))
+
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	start := today.AddDate(0, 0, -3)
+	end := today.AddDate(0, 1, 0)
+	stripe := newCheckoutStripeClient()
+	stripe.subscriptionState = &stripeclient.SubscriptionState{
+		ID:                           "sub_summary",
+		CustomerID:                   "cus_summary",
+		Status:                       "active",
+		CurrentPeriodStart:           start,
+		CurrentPeriodEnd:             end,
+		TrialStart:                   time.Time{},
+		TrialEnd:                     time.Time{},
+		CancelAtPeriodEnd:            false,
+		CancelAt:                     time.Time{},
+		CanceledAt:                   time.Time{},
+		LatestInvoiceID:              "in_summary",
+		LatestInvoiceStatus:          "paid",
+		LatestInvoiceAmountRemaining: 0,
+		PaymentFailed:                false,
+	}
+	service.stripeClient = stripe
+
+	return &paygBillingSummaryTestInstance{
+		service:    service,
+		db:         db,
+		clickhouse: clickhouse,
+		stripe:     stripe,
+		orgID:      orgID,
+		projectID:  projectID,
+		start:      start,
+		end:        end,
+	}
+}
+
+func (ti *paygBillingSummaryTestInstance) context(t *testing.T, grants ...authz.Grant) context.Context {
+	t.Helper()
+	sessionID := "session-summary"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: ti.orgID,
+		AccountType:          "enterprise",
+		UserID:               "user-summary",
+		SessionID:            &sessionID,
+	})
+	return authztest.WithExactGrants(t, ctx, grants...)
+}
+
+func upsertPaygSummarySpend(t *testing.T, db *pgxpool.Pool, orgID string, day time.Time, amount string) {
+	t.Helper()
+	var spend pgtype.Numeric
+	require.NoError(t, spend.Scan(amount))
+	require.NoError(t, repo.New(db).UpsertOpenRouterDailySpendFixture(t.Context(), repo.UpsertOpenRouterDailySpendFixtureParams{
+		OrganizationID: orgID,
+		Day:            pgtype.Date{Time: day, InfinityModifier: pgtype.Finite, Valid: true},
+		SpendUsd:       spend,
+	}))
+}
+
+func TestGetPaygBillingSummaryRequiresOrganizationRead(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	_, err := ti.service.GetPaygBillingSummary(ti.context(t), &gen.GetPaygBillingSummaryPayload{})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestGetPaygBillingSummaryReturnsExactCycleAlignedEstimate(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	now := time.Now().UTC()
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), now.Add(-time.Hour), 1_000_000)
+
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start.AddDate(0, 0, -1), "99.000000")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start, "1.200000")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start.AddDate(0, 0, 1), "2.345678")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, ti.start.AddDate(0, 0, 2), "0.000001")
+	upsertPaygSummarySpend(t, ti.db, ti.orgID, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), "88.000000")
+
+	ctx := ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, ti.start.Format(time.RFC3339), result.PeriodStart)
+		assert.Equal(c, ti.end.Format(time.RFC3339), result.PeriodEnd)
+		assert.Equal(c, int64(1_000_000), result.TumTokens)
+		assert.Equal(c, "0.00000035", result.TumUnitPriceUsd)
+		assert.Equal(c, "0.35000000", result.TumCostUsd)
+		assert.Equal(c, "3.545679", result.ChatSpendUsd)
+		if assert.NotNil(c, result.RecordedThrough) {
+			assert.Equal(c, ti.start.AddDate(0, 0, 2).Format(time.DateOnly), *result.RecordedThrough)
+		}
+		assert.Equal(c, "3.89567900", result.EstimatedTotalUsd)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestGetPaygBillingSummaryRejectsTrialingSubscription(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	ti.stripe.subscriptionState.Status = "trialing"
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestGetPaygBillingSummaryAcceptsPastDueSubscription(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	ti.stripe.subscriptionState.Status = "past_due"
+
+	result, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), result.TumTokens)
+	assert.Equal(t, "0.00000000", result.EstimatedTotalUsd)
+}
+
+func TestGetPaygBillingSummaryRejectsPreAnchorActiveSubscription(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	now := time.Now().UTC()
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	ti.stripe.subscriptionState.CurrentPeriodStart = tomorrow
+	ti.stripe.subscriptionState.CurrentPeriodEnd = tomorrow.AddDate(0, 1, 0)
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestGetPaygBillingSummaryRejectsExpiredPeriod(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	ti.stripe.subscriptionState.CurrentPeriodStart = today.AddDate(0, -2, 0)
+	ti.stripe.subscriptionState.CurrentPeriodEnd = today.AddDate(0, -1, 0)
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestGetPaygBillingSummaryRejectsNonMidnightPeriod(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	ti.stripe.subscriptionState.CurrentPeriodStart = ti.start.Add(time.Hour)
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestGetPaygBillingSummaryUsesExactPeriodBoundaries(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.start.Add(-time.Nanosecond), 10)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.start, 20)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.end.Add(-time.Nanosecond), 30)
+	insertObservedClaudeAggregateRow(t, ti.clickhouse, ti.projectID.String(), ti.end, 40)
+
+	ctx := ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(50), result.TumTokens)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestGetPaygBillingSummaryRejectsNonPaygOrganization(t *testing.T) {
+	t.Parallel()
+
+	ti := newPaygBillingSummaryTestInstance(t)
+	require.NoError(t, orgrepo.New(ti.db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		GramAccountType: "free",
+		ID:              ti.orgID,
+	}))
+
+	_, err := ti.service.GetPaygBillingSummary(
+		ti.context(t, authz.NewGrant(authz.ScopeOrgRead, ti.orgID)),
+		&gen.GetPaygBillingSummaryPayload{},
+	)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}

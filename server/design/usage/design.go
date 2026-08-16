@@ -140,6 +140,27 @@ var StripeSubscription = Type("StripeSubscription", func() {
 	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
 })
 
+// PaygBillingSummary reports billable usage and exact estimated cost for the
+// organization's live Stripe service period.
+var PaygBillingSummary = Type("PaygBillingSummary", func() {
+	Attribute("period_start", String, "Start of the live paid Stripe service period", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("period_end", String, "End of the live paid Stripe service period (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("tum_tokens", Int64, "Tokens under management in the live paid service period")
+	Attribute("tum_unit_price_usd", String, "Exact flat USD price per token under management")
+	Attribute("tum_cost_usd", String, "Exact estimated tokens-under-management cost in USD")
+	Attribute("chat_spend_usd", String, "Exact durable OpenRouter chat spend in USD through recorded_through")
+	Attribute("recorded_through", String, "Most recent completed durable UTC spend day included in the estimate", func() {
+		Format(FormatDate)
+	})
+	Attribute("estimated_total_usd", String, "Exact estimated current-cycle total in USD through recorded_through")
+
+	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "chat_spend_usd", "estimated_total_usd")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -383,6 +404,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getStripeSubscription")
 		Meta("openapi:extension:x-speakeasy-name-override", "getStripeSubscription")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getStripeSubscription"}`)
+	})
+
+	Method("getPaygBillingSummary", func() {
+		Description("Get exact billable usage and estimated cost for the organization's live paid Stripe service period")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(PaygBillingSummary)
+
+		HTTP(func() {
+			GET("/rpc/usage.getPaygBillingSummary")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPaygBillingSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPaygBillingSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPaygBillingSummary"}`)
 	})
 
 	Method("createStripePortalSession", func() {

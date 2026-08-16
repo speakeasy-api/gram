@@ -26,6 +26,7 @@ import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
 import { ChatSpendCapSection } from "@/components/billing/chat-spend-cap-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
+import { PaygUsageSection } from "@/components/billing/payg-usage-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
@@ -69,7 +70,10 @@ function BillingInner() {
   return (
     <>
       <StartPaygCheckoutCTA />
-      <UsageSection />
+      {/* Pay as you go bills through Stripe, so it gets the cycle usage and
+          invoice estimate. Every other self-serve tier still meters against
+          Polar period usage, which says nothing about a Stripe invoice. */}
+      {productTier === "payg" ? <PaygUsageSection /> : <UsageSection />}
       {/* Renders only for pay as you go — the section owns that rule. */}
       <PaygPlanSection />
       {/* Renders only for pay as you go — the section owns that rule. */}

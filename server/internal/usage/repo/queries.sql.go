@@ -780,6 +780,69 @@ func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID str
 	return i, err
 }
 
+const getPaygBillingSummaryCosts = `-- name: GetPaygBillingSummaryCosts :one
+WITH inputs AS (
+  SELECT
+      $1::bigint AS tum_tokens
+    , $2::text::numeric(20, 8) AS tum_unit_price_usd
+), completed_spend AS (
+  SELECT
+      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS chat_spend_usd
+    , MAX(day)::date AS recorded_through
+  FROM openrouter_spend_daily
+  WHERE organization_id = $3::text
+    AND key_type = 'chat'
+    AND day >= $4::timestamptz::date
+    AND day < $5::timestamptz::date
+    AND day < $6::timestamptz::date
+)
+SELECT
+    inputs.tum_unit_price_usd::text AS tum_unit_price_usd
+  , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd)::numeric(30, 8)::text AS tum_cost_usd
+  , completed_spend.chat_spend_usd::text AS chat_spend_usd
+  , completed_spend.recorded_through
+  , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd + completed_spend.chat_spend_usd)::numeric(30, 8)::text AS estimated_total_usd
+FROM inputs
+CROSS JOIN completed_spend
+`
+
+type GetPaygBillingSummaryCostsParams struct {
+	TumTokens       int64
+	TumUnitPriceUsd string
+	OrganizationID  string
+	PeriodStart     pgtype.Timestamptz
+	PeriodEnd       pgtype.Timestamptz
+	CompletedBefore pgtype.Timestamptz
+}
+
+type GetPaygBillingSummaryCostsRow struct {
+	TumUnitPriceUsd   string
+	TumCostUsd        string
+	ChatSpendUsd      string
+	RecordedThrough   pgtype.Date
+	EstimatedTotalUsd string
+}
+
+func (q *Queries) GetPaygBillingSummaryCosts(ctx context.Context, arg GetPaygBillingSummaryCostsParams) (GetPaygBillingSummaryCostsRow, error) {
+	row := q.db.QueryRow(ctx, getPaygBillingSummaryCosts,
+		arg.TumTokens,
+		arg.TumUnitPriceUsd,
+		arg.OrganizationID,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.CompletedBefore,
+	)
+	var i GetPaygBillingSummaryCostsRow
+	err := row.Scan(
+		&i.TumUnitPriceUsd,
+		&i.TumCostUsd,
+		&i.ChatSpendUsd,
+		&i.RecordedThrough,
+		&i.EstimatedTotalUsd,
+	)
+	return i, err
+}
+
 const getPaygInvoiceIdentity = `-- name: GetPaygInvoiceIdentity :one
 SELECT
     billing_metadata.stripe_customer_id
@@ -1822,6 +1885,26 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertOpenRouterDailySpendFixture = `-- name: UpsertOpenRouterDailySpendFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES ($1, 'chat', $2, $3)
+ON CONFLICT (organization_id, key_type, day) DO UPDATE
+SET spend_usd = EXCLUDED.spend_usd,
+    updated_at = clock_timestamp()
+`
+
+type UpsertOpenRouterDailySpendFixtureParams struct {
+	OrganizationID string
+	Day            pgtype.Date
+	SpendUsd       pgtype.Numeric
+}
+
+// Test-only fixture for billing-summary reads.
+func (q *Queries) UpsertOpenRouterDailySpendFixture(ctx context.Context, arg UpsertOpenRouterDailySpendFixtureParams) error {
+	_, err := q.db.Exec(ctx, upsertOpenRouterDailySpendFixture, arg.OrganizationID, arg.Day, arg.SpendUsd)
+	return err
 }
 
 const upsertStripeInvoice = `-- name: UpsertStripeInvoice :one

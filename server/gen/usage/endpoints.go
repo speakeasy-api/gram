@@ -27,6 +27,7 @@ type Endpoints struct {
 	CreateCheckout            goa.Endpoint
 	CreateStripeCheckout      goa.Endpoint
 	GetStripeSubscription     goa.Endpoint
+	GetPaygBillingSummary     goa.Endpoint
 	CreateStripePortalSession goa.Endpoint
 	CancelStripeSubscription  goa.Endpoint
 	ResumeStripeSubscription  goa.Endpoint
@@ -49,6 +50,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateCheckout:            NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
 		CreateStripeCheckout:      NewCreateStripeCheckoutEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscription:     NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:     NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
 		CreateStripePortalSession: NewCreateStripePortalSessionEndpoint(s, a.APIKeyAuth),
 		CancelStripeSubscription:  NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ResumeStripeSubscription:  NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
@@ -69,6 +71,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateCheckout = m(e.CreateCheckout)
 	e.CreateStripeCheckout = m(e.CreateStripeCheckout)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
+	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
 	e.CreateStripePortalSession = m(e.CreateStripePortalSession)
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
@@ -310,6 +313,29 @@ func NewGetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetStripeSubscription(ctx, p)
+	}
+}
+
+// NewGetPaygBillingSummaryEndpoint returns an endpoint function that calls the
+// method "getPaygBillingSummary" of service "usage".
+func NewGetPaygBillingSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPaygBillingSummaryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPaygBillingSummary(ctx, p)
 	}
 }
 
