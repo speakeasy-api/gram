@@ -27,12 +27,49 @@ var (
 	ErrUnavailable  = errors.New("platform mcp unavailable")
 )
 
+// ActingSurface names the surface a call arrives through. Audit has to be able
+// to tell an agent-driven change from a dashboard change made by the same
+// user, and reviewing a runaway agent's burst of activity depends on it.
+type ActingSurface string
+
+const (
+	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint.
+	SurfacePlatformMCP ActingSurface = "platform_mcp"
+	// SurfaceProjectAssistant is the project assistant runtime, which acts
+	// under assistant identity and holds no OAuth connection.
+	SurfaceProjectAssistant ActingSurface = "project_assistant"
+	// SurfaceDashboard is an authenticated dashboard session completing work a
+	// Platform MCP flow started, such as a provider setup handoff.
+	SurfaceDashboard ActingSurface = "dashboard"
+)
+
+// Principal is the identity a Platform MCP call acts under.
+//
+// ConnectionID and Generation are empty for a surface with no OAuth
+// connection. UserID and OrganizationID are always present: authorization,
+// idempotency, and audit are keyed on the real user, not on the connection,
+// so a call without a connection is attributable exactly as well as one with.
 type Principal struct {
 	UserID         string
 	OrganizationID string
 	ConnectionID   string
 	Generation     string
 	ClientID       string
+	Surface        ActingSurface
+}
+
+// HasConnection reports whether this principal carries an OAuth connection.
+func (p Principal) HasConnection() bool {
+	return p.ConnectionID != "" && p.Generation != ""
+}
+
+// surface defaults an unset surface to the external endpoint, which is the
+// only surface that existed before this field.
+func (p Principal) surface() ActingSurface {
+	if p.Surface == "" {
+		return SurfacePlatformMCP
+	}
+	return p.Surface
 }
 
 type Authenticator interface {
