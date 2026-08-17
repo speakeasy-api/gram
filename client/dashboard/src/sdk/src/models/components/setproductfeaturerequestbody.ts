@@ -26,7 +26,6 @@ export const FeatureName = {
   CustomerManagedEncryptionKeys: "customer_managed_encryption_keys",
   RemoteSessionAutoRefresh: "remote_session_auto_refresh",
   RemoteSessionAutoRefreshEnforced: "remote_session_auto_refresh_enforced",
-  McpApproval: "mcp_approval",
 } as const;
 /**
  * Name of the feature to update
