@@ -23,10 +23,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	admingen "github.com/speakeasy-api/gram/server/gen/admin_assets"
 	gen "github.com/speakeasy-api/gram/server/gen/assets"
+	adminsrv "github.com/speakeasy-api/gram/server/gen/http/admin_assets/server"
 	srv "github.com/speakeasy-api/gram/server/gen/http/assets/server"
+	orgsrv "github.com/speakeasy-api/gram/server/gen/http/organization_assets/server"
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -58,6 +63,7 @@ type Service struct {
 	guardianPolicy *guardian.Policy
 	db             *pgxpool.Pool
 	auth           *auth.Auth
+	authz          *authz.Engine
 	storage        BlobStore
 	jwtSecret      string
 
@@ -69,6 +75,10 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+var _ orggen.Service = (*Service)(nil)
+var _ orggen.Auther = (*Service)(nil)
+var _ admingen.Service = (*Service)(nil)
+var _ admingen.Auther = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
@@ -90,6 +100,7 @@ func NewService(
 		guardianPolicy: guardianPolicy,
 		db:             db,
 		auth:           auth.New(logger, db, sessions, authzEngine),
+		authz:          authzEngine,
 		storage:        storage,
 		jwtSecret:      jwtSecret,
 		chatSessions:   chatSessions,
@@ -100,13 +111,32 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
+	mw := []func(goa.Endpoint) goa.Endpoint{
+		middleware.MapErrors(),
+		middleware.TraceMethods(service.tracer),
+	}
+
 	endpoints := gen.NewEndpoints(service)
-	endpoints.Use(middleware.MapErrors())
-	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	for _, m := range mw {
+		endpoints.Use(m)
+	}
+	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	// The organization-tier (organizationAssets) and platform-admin
+	// (adminAssets) surfaces share this Service struct; their handlers live in
+	// organizationhandlers.go and adminhandlers.go and gate on org:admin and
+	// the platform-admin flag respectively.
+	orgEndpoints := orggen.NewEndpoints(service)
+	for _, m := range mw {
+		orgEndpoints.Use(m)
+	}
+	orgsrv.Mount(mux, orgsrv.New(orgEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	adminEndpoints := admingen.NewEndpoints(service)
+	for _, m := range mw {
+		adminEndpoints.Use(m)
+	}
+	adminsrv.Mount(mux, adminsrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -212,8 +242,10 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	logger := s.logger
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
-		projectID: *authCtx.ProjectID,
-		hash:      result.hash,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		hash:           result.hash,
 	})
 	if err != nil {
 		return nil, err
@@ -238,11 +270,13 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 
 	filename := fmt.Sprintf("image-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: payload.ContentLength,
-		file:          result.file,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		filename:       filename,
+		contentType:    mimeType,
+		contentLength:  payload.ContentLength,
+		file:           result.file,
 	})
 	if err != nil {
 		return nil, err
@@ -257,13 +291,14 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	ar := s.repo.WithTx(dbtx)
 
 	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        result.hash,
-		Kind:          "image",
-		ContentType:   inContentType,
-		ContentLength: payload.ContentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         result.hash,
+		Kind:           "image",
+		ContentType:    inContentType,
+		ContentLength:  payload.ContentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
@@ -325,8 +360,10 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	})
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
-		projectID: *authCtx.ProjectID,
-		hash:      result.hash,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		hash:           result.hash,
 	})
 	if err != nil {
 		return nil, err
@@ -355,11 +392,13 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 
 	filename := fmt.Sprintf("functions-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: payload.ContentLength,
-		file:          result.file,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		filename:       filename,
+		contentType:    mimeType,
+		contentLength:  payload.ContentLength,
+		file:           result.file,
 	})
 	if err != nil {
 		return nil, err
@@ -374,13 +413,14 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	ar := s.repo.WithTx(dbtx)
 
 	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        result.hash,
-		Kind:          "functions",
-		ContentType:   contentType,
-		ContentLength: payload.ContentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         result.hash,
+		Kind:           "functions",
+		ContentType:    contentType,
+		ContentLength:  payload.ContentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
@@ -442,8 +482,10 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	})
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
-		projectID: *authCtx.ProjectID,
-		hash:      result.hash,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		hash:           result.hash,
 	})
 	if err != nil {
 		return nil, err
@@ -468,11 +510,13 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	filename := fmt.Sprintf("openapi-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: payload.ContentLength,
-		file:          result.file,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		filename:       filename,
+		contentType:    mimeType,
+		contentLength:  payload.ContentLength,
+		file:           result.file,
 	})
 	if err != nil {
 		return nil, err
@@ -487,13 +531,14 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	ar := s.repo.WithTx(dbtx)
 
 	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        result.hash,
-		Kind:          "openapiv3",
-		ContentType:   contentType,
-		ContentLength: payload.ContentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         result.hash,
+		Kind:           "openapiv3",
+		ContentType:    contentType,
+		ContentLength:  payload.ContentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
@@ -542,8 +587,11 @@ type downloadPendingAssetResult struct {
 }
 
 func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
+	// Handlers authenticate and resolve their asset owner before calling this,
+	// so the check here is tier-agnostic defense-in-depth: no anonymous path
+	// may buffer request bytes to disk.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
@@ -610,17 +658,34 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 }
 
 type findAssetParams struct {
-	projectID uuid.UUID
-	hash      string
+	tier           assetTier
+	projectID      uuid.UUID
+	organizationID string
+	hash           string
 }
 
 func (s *Service) findExistingAsset(ctx context.Context, params *findAssetParams) (*gen.Asset, error) {
-	asset, err := s.repo.GetProjectAssetBySHA256(ctx, repo.GetProjectAssetBySHA256Params{
-		ProjectID: params.projectID,
-		Sha256:    params.hash,
-	})
+	var asset repo.Asset
+	var err error
+
+	switch params.tier {
+	case tierProject:
+		asset, err = s.repo.GetProjectAssetBySHA256(ctx, repo.GetProjectAssetBySHA256Params{
+			ProjectID: params.projectID,
+			Sha256:    params.hash,
+		})
+	case tierOrganization:
+		asset, err = s.repo.GetOrganizationAssetBySHA256(ctx, repo.GetOrganizationAssetBySHA256Params{
+			OrganizationID: params.organizationID,
+			Sha256:         params.hash,
+		})
+	case tierPlatform:
+		asset, err = s.repo.GetPlatformAssetBySHA256(ctx, params.hash)
+	default:
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find asset by hash: unknown asset tier %q", params.tier), "error loading document data")
+	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find project asset by hash: %w", err), "error loading document data")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find asset by hash: %w", err), "error loading document data")
 	}
 	if asset.ID != uuid.Nil {
 		if assetURL, err := url.Parse(asset.Url); err == nil {
@@ -650,16 +715,22 @@ func (s *Service) findExistingAsset(ctx context.Context, params *findAssetParams
 }
 
 type uploadAssetParams struct {
-	projectID     uuid.UUID
-	filename      string
-	contentType   string
-	contentLength int64
-	file          *os.File
+	tier           assetTier
+	projectID      uuid.UUID
+	organizationID string
+	filename       string
+	contentType    string
+	contentLength  int64
+	file           *os.File
 }
 
 func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*url.URL, error) {
-	projectID := params.projectID
-	dst, uri, err := s.storage.Write(ctx, path.Join(projectID.String(), params.filename), params.contentType, params.contentLength)
+	key, err := assetStorageKey(params.tier, params.projectID, params.organizationID, params.filename)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("resolve storage key: %w", err), "error writing document")
+	}
+
+	dst, uri, err := s.storage.Write(ctx, key, params.contentType, params.contentLength)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
@@ -910,8 +981,10 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	actualContentLength := fileInfo.Size()
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
-		projectID: *authCtx.ProjectID,
-		hash:      result.hash,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		hash:           result.hash,
 	})
 	if err != nil {
 		return nil, err
@@ -931,11 +1004,13 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 
 	filename := fmt.Sprintf("openapi-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: actualContentLength,
-		file:          result.file,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		filename:       filename,
+		contentType:    mimeType,
+		contentLength:  actualContentLength,
+		file:           result.file,
 	})
 	if err != nil {
 		return nil, err
@@ -950,13 +1025,14 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	ar := s.repo.WithTx(dbtx)
 
 	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        result.hash,
-		Kind:          "openapiv3",
-		ContentType:   mediaType,
-		ContentLength: actualContentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         result.hash,
+		Kind:           "openapiv3",
+		ContentType:    mediaType,
+		ContentLength:  actualContentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
@@ -1059,8 +1135,10 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 	actualContentLength := fileInfo.Size()
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
-		projectID: *authCtx.ProjectID,
-		hash:      result.hash,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		hash:           result.hash,
 	})
 	if err != nil {
 		return nil, err
@@ -1089,11 +1167,13 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 
 	filename := fmt.Sprintf("image-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: actualContentLength,
-		file:          result.file,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		filename:       filename,
+		contentType:    mimeType,
+		contentLength:  actualContentLength,
+		file:           result.file,
 	})
 	if err != nil {
 		return nil, err
@@ -1108,13 +1188,14 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 	ar := s.repo.WithTx(dbtx)
 
 	asset, err := ar.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        result.hash,
-		Kind:          "image",
-		ContentType:   inContentType,
-		ContentLength: actualContentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         result.hash,
+		Kind:           "image",
+		ContentType:    inContentType,
+		ContentLength:  actualContentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
@@ -1276,8 +1357,10 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 	})
 
 	existing, err := s.findExistingAsset(ctx, &findAssetParams{
-		projectID: *authCtx.ProjectID,
-		hash:      result.hash,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		hash:           result.hash,
 	})
 	if err != nil {
 		return nil, err
@@ -1300,24 +1383,27 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 
 	filename := fmt.Sprintf("attachment-%s%s", result.hash, ext)
 	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
-		projectID:     *authCtx.ProjectID,
-		filename:      filename,
-		contentType:   mimeType,
-		contentLength: payload.ContentLength,
-		file:          result.file,
+		tier:           tierProject,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		filename:       filename,
+		contentType:    mimeType,
+		contentLength:  payload.ContentLength,
+		file:           result.file,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
-		Name:          filename,
-		Url:           uri.String(),
-		ProjectID:     *authCtx.ProjectID,
-		Sha256:        result.hash,
-		Kind:          "chat_attachment",
-		ContentType:   mimeType,
-		ContentLength: payload.ContentLength,
+		Name:           filename,
+		Url:            uri.String(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         result.hash,
+		Kind:           "chat_attachment",
+		ContentType:    mimeType,
+		ContentLength:  payload.ContentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
