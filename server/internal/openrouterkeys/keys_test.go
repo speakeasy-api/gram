@@ -14,11 +14,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestListKeys_RequiresPlatformAdmin(t *testing.T) {
@@ -339,6 +341,44 @@ func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {
 	require.Equal(t, []string{orgID + "/" + string(openrouter.KeyTypeInternal)}, ti.provisioner.refreshCalls)
 }
 
+func TestEnableKey_ReinstatesLegacyZeroTrialKeyAtTrialPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+
+	orgID := seedKey(t, ctx, ti, "enabletrialzero", "internal", "sk-or-enable-trial-zero", "")
+	require.NoError(t, orgmetarepo.New(ti.conn).SetAccountType(ctx, orgmetarepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierEnterprise),
+		ID:              orgID,
+	}))
+	require.NoError(t, trialsrepo.New(ti.conn).CreateTrial(ctx, trialsrepo.CreateTrialParams{
+		OrganizationID: orgID,
+		Tier:           string(billing.TierEnterprise),
+		EndsAt:         conv.ToPGTimestamptz(time.Now().UTC().Add(14 * 24 * time.Hour)),
+	}))
+	require.NoError(t, orgrepo.New(ti.conn).UpdateOpenRouterKeyMonthlyCredits(ctx, orgrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeInternal),
+		MonthlyCredits: 0,
+	}))
+	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeInternal),
+	}))
+
+	expected, ok := openrouter.DefaultCreditLimit(orgID, billing.TierEnterprise, true)
+	require.True(t, ok)
+	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{
+		SessionToken:   nil,
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.False(t, view.Disabled)
+	require.EqualValues(t, expected, view.MonthlyCredits)
+}
+
 func TestEnableKeyWaitsForPerKeyBillingLock(t *testing.T) {
 	t.Parallel()
 
@@ -439,6 +479,62 @@ func TestKeyBillingLockAcquireTimeoutDoesNotLeakSession(t *testing.T) {
 	require.True(t, operationStarted)
 }
 
+func TestKeyBillingLockPoolWaitUsesCallerContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	conns := make([]*pgxpool.Conn, 0, ti.conn.Config().MaxConns)
+	for range ti.conn.Config().MaxConns {
+		conn, err := ti.conn.Acquire(ctx)
+		require.NoError(t, err)
+		conns = append(conns, conn)
+	}
+	t.Cleanup(func() {
+		for _, conn := range conns {
+			conn.Release()
+		}
+	})
+
+	shortCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	err := keybillinglock.WithAcquireTimeout(shortCtx, testenv.NewLogger(t), ti.conn, "org-pool-wait", openrouter.KeyTypeInternal, time.Second, func(_ *pgxpool.Conn) error {
+		require.FailNow(t, "operation started without a pooled connection")
+		return nil
+	})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotErrorIs(t, err, keybillinglock.ErrAcquireTimeout)
+}
+
+func TestKeyBillingLockQueryUsesCallerDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := seedKey(t, ctx, ti, "callerdeadline", "internal", "sk-or-caller-deadline", "")
+	lockConn, err := ti.conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer lockConn.Release()
+	lockQueries := activitiesrepo.New(lockConn)
+	lockParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{
+		KeyType:        string(openrouter.KeyTypeInternal),
+		OrganizationID: orgID,
+	}
+	require.NoError(t, lockQueries.AcquireOpenRouterKeyBillingLock(ctx, lockParams))
+	defer func() {
+		unlocked, releaseErr := lockQueries.ReleaseOpenRouterKeyBillingLock(context.WithoutCancel(ctx), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
+		require.NoError(t, releaseErr)
+		require.True(t, unlocked)
+	}()
+
+	shortCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	err = keybillinglock.WithAcquireTimeout(shortCtx, testenv.NewLogger(t), ti.conn, orgID, openrouter.KeyTypeInternal, time.Second, func(_ *pgxpool.Conn) error {
+		require.FailNow(t, "operation started before the caller deadline")
+		return nil
+	})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotErrorIs(t, err, keybillinglock.ErrAcquireTimeout)
+}
+
 func TestEnableKeyReportsLockContentionAsUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -465,9 +561,11 @@ func TestEnableKeyReportsLockContentionAsUnavailable(t *testing.T) {
 		require.True(t, unlocked)
 	}()
 
-	shortCtx, cancel := context.WithTimeout(adminCtx, 50*time.Millisecond)
+	// Keep the caller alive beyond the service's own lock budget so this
+	// exercises genuine advisory-lock contention, not caller cancellation.
+	lockWaitCtx, cancel := context.WithTimeout(adminCtx, 10*time.Second)
 	defer cancel()
-	_, err = ti.service.EnableKey(shortCtx, &gen.EnableKeyPayload{
+	_, err = ti.service.EnableKey(lockWaitCtx, &gen.EnableKeyPayload{
 		SessionToken:   nil,
 		OrganizationID: orgID,
 		KeyType:        string(openrouter.KeyTypeInternal),

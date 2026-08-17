@@ -3,7 +3,11 @@ import {
   type SpendCapThreshold,
   spendCapFillPercent,
 } from "@/components/billing/payg-billing-estimate";
-import { inferenceCapLabel } from "@/components/billing/inference-caps";
+import {
+  inferenceCapBillingNote,
+  inferenceCapInvoiceNote,
+  inferenceCapLabel,
+} from "@/components/billing/inference-caps";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
@@ -27,16 +31,22 @@ const usdMeter = new Intl.NumberFormat("en-US", {
  *
  * `title` is what the usage section needs and the control doesn't: the control
  * already names the cap in the label of the field that sets it, and repeating
- * it directly below reads as two separate things.
+ * it directly below reads as two separate things. `billingNote` is the same
+ * split: the usage section sits under the invoice estimate and has to say how
+ * these figures relate to it, while the control is nowhere near one.
+ *
+ * The note is picked here rather than passed in because which half of it is
+ * true depends on the branch below — copy that talks about the cap's month is
+ * a contradiction on a key that has no cap.
  */
 export function InferenceCapMeter({
   cap,
   title = true,
-  note,
+  billingNote = false,
 }: {
   cap: InferenceSpendCap;
   title?: boolean;
-  note?: string;
+  billingNote?: boolean;
 }): JSX.Element {
   const label = inferenceCapLabel(cap.keyType);
   const spent = usdMeter.format(cap.creditsUsed);
@@ -44,9 +54,11 @@ export function InferenceCapMeter({
 
   // Without a cap the spend has nothing to be a proportion of, and a full-width
   // bar would read as a limit that was reached. The figure still shows: it is
-  // the only place this month's spend on this key appears. So does the billing
-  // note — an uncapped key still spends money, and whether that money reaches
-  // the invoice is exactly what the note is there to say.
+  // the only place this month's spend on this key appears. So does the invoice
+  // half of the billing note — an uncapped key still spends money, and whether
+  // that money reaches the invoice is exactly what the note is there to say.
+  // Only that half: the rest of it is about the cap's month rolling over, which
+  // would contradict the "No cap is set." printed directly above it.
   if (!(cap.monthlyCredits > 0)) {
     return (
       <Stack gap={1}>
@@ -54,7 +66,9 @@ export function InferenceCapMeter({
         <Text muted small className="tabular-nums">
           {spent} spent this month. No cap is set.
         </Text>
-        <Footnote text={note ?? ""} />
+        <Footnote
+          text={billingNote ? inferenceCapInvoiceNote(cap.keyType) : ""}
+        />
       </Stack>
     );
   }
@@ -66,7 +80,12 @@ export function InferenceCapMeter({
   const percent = spendCapFillPercent(cap.creditsUsed, cap.monthlyCredits);
   const limit = usdMeter.format(cap.monthlyCredits);
   const thresholdNote = capNote(threshold);
-  const footnote = [thresholdNote, note].filter(Boolean).join(" ");
+  const footnote = [
+    thresholdNote,
+    billingNote ? inferenceCapBillingNote(cap.keyType) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <Stack gap={2}>
@@ -102,7 +121,7 @@ export function InferenceCapMeter({
  *
  * Both branches render one, and both can end up with an empty string — below
  * the first threshold there is no threshold note, and the cap's own control
- * passes no billing note at all — so an empty line must not take up space.
+ * asks for no billing note at all — so an empty line must not take up space.
  */
 function Footnote({ text }: { text: string }): JSX.Element | null {
   if (text === "") return null;

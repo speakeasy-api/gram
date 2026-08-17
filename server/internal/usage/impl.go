@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -68,6 +69,8 @@ type productFeatureCacheUpdater interface {
 }
 
 var _ gen.Service = (*Service)(nil)
+
+const polarWebhookKeyBillingLockWaitTimeout = 5 * time.Second
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
@@ -204,7 +207,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	if previousAccountType != updatedAccountType {
 		for _, keyType := range openrouter.AllKeyTypes {
-			err := keybillinglock.With(ctx, logger, s.db, refreshedOrg.ID, keyType, func(_ *pgxpool.Conn) error {
+			err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, refreshedOrg.ID, keyType, polarWebhookKeyBillingLockWaitTimeout, func(_ *pgxpool.Conn) error {
 				_, refreshErr := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil)
 				if refreshErr != nil {
 					return fmt.Errorf("refresh OpenRouter %s key after account type change: %w", keyType, refreshErr)
@@ -219,6 +222,9 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 				// webhook forever.
 				if errors.Is(err, pgx.ErrNoRows) {
 					continue
+				}
+				if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+					return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
 				}
 				return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
 			}

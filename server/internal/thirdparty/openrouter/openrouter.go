@@ -225,6 +225,18 @@ func AccountTypeCreditLimit(tier billing.Tier) (limit int, ok bool) {
 	return limit, ok
 }
 
+// DefaultCreditLimit applies the complete mint-time policy after the caller
+// has resolved whether the organization has an active trial.
+func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
+	if IsSpecialLimitOrg(orgID) {
+		return 500, true
+	}
+	if activeTrial {
+		return trialCreditLimit, true
+	}
+	return AccountTypeCreditLimit(tier)
+}
+
 // trialCreditLimit caps each key an organization inside a trial holds, so its
 // total trial exposure is this amount multiplied by len(AllKeyTypes). A trial
 // is armed without verified intent and the credit-balance gate hard-stops the
@@ -792,8 +804,9 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 // transaction that already holds an advisory lock and a pool connection, so it
 // must read through that same transaction.
 func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
-	if slices.Contains(specialLimitOrgs, org.ID) {
-		return 500
+	if IsSpecialLimitOrg(org.ID) {
+		limit, _ := DefaultCreditLimit(org.ID, billing.Tier(org.GramAccountType), false)
+		return limit
 	}
 
 	// A trial runs on the real enterprise tier, so the account type on its own
@@ -801,9 +814,9 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBT
 	// failure falls through to the account type rather than capping a paying
 	// customer on a transient database error.
 	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, org.ID)
+	activeTrial := err == nil
 	switch {
-	case err == nil:
-		return trialCreditLimit
+	case activeTrial:
 	case !errors.Is(err, pgx.ErrNoRows):
 		o.logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
 			attr.SlogError(err),
@@ -811,7 +824,8 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBT
 		)
 	}
 
-	return creditsAccountTypeMap[org.GramAccountType]
+	limit, _ := DefaultCreditLimit(org.ID, billing.Tier(org.GramAccountType), activeTrial)
+	return limit
 }
 
 // upstreamKeyIdentity names an org's OpenRouter key. Chat key naming must

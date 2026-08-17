@@ -1,8 +1,5 @@
 import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
-import {
-  inferenceCapBillingNote,
-  sortInferenceCaps,
-} from "@/components/billing/inference-caps";
+import { sortInferenceCaps } from "@/components/billing/inference-caps";
 import {
   canEstimatePaygInvoice,
   formatExactUsd,
@@ -214,11 +211,7 @@ function InferenceCapMeters(): JSX.Element | null {
   return (
     <Stack gap={6}>
       {sortInferenceCaps(data).map((cap) => (
-        <InferenceCapMeter
-          key={cap.keyType}
-          cap={cap}
-          note={inferenceCapBillingNote(cap.keyType)}
-        />
+        <InferenceCapMeter key={cap.keyType} cap={cap} billingNote />
       ))}
     </Stack>
   );

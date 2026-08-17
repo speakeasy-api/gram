@@ -28,18 +28,26 @@ func WithAcquireTimeout(
 	timeout time.Duration,
 	operation func(*pgxpool.Conn) error,
 ) error {
-	lockCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	started := false
-	err := With(lockCtx, logger, db, organizationID, keyType, func(conn *pgxpool.Conn) error {
-		started = true
-		return operation(conn)
-	})
-	if !started && errors.Is(lockCtx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("%w: %w", ErrAcquireTimeout, err)
+	conn, err := db.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for OpenRouter %s key billing lock: %w", keyType, err)
 	}
-	return err
+
+	lockCtx, cancel := context.WithTimeout(ctx, timeout)
+	queries, err := acquire(lockCtx, logger, conn, organizationID, keyType)
+	cancel()
+	if err != nil {
+		if ctx.Err() == nil && errors.Is(lockCtx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("%w: %w", ErrAcquireTimeout, err)
+		}
+		return err
+	}
+	defer release(ctx, logger, conn, queries, organizationID, keyType)
+
+	if err := operation(conn); err != nil {
+		return err
+	}
+	return nil
 }
 
 // With serializes a platform-key billing read and its upstream mutation.
@@ -56,6 +64,22 @@ func With(
 		return fmt.Errorf("acquire connection for OpenRouter %s key billing lock: %w", keyType, err)
 	}
 
+	queries, err := acquire(ctx, logger, conn, organizationID, keyType)
+	if err != nil {
+		return err
+	}
+	defer release(ctx, logger, conn, queries, organizationID, keyType)
+
+	return operation(conn)
+}
+
+func acquire(
+	ctx context.Context,
+	logger *slog.Logger,
+	conn *pgxpool.Conn,
+	organizationID string,
+	keyType openrouter.KeyType,
+) (*activitiesrepo.Queries, error) {
 	queries := activitiesrepo.New(conn)
 	if err := queries.AcquireOpenRouterKeyBillingLock(ctx, activitiesrepo.AcquireOpenRouterKeyBillingLockParams{
 		KeyType:        string(keyType),
@@ -69,11 +93,9 @@ func With(
 		if closeErr != nil {
 			logger.ErrorContext(ctx, "close connection after OpenRouter key billing lock failure", attr.SlogError(closeErr))
 		}
-		return fmt.Errorf("acquire OpenRouter %s key billing lock: %w", keyType, err)
+		return nil, fmt.Errorf("acquire OpenRouter %s key billing lock: %w", keyType, err)
 	}
-	defer release(ctx, logger, conn, queries, organizationID, keyType)
-
-	return operation(conn)
+	return queries, nil
 }
 
 func release(ctx context.Context, logger *slog.Logger, conn *pgxpool.Conn, queries *activitiesrepo.Queries, organizationID string, keyType openrouter.KeyType) {

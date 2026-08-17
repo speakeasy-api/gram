@@ -430,8 +430,9 @@ describe("PaygUsageSection", () => {
 
     // Uncapped spend is still spend, and one of these keys is invoiced while
     // the other never is — so the note that tells them apart has to survive the
-    // no-cap branch too.
-    it("keeps the billing note on an uncapped meter", () => {
+    // no-cap branch too. Only that part of it: the rest is about the cap's
+    // month resetting, which would contradict the "No cap is set." beside it.
+    it("keeps the invoice note on an uncapped meter, without the cap-reset copy", () => {
       inferenceCapsQuery([
         cap({ keyType: "chat", creditsUsed: 10, monthlyCredits: 0 }),
         cap({ keyType: "internal", creditsUsed: 20, monthlyCredits: 0 }),
@@ -448,6 +449,10 @@ describe("PaygUsageSection", () => {
           /Gram funds this inference, so it never reaches your invoice/,
         ),
       ).toBeTruthy();
+      expect(screen.queryByText(/resets on the first of the month/)).toBeNull();
+      expect(
+        screen.queryByText(/doesn't line up with the billing cycle above/),
+      ).toBeNull();
     });
 
     it("renders no meters when the cap read fails", () => {

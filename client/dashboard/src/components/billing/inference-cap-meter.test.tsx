@@ -1,4 +1,7 @@
-import { inferenceCapBillingNote } from "@/components/billing/inference-caps";
+import {
+  inferenceCapBillingNote,
+  inferenceCapInvoiceNote,
+} from "@/components/billing/inference-caps";
 import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -32,7 +35,7 @@ describe("InferenceCapMeter", () => {
       render(
         <InferenceCapMeter
           cap={cap({ keyType: "chat", monthlyCredits: 0 })}
-          note={inferenceCapBillingNote("chat")}
+          billingNote
         />,
       );
 
@@ -45,7 +48,7 @@ describe("InferenceCapMeter", () => {
       render(
         <InferenceCapMeter
           cap={cap({ keyType: "internal", monthlyCredits: 0 })}
-          note={inferenceCapBillingNote("internal")}
+          billingNote
         />,
       );
 
@@ -56,11 +59,44 @@ describe("InferenceCapMeter", () => {
       ).toBeTruthy();
     });
 
+    // The note's other half is about the cap's month rolling over, which says
+    // there is a cap directly under the line saying there isn't one.
+    it.each<["chat" | "internal"]>([["chat"], ["internal"]])(
+      "drops the cap-reset copy from the %s key's note",
+      (keyType) => {
+        render(<InferenceCapMeter cap={cap({ keyType, monthlyCredits: 0 })} />);
+
+        expect(screen.getByText(/No cap is set\./)).toBeTruthy();
+        expect(
+          screen.queryByText(/resets on the first of the month/),
+        ).toBeNull();
+      },
+    );
+
+    // The uncapped footnote is the invoice sentence and nothing else — not a
+    // substring match, so cap-reset copy can't creep back in beside it.
+    it.each<["chat" | "internal"]>([["chat"], ["internal"]])(
+      "renders exactly the %s key's invoice sentence",
+      (keyType) => {
+        const { container } = render(
+          <InferenceCapMeter
+            cap={cap({ keyType, monthlyCredits: 0 })}
+            billingNote
+          />,
+        );
+
+        const paragraphs = container.querySelectorAll("p");
+        expect(paragraphs[paragraphs.length - 1]?.textContent).toBe(
+          inferenceCapInvoiceNote(keyType),
+        );
+      },
+    );
+
     it("reports the spend and draws no bar", () => {
       render(
         <InferenceCapMeter
           cap={cap({ creditsUsed: 10, monthlyCredits: 0 })}
-          note={inferenceCapBillingNote("chat")}
+          billingNote
         />,
       );
 
@@ -70,7 +106,7 @@ describe("InferenceCapMeter", () => {
 
     // The cap's own control renders the meter without a note, and an empty
     // paragraph there would open a gap under the figure.
-    it("renders no footnote when the caller supplies none", () => {
+    it("renders no footnote when the caller asks for none", () => {
       const { container } = render(
         <InferenceCapMeter cap={cap({ monthlyCredits: 0 })} />,
       );
@@ -111,16 +147,19 @@ describe("InferenceCapMeter", () => {
     // The threshold note and the billing note share one line; the threshold
     // comes first because it is the part that has changed.
     it("joins the threshold note to the billing note", () => {
-      render(
-        <InferenceCapMeter
-          cap={cap({ creditsUsed: 50 })}
-          note={inferenceCapBillingNote("chat")}
-        />,
-      );
+      render(<InferenceCapMeter cap={cap({ creditsUsed: 50 })} billingNote />);
 
       expect(footnote()).toBe(
         `You've used at least half of this month's cap. ${inferenceCapBillingNote("chat")}`,
       );
+    });
+
+    // The cap-reset sentence is dropped only where it would contradict the
+    // meter; a cap that is set does reset, and the copy still has to say so.
+    it("keeps the cap-reset copy once a cap is set", () => {
+      render(<InferenceCapMeter cap={cap({ creditsUsed: 10 })} billingNote />);
+
+      expect(screen.getByText(/resets on the first of the month/)).toBeTruthy();
     });
   });
 });
