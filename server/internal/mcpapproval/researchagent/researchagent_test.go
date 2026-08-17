@@ -28,9 +28,11 @@ type scriptedCompletions struct {
 	extraction openrouter.ObjectCompletionRequest
 	extracted  string
 
-	// lastTools records the tool definitions of the most recent turn, so the
-	// wrap-up turn's tool-lessness is assertable.
-	lastTools []openrouter.Tool
+	// lastTools and lastToolChoice record the most recent turn's tool
+	// definitions and tool_choice, so the wrap-up turn's shape is assertable:
+	// tools stay defined, tool_choice "none" forbids calling them.
+	lastTools      []openrouter.Tool
+	lastToolChoice string
 
 	// firstTurn records the opening request, which carries the briefing.
 	firstTurn openrouter.CompletionRequest
@@ -41,6 +43,7 @@ func (s *scriptedCompletions) GetCompletion(_ context.Context, req openrouter.Co
 		return nil, fmt.Errorf("unexpected completion turn %d", s.turnIndex)
 	}
 	s.lastTools = req.Tools
+	s.lastToolChoice = string(req.ToolChoice)
 	if s.turnIndex == 0 {
 		s.firstTurn = req
 	}
@@ -256,8 +259,12 @@ func TestRun_TurnLimitForcesAWrapUp(t *testing.T) {
 	require.True(t, meta.TurnLimitReached)
 	require.Equal(t, 13, meta.Turns, "twelve budget turns plus the wrap-up")
 
-	// The wrap-up turn carries no tools — it cannot keep researching.
-	require.Nil(t, completions.lastTools)
+	// The wrap-up turn cannot keep researching, but the tools stay defined:
+	// the history is full of tool turns, and Anthropic-family models reject
+	// tool blocks arriving with no tools key. tool_choice "none" is what
+	// forbids further calls.
+	require.NotEmpty(t, completions.lastTools)
+	require.Equal(t, `"none"`, completions.lastToolChoice)
 	require.Contains(t, completions.extraction.Prompt, "FINAL FINDINGS")
 
 	var document researchagent.Document
@@ -276,12 +283,16 @@ func TestRun_CapsClaims(t *testing.T) {
 	}
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	encoded, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -309,12 +320,16 @@ func TestRun_DropsClaimsWhoseCitationsCannotBeFollowed(t *testing.T) {
 	}
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -433,12 +448,16 @@ func TestRun_BriefingFencesTheEvidenceAsUntrusted(t *testing.T) {
 
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -566,12 +585,16 @@ func TestRun_RejectsDegenerateExtraction(t *testing.T) {
 
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "placeholder", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "degenerate")
@@ -584,22 +607,30 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [{"tier": "verdict", "text": "bad"}]}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 
 	completions2 := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "certain"}, "claims": []}`,
 	}
-	runner2 := researchagent.New(completions2, nil, nil)
+	runner2 := researchagent.New(completions2, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 }
@@ -613,6 +644,10 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [
@@ -621,7 +656,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 		]}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	encoded, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -633,13 +668,17 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 
 	completions2 := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [
 			{"tier": "independently_reported", "text": "bad", "citations": [{"url": "https://example.com/a"}], "source_reputation": "trustworthy"}
 		]}`,
 	}
-	runner2 := researchagent.New(completions2, nil, nil)
+	runner2 := researchagent.New(completions2, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "source reputation")

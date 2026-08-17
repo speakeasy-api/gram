@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -109,9 +110,20 @@ func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 }
 
 func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
+	status := report.Status
+	errText := fromPGText(report.Error)
+	// A running row older than the workflow deadline is stranded, not live
+	// (see ResearchRunStaleAfter). Presenting it as failed here is what lets
+	// the page's polling resolve and the Run button re-enable — the durable
+	// resolution only happens on the next StartResearch, which this unblocks.
+	if status == researchStatusRunning && report.StartedAt.Valid && time.Since(report.StartedAt.Time) > ResearchRunStaleAfter {
+		status = "failed"
+		stale := "the research run was interrupted and did not resolve"
+		errText = &stale
+	}
 	return &gen.ResearchReport{
 		ID:            report.ID.String(),
-		Status:        report.Status,
+		Status:        status,
 		Report:        rawEvidence(report.Report),
 		ReportVersion: int(report.ReportVersion),
 		Model:         fromPGText(report.Model),
@@ -119,7 +131,7 @@ func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
 		RequestedBy:   fromPGText(report.RequestedBy),
 		StartedAt:     optionalTime(report.StartedAt),
 		CompletedAt:   optionalTime(report.CompletedAt),
-		Error:         fromPGText(report.Error),
+		Error:         errText,
 		CreatedAt:     conv.FromPGTimestamptz(report.CreatedAt),
 	}
 }

@@ -183,7 +183,16 @@ func TestWebSearch_BoundsSearchesPerRun(t *testing.T) {
 func TestWebSearch_ClampsMaxResults(t *testing.T) {
 	t.Parallel()
 
-	completions := &fakeCompletions{}
+	completions := &fakeCompletions{
+		// One real citation: a zero-annotation response is a failed search by
+		// contract (the plugin may not have applied), which is not what this
+		// test is about.
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{
+				URL: "https://somevendor.io/", Title: "SomeVendor", Content: "…",
+			}},
+		},
+	}
 	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
 
 	_, err := runSearch(t, authedContext(t), tool, `{"query": "q", "max_results": 50}`)

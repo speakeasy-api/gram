@@ -126,7 +126,13 @@ func McpResearchWorkflow(ctx workflow.Context, input activities.McpResearchInput
 		// which would pin the page's polling and its disabled Run button
 		// forever. Marking a row the activity already failed is a no-op: the
 		// update only touches rows still in running.
-		markCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		// A disconnected context: on workflow cancellation or termination the
+		// parent context is already canceled, and a compensation scheduled on
+		// it resolves canceled without ever running — the exact stranding this
+		// block exists to prevent.
+		disconnected, cancelDisconnected := workflow.NewDisconnectedContext(ctx)
+		defer cancelDisconnected()
+		markCtx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
 			StartToCloseTimeout:    mcpResearchCompensationAttemptTimeout,
 			ScheduleToCloseTimeout: mcpResearchCompensationScheduleToClose,
 			RetryPolicy:            mcpResearchCompensationRetryPolicy(),
