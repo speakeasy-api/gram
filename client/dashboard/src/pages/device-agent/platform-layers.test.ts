@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { enforcementLayer } from "./device-agent-configuration";
+import { enforcementLayer } from "./platform-layers";
 
 // Mirrors config.PlatformMode.Layer() in the device-agent repo: the
 // `platforms` map is opt-out, so anything but an explicit false is managed.
