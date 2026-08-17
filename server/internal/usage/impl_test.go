@@ -213,13 +213,14 @@ func testAuthContext(orgID string) context.Context {
 }
 
 func sampleUsage(toolCalls, servers, credits int) *gen.PeriodUsage {
+	includedCredits := 25
 	return &gen.PeriodUsage{
 		ToolCalls:                toolCalls,
 		IncludedToolCalls:        10000,
 		Servers:                  servers,
 		IncludedServers:          3,
-		Credits:                  credits,
-		IncludedCredits:          25,
+		Credits:                  &credits,
+		IncludedCredits:          &includedCredits,
 		HasActiveSubscription:    false,
 		ActualEnabledServerCount: 0,
 	}
@@ -243,7 +244,8 @@ func TestGetPeriodUsage_CacheHit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 42, result.ToolCalls)
 	require.Equal(t, 2, result.Servers)
-	require.Equal(t, 10, result.Credits)
+	require.Nil(t, result.Credits)
+	require.Nil(t, result.IncludedCredits)
 	require.Equal(t, 5, result.ActualEnabledServerCount) // from DB, not cache
 	billingMock.AssertNotCalled(t, "GetPeriodUsage", mock.Anything, mock.Anything)
 }
@@ -264,7 +266,8 @@ func TestGetPeriodUsage_CacheMissFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 100, result.ToolCalls)
 	require.Equal(t, 5, result.Servers)
-	require.Equal(t, 20, result.Credits)
+	require.Nil(t, result.Credits)
+	require.Nil(t, result.IncludedCredits)
 	require.Equal(t, 3, result.ActualEnabledServerCount)
 	billingMock.AssertCalled(t, "GetPeriodUsage", mock.Anything, orgID)
 }
@@ -300,6 +303,31 @@ func TestGetPeriodUsage_NoAuthContext(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+func TestGetPeriodUsage_CreditsPlatformAdminOnly(t *testing.T) {
+	t.Parallel()
+	orgID := "org-credits-admin-only"
+	cached := sampleUsage(42, 2, 10)
+
+	billingMock := &mockBillingRepo{}
+	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached)
+	svc := newTestService(t, billingMock, orgID, 1)
+
+	memberResult, err := svc.GetPeriodUsage(testAuthContext(orgID), &gen.GetPeriodUsagePayload{})
+	require.NoError(t, err)
+	require.Equal(t, 42, memberResult.ToolCalls)
+	require.Equal(t, 2, memberResult.Servers)
+	require.Nil(t, memberResult.Credits)
+	require.Nil(t, memberResult.IncludedCredits)
+
+	adminResult, err := svc.GetPeriodUsage(testAdminAuthContext(orgID), &gen.GetPeriodUsagePayload{})
+	require.NoError(t, err)
+	require.Equal(t, 42, adminResult.ToolCalls)
+	require.NotNil(t, adminResult.Credits)
+	require.Equal(t, 10, *adminResult.Credits)
+	require.NotNil(t, adminResult.IncludedCredits)
+	require.Equal(t, 25, *adminResult.IncludedCredits)
 }
 
 func TestGetPeriodUsage_ActualServerCountFromDB(t *testing.T) {
