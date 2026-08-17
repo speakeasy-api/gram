@@ -471,7 +471,9 @@ describe("StartPaygCheckoutCTA", () => {
       resolveWith(CHECKOUT_URL);
       render(<StartPaygCheckoutCTA eligibility="gated" />);
 
-      fireEvent.click(cta()!);
+      fireEvent.click(
+        screen.getByRole("button", { name: /start pay as you go/i }),
+      );
 
       expect(mocks.mutate).toHaveBeenCalledTimes(1);
       expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
