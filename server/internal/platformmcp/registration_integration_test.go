@@ -862,3 +862,89 @@ func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	require.True(t, replay.Replayed)
 	require.Equal(t, receipt.ID, replay.ID)
 }
+
+// TestExpiredReadinessIsPrunedWithoutAConnection covers the pruning half of a
+// connection-less lifecycle. The binding columns are NULL for a surface with no
+// OAuth connection, and plain equality against NULL is never true, so a query
+// written with `=` silently matches nothing: connected bindings would be pruned
+// while assistant ones accumulated expired rows forever.
+func TestExpiredReadinessIsPrunedWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_readiness_no_connection")
+	require.NoError(t, err)
+
+	connected, project := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       AssistantClientID,
+		Surface:        SurfaceProjectAssistant,
+	}
+
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+
+	request := registrationRequest(project, "assistant-readiness", "assistant-readiness-key")
+	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, assistant, project, request, receipt)
+	require.NoError(t, err)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, assistant, project, request, receipt, "https://reviewed.example.test/assistant-readiness")
+	require.NoError(t, err)
+	require.True(t, receipt.RegistrationID.Valid)
+
+	now := time.Now().UTC()
+	queries := platformrepo.New(conn)
+
+	// Two projections for the same connection-less binding. They coexist
+	// because the unique key includes the authorization fingerprint, which is
+	// what changes when a user reauthorizes upstream.
+	writeReadiness := func(fingerprint string, checkedAt, expiresAt time.Time) {
+		t.Helper()
+
+		_, err := queries.UpsertPlatformMCPReadiness(ctx, platformrepo.UpsertPlatformMCPReadinessParams{
+			OrganizationID:                   assistant.OrganizationID,
+			ProjectID:                        project.ID,
+			RegistrationID:                   receipt.RegistrationID.UUID,
+			ConnectionID:                     uuid.NullUUID{},
+			ConnectionGeneration:             uuid.NullUUID{},
+			UserID:                           conv.ToPGText(assistant.UserID),
+			ActingSurface:                    conv.ToPGText(string(SurfaceProjectAssistant)),
+			ProviderAuthorizationFingerprint: fingerprint,
+			State:                            "ready",
+			EvidenceCode:                     pgtype.Text{},
+			CheckedAt:                        pgtype.Timestamptz{Time: checkedAt, Valid: true},
+			ExpiresAt:                        pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+		require.NoError(t, err, "writing readiness projection %q", fingerprint)
+	}
+
+	writeReadiness("fingerprint-superseded", now.Add(-2*time.Hour), now.Add(-time.Hour))
+	writeReadiness("fingerprint-current", now.Add(-time.Minute), now.Add(time.Hour))
+
+	deleted, err := queries.DeleteExpiredPlatformMCPReadiness(ctx, platformrepo.DeleteExpiredPlatformMCPReadinessParams{
+		OrganizationID:       assistant.OrganizationID,
+		ProjectID:            project.ID,
+		RegistrationID:       receipt.RegistrationID.UUID,
+		ConnectionID:         uuid.NullUUID{},
+		ConnectionGeneration: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted, "the superseded expired projection must be pruned for a connection-less binding too")
+
+	remaining, err := queries.GetLatestPlatformMCPReadinessForLifecycle(ctx, platformrepo.GetLatestPlatformMCPReadinessForLifecycleParams{
+		OrganizationID:       assistant.OrganizationID,
+		ProjectID:            project.ID,
+		RegistrationID:       receipt.RegistrationID.UUID,
+		ConnectionID:         uuid.NullUUID{},
+		ConnectionGeneration: uuid.NullUUID{},
+		UserID:               conv.ToPGText(assistant.UserID),
+		SubjectUrn:           userSubjectURN(assistant.UserID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "fingerprint-current", remaining.ProviderAuthorizationFingerprint, "the newest projection is the one that survives")
+}

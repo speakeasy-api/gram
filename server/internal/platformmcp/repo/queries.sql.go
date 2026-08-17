@@ -1261,8 +1261,8 @@ DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
   AND stale.project_id = $2
   AND stale.registration_id = $3
-  AND stale.connection_id = $4
-  AND stale.connection_generation = $5
+  AND stale.connection_id IS NOT DISTINCT FROM $4::uuid
+  AND stale.connection_generation IS NOT DISTINCT FROM $5::uuid
   AND stale.expires_at <= clock_timestamp()
   AND EXISTS (
       SELECT 1
@@ -1270,8 +1270,8 @@ WHERE stale.organization_id = $1
       WHERE newer.organization_id = stale.organization_id
         AND newer.project_id = stale.project_id
         AND newer.registration_id = stale.registration_id
-        AND newer.connection_id = stale.connection_id
-        AND newer.connection_generation = stale.connection_generation
+        AND newer.connection_id IS NOT DISTINCT FROM stale.connection_id
+        AND newer.connection_generation IS NOT DISTINCT FROM stale.connection_generation
         AND (newer.checked_at, newer.id) > (stale.checked_at, stale.id)
   )
 `
@@ -1286,6 +1286,12 @@ type DeleteExpiredPlatformMCPReadinessParams struct {
 
 // Retain the newest expired projection as stale repair evidence. Only an older
 // expired row that has been superseded by later evidence is safe to remove.
+//
+// The connection columns are compared with IS NOT DISTINCT FROM, in the
+// predicate and in the correlation alike. A connection-less surface stores NULL
+// in both, and plain equality against NULL is never true, so ordinary equality
+// would match nothing: expired connection-less projections would accumulate
+// forever while the same query pruned connected ones correctly.
 func (q *Queries) DeleteExpiredPlatformMCPReadiness(ctx context.Context, arg DeleteExpiredPlatformMCPReadinessParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPReadiness,
 		arg.OrganizationID,

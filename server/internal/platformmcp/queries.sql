@@ -854,12 +854,18 @@ LIMIT 1;
 -- name: DeleteExpiredPlatformMCPReadiness :execrows
 -- Retain the newest expired projection as stale repair evidence. Only an older
 -- expired row that has been superseded by later evidence is safe to remove.
+--
+-- The connection columns are compared with IS NOT DISTINCT FROM, in the
+-- predicate and in the correlation alike. A connection-less surface stores NULL
+-- in both, and plain equality against NULL is never true, so ordinary equality
+-- would match nothing: expired connection-less projections would accumulate
+-- forever while the same query pruned connected ones correctly.
 DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = @organization_id
   AND stale.project_id = @project_id
   AND stale.registration_id = @registration_id
-  AND stale.connection_id = @connection_id
-  AND stale.connection_generation = @connection_generation
+  AND stale.connection_id IS NOT DISTINCT FROM sqlc.narg(connection_id)::uuid
+  AND stale.connection_generation IS NOT DISTINCT FROM sqlc.narg(connection_generation)::uuid
   AND stale.expires_at <= clock_timestamp()
   AND EXISTS (
       SELECT 1
@@ -867,8 +873,8 @@ WHERE stale.organization_id = @organization_id
       WHERE newer.organization_id = stale.organization_id
         AND newer.project_id = stale.project_id
         AND newer.registration_id = stale.registration_id
-        AND newer.connection_id = stale.connection_id
-        AND newer.connection_generation = stale.connection_generation
+        AND newer.connection_id IS NOT DISTINCT FROM stale.connection_id
+        AND newer.connection_generation IS NOT DISTINCT FROM stale.connection_generation
         AND (newer.checked_at, newer.id) > (stale.checked_at, stale.id)
   );
 

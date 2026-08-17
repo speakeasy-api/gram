@@ -1,9 +1,12 @@
 package platformmcp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 // Every tool the deployment registers declares an audience. A tool with none
@@ -92,19 +95,55 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestStubAndLiveToolsDeclareTheSameAudience(t *testing.T) {
 	t.Parallel()
 
-	// Nil dependencies register the stubs; a configured catalogue registers
-	// the live tools. Names present in both must agree.
+	// Nil dependencies register the stubs; a configured catalogue registers the
+	// live tools. Comparing the two registrations is the whole point: asserting
+	// only that the stub names an audience would still pass if the live tool
+	// stopped naming it, which is the same disappearing act from the other side.
 	_, stubbed := newServer(nil, nil, nil, "", nil, nil, nil, nil, CatalogDescriptor{})
+	_, live := newServer(nil, stubCatalog{}, catalogEnabledRegistrations(), "cursor-key", nil, nil, nil, nil, CatalogDescriptor{})
 
-	stubAudience := map[string][]Audience{}
-	for _, descriptor := range stubbed.Descriptors() {
-		stubAudience[descriptor.Name] = descriptor.Meta.Audiences
-	}
+	stubAudiences := audiencesByTool(stubbed)
+	liveAudiences := audiencesByTool(live)
 
 	for _, name := range []string{"search_mcp_catalog", "inspect_mcp_candidate"} {
-		audiences, ok := stubAudience[name]
-		require.True(t, ok, "tool %q is registered even when its dependency is absent", name)
-		require.Contains(t, audiences, AudienceAssistant,
-			"stub %q must serve the same audiences as its live counterpart, or the tool disappears from the assistant when the rollout is off", name)
+		stub, stubbedOK := stubAudiences[name]
+		configured, liveOK := liveAudiences[name]
+
+		require.True(t, stubbedOK, "tool %q is registered even when its dependency is absent", name)
+		require.True(t, liveOK, "tool %q is registered when the catalogue is configured", name)
+		require.ElementsMatch(t, configured, stub,
+			"tool %q declares different audiences live and stubbed, so it appears on a surface in one rollout state and vanishes in another", name)
 	}
+}
+
+func audiencesByTool(registrar *Registrar) map[string][]Audience {
+	audiences := map[string][]Audience{}
+	for _, descriptor := range registrar.Descriptors() {
+		audiences[descriptor.Name] = descriptor.Meta.Audiences
+	}
+
+	return audiences
+}
+
+// catalogEnabledRegistrations is the smallest registration service that makes
+// newServer take the live catalogue branch: a catalogue budget whose limiters
+// are present. No call reaches them — the test reads declarations only.
+func catalogEnabledRegistrations() *RegistrationService {
+	limiter := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+
+	return &RegistrationService{
+		budgets: OperationBudgets{
+			Catalog: OperationBudget{Connection: limiter, Organization: limiter},
+		},
+	}
+}
+
+type stubCatalog struct{}
+
+func (stubCatalog) Search(context.Context, string) ([]CatalogCandidate, error) {
+	return nil, nil
+}
+
+func (stubCatalog) Inspect(context.Context, string, string) (CatalogDetails, error) {
+	return CatalogDetails{}, nil
 }
