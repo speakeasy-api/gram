@@ -618,3 +618,18 @@ WHERE iss.project_id = @project_id AND iss.deleted IS FALSE AND s.deleted IS FAL
   AND s.subject_urn::text LIKE 'user:%'
 GROUP BY s.subject_urn, u.display_name, u.email
 ORDER BY count DESC, display_name ASC;
+
+-- name: TouchUserSessionLastUsed :exec
+-- Records that this session's access token was presented on an MCP request.
+-- Runs on the per-request auth path, so it is deliberately coalesced: the
+-- cutoff means a session writes at most one row per cutoff window however many
+-- requests it makes, and every other request matches no rows and only probes
+-- user_sessions_user_session_issuer_id_jti_idx. Mirrors the claim-cutoff shape
+-- used by the remote_sessions keepalive sweep.
+UPDATE user_sessions
+SET last_used_at = @now_ts::timestamptz
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);

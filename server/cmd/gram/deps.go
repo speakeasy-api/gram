@@ -455,6 +455,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
+	rdr.FieldsPerRecord = -1
+	rdr.Comment = '#'
 	records, err := rdr.ReadAll()
 	if err != nil {
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: failed to read local feature flags csv file", attr.SlogError(err))
@@ -469,7 +471,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 			continue
 		}
 
-		if len(record) != 3 {
+		if len(record) != 3 && len(record) != 4 {
 			logger.ErrorContext(ctx, "newLocalFeatureFlags: invalid record in local feature flags csv file at row "+rowid)
 			continue
 		}
@@ -481,6 +483,10 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		}
 
 		inmem.SetFlag(feature.Flag(record[1]), record[0], enabled)
+
+		if len(record) == 4 && record[3] != "" {
+			inmem.SetFlagVariant(feature.Flag(record[1]), record[0], feature.Variant(record[3]))
+		}
 	}
 
 	return inmem

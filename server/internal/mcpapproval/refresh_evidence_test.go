@@ -168,30 +168,16 @@ func TestRefreshEvidence_RequiresScope(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-// Refreshing is part of reviewing, not deciding: the read scope must be
-// enough, matching intake where any authenticated member triggers the same
-// gather.
-func TestRefreshEvidence_ReadScopeSuffices(t *testing.T) {
+// Refreshing is part of reviewing, an org-admin surface: project write
+// access is not enough.
+func TestRefreshEvidence_NonAdminIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://mcp.example.com/read-scope", status: "", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	nonAdmin := withProject(t, ctx, ti, ti.projectID, authz.ScopeProjectWrite)
 
-	detail, err := ti.service.RefreshEvidence(readOnly, refreshPayload(requestID.String()))
-	require.NoError(t, err)
-	require.NotNil(t, detail.EvidenceCollectedAt)
-}
-
-func TestRefreshEvidence_FeatureDisabledIsForbidden(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	disableMCPApproval(t, ctx, ti)
-
-	_, err := ti.service.RefreshEvidence(ctx, refreshPayload(requestID.String()))
+	_, err := ti.service.RefreshEvidence(nonAdmin, refreshPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

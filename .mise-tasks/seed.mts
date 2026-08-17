@@ -930,8 +930,6 @@ WITH system_role_scopes (role_slug, scope, resource_kind) AS (
     ('admin', 'environment:write', 'environment'),
     ('admin', 'skill:read', 'skill'),
     ('admin', 'skill:write', 'skill'),
-    ('admin', 'mcp_approval:read', 'mcp_approval'),
-    ('admin', 'mcp_approval:decide', 'mcp_approval'),
     ('member', 'org:read', 'org'),
     ('member', 'project:read', 'project'),
     ('member', 'mcp:read', 'mcp'),
@@ -5734,10 +5732,10 @@ async function seed() {
     // hooks.ingest accepts events but silently skips writing chat_messages.
     // platform_mcp is the default-on organization entitlement; PostHog rollout
     // flags separately control whether its runtime and dashboard are exposed.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills'), ('${activeOrgID}', 'platform_mcp'), ('${activeOrgID}', 'mcp_approval') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills: feature:${activeOrgID}:platform_mcp: feature:${activeOrgID}:mcp_approval:`.quiet();
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills'), ('${activeOrgID}', 'platform_mcp') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills: feature:${activeOrgID}:platform_mcp:`.quiet();
     log.info(
-      "Enabled local logs, tool_io_logs, session_capture, skills, platform_mcp, and mcp_approval features",
+      "Enabled local logs, tool_io_logs, session_capture, skills, and platform_mcp features",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };

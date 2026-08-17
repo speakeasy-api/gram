@@ -617,13 +617,13 @@ function KPIRow({
         }
       />
       <StatTile
-        title="Findings · last 24h"
-        value={data.findings24h}
-        previousValue={data.previousFindings24h}
+        title="Findings"
+        value={data.findings}
+        previousValue={data.previousFindings}
         invertDelta
         tone="neutral"
         icon="flag"
-        comparisonLabel="vs previous 24h"
+        comparisonLabel="vs previous period"
       />
       <StatTile
         title="Open signals"

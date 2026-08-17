@@ -614,6 +614,20 @@ jobs:
       - name: Prepare GitHub Actions environment
         run: mise run github
 
+      - name: Cache aube store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      # fly:init-runner is a .mts task that imports zx from the workspace.
+      - name: Install dependencies
+        run: aube install --frozen-lockfile
+
       - name: "[DEV] Create fly app"
         id: collectorFlyCreateDev
         shell: bash
@@ -967,7 +981,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -975,7 +989,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse

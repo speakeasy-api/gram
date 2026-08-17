@@ -403,7 +403,9 @@ describe("ShadowMCPServerDetail", () => {
     });
     mocks.useNavigate.mockReturnValue(mocks.navigate);
     mocks.useRoutes.mockReturnValue({
-      costs: { href: () => "/costs" },
+      employees: {
+        detail: { href: (userSlug: string) => `/employees/${userSlug}` },
+      },
     });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer(),
@@ -477,7 +479,7 @@ describe("ShadowMCPServerDetail", () => {
     );
   });
 
-  it("renders user sources and only links email-backed users to Costs", () => {
+  it("renders user sources and only links email-backed users to their employee page", () => {
     const lastCalled = new Date("2026-01-04T10:00:00Z");
     renderDetailPage();
 
@@ -495,7 +497,7 @@ describe("ShadowMCPServerDetail", () => {
     ).toBeTruthy();
     fireEvent.click(emailRow!);
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/costs/email~alex%40example.com",
+      "/employees/alex%40example.com",
     );
 
     const noEmailRow = screen.getByText("sam@example.com").closest("tr");

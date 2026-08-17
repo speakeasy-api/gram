@@ -23,7 +23,8 @@ func principalFromContext(ctx context.Context) (platformmcp.Principal, error) {
 		return platformmcp.Principal{}, fmt.Errorf("platform tools require organization auth context")
 	}
 	return platformmcp.Principal{
-		UserID:         "",
+		Surface:        platformmcp.SurfaceProjectAssistant,
+		UserID:         authCtx.UserID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ConnectionID:   "",
 		Generation:     "",

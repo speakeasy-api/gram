@@ -241,7 +241,7 @@ func (s *OnboardingService) RecordCatalogExplored(ctx context.Context, principal
 	if s == nil || s.db == nil {
 		return ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return err
 	}
@@ -291,7 +291,7 @@ func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, princi
 	if s == nil || s.db == nil || projectID == uuid.Nil || registrationID == uuid.Nil {
 		return ErrOnboardingInvalid
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return err
 	}

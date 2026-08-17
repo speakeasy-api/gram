@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GramAdminError,
+  bulkUpdateAccountType,
   disableOrganization,
   enableOrganization,
   errorMessage,
@@ -212,6 +213,39 @@ describe("the organization write endpoints", () => {
       method: "POST",
       contentType: "application/json",
       body: { id: ORG.id, days: 30 },
+    });
+  });
+
+  it("posts the ids and one account type to the bulk path", async () => {
+    const answer = {
+      updated_ids: [ORG.id],
+      missing_ids: ["org_placeholder_two"],
+    };
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(answer), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    // The only write here that answers with ids rather than a record, so the
+    // two lists have to come back out of the client whole.
+    await expect(
+      bulkUpdateAccountType({
+        ids: [ORG.id, "org_placeholder_two"],
+        account_type: "enterprise",
+      }),
+    ).resolves.toEqual(answer);
+
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/organizations.bulkUpdateAccountType",
+      method: "POST",
+      contentType: "application/json",
+      body: {
+        ids: [ORG.id, "org_placeholder_two"],
+        account_type: "enterprise",
+      },
     });
   });
 

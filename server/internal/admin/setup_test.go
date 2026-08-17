@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 var infra *testenv.Environment
@@ -51,6 +52,7 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 		logger: logger,
 		db:     conn,
 		audit:  audit.NewLogger(),
+		trial:  trialemails.NoopNotifier{},
 	}
 
 	return ctx, svc, conn
@@ -65,4 +67,24 @@ func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSOrgan
 	svc.workos = workos
 
 	return ctx, svc, conn
+}
+
+type fakeTrialNotifier struct {
+	started     []string
+	inactive    []string
+	inactiveErr error
+}
+
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.started = append(f.started, organizationID)
+	return nil
+}
+
+func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	f.inactive = append(f.inactive, organizationID)
+	return f.inactiveErr
 }
