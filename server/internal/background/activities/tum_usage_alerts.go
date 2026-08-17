@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -110,22 +111,36 @@ func (s *SnapshotBillingCycleUsage) maybeSendUsageAlert(
 		release("failed to acquire billing eligibility lock for tum usage alert", err)
 		return
 	}
-	defer lockConn.Release()
 	lockQueries := activitiesrepo.New(lockConn)
 	lockParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{
 		OrganizationID: orgID,
 		KeyType:        string(openrouter.KeyTypeChat),
 	}
 	if err := lockQueries.AcquireOpenRouterKeyBillingLock(ctx, lockParams); err != nil {
+		// Cancellation can surface after PostgreSQL acquired the session lock.
+		// Destroy the uncertain session instead of returning it to the pool.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		if closeErr := lockConn.Hijack().Close(cleanupCtx); closeErr != nil {
+			logger.ErrorContext(cleanupCtx, "failed to close uncertain tum alert billing-lock session", attr.SlogError(closeErr))
+		}
+		cancel()
 		release("failed to lock billing eligibility for tum usage alert", err)
 		return
 	}
 	defer func() {
-		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		unlocked, unlockErr := lockQueries.ReleaseOpenRouterKeyBillingLock(unlockCtx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
-		if unlockErr != nil || !unlocked {
-			logger.ErrorContext(unlockCtx, "failed to unlock billing eligibility after tum usage alert", attr.SlogError(unlockErr))
+		if unlockErr == nil && unlocked {
+			lockConn.Release()
+			return
+		}
+		if unlockErr == nil {
+			unlockErr = errors.New("billing eligibility lock was not held by this session")
+		}
+		logger.ErrorContext(unlockCtx, "failed to unlock billing eligibility after tum usage alert", attr.SlogError(unlockErr))
+		if closeErr := lockConn.Hijack().Close(unlockCtx); closeErr != nil {
+			logger.ErrorContext(unlockCtx, "failed to close tum alert billing-lock session", attr.SlogError(closeErr))
 		}
 	}()
 
