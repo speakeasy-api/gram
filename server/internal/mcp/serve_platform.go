@@ -136,13 +136,12 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	switch slug {
 	case platformtools.ResearchToolsetSlug:
 		// Nobody reaches the research tools over HTTP. The research runner
-		// holds these executors in-process, so an assistant token arriving
-		// here is an assistant that was never meant to have them — and what
-		// it would get is billable web search plus arbitrary page fetch,
-		// available to any assistant in any organization with the
-		// mcp_approval feature. If the runner is ever moved onto the
-		// assistant runtime, this is where its principal is checked; until
-		// then the honest answer is that the toolset is not there.
+		// constructs its executors privately — the slug is not even in the
+		// toolset registry — so this refusal is a tripwire: an assistant
+		// token arriving here was never meant to have billable web search
+		// and public page fetch, and re-registering the toolset must not
+		// quietly grant them. If the runner is ever moved onto the assistant
+		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
 	default:
