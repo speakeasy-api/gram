@@ -214,7 +214,6 @@ export function PlatformMCPOnboardingContent({
     const next = new URLSearchParams(searchParams);
     next.delete("setup");
     next.delete("entrySource");
-    next.delete("projectSlug");
     setSearchParams(next, { replace: true });
   }, [autoOpen, onSetupOpenChange, searchParams, setSearchParams, sheetOnly]);
 

@@ -36,7 +36,12 @@ export function createDismissedCtaStore(prefix: string): {
   function subscribe(listener: () => void) {
     listeners.add(listener);
     const onStorage = (event: StorageEvent) => {
-      if (!event.key?.startsWith(`${prefix}:`)) return;
+      if (event.key === null) {
+        memory.clear();
+        listener();
+        return;
+      }
+      if (!event.key.startsWith(`${prefix}:`)) return;
       const slug = event.key.slice(prefix.length + 1);
       if (!slug) return;
       memory.set(slug, event.newValue === "true");

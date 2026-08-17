@@ -1566,6 +1566,21 @@ WHERE EXISTS (
 )
 ON CONFLICT DO NOTHING;
 
+-- name: HasPlatformMCPOnboardingInstallStarted :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    JOIN platform_mcp_onboarding_workflows AS workflow
+      ON workflow.organization_id = milestone.organization_id
+     AND workflow.id = milestone.attempt_id
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = 'install_started'
+      AND milestone.attempt_id = @attempt_id
+      AND workflow.initiating_subject_urn = @initiating_subject_urn
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+);
+
 -- name: RecordPlatformMCPDashboardCtaEvent :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,

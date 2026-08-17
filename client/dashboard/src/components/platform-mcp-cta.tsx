@@ -5,6 +5,7 @@ import {
 } from "@/hooks/usePlatformMcpCta";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { PlugZap, X } from "lucide-react";
 import { Link } from "react-router";
 
@@ -28,7 +29,7 @@ export function PlatformMcpPromotion({
   return (
     <div
       ref={impressionRef}
-      className={className ?? "relative overflow-hidden border bg-card p-4"}
+      className={cn("relative overflow-hidden border bg-card p-4", className)}
     >
       <span
         aria-hidden="true"
@@ -53,15 +54,16 @@ export function PlatformMcpPromotion({
             Connect Platform MCP to choose a reviewed MCP catalogue server and
             add it to this project&apos;s Default plugin.
           </Text>
-          <Link
-            to={cta.href}
-            onClick={cta.recordSelected}
-            className="mt-3 inline-flex hover:no-underline"
+          <Button
+            asChild
+            size="sm"
+            variant="secondary"
+            className="mt-3 hover:no-underline"
           >
-            <Button size="sm" variant="secondary">
+            <Link to={cta.href} onClick={cta.recordSelected}>
               <Button.Text>{cta.label}</Button.Text>
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

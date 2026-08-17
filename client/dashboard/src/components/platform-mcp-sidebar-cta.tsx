@@ -5,10 +5,12 @@ import {
 } from "@/hooks/usePlatformMcpCta";
 
 import { Link } from "react-router";
+import { useSlugs } from "@/contexts/Sdk";
 
 export function PlatformMcpSidebarCta(): JSX.Element | null {
+  const { projectSlug } = useSlugs();
   const { dismiss, href, label, recordImpression, recordSelected, visible } =
-    usePlatformMcpCta({ surface: "sidebar_footer" });
+    usePlatformMcpCta({ surface: "sidebar_footer", projectSlug });
   const impressionRef = usePlatformMcpCtaImpression(visible, recordImpression);
 
   if (!visible) return null;

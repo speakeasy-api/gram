@@ -47,4 +47,17 @@ describe("createDismissedCtaStore", () => {
 
     expect(hook.result.current).toBe(true);
   });
+
+  it("clears in-memory dismissal after storage is cleared in another tab", () => {
+    const store = createDismissedCtaStore("test-dismissed-cta-storage-clear");
+    const hook = renderHook(() => store.useDismissed("user:organization"));
+    act(() => store.write("user:organization", true));
+
+    act(() => {
+      localStorage.clear();
+      window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    });
+
+    expect(hook.result.current).toBe(false);
+  });
 });

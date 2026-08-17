@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrganization, useUser } from "@/contexts/Auth";
 
 import type { RecordDashboardCtaEventRequestBody } from "@gram/client/models/components/recorddashboardctaeventrequestbody.js";
@@ -10,7 +10,7 @@ import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboa
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRecordPlatformMCPDashboardCtaEventMutation } from "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js";
 
-export const PLATFORM_MCP_CTA_SURFACES = [
+const PLATFORM_MCP_CTA_SURFACES = [
   "sidebar_footer",
   "sources_empty",
   "project_overview_zero_data",
@@ -85,14 +85,16 @@ export function usePlatformMcpCta({
   const { hasScope } = useRBAC();
   const { enabled: dashboardEnabled, isLoading: dashboardLoading } =
     usePlatformMcpDashboardVisibility();
+  const canQuery = dashboardEnabled && hasScope("org:admin");
   const onboarding = usePlatformMCPOnboarding(
     { gramSession: "" },
     { sessionHeaderGramSession: "" },
-    { throwOnError: false, staleTime: 10_000 },
+    { throwOnError: false, staleTime: 10_000, enabled: canQuery },
   );
   const packageStatus = usePlatformMCPPackageStatus(undefined, undefined, {
     throwOnError: false,
     staleTime: 10_000,
+    enabled: canQuery,
   });
   const scope = dismissalScope(user.id, organization.id);
   const dismissed = store.useDismissed(scope);
@@ -141,14 +143,16 @@ export function usePlatformMcpCta({
     recorded.current.clear();
   }, [surface, scope]);
 
+  const requiresOrganizationSetup =
+    surface === "sidebar_footer" || surface === "organization_home";
   const canRender =
     !dashboardLoading &&
-    dashboardEnabled &&
-    hasScope("org:admin") &&
+    canQuery &&
     !onboarding.isLoading &&
     !onboarding.isError &&
     onboarding.data?.enabled === true &&
-    onboarding.data.organizationSetupComplete === false &&
+    (!requiresOrganizationSetup ||
+      onboarding.data.organizationSetupComplete === false) &&
     !packageStatus.isLoading &&
     !packageStatus.isError &&
     packageStatus.data?.admission === "enabled" &&
@@ -170,10 +174,11 @@ export function usePlatformMcpCtaImpression(
   recordImpression: () => void,
 ): (node: HTMLElement | null) => void {
   const observer = useRef<IntersectionObserver | null>(null);
-  const node = useRef<HTMLElement | null>(null);
+  const [node, setNode] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!visible || !node.current) return;
+    observer.current?.disconnect();
+    if (!visible || !node) return;
     if (typeof IntersectionObserver === "undefined") {
       recordImpression();
       return;
@@ -186,11 +191,9 @@ export function usePlatformMcpCtaImpression(
       },
       { threshold: 0.5 },
     );
-    observer.current.observe(node.current);
+    observer.current.observe(node);
     return () => observer.current?.disconnect();
-  }, [recordImpression, visible]);
+  }, [node, recordImpression, visible]);
 
-  return useCallback((element: HTMLElement | null) => {
-    node.current = element;
-  }, []);
+  return setNode;
 }

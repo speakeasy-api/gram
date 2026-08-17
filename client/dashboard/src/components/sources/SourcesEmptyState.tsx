@@ -21,6 +21,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
+import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 
 type SourcesEmptyStateProps = {
@@ -63,6 +64,7 @@ export function SourcesEmptyState({
   isTunneledMcpEnabled,
 }: SourcesEmptyStateProps): JSX.Element {
   const routes = useRoutes();
+  const { projectSlug } = useSlugs();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
@@ -205,6 +207,7 @@ export function SourcesEmptyState({
           </RequireScope>
           <PlatformMcpPromotion
             surface="sources_empty"
+            projectSlug={projectSlug}
             className="mt-8 w-full max-w-2xl bg-card p-4 text-left"
           />
         </div>

@@ -273,12 +273,27 @@ func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizatio
 		return OnboardingProjection{}, fmt.Errorf("record platform mcp onboarding install intent: %w", err)
 	}
 
-	if _, err := platformrepo.New(s.db).RecordPlatformMCPOnboardingInstallStarted(ctx, platformrepo.RecordPlatformMCPOnboardingInstallStartedParams{
+	q := platformrepo.New(s.db)
+	rows, err := q.RecordPlatformMCPOnboardingInstallStarted(ctx, platformrepo.RecordPlatformMCPOnboardingInstallStartedParams{
 		OrganizationID:       organizationID,
 		InitiatingSubjectUrn: userSubjectURN(userID),
 		AttemptID:            uuid.NullUUID{UUID: row.ID, Valid: true},
-	}); err != nil {
+	})
+	if err != nil {
 		return OnboardingProjection{}, fmt.Errorf("record platform mcp onboarding install started: %w", err)
+	}
+	if rows == 0 {
+		recorded, err := q.HasPlatformMCPOnboardingInstallStarted(ctx, platformrepo.HasPlatformMCPOnboardingInstallStartedParams{
+			OrganizationID:       organizationID,
+			InitiatingSubjectUrn: userSubjectURN(userID),
+			AttemptID:            uuid.NullUUID{UUID: row.ID, Valid: true},
+		})
+		if err != nil {
+			return OnboardingProjection{}, fmt.Errorf("check platform mcp onboarding install-started evidence: %w", err)
+		}
+		if !recorded {
+			return OnboardingProjection{}, ErrUnavailable
+		}
 	}
 	// The durable install-started marker is deliberately once per active
 	// workflow. Re-selecting an agent may update the workflow's client family,

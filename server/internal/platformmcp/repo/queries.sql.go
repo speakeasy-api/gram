@@ -3002,6 +3002,35 @@ func (q *Queries) HasPlatformMCPOnboardingDistributionSucceeded(ctx context.Cont
 	return exists, err
 }
 
+const hasPlatformMCPOnboardingInstallStarted = `-- name: HasPlatformMCPOnboardingInstallStarted :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    JOIN platform_mcp_onboarding_workflows AS workflow
+      ON workflow.organization_id = milestone.organization_id
+     AND workflow.id = milestone.attempt_id
+    WHERE milestone.organization_id = $1
+      AND milestone.milestone = 'install_started'
+      AND milestone.attempt_id = $2
+      AND workflow.initiating_subject_urn = $3
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+)
+`
+
+type HasPlatformMCPOnboardingInstallStartedParams struct {
+	OrganizationID       string
+	AttemptID            uuid.NullUUID
+	InitiatingSubjectUrn string
+}
+
+func (q *Queries) HasPlatformMCPOnboardingInstallStarted(ctx context.Context, arg HasPlatformMCPOnboardingInstallStartedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPlatformMCPOnboardingInstallStarted, arg.OrganizationID, arg.AttemptID, arg.InitiatingSubjectUrn)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasPlatformMCPOnboardingLifecycleMilestone = `-- name: HasPlatformMCPOnboardingLifecycleMilestone :one
 SELECT EXISTS (
     SELECT 1
