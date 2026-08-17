@@ -312,6 +312,36 @@ describe("Overview", () => {
     expect(document.querySelector(".text-destructive")).toBeNull();
   });
 
+  it("keeps a failure showing when the next change is cancelled", async () => {
+    mocks.updateOrganization.mockRejectedValue(new Error("update failed"));
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    await confirmDialog();
+    await waitFor(() => {
+      expect(document.querySelector(".text-destructive")?.textContent).toMatch(
+        /update failed/,
+      );
+    });
+
+    await pickAccountType("enterprise");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    // Only a write clears the failure, and a cancelled change is not a write.
+    // Clearing it here would take away the only account of a failure the
+    // operator may not have read yet, in exchange for nothing happening.
+    expect(document.querySelector(".text-destructive")?.textContent).toMatch(
+      /update failed/,
+    );
+    expect(mocks.updateOrganization).toHaveBeenCalledTimes(1);
+  });
+
   it("writes the account type on its own, with no whitelisted field", async () => {
     mocks.updateOrganization.mockResolvedValue({
       ...ORG,
