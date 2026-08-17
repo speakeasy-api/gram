@@ -284,18 +284,22 @@ const (
 	// the `io.modelcontextprotocol/protocolVersion` `_meta` key under
 	// 2026-07-28), otherwise from the observed `initialize` response.
 	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
-	McpRequestedTagsKey             = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey             = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey             = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                  = attribute.Key("gram.mcp_server.id")
-	McpURLKey                       = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey        = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                   = attribute.Key("gram.metric.name")
-	MimeTypeKey                     = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey   = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey                = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey              = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey   = attribute.Key("gram.oauth.client_secret_generated")
+	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
+	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
+	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
+	McpSurfaceKey                 = attribute.Key("gram.mcp.surface")
+	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	McpURLKey                     = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                 = attribute.Key("gram.metric.name")
+	MimeTypeKey                   = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey              = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey            = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
@@ -1878,6 +1882,9 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
+
+func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
+func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
 
 func MCPRequestedProtocolVersion(v string) attribute.KeyValue {
 	return McpRequestedProtocolVersionKey.String(v)
