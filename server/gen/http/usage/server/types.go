@@ -39,10 +39,11 @@ type GetPeriodUsageResponseBody struct {
 	IncludedServers int `form:"included_servers" json:"included_servers" xml:"included_servers"`
 	// The number of servers enabled at the time of the request
 	ActualEnabledServerCount int `form:"actual_enabled_server_count" json:"actual_enabled_server_count" xml:"actual_enabled_server_count"`
-	// The number of credits used
-	Credits int `form:"credits" json:"credits" xml:"credits"`
-	// The number of credits included in the tier
-	IncludedCredits int `form:"included_credits" json:"included_credits" xml:"included_credits"`
+	// The number of credits used. Only populated for platform admins.
+	Credits *int `form:"credits,omitempty" json:"credits,omitempty" xml:"credits,omitempty"`
+	// The number of credits included in the tier. Only populated for platform
+	// admins.
+	IncludedCredits *int `form:"included_credits,omitempty" json:"included_credits,omitempty" xml:"included_credits,omitempty"`
 	// Whether the project has an active subscription
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 }

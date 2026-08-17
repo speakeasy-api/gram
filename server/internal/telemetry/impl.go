@@ -527,10 +527,7 @@ func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType 
 	g, gctx := errgroup.WithContext(ctx)
 	// Fold the enrollment list's email keys to canonical identities when the
 	// org is on the fold, matching the employee detail pages it links to.
-	canonicalOrg := ""
-	if fold, _ := s.canonicalIdentityMode(ctx, params.organizationID); fold {
-		canonicalOrg = params.organizationID
-	}
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
@@ -2127,13 +2124,15 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 	if payload.Cursor != nil {
 		cursor = *payload.Cursor
 	}
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
 	rows, nextCursor, err := s.chRepo.GetUnproxiedMcpServerUserUsage(ctx, repo.GetUnproxiedMcpServerUserUsageParams{
-		GramProjectID: authCtx.ProjectID.String(),
-		CanonicalURL:  canonical.CanonicalURL,
-		TimeStart:     timeStart,
-		TimeEnd:       timeEnd,
-		Cursor:        cursor,
-		Limit:         payload.Limit,
+		GramProjectID:        authCtx.ProjectID.String(),
+		CanonicalURL:         canonical.CanonicalURL,
+		TimeStart:            timeStart,
+		TimeEnd:              timeEnd,
+		Cursor:               cursor,
+		Limit:                payload.Limit,
+		CanonicalIdentityOrg: canonicalOrg,
 	})
 	if err != nil {
 		if errors.Is(err, repo.ErrInvalidUnproxiedMcpServerUsageCursor) {
@@ -2823,17 +2822,23 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
 		sessionCount          int64
 	)
+	// The user dimension folds one employee's linked emails into one bucket
+	// when the org is on the canonical fold; server/tool dimensions and the
+	// flag-off behavior are unchanged.
+	canonicalOrg := s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
 
 	eg.Go(func() error {
 		var err error
 		serverRows, err = s.chRepo.GetHooksSummary(egCtx, repo.GetHooksSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks server summary: %w", err)
@@ -2843,11 +2848,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		userRows, err = s.chRepo.GetHooksUserSummary(egCtx, repo.GetHooksUserSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks user summary: %w", err)
@@ -2857,11 +2863,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillRows, err = s.chRepo.GetSkillsSummary(egCtx, repo.GetSkillsSummaryParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get skills summary: %w", err)
@@ -2871,10 +2878,11 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillBreakdownRows, err = s.chRepo.GetSkillBreakdown(egCtx, repo.GetSkillBreakdownParams{
-			GramProjectID: projectID,
-			TimeStart:     timeStart,
-			TimeEnd:       timeEnd,
-			Filters:       attributeFilters,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill breakdown: %w", err)
@@ -2884,11 +2892,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks breakdown: %w", err)
@@ -2898,12 +2907,13 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		timeSeriesPoints, err = s.chRepo.GetHooksTimeSeries(egCtx, repo.GetHooksTimeSeriesParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			BucketSizeNs:   bucketSizeNs,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			BucketSizeNs:         bucketSizeNs,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks time series: %w", err)
@@ -2913,11 +2923,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		skillTimeSeriesPoints, err = s.chRepo.GetSkillTimeSeries(egCtx, repo.GetSkillTimeSeriesParams{
-			GramProjectID: projectID,
-			TimeStart:     timeStart,
-			TimeEnd:       timeEnd,
-			BucketSizeNs:  bucketSizeNs,
-			Filters:       attributeFilters,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			BucketSizeNs:         bucketSizeNs,
+			Filters:              attributeFilters,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill time series: %w", err)
@@ -2927,11 +2938,12 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	eg.Go(func() error {
 		var err error
 		sessionCount, err = s.chRepo.GetHooksSessionCount(egCtx, repo.GetHooksSessionCountParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Filters:        attributeFilters,
-			TypesToInclude: typesToInclude,
+			CanonicalIdentityOrg: canonicalOrg,
+			GramProjectID:        projectID,
+			TimeStart:            timeStart,
+			TimeEnd:              timeEnd,
+			Filters:              attributeFilters,
+			TypesToInclude:       typesToInclude,
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks session count: %w", err)
@@ -3912,15 +3924,17 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	attributeFilters := toRepoAttributeFilters(payload.Filters)
 
 	// Query with limit+1 to detect if there are more results
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
-		GramProjectID:  params.projectID,
-		TimeStart:      params.timeStart,
-		TimeEnd:        params.timeEnd,
-		Filters:        attributeFilters,
-		TypesToInclude: payload.TypesToInclude,
-		SortOrder:      params.sortOrder,
-		Cursor:         params.cursor,
-		Limit:          params.limit + 1,
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		Filters:              attributeFilters,
+		TypesToInclude:       payload.TypesToInclude,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		CanonicalIdentityOrg: canonicalOrg,
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "error listing hooks traces", attr.SlogError(err))

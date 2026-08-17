@@ -391,8 +391,8 @@ BEGIN
   -- (tools:http:acme:*) match the ClickHouse telemetry, feeding the
   -- Deployments, Sources, MCP, Playground, and Catalog surfaces.
   ------------------------------------------------------------------
-  INSERT INTO assets (id, project_id, name, url, kind, content_type, content_length, sha256)
-  VALUES (asset_id, proj_a, 'Acme Internal API', 'file://demo/acme-openapi.yaml',
+  INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
+  VALUES (asset_id, proj_a, demo_org, 'Acme Internal API', 'file://demo/acme-openapi.yaml',
           'openapiv3', 'application/x-yaml', 24576,
           'dec0de0000000000000000000000000000000000000000000000000000000001');
 

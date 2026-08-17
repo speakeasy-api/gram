@@ -18,10 +18,12 @@ import {
   disableOrganization,
   enableOrganization,
   extendTrial,
+  rearmTrial,
   type AdminOrganization,
   type BulkUpdateAccountTypeRequest,
   type BulkUpdateAccountTypeResult,
   type ExtendTrialRequest,
+  type RearmTrialRequest,
   type TrialState,
 } from "@/lib/gramAdminApi";
 
@@ -70,6 +72,25 @@ export function canExtendTrial(org: AdminOrganization): boolean {
     !org.disabled_at &&
     org.trial_state !== undefined &&
     EXTENDABLE_TRIAL_STATES.has(org.trial_state)
+  );
+}
+
+// The one state the server will re-arm. A trial that has converted or is still
+// running is rejected there with a conflict, an expired one has not been
+// demoted yet, and an organization that never trialled has nothing to put back.
+//
+// A set for the same reason the extendable states are one: the two sets are
+// disjoint by construction, and a test can walk every state and hold them so.
+const REARMABLE_TRIAL_STATES: ReadonlySet<TrialState> = new Set(["demoted"]);
+
+// Not for a disabled organization, for the reason canExtendTrial gives: a trial
+// that runs behind a lockout is a trial nobody can use, and re-enabling is one
+// press away for an operator who means to make it real.
+export function canRearmTrial(org: AdminOrganization): boolean {
+  return (
+    !org.disabled_at &&
+    org.trial_state !== undefined &&
+    REARMABLE_TRIAL_STATES.has(org.trial_state)
   );
 }
 
@@ -131,6 +152,20 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
     // Wrapped, so the body is the only argument the client is handed: the
     // mutation passes its own context as a second one.
     mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+// The response carries the restored account type, the restored whitelist flag
+// and the new end date, so the row repaints from it. A refetch would move the
+// row instead: the re-armed record no longer matches a filter on the demoted
+// state the operator was very likely looking at.
+export function useRearmTrial(): OrganizationWrite<RearmTrialRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RearmTrialRequest) => rearmTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
     onError: () => invalidateOrganizationStats(qc),

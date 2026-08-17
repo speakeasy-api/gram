@@ -75,6 +75,7 @@ export const AUDIT_ACTIONS = [
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
@@ -173,6 +174,7 @@ export const AUDIT_ACTIONS = [
   "tunneled-mcp:update",
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
+  "user-session-client:cimd-refresh",
   "user-session-client:revoke",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
@@ -367,6 +369,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_extended":
+      return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
 
@@ -580,6 +584,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "user-session:revoke":
       return "revoked user session";
+    case "user-session-client:cimd-refresh":
+      return "refreshed the client metadata document for";
     case "user-session-client:revoke":
       return "revoked user session client";
     case "user-session-consent:revoke":

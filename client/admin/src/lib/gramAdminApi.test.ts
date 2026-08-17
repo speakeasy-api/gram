@@ -9,7 +9,10 @@ import {
   listOrganizations,
   logout,
   MAX_TRIAL_EXTENSION_DAYS,
+  MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
+  MIN_TRIAL_REARM_DAYS,
+  rearmTrial,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -213,6 +216,32 @@ describe("the organization write endpoints", () => {
       method: "POST",
       contentType: "application/json",
       body: { id: ORG.id, days: 30 },
+    });
+  });
+
+  // MinTrialRearmDays and MaxTrialRearmDays in
+  // server/internal/constants/trials.go, which alias the extension bounds there
+  // today. Written out rather than compared to the extension constants: the two
+  // pairs are separate names so they can diverge, and an assertion that only
+  // said they matched would go on passing on the day one of them moves.
+  it("mirrors the server's re-arm bounds exactly", () => {
+    expect(MIN_TRIAL_REARM_DAYS).toBe(1);
+    expect(MAX_TRIAL_REARM_DAYS).toBe(365);
+  });
+
+  // A different path and a different action from extend: this one restores the
+  // account type and the whitelist flag and revives the model provider keys,
+  // and its days are the whole length of a fresh run rather than an addition.
+  it("posts the id and the day count to the re-arm path", async () => {
+    const fetch = stubFetch();
+
+    await expect(rearmTrial({ id: ORG.id, days: 14 })).resolves.toEqual(ORG);
+
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/trial.rearm",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id, days: 14 },
     });
   });
 
