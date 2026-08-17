@@ -220,6 +220,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"$11 per 10 additional chat based credits",
 			},
 		},
+		Payg: NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
 			IncludedToolCalls:          0,

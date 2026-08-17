@@ -186,10 +186,11 @@ func ResolveModel(model string) string {
 // this can always be customized per org in the DB
 // or via running OpenrouterKeyRefreshWorkflow {OrgID: "abc123", Limit: new_monthly_limit} in temporal directly
 var creditsAccountTypeMap = map[string]int{
-	"free":       5,
-	"pro":        100,
-	"enterprise": 100,
-	"":           5, // safety default
+	string(billing.TierBase):       5,
+	string(billing.TierPro):        100,
+	string(billing.TierPayg):       100,
+	string(billing.TierEnterprise): 100,
+	"":                             5, // safety default
 }
 
 // trialCreditLimit caps each key an organization inside a trial holds, so its

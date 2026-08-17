@@ -907,11 +907,11 @@ paths:
                     description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
                     type: string
                 - allowEmptyValue: true
-                  description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
+                  description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                   in: query
                   name: account_type
                   schema:
-                    description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
+                    description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                     type: string
                 - allowEmptyValue: true
                   description: Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.
@@ -56963,7 +56963,7 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: Gram account type (e.g. free, pro, enterprise).
+                    description: Gram account type (e.g. free, pro, payg, enterprise).
                 created_at:
                     type: string
                     description: The creation date of the organization.
@@ -58200,6 +58200,7 @@ components:
                     enum:
                         - free
                         - pro
+                        - payg
                         - enterprise
                 ids:
                     type: array
@@ -77998,10 +77999,11 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: New gram_account_type.
+                    description: New gram_account_type (free, pro, payg, or enterprise).
                     enum:
                         - free
                         - pro
+                        - payg
                         - enterprise
                 id:
                     type: string
@@ -79204,11 +79206,14 @@ components:
                     $ref: '#/components/schemas/TierLimits'
                 free:
                     $ref: '#/components/schemas/TierLimits'
+                payg:
+                    $ref: '#/components/schemas/TierLimits'
                 pro:
                     $ref: '#/components/schemas/TierLimits'
             required:
                 - free
                 - pro
+                - payg
                 - enterprise
         UserAccount:
             type: object
