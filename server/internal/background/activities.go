@@ -326,7 +326,7 @@ func NewActivities(
 	// worker's own clients; workers wired without the full ingredient set
 	// (test workers) get a nil activity and no schedule.
 	var mcpApprovalRecheck *activities.McpApprovalRecheck
-	if db != nil && guardianPolicy != nil && telemetryRepo != nil && mcpRegistryClient != nil && productFeatures != nil && auditLogger != nil {
+	if db != nil && guardianPolicy != nil && telemetryRepo != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
 		recheckProber := remoteprobe.New(logger, guardianPolicy)
 		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
 			packagemeta.NewClient(guardianPolicy.PooledClient()),
@@ -337,7 +337,7 @@ func NewActivities(
 			recheckProber,
 			recheckProber,
 			mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
-		), productFeatures, auditLogger)
+		), features, auditLogger)
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
