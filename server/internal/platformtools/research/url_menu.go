@@ -57,7 +57,9 @@ func CanonicalMenuURL(raw string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse url: %w", err)
 	}
-	if !target.IsAbs() || target.Host == "" {
+	// Hostname, not Host: a malformed authority like https://:443/path has a
+	// non-empty Host by way of its port and no machine behind it.
+	if !target.IsAbs() || target.Hostname() == "" {
 		return "", fmt.Errorf("url must be absolute with a host")
 	}
 	if target.Scheme != "https" {
