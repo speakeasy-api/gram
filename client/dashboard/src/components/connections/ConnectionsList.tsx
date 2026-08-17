@@ -8,10 +8,12 @@ import {
   type ConnectionGrouping,
 } from "@/components/connections/groupConnections";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { Button } from "@/components/ui/Button";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
+import { getInitials } from "@/lib/initials";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 
@@ -49,21 +51,36 @@ function ConnectionGroupSection({
   group,
   canRevoke,
   onRevoked,
+  showSubject,
 }: {
   group: ConnectionGroup;
   canRevoke: boolean;
   onRevoked: () => void;
+  /** True when the heading is not a person, so the rows must name one. */
+  showSubject: boolean;
 }): JSX.Element {
   const [revokeAllOpen, setRevokeAllOpen] = useState(false);
 
   return (
     <section className="border-border border">
       <header className="border-border bg-card flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="min-w-0">
-          <Text className="truncate font-medium">{group.label}</Text>
-          <Text small muted>
-            {connectionGroupSummary(group)}
-          </Text>
+        <div className="flex min-w-0 items-center gap-3">
+          {group.identity ? (
+            <Avatar className="size-8 shrink-0">
+              {group.identity.photoUrl ? (
+                <AvatarImage src={group.identity.photoUrl} alt={group.label} />
+              ) : null}
+              <AvatarFallback className="text-[10px] font-semibold">
+                {getInitials(group.label)}
+              </AvatarFallback>
+            </Avatar>
+          ) : null}
+          <div className="min-w-0">
+            <Text className="truncate font-medium">{group.label}</Text>
+            <Text small muted>
+              {connectionGroupSummary(group)}
+            </Text>
+          </div>
         </div>
         {canRevoke && group.revocableIds.length > 0 ? (
           <Button
@@ -81,6 +98,7 @@ function ConnectionGroupSection({
           <ConnectionChainRow
             key={`${group.key}:${session.id}`}
             session={session}
+            showSubject={showSubject}
             actions={
               canRevoke ? (
                 <ConnectionRowActions session={session} onRevoked={onRevoked} />
@@ -130,6 +148,7 @@ export function ConnectionsList({
           group={group}
           canRevoke={canRevoke}
           onRevoked={onRevoked}
+          showSubject={grouping !== "subject"}
         />
       ))}
     </div>

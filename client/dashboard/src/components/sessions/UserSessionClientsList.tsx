@@ -348,11 +348,13 @@ function ActiveSessionCountCell({
   client: UserSessionClient;
   onViewSessions?: (client: UserSessionClient) => void;
 }): JSX.Element {
-  // Without a drill-down target the count is still worth reading, just inert.
+  // Two separate reasons to render plain text, and they must not share a
+  // branch: a zero has nothing to drill into, and a caller with no drill-down
+  // target still needs the real tally rendered rather than a literal zero.
   if (client.activeSessionCount === 0 || !onViewSessions) {
     return (
       <Text small muted>
-        0
+        {client.activeSessionCount}
       </Text>
     );
   }

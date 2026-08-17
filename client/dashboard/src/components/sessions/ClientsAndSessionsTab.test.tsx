@@ -334,4 +334,19 @@ describe("ClientsAndSessionsTab", () => {
 
     expect(screen.getByText("Registered Client")).toBeDefined();
   });
+
+  it("reports each client's real session tally without a drill-down target", () => {
+    // Retiring the drill-down made the count cell render as plain text. The
+    // zero case and the no-drill-down case share that branch, so the tally has
+    // to come from the data rather than from the branch that produced it.
+    useUserSessionClientsInfinite.mockReturnValue(
+      queryResult([
+        client({ clientName: "Busy Client", activeSessionCount: 3 }),
+      ]),
+    );
+
+    renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
+
+    expect(screen.getByText("3")).toBeDefined();
+  });
 });

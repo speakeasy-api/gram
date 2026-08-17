@@ -24,6 +24,12 @@ export type ConnectionGroup = {
   attentionCount: number;
   /** Active session ids, the only ones a revoke action can act on. */
   revocableIds: string[];
+  /**
+   * Set when the group heading names a person, so the header can show their
+   * face. Absent for provider and client groups, which are not identities and
+   * would read oddly with an initials badge.
+   */
+  identity?: { photoUrl?: string };
 };
 
 /**
@@ -79,6 +85,13 @@ export function groupConnections(
           liveCount: 0,
           attentionCount: 0,
           revocableIds: [],
+          // Only the person grouping names an identity. A user subject may
+          // still have no photo, in which case the header falls back to
+          // initials rather than omitting the avatar.
+          identity:
+            grouping === "subject" && session.subjectType === "user"
+              ? { photoUrl: session.subjectPhotoUrl ?? undefined }
+              : undefined,
         };
         groups.set(key, group);
       }

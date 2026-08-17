@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 
 import { ClientSourceBadge } from "@/components/sessions/ClientSourceBadge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Text } from "@/components/ui/Text";
 import {
   Tooltip,
@@ -13,6 +14,7 @@ import {
   connectionDeadlineLabel,
   connectionState,
 } from "@/lib/connection-state";
+import { getInitials } from "@/lib/initials";
 import { subjectLabel } from "@/lib/user-session-status";
 import { cn } from "@/lib/utils";
 
@@ -119,8 +121,26 @@ export function ConnectionChainRow({
           </span>
 
           {showSubject ? (
-            <span className="text-foreground font-medium">
-              {subjectLabel(session)}
+            <span className="inline-flex items-center gap-1.5">
+              {/* Only user subjects have a face; API keys and anonymous
+                  sessions get the name alone rather than initials of a
+                  label that names no person. */}
+              {session.subjectType === "user" ? (
+                <Avatar className="size-5 shrink-0">
+                  {session.subjectPhotoUrl ? (
+                    <AvatarImage
+                      src={session.subjectPhotoUrl}
+                      alt={subjectLabel(session)}
+                    />
+                  ) : null}
+                  <AvatarFallback className="text-[8px] font-semibold">
+                    {getInitials(subjectLabel(session))}
+                  </AvatarFallback>
+                </Avatar>
+              ) : null}
+              <span className="text-foreground font-medium">
+                {subjectLabel(session)}
+              </span>
             </span>
           ) : null}
 
