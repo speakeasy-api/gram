@@ -91,6 +91,7 @@ type Activities struct {
 	db                              *pgxpool.Pool
 	temporalEnv                     *tenv.Environment
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
+	collectOpenRouterDailySpend     *activities.CollectOpenRouterDailySpend
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
@@ -172,6 +173,7 @@ func NewActivities(
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
 	openrouterProvisioner openrouter.Provisioner,
+	openrouterSpendClient openrouter.SpendClient,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
@@ -300,6 +302,7 @@ func NewActivities(
 		db:                              db,
 		temporalEnv:                     temporalEnv,
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
+		collectOpenRouterDailySpend:     activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
@@ -495,6 +498,10 @@ func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []act
 
 func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args activities.CollectOpenRouterCreditsMetricsArgs) ([]activities.OpenRouterCreditsMetric, error) {
 	return a.collectOpenRouterCreditsMetrics.Do(ctx, args)
+}
+
+func (a *Activities) CollectOpenRouterDailySpend(ctx context.Context, args activities.CollectOpenRouterDailySpendArgs) error {
+	return a.collectOpenRouterDailySpend.Do(ctx, args)
 }
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {

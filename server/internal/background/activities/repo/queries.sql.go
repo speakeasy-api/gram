@@ -122,6 +122,49 @@ func (q *Queries) ClaimPublishOutboxBatch(ctx context.Context, arg ClaimPublishO
 	return items, nil
 }
 
+const countOpenRouterDailySpendGaps = `-- name: CountOpenRouterDailySpendGaps :one
+WITH RECURSIVE calendar(day) AS (
+  SELECT MIN(openrouter_spend_daily.day)
+  FROM openrouter_spend_daily
+  WHERE openrouter_spend_daily.organization_id = $1
+    AND openrouter_spend_daily.key_type = $2
+  UNION ALL
+  SELECT calendar.day + 1
+  FROM calendar
+  WHERE calendar.day + 1 < $3::date
+), missing AS (
+  SELECT calendar.day
+  FROM calendar
+  LEFT JOIN openrouter_spend_daily spend
+    ON spend.organization_id = $1
+   AND spend.key_type = $2
+   AND spend.day = calendar.day
+  WHERE calendar.day IS NOT NULL
+    AND spend.id IS NULL
+  ORDER BY calendar.day
+)
+SELECT
+  COUNT(*)::bigint AS missing_count
+FROM missing
+`
+
+type CountOpenRouterDailySpendGapsParams struct {
+	TargetOrganizationID string
+	TargetKeyType        string
+	TargetCutoffDay      pgtype.Date
+}
+
+// Search only after the first successfully stored day. This avoids reporting
+// pre-rollout history or a newly created key as missing. The caller supplies
+// the start of its recovery window as cutoff_day, so every returned gap is too
+// old for the overlapping daily pull to repair automatically.
+func (q *Queries) CountOpenRouterDailySpendGaps(ctx context.Context, arg CountOpenRouterDailySpendGapsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenRouterDailySpendGaps, arg.TargetOrganizationID, arg.TargetKeyType, arg.TargetCutoffDay)
+	var missing_count int64
+	err := row.Scan(&missing_count)
+	return missing_count, err
+}
+
 const countPendingPublishOutboxRows = `-- name: CountPendingPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox
 `
@@ -477,7 +520,6 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
-    k.key AS api_key,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
@@ -494,7 +536,6 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
-	ApiKey           pgtype.Text
 	ApiKeyEncrypted  pgtype.Text
 }
 
@@ -503,11 +544,9 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 // account-type allowlist so coverage can expand (e.g. add 'pro') without a
 // code change. monthly_credits is the canonical limit last written by
 // RefreshAPIKeyLimit and reflects any per-org overrides applied via the
-// OpenrouterKeyRefreshWorkflow. The key material is included so the caller
-// can issue the upstream usage HTTP call in a single round-trip — keep it
-// inside the activity boundary and never return it to the workflow. The
-// encrypted column is preferred and the plaintext column is the legacy
-// fallback for rows minted before encrypted storage.
+// OpenrouterKeyRefreshWorkflow. The encrypted key material is included so the
+// caller can issue the upstream usage HTTP call in a single round-trip — keep
+// it inside the activity boundary and never return it to the workflow.
 func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, accountTypes []string) ([]GetOpenRouterCreditsMonitoringTargetsRow, error) {
 	rows, err := q.db.Query(ctx, getOpenRouterCreditsMonitoringTargets, accountTypes)
 	if err != nil {
@@ -523,7 +562,6 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.GramAccountType,
 			&i.KeyType,
 			&i.MonthlyCredits,
-			&i.ApiKey,
 			&i.ApiKeyEncrypted,
 		); err != nil {
 			return nil, err
@@ -746,6 +784,108 @@ func (q *Queries) ListIdentityMapEntries(ctx context.Context) ([]ListIdentityMap
 			&i.EmailLower,
 			&i.CanonicalUserID,
 			&i.CanonicalEmail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenRouterDailySpend = `-- name: ListOpenRouterDailySpend :many
+SELECT
+    organization_id,
+    key_type,
+    day,
+    spend_usd,
+    created_at,
+    updated_at
+FROM openrouter_spend_daily
+WHERE organization_id = $1
+  AND key_type = $2
+ORDER BY day
+`
+
+type ListOpenRouterDailySpendParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+type ListOpenRouterDailySpendRow struct {
+	OrganizationID string
+	KeyType        string
+	Day            pgtype.Date
+	SpendUsd       pgtype.Numeric
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListOpenRouterDailySpend(ctx context.Context, arg ListOpenRouterDailySpendParams) ([]ListOpenRouterDailySpendRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterDailySpend, arg.OrganizationID, arg.KeyType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterDailySpendRow
+	for rows.Next() {
+		var i ListOpenRouterDailySpendRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.KeyType,
+			&i.Day,
+			&i.SpendUsd,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenRouterDailySpendTargets = `-- name: ListOpenRouterDailySpendTargets :many
+SELECT
+    organization_id,
+    key_type,
+    key_hash,
+    created_at
+FROM openrouter_api_keys
+WHERE deleted = FALSE
+ORDER BY organization_id, key_type
+`
+
+type ListOpenRouterDailySpendTargetsRow struct {
+	OrganizationID string
+	KeyType        string
+	KeyHash        string
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Every live platform-managed key is a billing input, including disabled keys:
+// disabling a key stops future usage but does not erase spend already reported
+// by OpenRouter. The key hash identifies the management-API analytics filter;
+// plaintext key material never crosses this activity boundary.
+func (q *Queries) ListOpenRouterDailySpendTargets(ctx context.Context) ([]ListOpenRouterDailySpendTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterDailySpendTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterDailySpendTargetsRow
+	for rows.Next() {
+		var i ListOpenRouterDailySpendTargetsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.KeyType,
+			&i.KeyHash,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -999,5 +1139,44 @@ type ReleasePublishOutboxRowsParams struct {
 // back because the claim incremented it for a delivery that never happened.
 func (q *Queries) ReleasePublishOutboxRows(ctx context.Context, arg ReleasePublishOutboxRowsParams) error {
 	_, err := q.db.Exec(ctx, releasePublishOutboxRows, arg.Ids, arg.LeaseToken)
+	return err
+}
+
+const upsertOpenRouterDailySpend = `-- name: UpsertOpenRouterDailySpend :exec
+INSERT INTO openrouter_spend_daily (
+    organization_id,
+    key_type,
+    day,
+    spend_usd
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (organization_id, key_type, day) DO UPDATE
+SET
+    spend_usd = EXCLUDED.spend_usd,
+    updated_at = clock_timestamp()
+WHERE openrouter_spend_daily.spend_usd IS DISTINCT FROM $4
+`
+
+type UpsertOpenRouterDailySpendParams struct {
+	TargetOrganizationID string
+	TargetKeyType        string
+	TargetDay            pgtype.Date
+	TargetSpendUsd       pgtype.Numeric
+}
+
+// Restatements replace a day's value, while an identical replay leaves
+// updated_at unchanged so operators can distinguish a real correction from a
+// routine overlapping pull.
+func (q *Queries) UpsertOpenRouterDailySpend(ctx context.Context, arg UpsertOpenRouterDailySpendParams) error {
+	_, err := q.db.Exec(ctx, upsertOpenRouterDailySpend,
+		arg.TargetOrganizationID,
+		arg.TargetKeyType,
+		arg.TargetDay,
+		arg.TargetSpendUsd,
+	)
 	return err
 }

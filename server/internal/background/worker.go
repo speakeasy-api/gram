@@ -71,6 +71,7 @@ type WorkerOptions struct {
 	ChatMessageWriter   *chat.ChatMessageWriter
 	ChatClient          *chat.Client
 	OpenRouter          openrouter.Provisioner
+	OpenRouterSpend     openrouter.SpendClient
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
 	SiteURL             *url.URL
@@ -151,6 +152,7 @@ func ForDeploymentProcessing(
 		ChatMessageWriter:   nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
+		OpenRouterSpend:     nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
 		SiteURL:             nil,
@@ -209,6 +211,7 @@ func NewTemporalWorker(
 		ChatMessageWriter:         nil,
 		ChatClient:                nil,
 		OpenRouter:                nil,
+		OpenRouterSpend:           nil,
 		K8sClient:                 nil,
 		ExpectedTargetCNAME:       "",
 		SiteURL:                   nil,
@@ -254,6 +257,7 @@ func NewTemporalWorker(
 			SlackClient:               conv.Default(o.SlackClient, opts.SlackClient),
 			ChatMessageWriter:         conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:           conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
 			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
@@ -338,6 +342,7 @@ func NewTemporalWorker(
 		opts.AssetStorage,
 		opts.SlackClient,
 		opts.OpenRouter,
+		opts.OpenRouterSpend,
 		opts.ChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
@@ -391,6 +396,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.NotifyCustomDomainUnhealthy)
 	temporalWorker.RegisterActivity(activities.FindOrphanCustomDomainResources)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.CollectOpenRouterDailySpend)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
@@ -514,6 +520,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainUnhealthyNotifyWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainHealthSweepWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(CollectOpenRouterDailySpendWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
@@ -589,6 +596,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddOpenRouterDailySpendSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add openrouter daily spend schedule", attr.SlogError(err))
 	}
 
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {

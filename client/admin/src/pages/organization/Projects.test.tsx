@@ -130,10 +130,12 @@ describe("Projects", () => {
     });
 
     const link = await screen.findByRole("link", { name: PROJECT.name });
-    // Not /projects/{slug}. That link leaves the record, and the record's own
-    // project view is what the nav and the breadcrumb both point at.
+    // Not /projects/{id}. That link leaves the record, and the record's own
+    // project view is what the nav and the breadcrumb both point at. The
+    // project segment is the id, because project.get resolves a slug across
+    // every organization.
     expect(link.getAttribute("href")).toBe(
-      `/organizations/${ORG.slug}/projects/${PROJECT.slug}`,
+      `/organizations/${ORG.slug}/projects/${PROJECT.id}`,
     );
   });
 
@@ -147,7 +149,7 @@ describe("Projects", () => {
     // second read of the record to fill it.
     const link = await screen.findByRole("link", { name: PROJECT.name });
     expect(link.getAttribute("href")).toBe(
-      `/organizations/${ORG.id}/projects/${PROJECT.slug}`,
+      `/organizations/${ORG.id}/projects/${PROJECT.id}`,
     );
   });
 
@@ -163,7 +165,7 @@ describe("Projects", () => {
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe(
-        `/organizations/${ORG.id}/projects/${PROJECT.slug}`,
+        `/organizations/${ORG.id}/projects/${PROJECT.id}`,
       );
     });
   });
@@ -214,7 +216,7 @@ describe("Projects", () => {
 
     const link = await screen.findByRole("link", { name: otherProject.name });
     expect(link.getAttribute("href")).toBe(
-      `/organizations/${other.slug}/projects/${otherProject.slug}`,
+      `/organizations/${other.slug}/projects/${otherProject.id}`,
     );
   });
 

@@ -1102,6 +1102,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				fmt.Sprintf("%s / 10 additional LLM credits", formatPrice(10*creditsPrice)), // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
+			TumPricePerMillionUsd: nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
@@ -1126,7 +1127,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				fmt.Sprintf("%s / additional tool call", formatPrice(toolCallPrice)),
 				"$11 per 10 additional LLM credits", // 1.10 per credit in polar, but this is how we want to label from a marketing perspective
 			},
+			TumPricePerMillionUsd: nil,
 		},
+		Payg: billing.NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
 			IncludedToolCalls:          0,
@@ -1149,7 +1152,8 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets: []string{},
+			AddOnBullets:          []string{},
+			TumPricePerMillionUsd: nil,
 		},
 	}, nil
 }

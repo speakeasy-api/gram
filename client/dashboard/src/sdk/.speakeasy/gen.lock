@@ -63,7 +63,6 @@ trackedFiles:
   src/funcs/adminExternalCredentialsVerifyGcpIam.ts: {}
   src/funcs/adminOpenRouterKeysDisableKey.ts: {}
   src/funcs/adminOpenRouterKeysEnableKey.ts: {}
-  src/funcs/adminOpenRouterKeysEncryptKey.ts: {}
   src/funcs/adminOpenRouterKeysGetKeyUsage.ts: {}
   src/funcs/adminOpenRouterKeysListKeys.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalClient.ts: {}
@@ -551,6 +550,7 @@ trackedFiles:
   src/funcs/unproxiedMcpListTools.ts: {}
   src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
+  src/funcs/usageCreateStripeCheckout.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetTokensUnderManagement.ts: {}
@@ -756,7 +756,6 @@ trackedFiles:
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
   src/models/components/enableopenrouterkeyrequestbody.ts: {}
-  src/models/components/encryptopenrouterkeyrequestbody.ts: {}
   src/models/components/ensureserverreviewrequestbody.ts: {}
   src/models/components/environment.ts: {}
   src/models/components/environmententry.ts: {}
@@ -1481,6 +1480,7 @@ trackedFiles:
   src/models/operations/createsignedchatattachmenturl.ts: {}
   src/models/operations/createskill.ts: {}
   src/models/operations/createspendrule.ts: {}
+  src/models/operations/createstripecheckout.ts: {}
   src/models/operations/createtemplate.ts: {}
   src/models/operations/createtoolset.ts: {}
   src/models/operations/createtopupcheckout.ts: {}
@@ -1550,7 +1550,6 @@ trackedFiles:
   src/models/operations/downloadpluginpackage.ts: {}
   src/models/operations/enableadminopenrouterkey.ts: {}
   src/models/operations/enablewebhooks.ts: {}
-  src/models/operations/encryptadminopenrouterkey.ts: {}
   src/models/operations/ensuremanagedassistant.ts: {}
   src/models/operations/ensuremcpserverreview.ts: {}
   src/models/operations/enterdemo.ts: {}
@@ -2070,6 +2069,7 @@ trackedFiles:
   src/react-query/createRole.ts: {}
   src/react-query/createSignedChatAttachmentURL.ts: {}
   src/react-query/createSkill.ts: {}
+  src/react-query/createStripeCheckout.ts: {}
   src/react-query/createTemplate.ts: {}
   src/react-query/createToolset.ts: {}
   src/react-query/createTopUpCheckout.ts: {}
@@ -2139,7 +2139,6 @@ trackedFiles:
   src/react-query/distributeSkill.ts: {}
   src/react-query/enableAdminOpenRouterKey.ts: {}
   src/react-query/enableWebhooks.ts: {}
-  src/react-query/encryptAdminOpenRouterKey.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
@@ -3682,6 +3681,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createStripeCheckout:
+    speakeasy-default-create-stripe-checkout:
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createTemplate:
     speakeasy-default-create-template:
       requestBody:
@@ -4311,7 +4319,7 @@ examples:
         application/json: {"key_type": "chat", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-08-21T13:21:54.974Z", "disabled": true, "encryption_status": "encrypted_with_plaintext", "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 166947, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-04-19T14:12:31.155Z"}
+          application/json: {"created_at": "2024-08-21T13:21:54.974Z", "disabled": true, "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 166947, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-04-19T14:12:31.155Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4432,7 +4440,7 @@ examples:
         application/json: {"key_type": "internal", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-07-27T03:56:09.631Z", "disabled": true, "encryption_status": "encrypted_with_plaintext", "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 945065, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-03-30T05:03:57.632Z"}
+          application/json: {"created_at": "2025-07-27T03:56:09.631Z", "disabled": true, "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 945065, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-03-30T05:03:57.632Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4451,17 +4459,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  encryptAdminOpenRouterKey:
-    speakeasy-default-encrypt-admin-open-router-key:
-      requestBody:
-        application/json: {"key_type": "chat", "organization_id": "<id>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-04-04T21:18:18.850Z", "disabled": true, "encryption_status": "plaintext", "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 466968, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-03-14T04:17:19.837Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   ensureManagedAssistant:
     speakeasy-default-ensure-managed-assistant:
       responses:
@@ -4720,19 +4717,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getChatToolCallCount:
-    speakeasy-default-get-chat-tool-call-count:
-      parameters:
-        query:
-          id: "909e12bb-558d-4564-b320-adde98308f93"
-          generation: 606851
-      responses:
-        "200":
-          application/json: {"count": 538701}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getCustomDetectionRule:
     speakeasy-default-get-custom-detection-rule:
       parameters:
@@ -5745,7 +5729,7 @@ examples:
     speakeasy-default-get-usage-tiers:
       responses:
         "200":
-          application/json: {"enterprise": {"base_price": 6666.51, "feature_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_bullets": ["<value 1>"], "included_credits": 30279, "included_servers": 756366, "included_tool_calls": 735572, "price_per_additional_server": 1807.9, "price_per_additional_tool_call": 6835.91}, "free": {"base_price": 678.32, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_credits": 291095, "included_servers": 689304, "included_tool_calls": 166174, "price_per_additional_server": 5645.55, "price_per_additional_tool_call": 4147.67}, "pro": {"base_price": 7672.49, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>"], "included_credits": 241668, "included_servers": 667486, "included_tool_calls": 83324, "price_per_additional_server": 4587.47, "price_per_additional_tool_call": 9203.63}}
+          application/json: {"enterprise": {"base_price": 6666.51, "feature_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_bullets": ["<value 1>"], "included_credits": 30279, "included_servers": 756366, "included_tool_calls": 735572, "price_per_additional_server": 1807.9, "price_per_additional_tool_call": 6835.91}, "free": {"base_price": 678.32, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_credits": 291095, "included_servers": 689304, "included_tool_calls": 166174, "price_per_additional_server": 5645.55, "price_per_additional_tool_call": 4147.67}, "payg": {"base_price": 6666.51, "feature_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_bullets": ["<value 1>"], "included_credits": 30279, "included_servers": 756366, "included_tool_calls": 735572, "price_per_additional_server": 1807.9, "price_per_additional_tool_call": 6835.91}, "pro": {"base_price": 7672.49, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>"], "included_credits": 241668, "included_servers": 667486, "included_tool_calls": 83324, "price_per_additional_server": 4587.47, "price_per_additional_tool_call": 9203.63}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6080,18 +6064,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  listChatToolCalls:
-    speakeasy-default-list-chat-tool-calls:
-      parameters:
-        query:
-          id: "69a40b68-0f39-43c5-830c-848465b04451"
-      responses:
-        "200":
-          application/json: {"messages": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listChats:
     speakeasy-default-list-chats:
       parameters:
@@ -7432,8 +7404,6 @@ examples:
       parameters:
         query:
           id: "<id>"
-      requestBody:
-        application/json: {"id": "<id>"}
       responses:
         "200":
           application/json: {"decisions": [], "request": {"created_at": "2025-08-24T07:03:26.445Z", "id": "<id>", "requester_count": 710, "status": "<value>", "target_kind": "<value>", "target_raw": "<value>", "updated_at": "2026-10-07T20:05:06.266Z", "version_pinned": false}, "requesters": [], "research_reports": []}

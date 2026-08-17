@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -22,6 +23,10 @@ const (
 	meterCustomerPayloadKey     = "stripe_customer_id"
 	meterValuePayloadKey        = "value"
 )
+
+// ErrWebhookNotConfigured indicates that webhook verification cannot run because
+// the Stripe webhook secret is unavailable.
+var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
@@ -50,6 +55,7 @@ func IsConfigured(value string) bool {
 // Client is the Stripe surface used by PAYG billing.
 type Client interface {
 	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
+	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
 	CreateMeterEvent(context.Context, CreateMeterEventInput) error
 	VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error)
 	Catalog() Catalog
@@ -67,6 +73,36 @@ type Customer struct {
 	ID string
 }
 
+// CreateCheckoutSessionInput describes the hosted Checkout session for a PAYG subscription.
+type CreateCheckoutSessionInput struct {
+	// CustomerID identifies the Stripe customer that owns the subscription.
+	CustomerID string
+
+	// OrganizationID is Gram's stable organization identifier.
+	OrganizationID string
+
+	// OrganizationSlug is the organization slug included in Stripe metadata.
+	OrganizationSlug string
+
+	// SuccessURL is the browser destination after successful Checkout.
+	SuccessURL string
+
+	// CancelURL is the browser destination when Checkout is canceled.
+	CancelURL string
+
+	// TrialEnd preserves an active in-product trial on the Stripe subscription.
+	TrialEnd *time.Time
+
+	// IdempotencyKey identifies one Checkout creation request.
+	IdempotencyKey string
+}
+
+// CheckoutSession is the Stripe Checkout data needed by billing callers.
+type CheckoutSession struct {
+	// URL is Stripe's hosted Checkout page.
+	URL string
+}
+
 // CreateMeterEventInput reports a TUM delta for one Stripe customer.
 type CreateMeterEventInput struct {
 	CustomerID     string
@@ -77,14 +113,25 @@ type CreateMeterEventInput struct {
 
 // WebhookEvent is the verified Stripe event envelope consumed by webhook handlers.
 type WebhookEvent struct {
-	ID      string
-	Type    string
+	// ID is Stripe's globally unique event identifier.
+	ID string
+
+	// Type identifies the event kind.
+	Type string
+
+	// Created is the time Stripe created the event.
 	Created time.Time
-	Data    json.RawMessage
+
+	// ObjectID is the identifier of the event's data object, when present.
+	ObjectID string
+
+	// CustomerID is the normalized customer identifier carried by the data object, when present.
+	CustomerID string
 }
 
 type stripeAPI interface {
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
+	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
 }
 
@@ -98,6 +145,14 @@ func (s *sdkAPI) createCustomer(ctx context.Context, params *stripesdk.CustomerC
 		return nil, fmt.Errorf("stripe SDK create customer: %w", err)
 	}
 	return customer, nil
+}
+
+func (s *sdkAPI) createCheckoutSession(ctx context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
+	session, err := s.client.V1CheckoutSessions.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK create Checkout session: %w", err)
+	}
+	return session, nil
 }
 
 func (s *sdkAPI) createMeterEvent(ctx context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
@@ -155,6 +210,45 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 	return &Customer{ID: customer.ID}, nil
 }
 
+func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
+	if input.IdempotencyKey == "" {
+		return nil, errMissingIdempotencyKey
+	}
+
+	params := new(stripesdk.CheckoutSessionCreateParams)
+	params.CancelURL = stripesdk.String(input.CancelURL)
+	params.ClientReferenceID = stripesdk.String(input.OrganizationID)
+	params.Customer = stripesdk.String(input.CustomerID)
+	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
+		{
+			Price:    stripesdk.String(c.catalog.PriceIDTUM),
+			Quantity: nil,
+		},
+	}
+	params.Metadata = map[string]string{
+		organizationIDMetadataKey:   input.OrganizationID,
+		organizationSlugMetadataKey: input.OrganizationSlug,
+	}
+	params.Mode = stripesdk.String(stripesdk.CheckoutSessionModeSubscription)
+	params.PaymentMethodCollection = stripesdk.String(stripesdk.CheckoutSessionPaymentMethodCollectionAlways)
+	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
+	params.SubscriptionData.Metadata = map[string]string{
+		organizationIDMetadataKey:   input.OrganizationID,
+		organizationSlugMetadataKey: input.OrganizationSlug,
+	}
+	params.SuccessURL = stripesdk.String(input.SuccessURL)
+	if input.TrialEnd != nil {
+		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())
+	}
+	params.SetIdempotencyKey(input.IdempotencyKey)
+
+	session, err := c.api.createCheckoutSession(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
+	}
+	return &CheckoutSession{URL: session.URL}, nil
+}
+
 func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInput) error {
 	if input.IdempotencyKey == "" {
 		return errMissingIdempotencyKey
@@ -180,7 +274,7 @@ func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInp
 
 func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error) {
 	if !IsConfigured(c.webhookSecret) {
-		return nil, errors.New("verify Stripe webhook: webhook secret is not configured")
+		return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
 	}
 
 	event, err := stripewebhook.ConstructEvent(payload, signature, c.webhookSecret)
@@ -191,16 +285,48 @@ func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent,
 		return nil, fmt.Errorf("verify Stripe webhook: expected API version %s, got %s", stripesdk.APIVersion, event.APIVersion)
 	}
 
-	var data json.RawMessage
+	var objectID string
+	var customerID string
 	if event.Data != nil {
-		data = event.Data.Raw
+		objectID, customerID, err = webhookObjectIdentifiers(event.Data.Raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse Stripe webhook data object: %w", err)
+		}
 	}
 	return &WebhookEvent{
-		ID:      event.ID,
-		Type:    string(event.Type),
-		Created: time.Unix(event.Created, 0),
-		Data:    data,
+		ID:         event.ID,
+		Type:       string(event.Type),
+		Created:    time.Unix(event.Created, 0),
+		ObjectID:   objectID,
+		CustomerID: customerID,
 	}, nil
+}
+
+func webhookObjectIdentifiers(raw json.RawMessage) (string, string, error) {
+	var object *struct {
+		ID       string          `json:"id"`
+		Customer json.RawMessage `json:"customer"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return "", "", fmt.Errorf("decode data object: %w", err)
+	}
+	if object == nil {
+		return "", "", errors.New("data object is null")
+	}
+
+	var customerID string
+	if err := json.Unmarshal(object.Customer, &customerID); err == nil {
+		return object.ID, customerID, nil
+	}
+
+	var customer struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(object.Customer, &customer); err == nil {
+		return object.ID, customer.ID, nil
+	}
+
+	return object.ID, "", nil
 }
 
 func (c *client) Catalog() Catalog {
@@ -221,13 +347,18 @@ func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) 
 	return &Customer{ID: "cus_local_stub"}, nil
 }
 
+func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
+	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
+	return &CheckoutSession{URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
+}
+
 func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {
 	s.logger.DebugContext(ctx, "stub Stripe meter event skipped")
 	return nil
 }
 
 func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
-	return nil, errors.New("verify Stripe webhook: Stripe is not configured")
+	return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
 }
 
 func (s *stubClient) Catalog() Catalog {

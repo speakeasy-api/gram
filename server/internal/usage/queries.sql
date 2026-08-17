@@ -10,6 +10,54 @@ SELECT *
 FROM billing_metadata
 WHERE organization_id = @organization_id;
 
+-- name: StoreStripeCustomer :one
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (@organization_id, @stripe_customer_id)
+ON CONFLICT (organization_id) DO UPDATE SET
+    stripe_customer_id = COALESCE(billing_metadata.stripe_customer_id, EXCLUDED.stripe_customer_id)
+  , updated_at = CASE
+      WHEN billing_metadata.stripe_customer_id IS NULL THEN clock_timestamp()
+      ELSE billing_metadata.updated_at
+    END
+RETURNING *;
+
+-- name: GetBillingMetadataOrganizationByStripeCustomerID :one
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_customer_id = @stripe_customer_id;
+
+-- name: TryInsertStripeWebhookReceipt :one
+WITH inserted AS (
+  INSERT INTO stripe_webhook_receipts (
+      stripe_event_id
+    , organization_id
+    , event_type
+  ) VALUES (
+      @stripe_event_id
+    , @organization_id
+    , @event_type
+  )
+  ON CONFLICT (stripe_event_id) DO NOTHING
+  RETURNING stripe_event_id
+)
+SELECT EXISTS (SELECT 1 FROM inserted) AS inserted;
+
+-- name: CreateStripeBillingMetadataFixture :exec
+-- Test-only fixture for webhook tests that need a Stripe customer association.
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (@organization_id, @stripe_customer_id);
+
+-- name: CreateStripeSubscriptionBillingMetadataFixture :exec
+-- Test-only fixture for checkout tests that need an existing Stripe subscription.
+INSERT INTO billing_metadata (organization_id, stripe_customer_id, stripe_subscription_id)
+VALUES (@organization_id, @stripe_customer_id, @stripe_subscription_id);
+
+-- name: CountStripeWebhookReceiptsFixture :one
+-- Test-only fixture assertion for durable webhook completion receipts.
+SELECT count(*)
+FROM stripe_webhook_receipts
+WHERE organization_id = @organization_id;
+
 -- name: UpsertBillingMetadata :one
 INSERT INTO billing_metadata (
     organization_id

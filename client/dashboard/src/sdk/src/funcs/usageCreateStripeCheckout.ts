@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,10 +12,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import {
-  AdminOpenRouterKey,
-  AdminOpenRouterKey$inboundSchema,
-} from "../models/components/adminopenrouterkey.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +27,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  EncryptAdminOpenRouterKeyRequest,
-  EncryptAdminOpenRouterKeyRequest$outboundSchema,
-  EncryptAdminOpenRouterKeySecurity,
-} from "../models/operations/encryptadminopenrouterkey.js";
+  CreateStripeCheckoutRequest,
+  CreateStripeCheckoutRequest$outboundSchema,
+  CreateStripeCheckoutSecurity,
+} from "../models/operations/createstripecheckout.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * encryptKey adminOpenRouterKeys
+ * createStripeCheckout usage
  *
  * @remarks
- * Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.
+ * Create a Stripe Checkout link for starting PAYG billing
  */
-export function adminOpenRouterKeysEncryptKey(
+export function usageCreateStripeCheckout(
   client: GramCore,
-  request: EncryptAdminOpenRouterKeyRequest,
-  security?: EncryptAdminOpenRouterKeySecurity | undefined,
+  request?: CreateStripeCheckoutRequest | undefined,
+  security?: CreateStripeCheckoutSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AdminOpenRouterKey,
+    string,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +69,13 @@ export function adminOpenRouterKeysEncryptKey(
 
 async function $do(
   client: GramCore,
-  request: EncryptAdminOpenRouterKeyRequest,
-  security?: EncryptAdminOpenRouterKeySecurity | undefined,
+  request?: CreateStripeCheckoutRequest | undefined,
+  security?: CreateStripeCheckoutSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AdminOpenRouterKey,
+      string,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,23 +91,21 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(EncryptAdminOpenRouterKeyRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(CreateStripeCheckoutRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.EncryptOpenRouterKeyRequestBody, {
-    explode: true,
-  });
+  const body = null;
 
-  const path = pathToFunc("/rpc/adminOpenRouterKeys.encryptKey")();
+  const path = pathToFunc("/rpc/usage.createStripeCheckout")();
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -130,7 +124,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "encryptAdminOpenRouterKey",
+    operationID: "createStripeCheckout",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +168,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AdminOpenRouterKey,
+    string,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +179,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminOpenRouterKey$inboundSchema),
+    M.json(200, z.string()),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

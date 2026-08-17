@@ -907,11 +907,11 @@ paths:
                     description: Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.
                     type: string
                 - allowEmptyValue: true
-                  description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
+                  description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                   in: query
                   name: account_type
                   schema:
-                    description: Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.
+                    description: Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.
                     type: string
                 - allowEmptyValue: true
                   description: Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.
@@ -1144,6 +1144,13 @@ paths:
                   schema:
                     type: string
                     description: Project ID or slug.
+                - name: organization_id_or_slug
+                  in: query
+                  description: Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.
             responses:
                 "200":
                     description: OK response.
@@ -4306,93 +4313,6 @@ paths:
             x-speakeasy-name-override: enableKey
             x-speakeasy-react-hook:
                 name: EnableAdminOpenRouterKey
-    /rpc/adminOpenRouterKeys.encryptKey:
-        post:
-            description: 'Encrypt an organization''s stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.'
-            operationId: encryptAdminOpenRouterKey
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/EncryptOpenRouterKeyRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AdminOpenRouterKey'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: encryptKey adminOpenRouterKeys
-            tags:
-                - adminOpenRouterKeys
-            x-speakeasy-name-override: encryptKey
-            x-speakeasy-react-hook:
-                name: EncryptAdminOpenRouterKey
     /rpc/adminOpenRouterKeys.getKeyUsage:
         get:
             description: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.
@@ -4495,7 +4415,7 @@ paths:
                 name: AdminOpenRouterKeyUsage
     /rpc/adminOpenRouterKeys.listKeys:
         get:
-            description: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+            description: List every organization's platform OpenRouter keys. Requires platform admin.
             operationId: listAdminOpenRouterKeys
             parameters:
                 - allowEmptyValue: true
@@ -53386,6 +53306,87 @@ paths:
             x-speakeasy-name-override: createCustomerSession
             x-speakeasy-react-hook:
                 name: createCustomerSession
+    /rpc/usage.createStripeCheckout:
+        post:
+            description: Create a Stripe Checkout link for starting PAYG billing
+            operationId: createStripeCheckout
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createStripeCheckout usage
+            tags:
+                - usage
+            x-speakeasy-name-override: createStripeCheckout
+            x-speakeasy-react-hook:
+                name: createStripeCheckout
     /rpc/usage.createTopUpCheckout:
         post:
             description: Create a checkout link for a one-time credit top-up purchase
@@ -57105,13 +57106,6 @@ components:
                 disabled:
                     type: boolean
                     description: Whether the key is locked down (refused locally and disabled upstream).
-                encryption_status:
-                    type: string
-                    description: Storage state of the key material.
-                    enum:
-                        - plaintext
-                        - encrypted_with_plaintext
-                        - encrypted
                 gram_account_type:
                     type: string
                     description: The organization's Gram account type (e.g. free, pro, enterprise).
@@ -57144,7 +57138,6 @@ components:
                 - key_type
                 - monthly_credits
                 - disabled
-                - encryption_status
                 - created_at
                 - updated_at
         AdminOrganization:
@@ -57152,7 +57145,7 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: Gram account type (e.g. free, pro, enterprise).
+                    description: Gram account type (e.g. free, pro, payg, enterprise).
                 created_at:
                     type: string
                     description: The creation date of the organization.
@@ -58389,6 +58382,7 @@ components:
                     enum:
                         - free
                         - pro
+                        - payg
                         - enterprise
                 ids:
                     type: array
@@ -62054,21 +62048,6 @@ components:
                     minLength: 1
             required:
                 - id
-        EncryptOpenRouterKeyRequestBody:
-            type: object
-            properties:
-                key_type:
-                    type: string
-                    description: Key type to encrypt.
-                    enum:
-                        - chat
-                        - internal
-                organization_id:
-                    type: string
-                    description: Organization that owns the key.
-            required:
-                - organization_id
-                - key_type
         EnsureServerReviewRequestBody:
             type: object
             properties:
@@ -75734,6 +75713,9 @@ components:
                     type: number
                     description: The price per additional tool call
                     format: double
+                tum_price_per_million_usd:
+                    type: string
+                    description: Exact USD list price per million tokens under management (optional)
             required:
                 - base_price
                 - included_tool_calls
@@ -78238,10 +78220,11 @@ components:
             properties:
                 account_type:
                     type: string
-                    description: New gram_account_type.
+                    description: New gram_account_type (free, pro, payg, or enterprise).
                     enum:
                         - free
                         - pro
+                        - payg
                         - enterprise
                 id:
                     type: string
@@ -79444,11 +79427,14 @@ components:
                     $ref: '#/components/schemas/TierLimits'
                 free:
                     $ref: '#/components/schemas/TierLimits'
+                payg:
+                    $ref: '#/components/schemas/TierLimits'
                 pro:
                     $ref: '#/components/schemas/TierLimits'
             required:
                 - free
                 - pro
+                - payg
                 - enterprise
         UserAccount:
             type: object

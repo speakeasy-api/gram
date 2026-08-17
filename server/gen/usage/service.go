@@ -29,6 +29,8 @@ type Service interface {
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
 	// Create a checkout link for upgrading to the business plan
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
+	// Create a Stripe Checkout link for starting PAYG billing
+	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
 	// Create a checkout link for a one-time credit top-up purchase
 	CreateTopUpCheckout(context.Context, *CreateTopUpCheckoutPayload) (res string, err error)
 }
@@ -53,7 +55,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getUsageTiers", "createCustomerSession", "createCheckout", "createTopUpCheckout"}
+var MethodNames = [8]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "createTopUpCheckout"}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
@@ -64,6 +66,12 @@ type CreateCheckoutPayload struct {
 // CreateCustomerSessionPayload is the payload type of the usage service
 // createCustomerSession method.
 type CreateCustomerSessionPayload struct {
+	SessionToken *string
+}
+
+// CreateStripeCheckoutPayload is the payload type of the usage service
+// createStripeCheckout method.
+type CreateStripeCheckoutPayload struct {
 	SessionToken *string
 }
 
@@ -159,6 +167,8 @@ type TierLimits struct {
 	IncludedBullets []string
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string
+	// Exact USD list price per million tokens under management (optional)
+	TumPricePerMillionUsd *string
 }
 
 // TokensUnderManagement is the result type of the usage service
@@ -191,6 +201,8 @@ type UsageTiers struct {
 	Free *TierLimits
 	// The limits for the pro tier
 	Pro *TierLimits
+	// The limits for the pay-as-you-go tier
+	Payg *TierLimits
 	// The limits for the enterprise tier
 	Enterprise *TierLimits
 }

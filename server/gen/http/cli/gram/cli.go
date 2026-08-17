@@ -139,7 +139,7 @@ func UsageCommands() []string {
 		"admin-assets upload-platform-image",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
-		"admin-open-router-keys (list-keys|get-key-usage|encrypt-key|disable-key|enable-key)",
+		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -323,9 +323,10 @@ func ParseEndpoint(
 		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
 		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
 
-		adminGetProjectFlags                 = flag.NewFlagSet("get-project", flag.ExitOnError)
-		adminGetProjectIDOrSlugFlag          = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
-		adminGetProjectAdminSessionTokenFlag = adminGetProjectFlags.String("admin-session-token", "", "")
+		adminGetProjectFlags                    = flag.NewFlagSet("get-project", flag.ExitOnError)
+		adminGetProjectIDOrSlugFlag             = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
+		adminGetProjectOrganizationIDOrSlugFlag = adminGetProjectFlags.String("organization-id-or-slug", "", "")
+		adminGetProjectAdminSessionTokenFlag    = adminGetProjectFlags.String("admin-session-token", "", "")
 
 		adminUpdateOrganizationFlags                 = flag.NewFlagSet("update-organization", flag.ExitOnError)
 		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
@@ -1648,10 +1649,6 @@ func ParseEndpoint(
 		adminOpenRouterKeysGetKeyUsageOrganizationIDFlag = adminOpenRouterKeysGetKeyUsageFlags.String("organization-id", "REQUIRED", "")
 		adminOpenRouterKeysGetKeyUsageKeyTypeFlag        = adminOpenRouterKeysGetKeyUsageFlags.String("key-type", "REQUIRED", "")
 		adminOpenRouterKeysGetKeyUsageSessionTokenFlag   = adminOpenRouterKeysGetKeyUsageFlags.String("session-token", "", "")
-
-		adminOpenRouterKeysEncryptKeyFlags            = flag.NewFlagSet("encrypt-key", flag.ExitOnError)
-		adminOpenRouterKeysEncryptKeyBodyFlag         = adminOpenRouterKeysEncryptKeyFlags.String("body", "REQUIRED", "")
-		adminOpenRouterKeysEncryptKeySessionTokenFlag = adminOpenRouterKeysEncryptKeyFlags.String("session-token", "", "")
 
 		adminOpenRouterKeysDisableKeyFlags            = flag.NewFlagSet("disable-key", flag.ExitOnError)
 		adminOpenRouterKeysDisableKeyBodyFlag         = adminOpenRouterKeysDisableKeyFlags.String("body", "REQUIRED", "")
@@ -3254,6 +3251,9 @@ func ParseEndpoint(
 		usageCreateCheckoutFlags            = flag.NewFlagSet("create-checkout", flag.ExitOnError)
 		usageCreateCheckoutSessionTokenFlag = usageCreateCheckoutFlags.String("session-token", "", "")
 
+		usageCreateStripeCheckoutFlags            = flag.NewFlagSet("create-stripe-checkout", flag.ExitOnError)
+		usageCreateStripeCheckoutSessionTokenFlag = usageCreateStripeCheckoutFlags.String("session-token", "", "")
+
 		usageCreateTopUpCheckoutFlags            = flag.NewFlagSet("create-top-up-checkout", flag.ExitOnError)
 		usageCreateTopUpCheckoutSessionTokenFlag = usageCreateTopUpCheckoutFlags.String("session-token", "", "")
 
@@ -3786,7 +3786,6 @@ func ParseEndpoint(
 	adminOpenRouterKeysFlags.Usage = adminOpenRouterKeysUsage
 	adminOpenRouterKeysListKeysFlags.Usage = adminOpenRouterKeysListKeysUsage
 	adminOpenRouterKeysGetKeyUsageFlags.Usage = adminOpenRouterKeysGetKeyUsageUsage
-	adminOpenRouterKeysEncryptKeyFlags.Usage = adminOpenRouterKeysEncryptKeyUsage
 	adminOpenRouterKeysDisableKeyFlags.Usage = adminOpenRouterKeysDisableKeyUsage
 	adminOpenRouterKeysEnableKeyFlags.Usage = adminOpenRouterKeysEnableKeyUsage
 
@@ -4113,6 +4112,7 @@ func ParseEndpoint(
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
+	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
 	usageCreateTopUpCheckoutFlags.Usage = usageCreateTopUpCheckoutUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
@@ -5304,9 +5304,6 @@ func ParseEndpoint(
 			case "get-key-usage":
 				epf = adminOpenRouterKeysGetKeyUsageFlags
 
-			case "encrypt-key":
-				epf = adminOpenRouterKeysEncryptKeyFlags
-
 			case "disable-key":
 				epf = adminOpenRouterKeysDisableKeyFlags
 
@@ -6233,6 +6230,9 @@ func ParseEndpoint(
 			case "create-checkout":
 				epf = usageCreateCheckoutFlags
 
+			case "create-stripe-checkout":
+				epf = usageCreateStripeCheckoutFlags
+
 			case "create-top-up-checkout":
 				epf = usageCreateTopUpCheckoutFlags
 
@@ -6448,7 +6448,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
 			case "get-project":
 				endpoint = c.GetProject()
-				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
+				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectOrganizationIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
 			case "update-organization":
 				endpoint = c.UpdateOrganization()
 				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
@@ -7352,9 +7352,6 @@ func ParseEndpoint(
 			case "get-key-usage":
 				endpoint = c.GetKeyUsage()
 				data, err = adminopenrouterkeysc.BuildGetKeyUsagePayload(*adminOpenRouterKeysGetKeyUsageOrganizationIDFlag, *adminOpenRouterKeysGetKeyUsageKeyTypeFlag, *adminOpenRouterKeysGetKeyUsageSessionTokenFlag)
-			case "encrypt-key":
-				endpoint = c.EncryptKey()
-				data, err = adminopenrouterkeysc.BuildEncryptKeyPayload(*adminOpenRouterKeysEncryptKeyBodyFlag, *adminOpenRouterKeysEncryptKeySessionTokenFlag)
 			case "disable-key":
 				endpoint = c.DisableKey()
 				data, err = adminopenrouterkeysc.BuildDisableKeyPayload(*adminOpenRouterKeysDisableKeyBodyFlag, *adminOpenRouterKeysDisableKeySessionTokenFlag)
@@ -8280,6 +8277,9 @@ func ParseEndpoint(
 			case "create-checkout":
 				endpoint = c.CreateCheckout()
 				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag)
+			case "create-stripe-checkout":
+				endpoint = c.CreateStripeCheckout()
+				data, err = usagec.BuildCreateStripeCheckoutPayload(*usageCreateStripeCheckoutSessionTokenFlag)
 			case "create-top-up-checkout":
 				endpoint = c.CreateTopUpCheckout()
 				data, err = usagec.BuildCreateTopUpCheckoutPayload(*usageCreateTopUpCheckoutSessionTokenFlag)
@@ -8987,6 +8987,7 @@ func adminGetProjectUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin get-project", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id-or-slug STRING")
+	fmt.Fprint(os.Stderr, " -organization-id-or-slug STRING")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -8996,11 +8997,12 @@ func adminGetProjectUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id-or-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -organization-id-or-slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --organization-id-or-slug \"abc123\" --admin-session-token \"abc123\"")
 }
 
 func adminUpdateOrganizationUsage() {
@@ -14972,9 +14974,8 @@ func adminOpenRouterKeysUsage() {
 	fmt.Fprintln(os.Stderr, `Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-open-router-keys COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-key-usage: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    encrypt-key: Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    disable-key: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    enable-key: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -14989,7 +14990,7 @@ func adminOpenRouterKeysListKeysUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `List every organization's platform OpenRouter keys. Requires platform admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -15019,26 +15020,6 @@ func adminOpenRouterKeysGetKeyUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys get-key-usage --organization-id \"abc123\" --key-type \"internal\" --session-token \"abc123\"")
-}
-
-func adminOpenRouterKeysEncryptKeyUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys encrypt-key", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys encrypt-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func adminOpenRouterKeysDisableKeyUsage() {
@@ -21870,6 +21851,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
+	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create a Stripe Checkout link for starting PAYG billing`)
 	fmt.Fprintln(os.Stderr, `    create-top-up-checkout: Create a checkout link for a one-time credit top-up purchase`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21981,6 +21963,24 @@ func usageCreateCheckoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\"")
+}
+
+func usageCreateStripeCheckoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage create-stripe-checkout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a Stripe Checkout link for starting PAYG billing`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-stripe-checkout --session-token \"abc123\"")
 }
 
 func usageCreateTopUpCheckoutUsage() {

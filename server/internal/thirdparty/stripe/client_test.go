@@ -80,16 +80,23 @@ func TestSDKPinsExpectedAPIVersion(t *testing.T) {
 }
 
 type fakeStripeAPI struct {
-	customerParams   *stripesdk.CustomerCreateParams
-	meterEventParams *stripesdk.BillingMeterEventCreateParams
-	calls            int
-	err              error
+	customerParams        *stripesdk.CustomerCreateParams
+	checkoutSessionParams *stripesdk.CheckoutSessionCreateParams
+	meterEventParams      *stripesdk.BillingMeterEventCreateParams
+	calls                 int
+	err                   error
 }
 
 func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error) {
 	f.calls++
 	f.customerParams = params
 	return &stripesdk.Customer{ID: "cus_test"}, f.err
+}
+
+func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
+	f.calls++
+	f.checkoutSessionParams = params
+	return &stripesdk.CheckoutSession{URL: "https://checkout.stripe.test/session"}, f.err
 }
 
 func (f *fakeStripeAPI) createMeterEvent(_ context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
@@ -123,6 +130,72 @@ func TestCreateCustomerRejectsMissingIdempotencyKey(t *testing.T) {
 	c := &client{api: api}
 
 	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{})
+	require.ErrorIs(t, err, errMissingIdempotencyKey)
+	require.Zero(t, api.calls)
+}
+
+func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{
+		api: api,
+		catalog: Catalog{
+			PriceIDTUM:     "price_tum",
+			MeterEventName: "tum",
+		},
+	}
+	trialEnd := time.Date(2026, time.August, 20, 10, 0, 0, 0, time.UTC)
+
+	session, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID:       "cus_test",
+		OrganizationID:   "<ORG_ID>",
+		OrganizationSlug: "the-customer",
+		SuccessURL:       "https://app.example.test/the-customer/billing",
+		CancelURL:        "https://app.example.test/the-customer/billing",
+		TrialEnd:         &trialEnd,
+		IdempotencyKey:   "checkout:<ORG_ID>:request",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://checkout.stripe.test/session", session.URL)
+
+	params := api.checkoutSessionParams
+	require.Equal(t, "checkout:<ORG_ID>:request", stripesdk.StringValue(params.IdempotencyKey))
+	require.Equal(t, "cus_test", stripesdk.StringValue(params.Customer))
+	require.Equal(t, "<ORG_ID>", stripesdk.StringValue(params.ClientReferenceID))
+	require.Equal(t, "subscription", stripesdk.StringValue(params.Mode))
+	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
+	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.SuccessURL))
+	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.CancelURL))
+	require.Len(t, params.LineItems, 1)
+	require.Equal(t, "price_tum", stripesdk.StringValue(params.LineItems[0].Price))
+	require.Nil(t, params.LineItems[0].Quantity)
+	require.Equal(t, "<ORG_ID>", params.Metadata[organizationIDMetadataKey])
+	require.Equal(t, "the-customer", params.Metadata[organizationSlugMetadataKey])
+	require.NotNil(t, params.SubscriptionData)
+	require.Equal(t, trialEnd.Unix(), stripesdk.Int64Value(params.SubscriptionData.TrialEnd))
+	require.Equal(t, "<ORG_ID>", params.SubscriptionData.Metadata[organizationIDMetadataKey])
+	require.Equal(t, "the-customer", params.SubscriptionData.Metadata[organizationSlugMetadataKey])
+}
+
+func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterEventName: "tum"}}
+
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{IdempotencyKey: "checkout"})
+	require.NoError(t, err)
+	require.Nil(t, api.checkoutSessionParams.SubscriptionData.TrialEnd)
+}
+
+func TestCreateCheckoutSessionRejectsMissingIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{})
 	require.ErrorIs(t, err, errMissingIdempotencyKey)
 	require.Zero(t, api.calls)
 }
@@ -177,17 +250,25 @@ func TestWritesWrapStripeErrors(t *testing.T) {
 	err = c.CreateMeterEvent(t.Context(), CreateMeterEventInput{IdempotencyKey: "meter"})
 	require.ErrorIs(t, err, apiErr)
 	require.ErrorContains(t, err, "create Stripe meter event")
+
+	_, err = c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{IdempotencyKey: "checkout"})
+	require.ErrorIs(t, err, apiErr)
+	require.ErrorContains(t, err, "create Stripe Checkout session")
 }
 
 func TestVerifyWebhook(t *testing.T) {
 	t.Parallel()
 
 	const secret = "whsec_test"
-	payload := webhookPayload(t, stripesdk.APIVersion)
+	created := time.Now().Truncate(time.Second)
+	payload := webhookPayload(t, stripesdk.APIVersion, created, map[string]any{
+		"id":       "in_test",
+		"customer": "cus_test",
+	})
 	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
 		Payload:   payload,
 		Secret:    secret,
-		Timestamp: time.Now(),
+		Timestamp: created,
 	})
 	c := &client{webhookSecret: secret}
 
@@ -195,7 +276,138 @@ func TestVerifyWebhook(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "evt_test", event.ID)
 	require.Equal(t, "invoice.created", event.Type)
-	require.JSONEq(t, `{"id":"in_test"}`, string(event.Data))
+	require.Equal(t, created, event.Created)
+	require.Equal(t, "in_test", event.ObjectID)
+	require.Equal(t, "cus_test", event.CustomerID)
+}
+
+func TestVerifyWebhookExtractsExpandedCustomer(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+		Payload: webhookPayload(t, stripesdk.APIVersion, time.Now(), map[string]any{
+			"id": "in_test",
+			"customer": map[string]any{
+				"id":     "cus_expanded",
+				"object": "customer",
+			},
+		}),
+		Secret: secret,
+	})
+
+	event, err := (&client{webhookSecret: secret}).VerifyWebhook(signed.Payload, signed.Header)
+	require.NoError(t, err)
+	require.Equal(t, "in_test", event.ObjectID)
+	require.Equal(t, "cus_expanded", event.CustomerID)
+}
+
+func TestVerifyWebhookAllowsMissingCustomer(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+		Payload: webhookPayload(t, stripesdk.APIVersion, time.Now(), map[string]any{
+			"id": "in_test",
+		}),
+		Secret: secret,
+	})
+
+	event, err := (&client{webhookSecret: secret}).VerifyWebhook(signed.Payload, signed.Header)
+	require.NoError(t, err)
+	require.Equal(t, "in_test", event.ObjectID)
+	require.Empty(t, event.CustomerID)
+}
+
+func TestVerifyWebhookIgnoresUnsupportedCustomerShape(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+		Payload: webhookPayload(t, stripesdk.APIVersion, time.Now(), map[string]any{
+			"id":       "in_test",
+			"customer": 123,
+		}),
+		Secret: secret,
+	})
+
+	event, err := (&client{webhookSecret: secret}).VerifyWebhook(signed.Payload, signed.Header)
+	require.NoError(t, err)
+	require.Equal(t, "in_test", event.ObjectID)
+	require.Empty(t, event.CustomerID)
+}
+
+func TestVerifyWebhookExtractsCustomersForAcceptedEventTypes(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	tests := []struct {
+		name       string
+		eventType  string
+		customer   any
+		customerID string
+	}{
+		{
+			name:       "checkout session with string customer",
+			eventType:  "checkout.session.completed",
+			customer:   "cus_checkout",
+			customerID: "cus_checkout",
+		},
+		{
+			name:      "invoice created with expanded customer",
+			eventType: "invoice.created",
+			customer: map[string]any{
+				"id":     "cus_invoice_created",
+				"object": "customer",
+			},
+			customerID: "cus_invoice_created",
+		},
+		{
+			name:       "invoice payment failure with string customer",
+			eventType:  "invoice.payment_failed",
+			customer:   "cus_invoice_failed",
+			customerID: "cus_invoice_failed",
+		},
+		{
+			name:      "subscription deletion with expanded customer",
+			eventType: "customer.subscription.deleted",
+			customer: map[string]any{
+				"id":     "cus_subscription",
+				"object": "customer",
+			},
+			customerID: "cus_subscription",
+		},
+	}
+
+	for _, tt := range tests {
+		signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+			Payload: webhookPayloadForType(t, stripesdk.APIVersion, time.Now(), tt.eventType, map[string]any{
+				"id":       "obj_test",
+				"customer": tt.customer,
+			}),
+			Secret: secret,
+		})
+
+		event, err := (&client{webhookSecret: secret}).VerifyWebhook(signed.Payload, signed.Header)
+		require.NoErrorf(t, err, "%s: verification", tt.name)
+		require.Equalf(t, tt.eventType, event.Type, "%s: event type", tt.name)
+		require.Equalf(t, "obj_test", event.ObjectID, "%s: object id", tt.name)
+		require.Equalf(t, tt.customerID, event.CustomerID, "%s: customer id", tt.name)
+	}
+}
+
+func TestVerifyWebhookRejectsMalformedDataObject(t *testing.T) {
+	t.Parallel()
+
+	const secret = "whsec_test"
+	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
+		Payload: webhookPayloadForType(t, stripesdk.APIVersion, time.Now(), "invoice.created", nil),
+		Secret:  secret,
+	})
+
+	_, err := (&client{webhookSecret: secret}).VerifyWebhook(signed.Payload, signed.Header)
+	require.ErrorContains(t, err, "parse Stripe webhook data object")
+	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
 func TestVerifyWebhookRejectsInvalidSignature(t *testing.T) {
@@ -203,23 +415,24 @@ func TestVerifyWebhookRejectsInvalidSignature(t *testing.T) {
 
 	const secret = "whsec_test"
 	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
-		Payload: webhookPayload(t, stripesdk.APIVersion),
+		Payload: webhookPayload(t, stripesdk.APIVersion, time.Now(), map[string]any{"id": "in_test"}),
 		Secret:  secret,
 	})
 	c := &client{webhookSecret: secret}
 
 	_, err := c.VerifyWebhook(signed.Payload, signed.Header+"bad")
 	require.ErrorContains(t, err, "verify Stripe webhook")
+	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
 func TestVerifyWebhookRejectsUnconfiguredSecret(t *testing.T) {
 	t.Parallel()
 
-	payload := webhookPayload(t, stripesdk.APIVersion)
+	payload := webhookPayload(t, stripesdk.APIVersion, time.Now(), map[string]any{"id": "in_test"})
 	for _, secret := range []string{"", "unset"} {
 		c := &client{webhookSecret: secret}
 		_, err := c.VerifyWebhook(payload, "")
-		require.ErrorContains(t, err, "webhook secret is not configured")
+		require.ErrorIs(t, err, ErrWebhookNotConfigured)
 	}
 }
 
@@ -228,7 +441,7 @@ func TestVerifyWebhookRejectsReplayedTimestamp(t *testing.T) {
 
 	const secret = "whsec_test"
 	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
-		Payload:   webhookPayload(t, stripesdk.APIVersion),
+		Payload:   webhookPayload(t, stripesdk.APIVersion, time.Now(), map[string]any{"id": "in_test"}),
 		Secret:    secret,
 		Timestamp: time.Now().Add(-stripewebhook.DefaultTolerance - time.Second),
 	})
@@ -236,6 +449,7 @@ func TestVerifyWebhookRejectsReplayedTimestamp(t *testing.T) {
 
 	_, err := c.VerifyWebhook(signed.Payload, signed.Header)
 	require.ErrorContains(t, err, "timestamp wasn't within tolerance")
+	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
 func TestVerifyWebhookRejectsWrongAPIVersion(t *testing.T) {
@@ -243,13 +457,14 @@ func TestVerifyWebhookRejectsWrongAPIVersion(t *testing.T) {
 
 	const secret = "whsec_test"
 	signed := stripewebhook.GenerateTestSignedPayload(&stripewebhook.UnsignedPayload{
-		Payload: webhookPayload(t, "2026-05-27.dahlia"),
+		Payload: webhookPayload(t, "2026-05-27.dahlia", time.Now(), map[string]any{"id": "in_test"}),
 		Secret:  secret,
 	})
 	c := &client{webhookSecret: secret}
 
 	_, err := c.VerifyWebhook(signed.Payload, signed.Header)
 	require.ErrorContains(t, err, "expected API version "+stripesdk.APIVersion)
+	require.NotErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
 func TestStubClientIsSafeToCall(t *testing.T) {
@@ -260,23 +475,31 @@ func TestStubClientIsSafeToCall(t *testing.T) {
 	customer, err := c.CreateCustomer(t.Context(), CreateCustomerInput{})
 	require.NoError(t, err)
 	require.Equal(t, "cus_local_stub", customer.ID)
+	checkout, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{OrganizationSlug: "test/org"})
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:3000/test%2Forg/billing", checkout.URL)
 	require.NoError(t, c.CreateMeterEvent(t.Context(), CreateMeterEventInput{}))
 	require.Equal(t, Catalog{}, c.Catalog())
 	_, err = c.VerifyWebhook(nil, "")
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrWebhookNotConfigured)
 }
 
-func webhookPayload(t *testing.T, apiVersion string) []byte {
+func webhookPayload(t *testing.T, apiVersion string, created time.Time, object map[string]any) []byte {
+	t.Helper()
+	return webhookPayloadForType(t, apiVersion, created, "invoice.created", object)
+}
+
+func webhookPayloadForType(t *testing.T, apiVersion string, created time.Time, eventType string, object any) []byte {
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
 		"id":          "evt_test",
 		"object":      "event",
 		"api_version": apiVersion,
-		"created":     time.Now().Unix(),
-		"type":        "invoice.created",
+		"created":     created.Unix(),
+		"type":        eventType,
 		"data": map[string]any{
-			"object": map[string]any{"id": "in_test"},
+			"object": object,
 		},
 	})
 	require.NoError(t, err)

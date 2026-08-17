@@ -24,6 +24,8 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
+import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
 import { TumUsageSection } from "@/components/billing/tum-section";
@@ -48,11 +50,15 @@ function BillingInner() {
   const isPlatformAdmin = useIsPlatformAdmin();
 
   // Enterprise contracts bill on tokens under management, so enterprise orgs
-  // see the TUM view instead of the self-serve usage meters.
+  // see the TUM view instead of the self-serve usage meters. Trials run on the
+  // enterprise tier, so the pay-as-you-go CTA has to be repeated here — the
+  // early return is exactly the path an org in an active trial takes.
   if (productTier === "enterprise") {
     return (
       <>
+        <StartPaygCheckoutCTA label="Add payment method" />
         <TumUsageSection />
+        <PaygPriceList />
         {isPlatformAdmin && <TumAdminSection />}
       </>
     );
@@ -60,6 +66,7 @@ function BillingInner() {
 
   return (
     <>
+      <StartPaygCheckoutCTA label="Add payment method" />
       <UsageSection />
       {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (

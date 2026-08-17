@@ -170,11 +170,14 @@ export function RecordNav({
                 tooltip="Projects"
               >
                 {onlyProject ? (
+                  // Always the id. Project slugs are unique only within an
+                  // organization, so project.get resolves a slug across all of
+                  // them, and "default" matches one project in every one.
                   <Link
                     to="/organizations/$idOrSlug/projects/$projectIdOrSlug"
                     params={{
                       idOrSlug,
-                      projectIdOrSlug: onlyProject.slug || onlyProject.id,
+                      projectIdOrSlug: onlyProject.id,
                     }}
                     {...currentProps(onProjects)}
                   >

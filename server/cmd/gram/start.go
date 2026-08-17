@@ -712,7 +712,10 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			var openRouter openrouter.Provisioner
+			var openRouter interface {
+				openrouter.Provisioner
+				openrouter.SpendClient
+			}
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
@@ -1447,7 +1450,7 @@ func newStartCommand() *cli.Command {
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, authzEngine, telemetryrepo.New(chDB), auditLogger, trialEmailNotifier))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, trialEmailNotifier))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
@@ -1606,6 +1609,7 @@ func newStartCommand() *cli.Command {
 						ChatMessageWriter:         chatWriter,
 						ChatClient:                chatClient,
 						OpenRouter:                openRouter,
+						OpenRouterSpend:           openRouter,
 						K8sClient:                 k8sClient,
 						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
 						SiteURL:                   siteURL,

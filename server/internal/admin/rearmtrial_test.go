@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -149,12 +150,15 @@ type keyFixture struct {
 func seedOpenRouterKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, f keyFixture) {
 	t.Helper()
 
+	enc := testenv.NewEncryptionClient(t)
+	ciphertext, err := enc.Encrypt([]byte("sk-test-" + orgID + "-" + string(f.keyType)))
+	require.NoError(t, err)
+
 	keys := orrepo.New(conn)
-	_, err := keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+	_, err = keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(f.keyType),
-		Key:            conv.ToPGText("sk-test-" + orgID + "-" + string(f.keyType)),
-		KeyEncrypted:   conv.ToPGText(""),
+		KeyEncrypted:   conv.ToPGText(ciphertext),
 		KeyHash:        "hash-" + orgID + "-" + string(f.keyType),
 		MonthlyCredits: f.monthlyCredits,
 	})

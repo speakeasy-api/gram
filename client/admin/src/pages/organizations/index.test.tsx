@@ -626,6 +626,21 @@ describe("organizations list", () => {
     expect(currentSearch(router)).toContain('type=["free","enterprise"]');
   });
 
+  it("filters by payg, which the type picker offers", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+
+    await openFilters("Type");
+    await chooseFilter("Type", "payg");
+    applyFilters();
+
+    await waitFor(() => {
+      expect(lastListParams().account_types).toEqual(["payg"]);
+    });
+    expect(currentSearch(router)).toContain('type=["payg"]');
+  });
+
   it("holds the table still until the operator applies", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",

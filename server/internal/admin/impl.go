@@ -292,49 +292,61 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) error 
 func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.AdminProjectDetail, error) {
 	queries := repo.New(s.db)
 
-	if id, err := uuid.Parse(payload.IDOrSlug); err == nil {
-		row, err := queries.AdminGetProjectDetailByID(ctx, id)
+	// The organization is resolved to its id first so that both project
+	// addresses below are checked against the same value: the caller names it
+	// the way the URL does, by id or slug, and a project row carries only the id.
+	var orgID string
+	if payload.OrganizationIDOrSlug != nil {
+		var err error
+		orgID, err = queries.AdminResolveOrganizationID(ctx, *payload.OrganizationIDOrSlug)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.C(oops.CodeNotFound)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve organization").LogError(ctx, s.logger)
 		}
-		return adminProjectDetailFromIDRow(row), nil
 	}
 
-	row, err := queries.AdminGetProjectDetailBySlug(ctx, payload.IDOrSlug)
+	// A slug is resolved to one id before the detail is read, never counted
+	// against directly: slugs are unique only within an organization, and the
+	// detail query prices every row it matches. See AdminResolveProjectIDBySlug.
+	id, err := uuid.Parse(payload.IDOrSlug)
+	if err != nil {
+		if orgID != "" {
+			id, err = queries.AdminResolveProjectIDBySlugInOrganization(ctx, repo.AdminResolveProjectIDBySlugInOrganizationParams{
+				OrganizationID: orgID,
+				Slug:           payload.IDOrSlug,
+			})
+		} else {
+			id, err = queries.AdminResolveProjectIDBySlug(ctx, payload.IDOrSlug)
+		}
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.C(oops.CodeNotFound)
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve project slug").LogError(ctx, s.logger)
+		}
+	}
+
+	row, err := queries.AdminGetProjectDetailByID(ctx, id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").LogError(ctx, s.logger)
 	}
-	return adminProjectDetailFromSlugRow(row), nil
+
+	// An id addresses a project on its own, so the organization is checked after
+	// the read rather than inside it. Duplicating the six-subquery detail read
+	// for one comparison would cost more than the comparison saves.
+	if orgID != "" && row.OrganizationID != orgID {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	return adminProjectDetailFromIDRow(row), nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
-	logo := uuidPtr(row.LogoAssetID)
-	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
-	return &gen.AdminProjectDetail{
-		ID:                     row.ID.String(),
-		Name:                   row.Name,
-		Slug:                   row.Slug,
-		OrganizationID:         row.OrganizationID,
-		LogoAssetID:            logo,
-		FunctionsRunnerVersion: runner,
-		ToolsetCount:           int(row.ToolsetCount),
-		DeploymentCount:        int(row.DeploymentCount),
-		HTTPToolCount:          int(row.HttpToolCount),
-		EnvironmentCount:       int(row.EnvironmentCount),
-		APIKeyCount:            int(row.ApiKeyCount),
-		AssistantCount:         int(row.AssistantCount),
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-	}
-}
-
-func adminProjectDetailFromSlugRow(row repo.AdminGetProjectDetailBySlugRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{

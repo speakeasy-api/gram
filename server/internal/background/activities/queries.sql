@@ -55,18 +55,15 @@ HAVING COUNT(toolsets.id) > 0;
 -- account-type allowlist so coverage can expand (e.g. add 'pro') without a
 -- code change. monthly_credits is the canonical limit last written by
 -- RefreshAPIKeyLimit and reflects any per-org overrides applied via the
--- OpenrouterKeyRefreshWorkflow. The key material is included so the caller
--- can issue the upstream usage HTTP call in a single round-trip — keep it
--- inside the activity boundary and never return it to the workflow. The
--- encrypted column is preferred and the plaintext column is the legacy
--- fallback for rows minted before encrypted storage.
+-- OpenrouterKeyRefreshWorkflow. The encrypted key material is included so the
+-- caller can issue the upstream usage HTTP call in a single round-trip — keep
+-- it inside the activity boundary and never return it to the workflow.
 SELECT
     om.id AS organization_id,
     om.slug AS organization_slug,
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
-    k.key AS api_key,
     k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
@@ -75,6 +72,83 @@ WHERE om.disabled_at IS NULL
   AND k.deleted = FALSE
   AND om.gram_account_type = ANY(@account_types::text[])
 ORDER BY om.slug;
+
+-- name: ListOpenRouterDailySpendTargets :many
+-- Every live platform-managed key is a billing input, including disabled keys:
+-- disabling a key stops future usage but does not erase spend already reported
+-- by OpenRouter. The key hash identifies the management-API analytics filter;
+-- plaintext key material never crosses this activity boundary.
+SELECT
+    organization_id,
+    key_type,
+    key_hash,
+    created_at
+FROM openrouter_api_keys
+WHERE deleted = FALSE
+ORDER BY organization_id, key_type;
+
+-- name: UpsertOpenRouterDailySpend :exec
+-- Restatements replace a day's value, while an identical replay leaves
+-- updated_at unchanged so operators can distinguish a real correction from a
+-- routine overlapping pull.
+INSERT INTO openrouter_spend_daily (
+    organization_id,
+    key_type,
+    day,
+    spend_usd
+) VALUES (
+    @target_organization_id,
+    @target_key_type,
+    @target_day,
+    @target_spend_usd
+)
+ON CONFLICT (organization_id, key_type, day) DO UPDATE
+SET
+    spend_usd = EXCLUDED.spend_usd,
+    updated_at = clock_timestamp()
+WHERE openrouter_spend_daily.spend_usd IS DISTINCT FROM @target_spend_usd;
+
+-- name: CountOpenRouterDailySpendGaps :one
+-- Search only after the first successfully stored day. This avoids reporting
+-- pre-rollout history or a newly created key as missing. The caller supplies
+-- the start of its recovery window as cutoff_day, so every returned gap is too
+-- old for the overlapping daily pull to repair automatically.
+WITH RECURSIVE calendar(day) AS (
+  SELECT MIN(openrouter_spend_daily.day)
+  FROM openrouter_spend_daily
+  WHERE openrouter_spend_daily.organization_id = @target_organization_id
+    AND openrouter_spend_daily.key_type = @target_key_type
+  UNION ALL
+  SELECT calendar.day + 1
+  FROM calendar
+  WHERE calendar.day + 1 < @target_cutoff_day::date
+), missing AS (
+  SELECT calendar.day
+  FROM calendar
+  LEFT JOIN openrouter_spend_daily spend
+    ON spend.organization_id = @target_organization_id
+   AND spend.key_type = @target_key_type
+   AND spend.day = calendar.day
+  WHERE calendar.day IS NOT NULL
+    AND spend.id IS NULL
+  ORDER BY calendar.day
+)
+SELECT
+  COUNT(*)::bigint AS missing_count
+FROM missing;
+
+-- name: ListOpenRouterDailySpend :many
+SELECT
+    organization_id,
+    key_type,
+    day,
+    spend_usd,
+    created_at,
+    updated_at
+FROM openrouter_spend_daily
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+ORDER BY day;
 
 -- name: GetOpenRouterCreditsAlertRecipients :many
 -- Resolve the billing alert recipient for each supplied organization that

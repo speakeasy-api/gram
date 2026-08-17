@@ -8,10 +8,9 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminOpenRouterKeysEncryptKey } from "../funcs/adminOpenRouterKeysEncryptKey.js";
+import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AdminOpenRouterKey } from "../models/components/adminopenrouterkey.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +23,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  EncryptAdminOpenRouterKeyRequest,
-  EncryptAdminOpenRouterKeySecurity,
-} from "../models/operations/encryptadminopenrouterkey.js";
+  CreateStripeCheckoutRequest,
+  CreateStripeCheckoutSecurity,
+} from "../models/operations/createstripecheckout.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type EncryptAdminOpenRouterKeyMutationVariables = {
-  request: EncryptAdminOpenRouterKeyRequest;
-  security?: EncryptAdminOpenRouterKeySecurity | undefined;
+export type CreateStripeCheckoutMutationVariables = {
+  request?: CreateStripeCheckoutRequest | undefined;
+  security?: CreateStripeCheckoutSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type EncryptAdminOpenRouterKeyMutationData = AdminOpenRouterKey;
+export type CreateStripeCheckoutMutationData = string;
 
-export type EncryptAdminOpenRouterKeyMutationError =
+export type CreateStripeCheckoutMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +50,49 @@ export type EncryptAdminOpenRouterKeyMutationError =
   | SDKValidationError;
 
 /**
- * encryptKey adminOpenRouterKeys
+ * createStripeCheckout usage
  *
  * @remarks
- * Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.
+ * Create a Stripe Checkout link for starting PAYG billing
  */
-export function useEncryptAdminOpenRouterKeyMutation(
+export function useCreateStripeCheckoutMutation(
   options?: MutationHookOptions<
-    EncryptAdminOpenRouterKeyMutationData,
-    EncryptAdminOpenRouterKeyMutationError,
-    EncryptAdminOpenRouterKeyMutationVariables
+    CreateStripeCheckoutMutationData,
+    CreateStripeCheckoutMutationError,
+    CreateStripeCheckoutMutationVariables
   >,
 ): UseMutationResult<
-  EncryptAdminOpenRouterKeyMutationData,
-  EncryptAdminOpenRouterKeyMutationError,
-  EncryptAdminOpenRouterKeyMutationVariables
+  CreateStripeCheckoutMutationData,
+  CreateStripeCheckoutMutationError,
+  CreateStripeCheckoutMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildEncryptAdminOpenRouterKeyMutation(client, options),
+    ...buildCreateStripeCheckoutMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyEncryptAdminOpenRouterKey(): MutationKey {
-  return ["@gram/client", "adminOpenRouterKeys", "encryptKey"];
+export function mutationKeyCreateStripeCheckout(): MutationKey {
+  return ["@gram/client", "usage", "createStripeCheckout"];
 }
 
-export function buildEncryptAdminOpenRouterKeyMutation(
+export function buildCreateStripeCheckoutMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: EncryptAdminOpenRouterKeyMutationVariables,
-  ) => Promise<EncryptAdminOpenRouterKeyMutationData>;
+    variables: CreateStripeCheckoutMutationVariables,
+  ) => Promise<CreateStripeCheckoutMutationData>;
 } {
   return {
-    mutationKey: mutationKeyEncryptAdminOpenRouterKey(),
-    mutationFn: function encryptAdminOpenRouterKeyMutationFn({
+    mutationKey: mutationKeyCreateStripeCheckout(),
+    mutationFn: function createStripeCheckoutMutationFn({
       request,
       security,
       options,
-    }): Promise<EncryptAdminOpenRouterKeyMutationData> {
+    }): Promise<CreateStripeCheckoutMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +105,7 @@ export function buildEncryptAdminOpenRouterKeyMutation(
           ),
         },
       };
-      return unwrapAsync(adminOpenRouterKeysEncryptKey(
+      return unwrapAsync(usageCreateStripeCheckout(
         client$,
         request,
         security,

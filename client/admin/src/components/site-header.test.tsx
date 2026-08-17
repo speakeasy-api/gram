@@ -65,10 +65,20 @@ beforeEach(() => {
       : Promise.reject(new Error(`no organization ${idOrSlug}`)),
   );
   mocks.getProject.mockReset();
-  mocks.getProject.mockImplementation((idOrSlug: string) =>
-    idOrSlug === PROJECT.id || idOrSlug === PROJECT.slug
-      ? Promise.resolve(PROJECT_DETAIL)
-      : Promise.reject(new Error(`no project ${idOrSlug}`)),
+  // Rejects a wrong organization for the same reason the organization mock
+  // rejects a wrong id: a mock that answers every scope alike lets a caller that
+  // sends the wrong one pass.
+  mocks.getProject.mockImplementation(
+    (idOrSlug: string, organizationIdOrSlug?: string) => {
+      const named = idOrSlug === PROJECT.id || idOrSlug === PROJECT.slug;
+      const scoped =
+        organizationIdOrSlug === undefined ||
+        organizationIdOrSlug === ORG.id ||
+        organizationIdOrSlug === ORG.slug;
+      return named && scoped
+        ? Promise.resolve(PROJECT_DETAIL)
+        : Promise.reject(new Error(`no project ${idOrSlug}`));
+    },
   );
   mocks.listOrganizationProjects.mockReset();
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
@@ -105,7 +115,14 @@ function seeded(): QueryClient {
     defaultOptions: { queries: { retry: false } },
   });
   qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+  // Two entries, because the two routes to this page read under two keys: the
+  // record scopes the project by its organization and the standalone page
+  // cannot.
   qc.setQueryData(projectQuery(PROJECT.slug).queryKey, PROJECT_DETAIL);
+  qc.setQueryData(
+    projectQuery(PROJECT.slug, ORG.slug).queryKey,
+    PROJECT_DETAIL,
+  );
   return qc;
 }
 
@@ -164,6 +181,27 @@ describe("SiteHeader", () => {
     });
 
     expect(crumbs()).toEqual(["Organizations", ORG.name, PROJECT.name]);
+  });
+
+  it("fills the project crumb from the view's own read, nothing seeded", async () => {
+    // The one claim seeding cannot make. The bar watches the cache and never
+    // fetches, so its key must be the key the view writes under, and both tests
+    // above seed whatever key the crumb asks for. Here only the view reads, and
+    // it reads scoped by the organization the URL names.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects/${PROJECT.slug}`,
+      queryClient: qc,
+    });
+
+    await waitFor(() =>
+      expect(crumbs()).toEqual(["Organizations", ORG.name, PROJECT.name]),
+    );
+    expect(mocks.getProject).toHaveBeenCalledWith(PROJECT.slug, ORG.slug);
   });
 
   it("names the standalone project page after its project", async () => {
