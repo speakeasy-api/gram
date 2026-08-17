@@ -28,6 +28,7 @@ type Server struct {
 	ListGcpKmsKeys   http.Handler
 	GetAwsKmsKey     http.Handler
 	GetGcpKmsKey     http.Handler
+	VerifyGcpKmsKey  http.Handler
 	DeleteAwsKmsKey  http.Handler
 	DeleteGcpKmsKey  http.Handler
 }
@@ -68,6 +69,7 @@ func New(
 			{"ListGcpKmsKeys", "GET", "/rpc/externalKeys.listGcpKms"},
 			{"GetAwsKmsKey", "GET", "/rpc/externalKeys.getAwsKms"},
 			{"GetGcpKmsKey", "GET", "/rpc/externalKeys.getGcpKms"},
+			{"VerifyGcpKmsKey", "POST", "/rpc/externalKeys.verifyGcpKms"},
 			{"DeleteAwsKmsKey", "DELETE", "/rpc/externalKeys.deleteAwsKms"},
 			{"DeleteGcpKmsKey", "DELETE", "/rpc/externalKeys.deleteGcpKms"},
 		},
@@ -80,6 +82,7 @@ func New(
 		ListGcpKmsKeys:   NewListGcpKmsKeysHandler(e.ListGcpKmsKeys, mux, decoder, encoder, errhandler, formatter),
 		GetAwsKmsKey:     NewGetAwsKmsKeyHandler(e.GetAwsKmsKey, mux, decoder, encoder, errhandler, formatter),
 		GetGcpKmsKey:     NewGetGcpKmsKeyHandler(e.GetGcpKmsKey, mux, decoder, encoder, errhandler, formatter),
+		VerifyGcpKmsKey:  NewVerifyGcpKmsKeyHandler(e.VerifyGcpKmsKey, mux, decoder, encoder, errhandler, formatter),
 		DeleteAwsKmsKey:  NewDeleteAwsKmsKeyHandler(e.DeleteAwsKmsKey, mux, decoder, encoder, errhandler, formatter),
 		DeleteGcpKmsKey:  NewDeleteGcpKmsKeyHandler(e.DeleteGcpKmsKey, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -99,6 +102,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListGcpKmsKeys = m(s.ListGcpKmsKeys)
 	s.GetAwsKmsKey = m(s.GetAwsKmsKey)
 	s.GetGcpKmsKey = m(s.GetGcpKmsKey)
+	s.VerifyGcpKmsKey = m(s.VerifyGcpKmsKey)
 	s.DeleteAwsKmsKey = m(s.DeleteAwsKmsKey)
 	s.DeleteGcpKmsKey = m(s.DeleteGcpKmsKey)
 }
@@ -117,6 +121,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListGcpKmsKeysHandler(mux, h.ListGcpKmsKeys)
 	MountGetAwsKmsKeyHandler(mux, h.GetAwsKmsKey)
 	MountGetGcpKmsKeyHandler(mux, h.GetGcpKmsKey)
+	MountVerifyGcpKmsKeyHandler(mux, h.VerifyGcpKmsKey)
 	MountDeleteAwsKmsKeyHandler(mux, h.DeleteAwsKmsKey)
 	MountDeleteGcpKmsKeyHandler(mux, h.DeleteGcpKmsKey)
 }
@@ -580,6 +585,59 @@ func NewGetGcpKmsKeyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getGcpKmsKey")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "externalKeys")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountVerifyGcpKmsKeyHandler configures the mux to serve the "externalKeys"
+// service "verifyGcpKmsKey" endpoint.
+func MountVerifyGcpKmsKeyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/externalKeys.verifyGcpKms", f)
+}
+
+// NewVerifyGcpKmsKeyHandler creates a HTTP handler which loads the HTTP
+// request and calls the "externalKeys" service "verifyGcpKmsKey" endpoint.
+func NewVerifyGcpKmsKeyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeVerifyGcpKmsKeyRequest(mux, decoder)
+		encodeResponse = EncodeVerifyGcpKmsKeyResponse(encoder)
+		encodeError    = EncodeVerifyGcpKmsKeyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "verifyGcpKmsKey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "externalKeys")
 		payload, err := decodeRequest(r)
 		if err != nil {

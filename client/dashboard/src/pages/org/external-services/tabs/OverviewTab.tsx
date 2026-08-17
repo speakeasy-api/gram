@@ -1,4 +1,9 @@
-import { InfoField, InfoSection, InfoText } from "@/components/detail-fields";
+import {
+  InfoField,
+  InfoFieldGrid,
+  InfoSection,
+  InfoText,
+} from "@/components/detail-fields";
 import { RequireScope } from "@/components/require-scope";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
@@ -45,14 +50,18 @@ export function OverviewTab({
   };
 
   return (
-    <div className="flex max-w-2xl flex-col gap-8">
+    <div className="flex max-w-4xl flex-col gap-8">
       <InfoSection title="Credential">
-        <InfoField label="Name">
-          <InfoText>{credential.name}</InfoText>
-        </InfoField>
-        <InfoField label="External Service">
-          <InfoText>{providerLabel(credential.provider)}</InfoText>
-        </InfoField>
+        <InfoFieldGrid columns={2}>
+          <InfoField label="Name">
+            <InfoText>{credential.name}</InfoText>
+          </InfoField>
+          <InfoField label="External Service">
+            <InfoText>{providerLabel(credential.provider)}</InfoText>
+          </InfoField>
+        </InfoFieldGrid>
+        {/* Full width: a service account address is long enough that a narrow
+            column would wrap it into several lines of mono text. */}
         {credential.impersonateServiceAccount && (
           <InfoField label="Impersonated service account">
             <span className="flex items-center gap-1">
@@ -69,7 +78,7 @@ export function OverviewTab({
             credential created before that rule may still carry it, so it stays
             visible read-only rather than silently disappearing. */}
         {credential.wifPoolId && (
-          <>
+          <InfoFieldGrid>
             <InfoField label="Workload Identity Federation pool ID">
               <InfoText mono>{credential.wifPoolId}</InfoText>
             </InfoField>
@@ -79,18 +88,20 @@ export function OverviewTab({
             <InfoField label="Workload Identity Federation project number">
               <InfoText mono>{credential.wifProjectNumber}</InfoText>
             </InfoField>
-          </>
+          </InfoFieldGrid>
         )}
-        <InfoField label="Created">
-          <InfoText>
-            <HumanizeDateTime date={credential.createdAt} />
-          </InfoText>
-        </InfoField>
-        <InfoField label="Updated">
-          <InfoText>
-            <HumanizeDateTime date={credential.updatedAt} />
-          </InfoText>
-        </InfoField>
+        <InfoFieldGrid>
+          <InfoField label="Created">
+            <InfoText>
+              <HumanizeDateTime date={credential.createdAt} />
+            </InfoText>
+          </InfoField>
+          <InfoField label="Updated">
+            <InfoText>
+              <HumanizeDateTime date={credential.updatedAt} />
+            </InfoText>
+          </InfoField>
+        </InfoFieldGrid>
       </InfoSection>
 
       <InfoSection title="Access">
@@ -99,8 +110,8 @@ export function OverviewTab({
 
       <InfoSection title="Verify">
         <Text small muted>
-          Check that Gram can still impersonate this service account. Nothing is
-          stored; the check runs against your project each time.
+          Check that Speakeasy can still impersonate this service account.
+          Nothing is stored; the check runs against your project each time.
         </Text>
         <RequireScope
           scope="org:admin"
@@ -128,9 +139,9 @@ export function OverviewTab({
 
 function verifyMessage(result: VerifyCredentialResult): string {
   if (result.verified) {
-    return `Gram can impersonate ${result.principal}.`;
+    return `Speakeasy can impersonate ${result.principal}.`;
   }
-  return `Gram could not impersonate ${result.principal}.`;
+  return `Speakeasy could not impersonate ${result.principal}.`;
 }
 
 function VerifyResult({

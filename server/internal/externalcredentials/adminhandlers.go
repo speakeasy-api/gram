@@ -274,7 +274,7 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading platform gcp iam credential").LogError(ctx, logger)
 	}
 
-	principal, resolveErr := s.gcpResolver.ResolvePrincipal(ctx, gcpauth.Credential{
+	principal, resolveErr := s.gcpIdentity.ResolvePrincipal(ctx, gcpauth.Credential{
 		ImpersonateServiceAccount: row.GcpIamCredential.ImpersonateServiceAccount.String,
 		WifPoolID:                 row.GcpIamCredential.WifPoolID.String,
 		WifProviderID:             row.GcpIamCredential.WifProviderID.String,

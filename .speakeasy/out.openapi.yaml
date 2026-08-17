@@ -15456,7 +15456,7 @@ paths:
         name: CreateGcpIamCredential
   /rpc/externalCredentials.deleteAwsIam:
     delete:
-      description: Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+      description: Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
       operationId: deleteAwsIamCredential
       parameters:
         - allowEmptyValue: true
@@ -15543,7 +15543,7 @@ paths:
         name: DeleteAwsIamCredential
   /rpc/externalCredentials.deleteGcpIam:
     delete:
-      description: Soft-delete a GCP IAM external credential by ID. Requires org:admin.
+      description: Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
       operationId: deleteGcpIamCredential
       parameters:
         - allowEmptyValue: true
@@ -16394,6 +16394,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
         "500":
           content:
             application/json:
@@ -17379,6 +17385,103 @@ paths:
       x-speakeasy-name-override: updateGcpKms
       x-speakeasy-react-hook:
         name: UpdateGcpKmsKey
+  /rpc/externalKeys.verifyGcpKms:
+    post:
+      description: 'Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key''s public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key''s owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
+      operationId: verifyGcpKmsKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to verify.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to verify.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyKmsKeyResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verifyGcpKmsKey externalKeys
+      tags:
+        - externalKeys
+      x-speakeasy-name-override: verifyGcpKms
+      x-speakeasy-react-hook:
+        name: VerifyGcpKmsKey
   /rpc/hooks.claude:
     post:
       tags:
@@ -78333,6 +78436,35 @@ components:
       description: Result of a live probe that Gram can assume the identity the credential names.
       required:
         - verified
+    VerifyKmsKeyResult:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+        probe_outcome:
+          type: string
+          description: The machine-readable outcome of the probe.
+          enum:
+            - verified
+            - credential_deleted
+            - credential_unusable
+            - invalid_resource_name
+            - key_not_found
+            - permission_denied
+            - key_unusable
+            - unsupported_algorithm
+            - algorithm_mismatch
+            - signature_invalid
+            - unavailable
+            - unexpected
+        verified:
+          type: boolean
+          description: Whether the key produced a signature that validated against its own public half.
+      description: Result of a live probe that Gram can reach an external key and use it to sign.
+      required:
+        - verified
+        - probe_outcome
     VerifyOnboardingHooksSetupResult:
       type: object
       properties:
