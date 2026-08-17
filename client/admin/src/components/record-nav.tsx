@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { organizationProjectsQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { organizationFeaturesUrl } from "@/lib/impersonation";
+import { LEAVES_THE_APP, organizationFeaturesUrl } from "@/lib/impersonation";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 
 // Indexed as a plain string record, for the reason `Trial` gives: the server
@@ -212,10 +212,7 @@ export function RecordNav({
                     <SlidersHorizontalIcon />
                     <span>
                       Features
-                      <span className="sr-only">
-                        {" "}
-                        (opens in the Gram dashboard)
-                      </span>
+                      <span className="sr-only">{LEAVES_THE_APP}</span>
                     </span>
                     <ExternalLinkIcon
                       aria-hidden="true"

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { badgeTone } from "@/lib/badgeTone";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { impersonationUrl } from "@/lib/impersonation";
+import { impersonationUrl, LEAVES_THE_APP } from "@/lib/impersonation";
 import { fmtDateShort } from "@/lib/utils";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 
@@ -54,8 +54,12 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
         {/* Absent rather than dead when no app origin is configured. */}
         {gramUrl && (
           <Button asChild variant="outline" size="xs">
+            {/* The record's other way out of the admin app, marked the way the
+                nav's Features row is. Appended rather than an `aria-label`,
+                which would take the visible words away and leave the aside. */}
             <a href={gramUrl} target="_blank" rel="noreferrer">
               Open in Gram
+              <span className="sr-only">{LEAVES_THE_APP}</span>
             </a>
           </Button>
         )}

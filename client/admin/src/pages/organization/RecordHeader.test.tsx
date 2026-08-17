@@ -73,6 +73,21 @@ describe("RecordHeader", () => {
     expect(link.getAttribute("rel")).toContain("noreferrer");
   });
 
+  it("says Open in Gram leaves the app, in the nav's words", async () => {
+    await renderWithApp(<RecordHeader org={anOrganization()} />);
+
+    const link = screen.getByRole("link", { name: /Open in Gram/ });
+    // Written out, not read off the constant. The same words are asserted
+    // against the nav's Features row, which is the only thing holding two links
+    // that say the same fact to one wording.
+    expect(link.textContent).toBe("Open in Gram (opens in the Gram dashboard)");
+    // Appended, not substituted. An `aria-label` would take "Open in Gram" away
+    // from a screen reader and leave the aside standing in for the label.
+    expect(link.querySelector(".sr-only")?.textContent).toBe(
+      " (opens in the Gram dashboard)",
+    );
+  });
+
   it("impersonates through the record's slug, not its id", async () => {
     // The server reads the first path segment of `redirect` back as the
     // organization, so an id there lands the operator nowhere.
