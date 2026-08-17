@@ -3954,6 +3954,24 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   -- fields.
   metadata JSONB,
 
+  -- acting_surface and acting_client_id record how a change was made, which
+  -- the actor fields alone cannot express: the same user acting through the
+  -- dashboard and through an agent over Platform MCP is indistinguishable
+  -- without them. Reviewing a runaway agent's burst of activity depends on
+  -- telling the two apart.
+  --
+  -- The surface is a low-cardinality value drawn from a server-side allowlist,
+  -- never a client-supplied string. Rows written before this column existed
+  -- take the 'unknown' default rather than being backfilled with a surface
+  -- that was never recorded.
+  acting_surface TEXT NOT NULL DEFAULT 'unknown',
+
+  -- The registered OAuth client the call authenticated as, when it had one.
+  -- Sourced from the token's client record rather than a request header, so a
+  -- caller cannot name itself. NULL means the call carried no OAuth client,
+  -- which is not the same as an unrecognized one.
+  acting_client_id TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT audit_logs_pkey PRIMARY KEY (id)
