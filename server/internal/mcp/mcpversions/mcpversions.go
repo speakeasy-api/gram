@@ -109,6 +109,40 @@ func Known(v string) bool {
 	return slices.Contains(all, v)
 }
 
+// Handshakeless reports whether v is a recognized revision that carries its
+// protocol version on every request instead of agreeing one at `initialize`.
+//
+// 2026-07-28 removed the handshake, which is what makes this distinction worth
+// drawing rather than simply comparing revisions. A client on a handshake-based
+// revision learns what a server speaks by being told at `initialize`, so a
+// surface answering an older revision than the client asked for is understood
+// and the client adapts. A client on a handshake-less revision is never told
+// anything: it declares a version per request and validates the reply against
+// it. Serving one of those a response shaped for an older revision cannot be
+// detected by the client, so the surface has to say so out loud — see
+// [Serves].
+func Handshakeless(v string) bool {
+	idx := slices.Index(all, v)
+	return idx >= 0 && idx >= slices.Index(all, Version20260728)
+}
+
+// Serves reports whether a surface answering the served revision can honour a
+// request declaring the requested one.
+//
+// An empty or unrecognized request version is served: those are clients that
+// either predate the header or are not speaking a revision this package knows,
+// and both are better handled by the surface's existing behaviour than by a
+// rejection. A handshake-less request for anything other than exactly the
+// served revision is not, because such a client has no other way to discover
+// the mismatch.
+func Serves(served, requested string) bool {
+	if requested == "" || !Known(requested) || requested == served {
+		return true
+	}
+
+	return !Handshakeless(requested)
+}
+
 // Clamp bounds a client-supplied version for use as a metric dimension: a
 // recognized revision passes through, an absent one becomes [None], and
 // anything else becomes [Other].
