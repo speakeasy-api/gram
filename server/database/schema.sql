@@ -6567,6 +6567,10 @@ CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT platform_mcp_catalog_registrations_pkey PRIMARY KEY (id),
+  -- A generation cannot identify a connection without the connection itself,
+  -- so the pair is present together or absent together.
+  CONSTRAINT platform_mcp_catalog_registrations_connection_pair_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_catalog_registrations_source_kind_check CHECK (source_kind <> ''),
   CONSTRAINT platform_mcp_catalog_registrations_catalog_provider_check CHECK (catalog_provider <> ''),
   CONSTRAINT platform_mcp_catalog_registrations_catalog_reference_check CHECK (catalog_reference <> ''),
@@ -6643,6 +6647,9 @@ CREATE TABLE IF NOT EXISTS platform_mcp_operation_receipts (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT platform_mcp_operation_receipts_pkey PRIMARY KEY (id),
+  -- As above: half a connection identifies nothing.
+  CONSTRAINT platform_mcp_operation_receipts_connection_pair_check
+    CHECK ((connection_id IS NULL) = (connection_generation IS NULL)),
   CONSTRAINT platform_mcp_operation_receipts_operation_check CHECK (operation <> ''),
   CONSTRAINT platform_mcp_operation_receipts_idempotency_key_check CHECK (idempotency_key <> ''),
   CONSTRAINT platform_mcp_operation_receipts_input_hash_check CHECK (input_hash <> ''),
