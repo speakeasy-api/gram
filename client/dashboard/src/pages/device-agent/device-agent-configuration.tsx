@@ -34,36 +34,38 @@ import { toast } from "sonner";
 
 type EnforcementLayer = "off" | "user" | "managed";
 
+// The `platforms` map is opt-out on the device agent: a tool absent from it is
+// managed at the user layer (config.PlatformMode.Layer in the device-agent
+// repo). Only an explicit `false` disables one. This UI must resolve an absent
+// key the same way, or it reports a tool as Off while the fleet is enforcing
+// it — and then writes that false reading back on the next save.
+const DEFAULT_LAYER: EnforcementLayer = "user";
+
 const PLATFORMS = [
   {
     key: "claude_code",
     label: "Claude Code",
     description: "Configure Claude Code plugins and MCP settings.",
-    defaultLayer: "user",
   },
   {
     key: "codex",
     label: "Codex",
     description: "Configure Codex plugins and MCP settings.",
-    defaultLayer: "off",
   },
   {
     key: "cursor",
     label: "Cursor",
     description: "Configure Cursor plugins and MCP settings.",
-    defaultLayer: "off",
   },
   {
     key: "opencode",
     label: "OpenCode",
     description: "Configure OpenCode plugins and MCP settings.",
-    defaultLayer: "off",
   },
 ] as const satisfies ReadonlyArray<{
   key: string;
   label: string;
   description: string;
-  defaultLayer: EnforcementLayer;
 }>;
 
 const MIN_SYNC_INTERVAL_SECONDS = 60;
@@ -100,14 +102,14 @@ function recordValue(value: unknown): Record<string, unknown> {
   return {};
 }
 
-function enforcementLayer(
-  config: DeviceAgentConfiguration,
-  platform: (typeof PLATFORMS)[number],
+export function enforcementLayer(
+  platforms: unknown,
+  platformKey: string,
 ): EnforcementLayer {
-  const value = recordValue(config.config.platforms)[platform.key];
+  const value = recordValue(platforms)[platformKey];
   if (value === "user" || value === "managed") return value;
   if (value === false) return "off";
-  return platform.defaultLayer;
+  return DEFAULT_LAYER;
 }
 
 function stringSetting(
@@ -222,7 +224,7 @@ function DeviceAgentConfigurationForm({
     Object.fromEntries(
       PLATFORMS.map((platform) => [
         platform.key,
-        enforcementLayer(configuration, platform),
+        enforcementLayer(configuration.config.platforms, platform.key),
       ]),
     ),
   );
@@ -264,7 +266,7 @@ function DeviceAgentConfigurationForm({
   const currentPlatformLayers = Object.fromEntries(
     PLATFORMS.map((platform) => [
       platform.key,
-      enforcementLayer(configuration, platform),
+      enforcementLayer(configuration.config.platforms, platform.key),
     ]),
   );
   const isDirty =
