@@ -23,178 +23,36 @@ func TestListKeys_RequiresPlatformAdmin(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestListKeys_ReportsEncryptionStatus(t *testing.T) {
+func TestListKeys_ReturnsSeededKeys(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 
-	ciphertext, err := ti.enc.Encrypt([]byte("sk-or-dual"))
-	require.NoError(t, err)
-	ciphertextOnly, err := ti.enc.Encrypt([]byte("sk-or-scrubbed"))
-	require.NoError(t, err)
-
-	plainOrg := seedKey(t, ctx, ti, "plain", "chat", "sk-or-plain", "")
-	dualOrg := seedKey(t, ctx, ti, "dual", "chat", "sk-or-dual", ciphertext)
-	encOrg := seedKey(t, ctx, ti, "enc", "chat", "", ciphertextOnly)
+	orgID := seedKey(t, ctx, ti, "list", "chat", "sk-or-list")
 
 	res, err := ti.service.ListKeys(adminCtx, &gen.ListKeysPayload{SessionToken: nil})
 	require.NoError(t, err)
 
-	statusByOrg := map[string]string{}
+	var found *gen.AdminOpenRouterKey
 	for _, key := range res.Keys {
-		statusByOrg[key.OrganizationID] = key.EncryptionStatus
-		require.Equal(t, "chat", key.KeyType)
+		if key.OrganizationID == orgID {
+			found = key
+		}
 	}
-	require.Equal(t, "plaintext", statusByOrg[plainOrg])
-	require.Equal(t, "encrypted_with_plaintext", statusByOrg[dualOrg])
-	require.Equal(t, "encrypted", statusByOrg[encOrg])
+	require.NotNil(t, found)
+	require.Equal(t, "chat", found.KeyType)
+	require.Equal(t, int64(5), found.MonthlyCredits)
+	require.False(t, found.Disabled)
 }
 
-func TestEncryptKey_ScrubsPlaintext(t *testing.T) {
+func TestGetKeyUsage_DecryptsStoredCiphertext(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 
-	orgID := seedKey(t, ctx, ti, "scrub", "chat", "sk-or-scrub-me", "")
-
-	view, err := ti.service.EncryptKey(adminCtx, &gen.EncryptKeyPayload{
-		SessionToken:   nil,
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "encrypted", view.EncryptionStatus)
-
-	row, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.False(t, row.Key.Valid, "plaintext column must be cleared")
-	require.True(t, row.KeyEncrypted.Valid)
-	decrypted, err := ti.enc.Decrypt(row.KeyEncrypted.String)
-	require.NoError(t, err)
-	require.Equal(t, "sk-or-scrub-me", decrypted)
-}
-
-func TestEncryptKey_PrefersExistingCiphertext(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	adminCtx := withAdmin(t, ctx)
-
-	ciphertext, err := ti.enc.Encrypt([]byte("sk-or-dual-scrub"))
-	require.NoError(t, err)
-	orgID := seedKey(t, ctx, ti, "dualscrub", "chat", "sk-or-dual-scrub", ciphertext)
-
-	view, err := ti.service.EncryptKey(adminCtx, &gen.EncryptKeyPayload{
-		SessionToken:   nil,
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "encrypted", view.EncryptionStatus)
-
-	row, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.False(t, row.Key.Valid)
-	require.Equal(t, ciphertext, row.KeyEncrypted.String, "existing ciphertext must be kept, not re-minted")
-}
-
-func TestEncryptKey_MismatchedCiphertextRefusesScrub(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	adminCtx := withAdmin(t, ctx)
-
-	// The stored ciphertext decrypts fine but to a different key than the
-	// plaintext column: the scrub must refuse rather than destroy the only
-	// trustworthy copy.
-	wrongCiphertext, err := ti.enc.Encrypt([]byte("sk-or-something-else"))
-	require.NoError(t, err)
-	orgID := seedKey(t, ctx, ti, "mismatch", "chat", "sk-or-truth", wrongCiphertext)
-
-	_, err = ti.service.EncryptKey(adminCtx, &gen.EncryptKeyPayload{
-		SessionToken:   nil,
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-
-	row, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.True(t, row.Key.Valid, "plaintext must survive a refused scrub")
-}
-
-func TestEncryptKey_IdempotentOnScrubbedRow(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	adminCtx := withAdmin(t, ctx)
-
-	orgID := seedKey(t, ctx, ti, "idem", "chat", "sk-or-idem", "")
-
-	_, err := ti.service.EncryptKey(adminCtx, &gen.EncryptKeyPayload{
-		SessionToken:   nil,
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-
-	firstRow, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-
-	view, err := ti.service.EncryptKey(adminCtx, &gen.EncryptKeyPayload{
-		SessionToken:   nil,
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "encrypted", view.EncryptionStatus)
-
-	secondRow, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	})
-	require.NoError(t, err)
-	require.Equal(t, firstRow.KeyEncrypted.String, secondRow.KeyEncrypted.String, "a no-op scrub must not re-mint the ciphertext")
-}
-
-func TestEncryptKey_NotFound(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	adminCtx := withAdmin(t, ctx)
-	_ = ctx
-
-	_, err := ti.service.EncryptKey(adminCtx, &gen.EncryptKeyPayload{
-		SessionToken:   nil,
-		OrganizationID: "org-missing",
-		KeyType:        "chat",
-	})
-	requireOopsCode(t, err, oops.CodeNotFound)
-}
-
-func TestGetKeyUsage_DecryptsPreferredCiphertext(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	adminCtx := withAdmin(t, ctx)
-
-	ciphertext, err := ti.enc.Encrypt([]byte("sk-or-usage"))
-	require.NoError(t, err)
-	orgID := seedKey(t, ctx, ti, "usage", "chat", "sk-or-stale-plain", ciphertext)
+	orgID := seedKey(t, ctx, ti, "usage", "chat", "sk-or-usage")
 
 	ti.provisioner.usage = 3.21
 	limit := int64(5)
@@ -211,9 +69,25 @@ func TestGetKeyUsage_DecryptsPreferredCiphertext(t *testing.T) {
 	require.NotNil(t, res.UpstreamLimit)
 	require.Equal(t, int64(5), *res.UpstreamLimit)
 
-	// The upstream call must use the decrypted ciphertext, not the stale
-	// plaintext column.
+	// The upstream call must use the decrypted key material.
 	require.Equal(t, []string{"sk-or-usage"}, ti.provisioner.UsageCalls())
+}
+
+func TestGetKeyUsage_MissingCiphertextErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+
+	orgID := seedKey(t, ctx, ti, "nomaterial", "chat", "")
+
+	_, err := ti.service.GetKeyUsage(adminCtx, &gen.GetKeyUsagePayload{
+		SessionToken:   nil,
+		OrganizationID: orgID,
+		KeyType:        "chat",
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.Empty(t, ti.provisioner.UsageCalls())
 }
 
 func TestGetKeyUsage_DisabledKeyRefused(t *testing.T) {
@@ -222,7 +96,7 @@ func TestGetKeyUsage_DisabledKeyRefused(t *testing.T) {
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 
-	orgID := seedKey(t, ctx, ti, "disabledusage", "chat", "sk-or-disabled", "")
+	orgID := seedKey(t, ctx, ti, "disabledusage", "chat", "sk-or-disabled")
 	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "chat",
@@ -243,7 +117,7 @@ func TestDisableKey_MarksDisabledAndAudits(t *testing.T) {
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 
-	orgID := seedKey(t, ctx, ti, "disable", "chat", "sk-or-disable", "")
+	orgID := seedKey(t, ctx, ti, "disable", "chat", "sk-or-disable")
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
 	require.NoError(t, err)
@@ -267,7 +141,7 @@ func TestEnableKey_ReinstatesWithRecordedLimit(t *testing.T) {
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 
-	orgID := seedKey(t, ctx, ti, "enable", "chat", "sk-or-enable", "")
+	orgID := seedKey(t, ctx, ti, "enable", "chat", "sk-or-enable")
 	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "chat",
@@ -296,7 +170,7 @@ func TestEnableKey_AlreadyEnabledSkipsUpstream(t *testing.T) {
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 
-	orgID := seedKey(t, ctx, ti, "noopenable", "chat", "sk-or-noop", "")
+	orgID := seedKey(t, ctx, ti, "noopenable", "chat", "sk-or-noop")
 
 	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{
 		SessionToken:   nil,

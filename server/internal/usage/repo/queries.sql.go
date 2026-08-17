@@ -12,6 +12,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countStripeWebhookReceiptsFixture = `-- name: CountStripeWebhookReceiptsFixture :one
+SELECT count(*)
+FROM stripe_webhook_receipts
+WHERE organization_id = $1
+`
+
+// Test-only fixture assertion for durable webhook completion receipts.
+func (q *Queries) CountStripeWebhookReceiptsFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countStripeWebhookReceiptsFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createStripeBillingMetadataFixture = `-- name: CreateStripeBillingMetadataFixture :exec
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES ($1, $2)
+`
+
+type CreateStripeBillingMetadataFixtureParams struct {
+	OrganizationID   string
+	StripeCustomerID pgtype.Text
+}
+
+// Test-only fixture for webhook tests that need a Stripe customer association.
+func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg CreateStripeBillingMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, createStripeBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID)
+	return err
+}
+
 const getBillingMetadata = `-- name: GetBillingMetadata :one
 SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
@@ -34,6 +64,19 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getBillingMetadataOrganizationByStripeCustomerID = `-- name: GetBillingMetadataOrganizationByStripeCustomerID :one
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_customer_id = $1
+`
+
+func (q *Queries) GetBillingMetadataOrganizationByStripeCustomerID(ctx context.Context, stripeCustomerID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getBillingMetadataOrganizationByStripeCustomerID, stripeCustomerID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
@@ -154,6 +197,36 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 		return nil, err
 	}
 	return items, nil
+}
+
+const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one
+WITH inserted AS (
+  INSERT INTO stripe_webhook_receipts (
+      stripe_event_id
+    , organization_id
+    , event_type
+  ) VALUES (
+      $1
+    , $2
+    , $3
+  )
+  ON CONFLICT (stripe_event_id) DO NOTHING
+  RETURNING stripe_event_id
+)
+SELECT EXISTS (SELECT 1 FROM inserted) AS inserted
+`
+
+type TryInsertStripeWebhookReceiptParams struct {
+	StripeEventID  string
+	OrganizationID string
+	EventType      string
+}
+
+func (q *Queries) TryInsertStripeWebhookReceipt(ctx context.Context, arg TryInsertStripeWebhookReceiptParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryInsertStripeWebhookReceipt, arg.StripeEventID, arg.OrganizationID, arg.EventType)
+	var inserted bool
+	err := row.Scan(&inserted)
+	return inserted, err
 }
 
 const upsertBillingCycleUsage = `-- name: UpsertBillingCycleUsage :exec

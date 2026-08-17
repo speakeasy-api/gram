@@ -440,24 +440,48 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		groupBy = "external_user_id"
 	}
 
-	items, err := s.chRepo.SearchUsers(ctx, repo.SearchUsersParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		EventSource:      conv.PtrValOr(filter.EventSource, ""),
-		HookSource:       conv.PtrValOr(filter.HookSource, ""),
-		AccountType:      conv.PtrValOr(filter.AccountType, ""),
-		ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
-		GroupBy:          groupBy,
-		UserIDs:          filter.UserIds,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
-		MetricsDetail:    metricsDetailFromPayload(payload.Metrics),
-	})
+	// Internal grouping folds one employee's linked emails into one summary
+	// when the org is on the canonical fold; external ids never fold. A
+	// canonical cursor minted under the fold stops resolving if the flag
+	// flips off mid-pagination (short page, no error) — transient, inherent
+	// to per-request flag evaluation.
+	fold, shadow := false, false
+	if groupBy != "external_user_id" {
+		fold, shadow = s.canonicalIdentityMode(ctx, params.organizationID)
+	}
+	canonicalOrg := ""
+	if fold {
+		canonicalOrg = params.organizationID
+	}
+
+	searchParams := repo.SearchUsersParams{
+		GramProjectID:        params.projectID,
+		TimeStart:            params.timeStart,
+		TimeEnd:              params.timeEnd,
+		GramDeploymentID:     deploymentID,
+		EventSource:          conv.PtrValOr(filter.EventSource, ""),
+		HookSource:           conv.PtrValOr(filter.HookSource, ""),
+		AccountType:          conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
+		GroupBy:              groupBy,
+		UserIDs:              filter.UserIds,
+		SortOrder:            params.sortOrder,
+		Cursor:               params.cursor,
+		Limit:                params.limit + 1,
+		MetricsDetail:        metricsDetailFromPayload(payload.Metrics),
+		CanonicalIdentityOrg: canonicalOrg,
+	}
+	items, err := s.chRepo.SearchUsers(ctx, searchParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
+	}
+
+	// List divergence is customer-visible in a way aggregate drift is not, so
+	// the employee list gets its own shadow: first pages only — under a cursor
+	// the literal and folded orderings paginate differently and a membership
+	// diff would be noise.
+	if shadow && params.cursor == "" {
+		s.shadowCompareSearchUsersFold(ctx, params.organizationID, searchParams, items)
 	}
 
 	var nextCursor *string
@@ -912,6 +936,12 @@ func dedupeNonEmpty(values []string) []string {
 // pairing one person's email with another person's user id hand the second
 // person's accounts to the first summary (DNO-509). Best-effort: a lookup
 // failure leaves accounts empty rather than failing the listing.
+//
+// Canonical-fold edge, accepted: if the fold's canonical key fails directory
+// resolution (owner deleted after the last identity-map sync), the email
+// fallback targets the folded-away personal-email summary and the chip
+// attaches nowhere for that page load. Transient — the next map sync drops
+// the deleted owner's entries and the rows return to literal keys.
 func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
 	if len(users) == 0 {
 		return
@@ -1027,24 +1057,29 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	var items []repo.UserSummary
 	var assignments []orgsRepo.ListActiveRoleAssignmentsByOrganizationRow
 
+	// Canonical keys also serve the role rollup: one employee aggregates once
+	// per role instead of splitting across their linked emails.
+	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
-			GramProjectID:    params.projectID,
-			TimeStart:        params.timeStart,
-			TimeEnd:          params.timeEnd,
-			GramDeploymentID: deploymentID,
-			EventSource:      conv.PtrValOr(filter.EventSource, ""),
-			HookSource:       conv.PtrValOr(filter.HookSource, ""),
-			AccountType:      conv.PtrValOr(filter.AccountType, ""),
-			ExternalOrgID:    conv.PtrValOr(filter.ExternalOrgID, ""),
-			GroupBy:          "user_id",
-			UserIDs:          filter.UserIds,
-			SortOrder:        "desc",
-			Cursor:           "",
-			Limit:            10001,                  // Upper bound; orgs rarely have >10k users
-			MetricsDetail:    repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			GramProjectID:        params.projectID,
+			TimeStart:            params.timeStart,
+			TimeEnd:              params.timeEnd,
+			GramDeploymentID:     deploymentID,
+			EventSource:          conv.PtrValOr(filter.EventSource, ""),
+			HookSource:           conv.PtrValOr(filter.HookSource, ""),
+			AccountType:          conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
+			GroupBy:              "user_id",
+			UserIDs:              filter.UserIds,
+			SortOrder:            "desc",
+			Cursor:               "",
+			Limit:                10001,                  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:        repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			CanonicalIdentityOrg: canonicalOrg,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")

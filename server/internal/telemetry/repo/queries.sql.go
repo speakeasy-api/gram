@@ -131,14 +131,56 @@ func withAccountTypeFilter(sb squirrel.SelectBuilder, accountType string) squirr
 // known_emails join (see SearchUsers) so a person's email-less rows (e.g. tool
 // calls attributed by id only) merge into their email-keyed summary instead of
 // splitting into a second, token-less one.
-func searchUsersGroupExpr(groupBy string) string {
+// In canonical mode (canonicalOrgLit != "", internal grouping only) both email
+// arms fold through the identity_map, so one employee's work, personal, and
+// case-variant emails key a single summary; rows whose user_id never co-occurs
+// with an email keep their literal id key — the map is email-keyed and cannot
+// resolve a bare id.
+func searchUsersGroupExpr(groupBy, canonicalOrgLit string) string {
 	if groupBy == "external_user_id" {
 		return userIdentifierExpr("external_user_id")
+	}
+	if canonicalOrgLit != "" {
+		return "multiIf(" +
+			"telemetry_logs.user_email != '', " + canonicalEmailExpr(canonicalOrgLit, "telemetry_logs.user_email") + ", " +
+			"known_emails.known_email != '', " + canonicalEmailExpr(canonicalOrgLit, "known_emails.known_email") + ", " +
+			"telemetry_logs.user_id)"
 	}
 	return "multiIf(" +
 		"telemetry_logs.user_email != '', telemetry_logs.user_email, " +
 		"known_emails.known_email != '', known_emails.known_email, " +
 		"telemetry_logs.user_id)"
+}
+
+// searchUsersCanonicalKeyFilter matches requested summary keys in canonical
+// mode: email-shaped keys fold through the identity_map on both sides — a
+// drill by any of an employee's linked emails finds their one canonical
+// summary — while id-shaped keys keep the literal exact-match arms (the group
+// key and the raw id column; ids never fold, the map is email-keyed).
+func searchUsersCanonicalKeyFilter(orgLit, groupExpr, groupCol string, keys []string) squirrel.Sqlizer {
+	emailKeys := make([]string, 0, len(keys))
+	idKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if strings.Contains(key, "@") {
+			emailKeys = append(emailKeys, key)
+		} else {
+			idKeys = append(idKeys, key)
+		}
+	}
+	var or squirrel.Or
+	if len(emailKeys) > 0 {
+		fragments, args, _ := canonicalEmailValueList(orgLit, emailKeys)
+		if len(fragments) > 0 {
+			or = append(or, squirrel.Expr(groupExpr+" IN ("+strings.Join(fragments, ", ")+")", args...))
+		}
+	}
+	if len(idKeys) > 0 {
+		or = append(or, squirrel.Eq{groupExpr: idKeys}, squirrel.Eq{userIdentifierExpr(groupCol): idKeys})
+	}
+	if len(or) == 0 {
+		return squirrel.Expr("0")
+	}
+	return or
 }
 
 // searchUsersKnownEmailsJoin maps each user_id to an email observed alongside it
@@ -3058,6 +3100,10 @@ type SearchUsersParams struct {
 	// employee enrollment list uses MetricsDetailBasic because it renders only the
 	// lean fields.
 	MetricsDetail string
+	// CanonicalIdentityOrg, when set (internal grouping only), folds the email
+	// group-key arms and requested email keys through the identity_map so one
+	// employee is one summary keyed by their canonical email.
+	CanonicalIdentityOrg string
 }
 
 // MetricsDetail levels for SearchUsersParams.MetricsDetail. The string values
@@ -3081,14 +3127,26 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.GroupBy == "external_user_id" {
 		groupCol = "external_user_id"
 	}
-	groupExpr := searchUsersGroupExpr(arg.GroupBy)
+	orgLit := ""
+	if arg.GroupBy != "external_user_id" {
+		orgLit = canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	}
+	groupExpr := searchUsersGroupExpr(arg.GroupBy, orgLit)
+
+	// The displayed email folds with the group key: an arbitrary literal variant
+	// (e.g. the personal address) labeling a canonical bucket would contradict
+	// the key it merged into.
+	emailDisplay := "anyIf(user_email, user_email != '')"
+	if orgLit != "" {
+		emailDisplay = "anyIf(" + canonicalEmailExpr(orgLit, "telemetry_logs.user_email") + ", user_email != '')"
+	}
 
 	// Lean columns rendered by every caller (identity, activity window, tokens) and
 	// the raw ids the account-enrichment join needs. The employee enrollment list
 	// consumes only these, so "basic" stops here — see MetricsDetail.
 	columns := []string{
 		groupExpr + " AS user_id",
-		"anyIf(user_email, user_email != '') AS user_email",
+		emailDisplay + " AS user_email",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
@@ -3175,9 +3233,12 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
 	}
 	if len(arg.UserIDs) > 0 {
-		if arg.GroupBy == "external_user_id" {
+		switch {
+		case arg.GroupBy == "external_user_id":
 			sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
-		} else {
+		case orgLit != "":
+			sb = sb.Where(searchUsersCanonicalKeyFilter(orgLit, groupExpr, groupCol, arg.UserIDs))
+		default:
 			sb = sb.Where(squirrel.Or{
 				squirrel.Eq{groupExpr: arg.UserIDs},
 				squirrel.Eq{userIdentifierExpr(groupCol): arg.UserIDs},
@@ -3195,6 +3256,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 
+	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building search users query: %w", err)

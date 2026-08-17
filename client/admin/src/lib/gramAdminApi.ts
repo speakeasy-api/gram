@@ -283,8 +283,14 @@ export type AdminProjectDetail = {
   updated_at: string;
 };
 
-export function getProject(idOrSlug: string): Promise<AdminProjectDetail> {
-  const qs = toSearchParams({ id_or_slug: idOrSlug });
+export function getProject(
+  idOrSlug: string,
+  organizationIdOrSlug?: string,
+): Promise<AdminProjectDetail> {
+  const qs = toSearchParams({
+    id_or_slug: idOrSlug,
+    organization_id_or_slug: organizationIdOrSlug,
+  });
   return gramAdminFetch<AdminProjectDetail>(`/admin/project.get?${qs}`);
 }
 
