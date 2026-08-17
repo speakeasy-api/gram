@@ -32,6 +32,21 @@ func UpdateOrganizationAdminPath() string {
 	return "/admin/organization.update"
 }
 
+// BulkUpdateAccountTypeAdminPath returns the URL path to the admin service bulkUpdateAccountType HTTP endpoint.
+func BulkUpdateAccountTypeAdminPath() string {
+	return "/admin/organizations.bulkUpdateAccountType"
+}
+
+// DisableOrganizationAdminPath returns the URL path to the admin service disableOrganization HTTP endpoint.
+func DisableOrganizationAdminPath() string {
+	return "/admin/organization.disable"
+}
+
+// EnableOrganizationAdminPath returns the URL path to the admin service enableOrganization HTTP endpoint.
+func EnableOrganizationAdminPath() string {
+	return "/admin/organization.enable"
+}
+
 // GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
 func GetOrganizationAdminPath() string {
 	return "/admin/organization.get"
@@ -50,4 +65,24 @@ func ListOrganizationProjectsAdminPath() string {
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
+}
+
+// ExtendTrialAdminPath returns the URL path to the admin service extendTrial HTTP endpoint.
+func ExtendTrialAdminPath() string {
+	return "/admin/trial.extend"
+}
+
+// CreateOrganizationAdminPath returns the URL path to the admin service createOrganization HTTP endpoint.
+func CreateOrganizationAdminPath() string {
+	return "/admin/organization.create"
+}
+
+// RearmTrialAdminPath returns the URL path to the admin service rearmTrial HTTP endpoint.
+func RearmTrialAdminPath() string {
+	return "/admin/trial.rearm"
+}
+
+// GetOrganizationStatsAdminPath returns the URL path to the admin service getOrganizationStats HTTP endpoint.
+func GetOrganizationStatsAdminPath() string {
+	return "/admin/organizations.stats"
 }

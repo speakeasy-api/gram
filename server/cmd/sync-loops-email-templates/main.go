@@ -30,6 +30,7 @@ func run(ctx context.Context, args []string) error {
 	outputPath := flags.String("output", "", "JSON file to write with the resolved mapping")
 	baseURL := flags.String("base-url", loopsync.DefaultBaseURL, "Loops Content API base URL")
 	validateOnly := flags.Bool("validate-only", false, "validate repository templates without calling Loops")
+	resolveOnly := flags.Bool("resolve-only", false, "resolve existing Loops template IDs without modifying templates")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("parse command flags: %w", err)
 	}
@@ -60,6 +61,13 @@ func run(ctx context.Context, args []string) error {
 	}
 	policy := guardian.NewDefaultPolicy(noop.NewTracerProvider())
 	client := loopsync.NewClient(*baseURL, apiKey, policy.PooledClient())
+	if *resolveOnly {
+		resolved, err := loopsync.ResolveExisting(ctx, client, manifest)
+		if err != nil {
+			return fmt.Errorf("resolve transactional email template IDs: %w", err)
+		}
+		return writeJSONAtomically(*outputPath, resolved)
+	}
 	resolved, err := (&loopsync.Reconciler{API: client, Log: os.Stdout}).Reconcile(ctx, manifest, existingIDs)
 	if err != nil {
 		return fmt.Errorf("reconcile transactional email templates: %w", err)

@@ -34,6 +34,7 @@ type EmailMessage struct {
 	FromName          string `json:"fromName"`
 	FromEmail         string `json:"fromEmail"`
 	ReplyToEmail      string `json:"replyToEmail"`
+	EmailFormat       string `json:"emailFormat"`
 	LMX               string `json:"lmx"`
 	ContentRevisionID string `json:"contentRevisionId"`
 }
@@ -67,6 +68,7 @@ type UpdateEmailMessageInput struct {
 	FromName           string `json:"fromName"`
 	FromEmail          string `json:"fromEmail"`
 	ReplyToEmail       string `json:"replyToEmail"`
+	EmailFormat        string `json:"emailFormat"`
 	LMX                string `json:"lmx"`
 }
 

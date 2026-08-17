@@ -44,6 +44,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -69,15 +70,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	"golang.org/x/oauth2"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -452,6 +460,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
+	rdr.FieldsPerRecord = -1
+	rdr.Comment = '#'
 	records, err := rdr.ReadAll()
 	if err != nil {
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: failed to read local feature flags csv file", attr.SlogError(err))
@@ -466,7 +476,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 			continue
 		}
 
-		if len(record) != 3 {
+		if len(record) != 3 && len(record) != 4 {
 			logger.ErrorContext(ctx, "newLocalFeatureFlags: invalid record in local feature flags csv file at row "+rowid)
 			continue
 		}
@@ -478,6 +488,10 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		}
 
 		inmem.SetFlag(feature.Flag(record[1]), record[0], enabled)
+
+		if len(record) == 4 && record[3] != "" {
+			inmem.SetFlagVariant(feature.Flag(record[1]), record[0], feature.Variant(record[3]))
+		}
 	}
 
 	return inmem
@@ -490,6 +504,7 @@ func newBillingProvider(
 	guardianPolicy *guardian.Policy,
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
+	stripeClient stripeclient.Client,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -530,9 +545,46 @@ func newBillingProvider(
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
 		return stub, stub, nil
+	case stripeClient != nil:
+		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
+		unavailable := billing.NewUnavailableClient(logger)
+		return unavailable, tracking.New(unavailable, posthogClient, logger), nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")
 	}
+}
+
+func newStripeClient(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.Client, error) {
+	apiKey := c.String("stripe-api-key")
+	if !stripeclient.IsConfigured(apiKey) {
+		if c.String("environment") == "local" {
+			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
+			return stripeclient.NewStubClient(logger), nil
+		}
+
+		logger.InfoContext(ctx, "Stripe client not configured")
+		return nil, nil
+	}
+
+	catalog := stripeclient.Catalog{
+		PriceIDTUM:     c.String("stripe-price-id-tum"),
+		MeterEventName: c.String("stripe-meter-event-name"),
+	}
+	if err := catalog.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Stripe catalog configuration: %w", err)
+	}
+
+	return stripeclient.NewClient(
+		guardianPolicy,
+		apiKey,
+		c.String("stripe-webhook-secret"),
+		catalog,
+	), nil
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
@@ -574,6 +626,81 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
+}
+
+// newAdminWorkOSOrganizationCreator builds the WorkOS surface the admin server
+// uses to create organizations. With nothing configured it returns
+// orgprovision.Unavailable, so the create-organization endpoint reports that the
+// deployment cannot do this rather than inventing a local-only organization.
+//
+// It never fails. A missing key degrades one endpoint, and taking the admin
+// server down over it would take login, the organizations list, the detail page
+// and every update endpoint with it. The condition is logged at Error on
+// startup, which is what makes it visible before an operator goes looking.
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+	apiKey := c.String("workos-api-key")
+	haveRealKey := apiKey != "" && apiKey != "unset"
+	opts := workosClientOpts(c)
+
+	switch {
+	case haveRealKey:
+		logger.InfoContext(ctx, "using real WorkOS API key to create organizations")
+		return workos.NewClient(guardianPolicy, apiKey, opts)
+	case c.String("environment") != "local":
+		logger.ErrorContext(ctx, "organization creation is unavailable: no WorkOS API key configured")
+		return orgprovision.Unavailable{}
+	case opts.Endpoint != "":
+		logger.InfoContext(ctx, "using dev-idp mock-workos to create organizations")
+		return workos.NewClient(guardianPolicy, "dev-idp-mock", opts)
+	default:
+		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
+		return orgprovision.Unavailable{}
+	}
+}
+
+// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm needs.
+// It degrades rather than refusing to boot, because every other admin endpoint
+// works without OpenRouter; the unavailable case is logged at Error on startup.
+//
+// The nil arguments are a billing tracker and a key refresher, neither reached.
+func newAdminTrialKeyReviver(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	redisClient *redis.Client,
+	c *cli.Context,
+) admin.TrialKeyReviver {
+	env := c.String("environment")
+	if env == "local" {
+		return openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+	}
+
+	provisioningKey := c.String("openrouter-provisioning-key")
+	if provisioningKey == "" {
+		logger.ErrorContext(ctx, "trial re-arm is unavailable: no OpenRouter provisioning key configured")
+		return admin.TrialKeysUnavailable{}
+	}
+
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		logger.ErrorContext(ctx, "trial re-arm is unavailable: no usable encryption key configured", attr.SlogError(err))
+		return admin.TrialKeysUnavailable{}
+	}
+
+	return openrouter.New(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		db,
+		env,
+		provisioningKey,
+		nil,
+		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
+		nil,
+		encryptionClient,
+	)
 }
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
@@ -1108,4 +1235,67 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		RiskFindings:            riskFindings,
 		TelemetryLogs:           telemetryLogs,
 	}, shutdown, nil
+}
+
+// newGCPIdentity returns the GCP identity the services that reach a customer's
+// cloud account authenticate through.
+//
+// Local development gets a stub. The real resolver screens every customer
+// supplied service account against Gram's own project, which requires Gram to be
+// running as a user managed service account. A developer machine authenticates
+// with a personal Google login instead, so the screening cannot be evaluated and
+// every credential and key write fails closed. Stubbing the resolver is what
+// makes the feature exercisable locally at all.
+func newGCPIdentity(ctx context.Context, logger *slog.Logger, c *cli.Context) *gcpauth.Identity {
+	if c.String("environment") == "local" {
+		logger.WarnContext(ctx, "using stub gcp identity resolver: local development cannot run as a service account")
+		return gcpauth.NewIdentity(gcpauth.NewStubResolver())
+	}
+
+	return gcpauth.NewIdentity(gcpauth.NewResolver())
+}
+
+// defaultLocalSigningAlgorithm is what the local KMS stand-in signs with when
+// nothing else is configured. RS256 because it is the algorithm every verifier
+// implements, matching the default the key creation form offers.
+const defaultLocalSigningAlgorithm = jose.RS256
+
+// newKMSSigningClients returns the factory the external keys service builds a
+// KMS client from.
+//
+// Local development gets an in-process signer rather than a real KMS client:
+// there is no GCP project to reach, and the stub identity above cannot mint a
+// token that would authenticate against one. The stand-in still generates a real
+// key and produces real signatures, so the probe verifies them for real.
+//
+// The algorithm it signs with is configurable, and deliberately independent of
+// what any key records. Reporting back whatever the caller expected would make
+// the stand-in agree with Gram by construction, and agreeing by construction is
+// precisely what the verify probe exists to disprove: comparing the key's real
+// algorithm against the recorded one is the check that catches a key pointed at
+// the wrong row. Keeping the two independent is what leaves the mismatch outcome
+// reachable locally, by recording a key with the other algorithm.
+func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.SigningClientFactory, error) {
+	if c.String("environment") != "local" {
+		return gcpkms.NewSigningClient, nil
+	}
+
+	alg := defaultLocalSigningAlgorithm
+	if configured := strings.TrimSpace(c.String("local-kms-signing-algorithm")); configured != "" {
+		parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
+		if err != nil {
+			return nil, fmt.Errorf("parse local kms signing algorithm: %w", err)
+		}
+		alg = parsed
+	}
+
+	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
+
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		client, err := gcpkms.NewLocalSigningClient(alg)
+		if err != nil {
+			return nil, fmt.Errorf("build local signing client: %w", err)
+		}
+		return client, nil
+	}, nil
 }

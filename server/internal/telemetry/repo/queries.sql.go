@@ -81,7 +81,13 @@ func (u UserIdentity) IsEmpty() bool {
 // user_email is compared lowercased on both sides because ingest stores the
 // provider's casing verbatim while the directory emails callers resolve are
 // normalized.
-func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity) squirrel.SelectBuilder {
+func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, canonical CanonicalUserIdentity) squirrel.SelectBuilder {
+	// Canonical mode replaces the Postgres-expanded identity set with the
+	// ClickHouse identity_map fold; the literal path below is unchanged and
+	// remains the flag-off behavior.
+	if canonical.Enabled() {
+		return withCanonicalUserIdentityFilter(sb, canonical)
+	}
 	if identity.IsEmpty() {
 		return sb
 	}
@@ -93,7 +99,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity) sq
 	if len(identity.Emails) > 0 {
 		match = append(match, squirrel.And{
 			squirrel.Eq{"telemetry_logs.user_id": ""},
-			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails},
+			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails}, //nolint:glint // legacy flag-off identity path; deleted at GA with the canonical fold rollout
 		})
 	}
 
@@ -1576,7 +1582,7 @@ func (q *Queries) GetUnproxiedMcpServerUserUsage(ctx context.Context, arg GetUnp
 		FromSelect(innerSb, "per_trace").
 		Where("server_url != ''").
 		Where(unproxiedMcpServerUsageURLMatch(arg.CanonicalURL)).
-		GroupBy("user_email").
+		GroupBy("user_email"). //nolint:glint // searchUsers raw-logs path, not yet folded; needs its own shadow comparison (DNO-857 tail)
 		OrderBy("call_count DESC", "user_email ASC").
 		Limit(uint64(limit + 1)). //nolint:gosec // limit is clamped to 1..500 by clampUnproxiedMcpServerUsageLimit.
 		Offset(uint64(offset))    //nolint:gosec // offset comes from a decoded, non-negative cursor.
@@ -2198,17 +2204,18 @@ type GetTimeSeriesMetricsParams struct {
 	GramProjectID     string
 	TimeStart         int64
 	TimeEnd           int64
-	IntervalSeconds   int64        // Bucket interval in seconds
-	User              UserIdentity // Optional filter - scopes to one employee across all their identities
-	ExternalUserID    string       // Optional filter
-	APIKeyID          string       // Optional filter
-	ToolsetSlug       string       // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string       // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string       // Optional filter - filters by mcp_server_id
-	EventSource       string       // Optional filter - filters by event_source
-	HookSource        string       // Optional filter - filters by hook_source
-	AccountType       string       // Optional filter - filters by account_type
-	ExternalOrgID     string       // Optional filter - scopes to a single account by provider org id
+	IntervalSeconds   int64                 // Bucket interval in seconds
+	User              UserIdentity          // Optional filter - scopes to one employee across all their identities
+	CanonicalUser     CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID    string                // Optional filter
+	APIKeyID          string                // Optional filter
+	ToolsetSlug       string                // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string                // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string                // Optional filter - filters by mcp_server_id
+	EventSource       string                // Optional filter - filters by event_source
+	HookSource        string                // Optional filter - filters by hook_source
+	AccountType       string                // Optional filter - filters by account_type
+	ExternalOrgID     string                // Optional filter - scopes to a single account by provider org id
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -2255,7 +2262,8 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	sb = withUserIdentityFilter(sb, arg.User)
+	sb = withUserIdentityFilter(sb, arg.User, arg.CanonicalUser)
+	sb = withCanonicalFoldSettings(sb, arg.CanonicalUser.orgLit())
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
@@ -2318,16 +2326,17 @@ type GetToolMetricsBreakdownParams struct {
 	GramProjectID     string
 	TimeStart         int64
 	TimeEnd           int64
-	User              UserIdentity // Optional filter - scopes to one employee across all their identities
-	ExternalUserID    string       // Optional filter
-	APIKeyID          string       // Optional filter
-	ToolsetSlug       string       // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string       // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string       // Optional filter - filters by mcp_server_id
-	EventSource       string       // Optional filter - filters by event_source
-	HookSource        string       // Optional filter - filters by hook_source
-	AccountType       string       // Optional filter - filters by account_type
-	ExternalOrgID     string       // Optional filter - scopes to a single account by provider org id
+	User              UserIdentity          // Optional filter - scopes to one employee across all their identities
+	CanonicalUser     CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID    string                // Optional filter
+	APIKeyID          string                // Optional filter
+	ToolsetSlug       string                // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string                // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string                // Optional filter - filters by mcp_server_id
+	EventSource       string                // Optional filter - filters by event_source
+	HookSource        string                // Optional filter - filters by hook_source
+	AccountType       string                // Optional filter - filters by account_type
+	ExternalOrgID     string                // Optional filter - scopes to a single account by provider org id
 	Limit             int
 	SortBy            string // "count" or "failure_rate"
 }
@@ -2354,7 +2363,8 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	sb = withUserIdentityFilter(sb, arg.User)
+	sb = withUserIdentityFilter(sb, arg.User, arg.CanonicalUser)
+	sb = withCanonicalFoldSettings(sb, arg.CanonicalUser.orgLit())
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
@@ -2421,16 +2431,17 @@ type GetOverviewSummaryParams struct {
 	GramProjectID     string
 	TimeStart         int64
 	TimeEnd           int64
-	User              UserIdentity // Optional filter - scopes to one employee across all their identities
-	ExternalUserID    string       // Optional filter
-	APIKeyID          string       // Optional filter
-	ToolsetSlug       string       // Optional filter - filters by toolset/MCP server slug
-	RemoteMCPServerID string       // Optional filter - filters by remote_mcp_server_id
-	MCPServerID       string       // Optional filter - filters by mcp_server_id
-	EventSource       string       // Optional filter - filters by event_source
-	HookSource        string       // Optional filter - filters by hook_source
-	AccountType       string       // Optional filter - filters by account_type
-	ExternalOrgID     string       // Optional filter - scopes to a single account by provider org id
+	User              UserIdentity          // Optional filter - scopes to one employee across all their identities
+	CanonicalUser     CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID    string                // Optional filter
+	APIKeyID          string                // Optional filter
+	ToolsetSlug       string                // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string                // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string                // Optional filter - filters by mcp_server_id
+	EventSource       string                // Optional filter - filters by event_source
+	HookSource        string                // Optional filter - filters by hook_source
+	AccountType       string                // Optional filter - filters by account_type
+	ExternalOrgID     string                // Optional filter - scopes to a single account by provider org id
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -2439,7 +2450,9 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := !arg.User.IsEmpty() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
+	// A canonical user scope is a user filter even though arg.User stays empty
+	// in fold mode, so it must force the raw path off the unfiltered MV.
+	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -2540,7 +2553,8 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
-	sb = withUserIdentityFilter(sb, arg.User)
+	sb = withUserIdentityFilter(sb, arg.User, arg.CanonicalUser)
+	sb = withCanonicalFoldSettings(sb, arg.CanonicalUser.orgLit())
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
@@ -3162,12 +3176,13 @@ type GetUserMetricsSummaryParams struct {
 	GramProjectID  string
 	TimeStart      int64
 	TimeEnd        int64
-	User           UserIdentity // the employee's identities (mutually exclusive with ExternalUserID)
-	ExternalUserID string       // external_user_id (mutually exclusive with User)
-	EventSource    string       // Optional filter - filters by event_source
-	HookSource     string       // Optional filter - filters by hook_source
-	AccountType    string       // Optional filter - filters by account_type
-	ExternalOrgID  string       // Optional filter - scopes to a single account by provider org id
+	User           UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
+	CanonicalUser  CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID string                // external_user_id (mutually exclusive with User)
+	EventSource    string                // Optional filter - filters by event_source
+	HookSource     string                // Optional filter - filters by hook_source
+	AccountType    string                // Optional filter - filters by account_type
+	ExternalOrgID  string                // Optional filter - scopes to a single account by provider org id
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -3237,7 +3252,8 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	} else {
-		sb = withUserIdentityFilter(sb, arg.User)
+		sb = withUserIdentityFilter(sb, arg.User, arg.CanonicalUser)
+		sb = withCanonicalFoldSettings(sb, arg.CanonicalUser.orgLit())
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -3339,10 +3355,11 @@ type GetEmployeeDataFlowGraphParams struct {
 	GramProjectID  string
 	TimeStart      int64
 	TimeEnd        int64
-	User           UserIdentity // the employee's identities (mutually exclusive with ExternalUserID)
-	ExternalUserID string       // external_user_id (mutually exclusive with User)
-	AccountType    string       // Optional filter - filters by account_type
-	ExternalOrgID  string       // Optional filter - scopes to a single account by provider org id
+	User           UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
+	CanonicalUser  CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	ExternalUserID string                // external_user_id (mutually exclusive with User)
+	AccountType    string                // Optional filter - filters by account_type
+	ExternalOrgID  string                // Optional filter - scopes to a single account by provider org id
 }
 
 const employeeDataFlowMaxPathTuples uint64 = 100
@@ -3440,7 +3457,8 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	} else {
-		sb = withUserIdentityFilter(sb, arg.User)
+		sb = withUserIdentityFilter(sb, arg.User, arg.CanonicalUser)
+		sb = withCanonicalFoldSettings(sb, arg.CanonicalUser.orgLit())
 	}
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
@@ -5661,8 +5679,8 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
-	sb = sb.GroupBy("user_email").
-		OrderBy("event_count DESC")
+	sb = sb.GroupBy("user_email"). //nolint:glint // hooks user summary, not yet folded (DNO-857 tail)
+					OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5785,8 +5803,8 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
-	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC").
-		Limit(10000) // Defensive cap
+	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC"). //nolint:glint // skill breakdown, not yet folded (DNO-857 tail)
+												Limit(10000) // Defensive cap
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5853,9 +5871,9 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
-	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name").
-		OrderBy("event_count DESC").
-		Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
+	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name"). //nolint:glint // hooks breakdown, not yet folded (DNO-857 tail)
+											OrderBy("event_count DESC").
+											Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5923,9 +5941,9 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
-	sb = sb.GroupBy("bucket_start", "server_name", "user_email").
-		OrderBy("bucket_start ASC").
-		Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
+	sb = sb.GroupBy("bucket_start", "server_name", "user_email"). //nolint:glint // unproxied MCP usage, not yet folded (DNO-857 tail)
+									OrderBy("bucket_start ASC").
+									Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -6128,7 +6146,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name")
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // hooks timeseries, not yet folded (DNO-857 tail)
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {
@@ -6979,13 +6997,22 @@ type TumBreakdownDimDayBucket struct {
 // dimension, whose rows overlap).
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnderManagementParams, dimension string) ([]TumBreakdownDimDayBucket, error) {
+func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnderManagementParams, dimension string, canonicalOrg string) ([]TumBreakdownDimDayBucket, error) {
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
 	expr, ok := tumBreakdownDimExprs[dimension]
 	if !ok {
 		return nil, fmt.Errorf("unsupported tum breakdown dimension: %q", dimension)
+	}
+	// In canonical mode the email slices fold through the identity_map, so
+	// the billing breakdown shows one row per employee. Values only re-bucket;
+	// day totals are unchanged.
+	canonicalOrgLit := canonicalIdentityOrgLiteral(canonicalOrg)
+	if dimension == "email" && canonicalOrgLit != "" {
+		expr = canonicalEmailExpr(canonicalOrgLit, "user_email")
+	} else {
+		canonicalOrgLit = ""
 	}
 
 	sb := tumObservedBase(sq.Select(
@@ -6996,6 +7023,7 @@ func (q *Queries) GetTumBreakdownDimByDay(ctx context.Context, arg GetTokensUnde
 		GroupBy("day_bucket", "dim_value").
 		OrderBy("day_bucket", "dim_value")
 
+	sb = withCanonicalFoldSettings(sb, canonicalOrgLit)
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building tum breakdown dimension query: %w", err)

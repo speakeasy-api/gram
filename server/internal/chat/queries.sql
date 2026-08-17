@@ -574,6 +574,7 @@ chat_activity AS (
   -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
+    cc.created_at,
     COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
   CROSS JOIN LATERAL (
@@ -584,8 +585,11 @@ chat_activity AS (
 )
 SELECT COUNT(*) AS total
 FROM chat_activity ca
+-- Interval overlap, mirroring ListChats: last activity after the range opens,
+-- created before it closes. Bounding last_message_timestamp above would evict
+-- an actively-writing chat as soon as a message lands past the caller's @to.
 WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_time)
-  AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
+  AND (@to_time::timestamptz IS NULL OR ca.created_at <= @to_time);
 
 -- name: ListChats :many
 -- Returns the page plus the pre-LIMIT total (total_count window column), so the
@@ -734,8 +738,14 @@ filtered_chats AS (
     cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
+  -- The range test is interval overlap: the chat was active after the range
+  -- opened (last message >= @from_time) and existed before it closed
+  -- (created_at <= @to_time). Bounding last_message_timestamp above instead
+  -- would evict an actively-writing chat the moment a new message lands past
+  -- the caller's @to — the dashboard freezes @to when a range is picked, so
+  -- running sessions would flicker out of the list until the next reload.
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
-    AND (@to_time::timestamptz IS NULL OR cs.last_message_timestamp <= @to_time)
+    AND (@to_time::timestamptz IS NULL OR cc.created_at <= @to_time)
 ),
 limited_chats AS (
   SELECT
@@ -824,6 +834,82 @@ SELECT
   lc.assistant_name,
   lc.total_count
 FROM chat_attribution lc;
+
+-- name: GetAssistantSessionSummaryProjection :one
+-- Returns the range-bounded Postgres portion of the assistant activity
+-- summary. Setup/onboarding threads are excluded from runtime activity.
+WITH target_assistant AS (
+  SELECT a.id
+  FROM assistants a
+  WHERE a.id = @assistant_id
+    AND a.project_id = @project_id
+    AND a.deleted IS FALSE
+),
+assistant_chats AS MATERIALIZED (
+  SELECT DISTINCT at.chat_id
+  FROM assistant_threads at
+  JOIN target_assistant a ON a.id = at.assistant_id
+  JOIN chats c
+    ON c.id = at.chat_id
+    AND c.project_id = at.project_id
+    AND c.deleted IS FALSE
+  WHERE at.project_id = @project_id
+    AND at.source_kind <> 'setup'
+    AND at.deleted IS FALSE
+    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+),
+activity AS (
+  SELECT
+    ac.chat_id,
+    COUNT(*)::bigint AS messages
+  FROM assistant_chats ac
+  JOIN chat_messages cm
+    ON cm.chat_id = ac.chat_id
+    AND cm.project_id = @project_id
+  WHERE cm.created_at >= @from_time
+    AND cm.created_at <= @to_time
+  GROUP BY ac.chat_id
+)
+SELECT
+  EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
+  COUNT(*)::bigint AS sessions,
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages
+FROM activity;
+
+-- name: ListAssistantSessionSummaryChats :many
+-- Keyset page over every visible runtime chat for an assistant. This is
+-- deliberately independent of message activity: completion telemetry can be
+-- in range even when its corresponding message was persisted outside the
+-- selected range. The endpoint consumes fixed-size pages so it remains
+-- uncapped without constructing an unbounded UUID array or ClickHouse IN list.
+-- Runtime ingestion maps each live assistant correlation to exactly one chat:
+-- the dashboard correlation is the server-minted chat id, while other sources
+-- derive the chat id from (assistant, correlation), and the live correlation
+-- key is unique. Correlation is immutable after insertion, so it is also a
+-- stable cursor while activity updates the thread. The keyset is backed by
+-- assistant_threads_project_id_assistant_id_correlation_id_key.
+SELECT
+  at.chat_id,
+  at.correlation_id
+FROM assistant_threads at
+JOIN assistants a
+  ON a.id = at.assistant_id
+  AND a.project_id = at.project_id
+  AND a.deleted IS FALSE
+JOIN chats c
+  ON c.id = at.chat_id
+  AND c.project_id = at.project_id
+  AND c.deleted IS FALSE
+WHERE at.assistant_id = @assistant_id
+  AND at.project_id = @project_id
+  AND at.source_kind <> 'setup'
+  AND at.deleted IS FALSE
+  AND at.correlation_id > @after_correlation_id
+  AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR c.user_id = @user_id::text)
+ORDER BY at.correlation_id
+LIMIT @page_limit;
 
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the

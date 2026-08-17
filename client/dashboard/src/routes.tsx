@@ -73,12 +73,18 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import PlatformMCP from "./pages/org/PlatformMCP";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
   ExternalServicesPage,
   ExternalServicesRoot,
 } from "./pages/org/external-services/ExternalServices";
+import ExternalKeyDetail from "./pages/org/encryption-keys/ExternalKeyDetail";
+import {
+  EncryptionKeysPage,
+  EncryptionKeysRoot,
+} from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -110,7 +116,6 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import ApprovalRequests from "./pages/security/ApprovalRequests";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -673,12 +678,6 @@ const ROUTE_STRUCTURE = {
     icon: "scan-search",
     component: DetectionRules,
   },
-  approvalRequests: {
-    title: "Approval Requests",
-    url: "approval-requests",
-    icon: "inbox",
-    component: ApprovalRequests,
-  },
   policyCenter: {
     title: "Risk Policies",
     url: "risk-policies",
@@ -1024,6 +1023,13 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "terminal",
     component: OrgSkills,
   },
+  platformMcp: {
+    title: "Platform MCP",
+    url: "platform-mcp",
+    icon: "plug-zap",
+    stage: "preview",
+    component: PlatformMCP,
+  },
   aiIntegrations: {
     title: "AI Integrations",
     url: "ai-integrations",
@@ -1056,6 +1062,29 @@ const ORG_ROUTE_STRUCTURE = {
         title: "External Credential",
         url: "credentials/:provider/:credentialId",
         component: ExternalCredentialDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          kmsKeys: { title: "KMS Keys", url: "kms-keys" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+  encryptionKeys: {
+    title: "Encryption Keys",
+    url: "encryption-keys",
+    icon: "key-square",
+    component: EncryptionKeysRoot,
+    indexComponent: EncryptionKeysPage,
+    subPages: {
+      // Keyed on the provider for the same reason credentials are: the detail
+      // page is per-provider, with its own get/update endpoints and its own
+      // fields, so a deep link has to carry which provider it names rather than
+      // relying on state handed over from the list.
+      keyDetail: {
+        title: "Encryption Key",
+        url: ":provider/:keyId",
+        component: ExternalKeyDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
           settings: { title: "Settings", url: "settings" },

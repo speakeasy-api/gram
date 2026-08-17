@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	platformmcprepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -165,6 +166,30 @@ type Service struct {
 	// Indeterminate outcomes preserve published package bytes rather than
 	// interpreting an unavailable dependency as a revocation.
 	platformAdmission PlatformMCPAdmission
+}
+
+func (s *Service) platformMCPPackageEnabled(ctx context.Context, organizationID, organizationSlug string, projectID uuid.UUID) (bool, error) {
+	if s == nil || s.platformAdmission == nil || organizationID == "" || organizationSlug == "" || projectID == uuid.Nil {
+		return false, nil
+	}
+	admission, err := s.platformAdmission.Evaluate(ctx, organizationID, organizationSlug)
+	if err != nil {
+		return false, fmt.Errorf("evaluate Platform MCP admission: %w", err)
+	}
+	if admission == platformmcp.AdmissionIndeterminate {
+		return false, errors.New("platform mcp admission indeterminate")
+	}
+	if admission != platformmcp.AdmissionEnabled {
+		return false, nil
+	}
+	attached, err := platformmcprepo.New(s.db).HasAttachedPlatformMCPOnboardingDistributionForProject(ctx, platformmcprepo.HasAttachedPlatformMCPOnboardingDistributionForProjectParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check selected project Platform MCP distribution: %w", err)
+	}
+	return attached, nil
 }
 
 // PlatformMCPAdmission is the package-level policy used by plugin publishing.
@@ -1084,6 +1109,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 
 	// Normalize and validate every principal URN through urn.ParsePrincipal so
 	// the typed wrapper is the single source of truth on what a principal is.
+	// Role assignments additionally require an active canonical role principal.
 	// The wildcard is a literal token (not a typed URN), so it takes a
 	// fast-path. Email IDs are lowercased here so the device-agent endpoint
 	// can match a lowercased lookup deterministically.
@@ -1101,6 +1127,14 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			parsed, err := urn.ParsePrincipal(normalized)
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
+			}
+			if parsed.Type == urn.PrincipalTypeRole {
+				if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, parsed); err != nil {
+					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+						return nil, oops.E(oops.CodeBadRequest, err, "invalid role principal URN: %s", raw)
+					}
+					return nil, oops.E(oops.CodeUnexpected, err, "validate role principal URN: %s", raw).LogError(ctx, s.logger)
+				}
 			}
 			principalURN = parsed.String()
 		}
@@ -1670,27 +1704,19 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-	admission := platformmcp.AdmissionDisabled
-	if projectSlug == "default" {
-		admission = platformmcp.AdmissionIndeterminate
-		if s.platformAdmission != nil {
-			admission, err = s.platformAdmission.Evaluate(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-			if err != nil {
-				s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp admission", attr.SlogError(err))
-				admission = platformmcp.AdmissionIndeterminate
-			}
-		}
+	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
+	if admissionErr != nil {
+		s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp package admission", attr.SlogError(admissionErr))
 	}
 	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled ||
-		(admission == platformmcp.AdmissionIndeterminate && platformWasPublished)
+	cfg.PlatformMCPEnabled = platformEnabled || (admissionErr != nil && platformWasPublished)
 
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
 	}
-	if admission == platformmcp.AdmissionIndeterminate && platformWasPublished {
+	if admissionErr != nil && platformWasPublished {
 		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
 	}
 
@@ -1975,28 +2001,21 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
 	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
-	// Platform publishing is bound to the literal default project slug, not the
-	// oldest-project convention used by marketplace naming.
-	admission := platformmcp.AdmissionDisabled
-	if input.ProjectSlug == "default" {
-		admission = platformmcp.AdmissionIndeterminate
-		if s.platformAdmission != nil {
-			var admissionErr error
-			admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
-			if admissionErr != nil {
-				if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
-					return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
-				}
-				s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
-					attr.SlogOrganizationID(input.OrganizationID),
-					attr.SlogError(admissionErr))
-				admission = platformmcp.AdmissionIndeterminate
-			}
+	// Package admission requires both organization-level eligibility and a live
+	// attachment for this exact project. Other projects must never receive the
+	// selected project's Platform MCP package.
+	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectID)
+	if admissionErr != nil {
+		if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
 		}
+		s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
+			attr.SlogOrganizationID(input.OrganizationID),
+			attr.SlogError(admissionErr))
 	}
 	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	preservePlatformMCP := admission == platformmcp.AdmissionIndeterminate && platformWasPublished
-	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled || preservePlatformMCP
+	preservePlatformMCP := admissionErr != nil && platformWasPublished
+	cfg.PlatformMCPEnabled = platformEnabled || preservePlatformMCP
 
 	// The per-plugin MCP fingerprints and the hooks generator version are the two
 	// independent rollout signals. Compute both up front so we can short-circuit
@@ -2150,7 +2169,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		// A transition or an indeterminate result needs a separate Platform
 		// decision below. Otherwise include Platform paths in normal MCP carry
 		// enumeration so hooks-only publishes preserve its bytes verbatim.
-		if platformOnlyChange || admission != platformmcp.AdmissionEnabled {
+		if platformOnlyChange || !platformEnabled {
 			carryCfg.PlatformMCPEnabled = false
 		}
 		paths, err := mcpFilePaths(pluginInfos, carryCfg)
@@ -2179,7 +2198,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, mcpFiles)
-		if admission == platformmcp.AdmissionEnabled {
+		if platformEnabled {
 			if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
 			}
@@ -2196,7 +2215,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 		mcpFingerprints[mcpPlatformFingerprintKey] = currentPlatformMCPFingerprint
 	}
-	if admission == platformmcp.AdmissionEnabled && platformOnlyChange && carriedMCP {
+	if platformEnabled && platformOnlyChange && carriedMCP {
 		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
 		}

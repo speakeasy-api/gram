@@ -26,6 +26,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -59,6 +60,10 @@ type Service struct {
 	logsEnabled           FeatureChecker
 	sessionCaptureEnabled FeatureChecker
 	authz                 *authz.Engine
+	featureFlags          feature.Provider
+	// shadowFoldSem bounds concurrent identity-fold shadow queries; see
+	// maxConcurrentShadowCompares.
+	shadowFoldSem chan struct{}
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -76,6 +81,7 @@ func NewService(
 	sessionCaptureEnabled FeatureChecker,
 	posthogClient PosthogClient,
 	authzEngine *authz.Engine,
+	featureFlags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
@@ -104,6 +110,8 @@ func NewService(
 		posthog:               posthogClient,
 		chatSessions:          chatSessions,
 		authz:                 authzEngine,
+		featureFlags:          featureFlags,
+		shadowFoldSem:         make(chan struct{}, maxConcurrentShadowCompares),
 	}
 }
 
@@ -517,12 +525,20 @@ func validateAgentMetricsFilter(filter *telem_gen.SearchUsersFilter) error {
 func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType string, params *searchParams) (*telem_gen.SearchUsersResult, error) {
 	var agentItems, emaillessItems []repo.UserSummary
 	g, gctx := errgroup.WithContext(ctx)
+	// Fold the enrollment list's email keys to canonical identities when the
+	// org is on the fold, matching the employee detail pages it links to.
+	canonicalOrg := ""
+	if fold, _ := s.canonicalIdentityMode(ctx, params.organizationID); fold {
+		canonicalOrg = params.organizationID
+	}
+
 	g.Go(func() error {
 		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
-			GramProjectID: params.projectID,
-			TimeStart:     params.timeStart,
-			TimeEnd:       params.timeEnd,
-			Limit:         agentMetricsDirectoryCap,
+			GramProjectID:        params.projectID,
+			TimeStart:            params.timeStart,
+			TimeEnd:              params.timeEnd,
+			Limit:                agentMetricsDirectoryCap,
+			CanonicalIdentityOrg: canonicalOrg,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error reading employee agent usage")
@@ -1286,11 +1302,13 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	metrics, err := s.chRepo.GetUserMetricsSummary(ctx, repo.GetUserMetricsSummaryParams{
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		User:           s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID),
+		User:           user,
+		CanonicalUser:  canonicalUser,
 		ExternalUserID: externalUserID,
 		EventSource:    conv.PtrValOr(payload.EventSource, ""),
 		HookSource:     conv.PtrValOr(payload.HookSource, ""),
@@ -1341,11 +1359,13 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		return nil, err
 	}
 
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 	rows, err := s.chRepo.GetEmployeeDataFlowGraph(ctx, repo.GetEmployeeDataFlowGraphParams{
 		GramProjectID:  authCtx.ProjectID.String(),
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
-		User:           s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID),
+		User:           user,
+		CanonicalUser:  canonicalUser,
 		ExternalUserID: externalUserID,
 		AccountType:    conv.PtrValOr(payload.AccountType, ""),
 		ExternalOrgID:  conv.PtrValOr(payload.ExternalOrgID, ""),
@@ -1825,7 +1845,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// Resolved once and shared by every query below so the summary, its
 	// comparison period, the time series and the tool breakdowns all scope to
 	// the same set of identities.
-	user := s.resolveEmployeeIdentity(ctx, authCtx.ActiveOrganizationID, userID)
+	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -1841,6 +1861,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1860,6 +1881,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         comparisonStart,
 		TimeEnd:           comparisonEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1882,6 +1904,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			TimeEnd:           timeEnd,
 			IntervalSeconds:   intervalSeconds,
 			User:              user,
+			CanonicalUser:     canonicalUser,
 			ExternalUserID:    externalUserID,
 			APIKeyID:          apiKeyID,
 			ToolsetSlug:       toolsetSlug,
@@ -1902,6 +1925,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -1923,6 +1947,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		TimeStart:         timeStart,
 		TimeEnd:           timeEnd,
 		User:              user,
+		CanonicalUser:     canonicalUser,
 		ExternalUserID:    externalUserID,
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
@@ -3947,6 +3972,23 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetChatMetricsSummaryByIDs retrieves range-bounded token and cost totals for
+// a set of chats.
+func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.GetChatMetricsSummaryByIDsParams) (repo.ChatMetricsSummary, error) {
+	if s.chRepo == nil {
+		return repo.ChatMetricsSummary{
+			TotalTokens: 0,
+			TotalCost:   0,
+		}, nil
+	}
+
+	result, err := s.chRepo.GetChatMetricsSummaryByIDs(ctx, params)
+	if err != nil {
+		return repo.ChatMetricsSummary{}, fmt.Errorf("get chat metrics summary by ids: %w", err)
 	}
 	return result, nil
 }

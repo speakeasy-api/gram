@@ -62,6 +62,73 @@ func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID s
 	return i, err
 }
 
+const extendTrial = `-- name: ExtendTrial :execrows
+UPDATE trials
+SET ends_at = ends_at + make_interval(days => $1::int),
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND converted_at IS NULL
+  AND demoted_at IS NULL
+  AND ends_at > clock_timestamp()
+`
+
+type ExtendTrialParams struct {
+	ExtendByDays   int32
+	OrganizationID string
+}
+
+// Operator-initiated extension. The interval is added to the existing ends_at
+// rather than to the current time: "give them another two weeks" means two weeks
+// on top of whatever the trial has left, and adding to now would silently
+// shorten a trial that still had three weeks to run.
+//
+// make_interval(days => N) on a timestamptz is calendar-day arithmetic evaluated
+// in the session TimeZone, so it is 23 hours across a spring-forward rather than
+// 24. Calendar days are the right semantics for "another two weeks", and every
+// session here is UTC in any case: the database container defaults to Etc/UTC and
+// GRAM_DATABASE_URL sets no TimeZone. That is what makes the exact 24-hour
+// assertions in the tests sound, and a deployment that ever sets a non-UTC
+// session TimeZone has to revisit them.
+//
+// Only a running trial can be extended, and the conditions that define running
+// are here rather than in the handler so the database enforces them. Zero rows
+// means either that the trial cannot be extended or that the organization does
+// not exist at all; the two share a row count but not an operator action, so the
+// handler tells them apart with a follow-up read rather than merging them.
+//
+// The three conditions are not equally load-bearing today, and it is worth
+// saying which is which:
+//
+//   - converted_at IS NULL is load-bearing. A mid-trial conversion leaves ends_at
+//     in the future, so nothing else would reject it.
+//   - ends_at > clock_timestamp() is load-bearing. It is the ordinary case.
+//   - demoted_at IS NULL is defence in depth: no writer leaves demoted_at set
+//     with ends_at in the future.
+//
+// Extending a demoted trial is not re-arming it: a re-arm also revives the
+// model provider keys and restores the account type. See RearmTrial.
+//
+// Two things this query deliberately does not check:
+//
+//   - tier. The error message and the API description both say enterprise, and
+//     enterprise is the only tier the application writes, so the claim holds
+//     today. schema.sql anticipates further tiers, and the first one that arrives
+//     must revisit this query and that wording together, because this statement
+//     would otherwise extend it while reporting an enterprise trial.
+//   - organization_metadata.disabled_at. A disabled organization can still be
+//     extended, on purpose. Disabled and trial state are independent axes: an
+//     operator who disables an organization while investigating and re-enables it
+//     afterwards should not have silently lost the ability to extend in between,
+//     and a trial that keeps expiring during the investigation punishes the
+//     investigation.
+func (q *Queries) ExtendTrial(ctx context.Context, arg ExtendTrialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, extendTrial, arg.ExtendByDays, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveTrial = `-- name: GetActiveTrial :one
 SELECT organization_id, created_at, ends_at
 FROM trials
@@ -133,16 +200,17 @@ const insertTrialFixture = `-- name: InsertTrialFixture :exec
 INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
 VALUES (
     $1,
-    'enterprise',
     $2,
     $3,
-    $4::timestamptz,
-    $5::timestamptz
+    $4,
+    $5::timestamptz,
+    $6::timestamptz
 )
 `
 
 type InsertTrialFixtureParams struct {
 	OrganizationID string
+	Tier           string
 	CreatedAt      pgtype.Timestamptz
 	EndsAt         pgtype.Timestamptz
 	ConvertedAt    pgtype.Timestamptz
@@ -153,6 +221,7 @@ type InsertTrialFixtureParams struct {
 func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertTrialFixture,
 		arg.OrganizationID,
+		arg.Tier,
 		arg.CreatedAt,
 		arg.EndsAt,
 		arg.ConvertedAt,
@@ -232,5 +301,71 @@ func (q *Queries) MarkTrialDemoted(ctx context.Context, organizationID string) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const rearmTrial = `-- name: RearmTrial :one
+UPDATE trials
+SET demoted_at = NULL,
+    ends_at = clock_timestamp() + make_interval(days => $1::int),
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND demoted_at IS NOT NULL
+  AND converted_at IS NULL
+RETURNING tier, ends_at
+`
+
+type RearmTrialParams struct {
+	RearmForDays   int32
+	OrganizationID string
+}
+
+type RearmTrialRow struct {
+	Tier   string
+	EndsAt pgtype.Timestamptz
+}
+
+// Operator-initiated reinstatement of a demoted trial. Returns the tier the
+// trial grants, which the handler writes back onto the organization.
+//
+// ends_at moves to a window measured from now, not left where it is:
+// MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
+// alone leaves a row the next sweep demotes again.
+//
+// converted_at IS NULL guards nothing today, because MarkTrialConverted has no
+// production caller. It is written for the conversion path that will (AGE-3218).
+func (q *Queries) RearmTrial(ctx context.Context, arg RearmTrialParams) (RearmTrialRow, error) {
+	row := q.db.QueryRow(ctx, rearmTrial, arg.RearmForDays, arg.OrganizationID)
+	var i RearmTrialRow
+	err := row.Scan(&i.Tier, &i.EndsAt)
+	return i, err
+}
+
+const restoreOrganizationFromTrial = `-- name: RestoreOrganizationFromTrial :one
+UPDATE organization_metadata
+SET gram_account_type = $1,
+    whitelisted = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = $2
+RETURNING name, slug
+`
+
+type RestoreOrganizationFromTrialParams struct {
+	AccountType    string
+	OrganizationID string
+}
+
+type RestoreOrganizationFromTrialRow struct {
+	Name string
+	Slug string
+}
+
+// Undoes DemoteOrganizationToFree's two writes. whitelisted is set
+// unconditionally because demotion cleared it and the signup arming path never
+// writes it, so replaying that path would leave the book-a-demo gate up.
+func (q *Queries) RestoreOrganizationFromTrial(ctx context.Context, arg RestoreOrganizationFromTrialParams) (RestoreOrganizationFromTrialRow, error) {
+	row := q.db.QueryRow(ctx, restoreOrganizationFromTrial, arg.AccountType, arg.OrganizationID)
+	var i RestoreOrganizationFromTrialRow
+	err := row.Scan(&i.Name, &i.Slug)
 	return i, err
 }

@@ -32,7 +32,7 @@ headlines, square black actions, neutral outlined details, and a dashed pale
 footer. `weekly_usage_summary.mjml` specializes that system for a data-heavy
 report. Do not replace this language with a separate LMX-derived theme.
 
-`transactional_base.lmx` is the production translation. LMX cannot express the
-raw spectrum table, hosted font faces, or public favicon from MJML, so it uses
-the approved text-only header and Inter fallback while preserving the same
-hierarchy, palette, square action, panels, and pale footer.
+`transactional_base.lmx` is the production translation. It uses Loops-hosted
+copies of the spectrum rail and logo mark, plus the Inter fallback, while
+preserving the same hierarchy, palette, square action, panels, and pale footer.
+Copy those managed asset URLs unchanged into every production template.

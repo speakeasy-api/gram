@@ -1,5 +1,111 @@
 # dashboard
 
+## 0.108.0
+
+### Minor Changes
+
+- ed97a31: The MCP evidence dossier gains three deterministic sources. The assembler now
+  consults the code host about a package's declared source repository (stars,
+  forks, contributors, commit recency, archived status), asks OSV.dev which
+  published vulnerability advisories name the package, and reads the domain
+  registry's registration record for a remote server's registrable domain.
+  Package registries also surface their declared repository and homepage URLs.
+  Each source follows the dossier's existing contract — found, not-found, and
+  could-not-look stay distinct, with failures recorded as gaps — and the
+  approval page renders the new facts in the evidence panel, including a
+  dedicated advisories group where checked-and-clean is shown as a finding
+  rather than an absence.
+- 798360b: A shadow-MCP block link now redeems into the MCP approval workflow: the blocked employee's ask attaches as a requester on the server's single review — deduplicated by canonical URL, evidence gathered — instead of minting a per-user bypass request. The redemption endpoint reports what the token turned into, keeps the legacy bypass request only for identity-only servers and organizations without the approval feature, and the standalone Approval Requests review page retires — the Shadow MCP servers table is the one review surface. The command palette surfaces pending access requests in its place.
+- 798360b: Adds the MCP approval review surface, unified into the Shadow MCP servers table: every server row carries its review state, and each server's page renders the gathered evidence grouped by the question an admin is actually asking — who am I trusting, what is it asking me to hand over, what does it say it can do, is it real and maintained, are we already exposed, and what has been decided before. Every not-yet-gathered group renders as an explicitly unknown state rather than an empty one, and decisions are made in place with a required rationale.
+- 523d6b1: Allow risk policies to be disabled and re-enabled from Policy Center and the policy detail page, so operators can pause enforcement without deleting the policy.
+- 798360b: Unify Shadow MCP server pages with the MCP approval flow. The server detail page absorbs the approval review (evidence, requesters, decision history, decide form) and every allow/deny travels one write path: a recorded approval decision, opened on the spot for servers with no pending request. The standalone allow-rule/block/unblock/bypass action sheets are retired, approval queue rows and command-palette results land on the server page, and request links for URL targets redirect there.
+- 798360b: The Shadow MCP page becomes one servers table: the inventory list now unions in review-only targets (requested-but-unobserved URLs and stdio commands, marked by a new target_kind field) on the first page, and the separate Access Requests tab is gone. Every row carries its review state with pending decisions sorted first and filterable; URL rows open the server page, stdio rows open the review sheet.
+
+### Patch Changes
+
+- 2d5e6bb: Platform admins can now put a demoted enterprise trial back on. Until now the
+  expiry sweeper's demotion was one-way: it dropped the organization to the free
+  tier, put it back behind the book-a-demo gate and switched off its model
+  provider keys. Only the keys could be undone, one at a time, through the
+  existing admin action for enabling a key; the tier and the gate had no undo at
+  all. An operator who wanted to give a customer a second run had no way to do it,
+  and extending the trial was not the same thing, because an extension moves an
+  end date and leaves the free tier exactly where the demotion left it.
+
+  Re-arming restores all of it at once: the account type the trial grants, the
+  whitelist flag, every model provider key the demotion switched off, and a fresh
+  run of the length the operator asks for, capped at a year and counted from now. The end date is
+  counted from now rather than added to the old one on purpose, because a demoted
+  trial's end date is already in the past and adding to it could land in the past
+  again, which would leave the sweeper free to demote the organization a second
+  time within the hour.
+
+  One caveat on the keys: this is the deployed behaviour. A local development
+  stack has no OpenRouter account behind it, and its stand-in client accepts the
+  refresh without doing anything, so a re-arm there reports success and restores
+  the tier while both key rows stay switched off. Enabling a key locally has the
+  same gap.
+
+  The keys come back up before any of the database changes are committed. That
+  ordering is the opposite of the demotion's, and it is deliberate: if the model
+  provider refuses, the organization stays demoted and on the free tier, and the
+  operator can retry. Any key that came back up before the refusal stays up, which
+  is what makes the retry cheap. The alternative would advertise a running trial
+  to a customer whose keys were still switched off.
+
+  Only a demoted trial can be re-armed. A trial that is already running is
+  rejected, so re-arm cannot be used as an extend that ignores the extension
+  rules. An organization id that matches nothing is reported as not found, the
+  same answer the disable, enable and extend actions already give, so a mistyped
+  id does not send an operator off to inspect a trial that was never the problem.
+
+  The activity log reads the new entry as "restarted enterprise trial", credited
+  to the Speakeasy team rather than to the operator who ran it, which is the same
+  label the log already gives a Speakeasy action inside a customer's
+  organization. The admin dashboard row action follows.
+
+- 7da1436: The activity log can now record and render a restarted enterprise trial. The
+  entry reads "restarted enterprise trial" and is credited to the Speakeasy team
+  rather than to the individual operator, which is the label the log already gives
+  a Speakeasy action taken inside a customer's organization.
+
+  Nothing produces the entry yet. The admin action that restarts a trial follows
+  separately, and this change is the log's half of it: the action name, the writer
+  that records it, and the phrase the dashboard shows for it.
+
+  The collective "Speakeasy Team" label now has one definition instead of two.
+  The activity log applies it on read, by matching an actor against the members of
+  the Speakeasy organization. A writer that already knows it is acting as staff
+  has to apply the same label when it records the entry, because the read-time
+  mask can only recognise an actor that has a Gram user id, and an operator
+  authenticated through the admin app does not have one. Both paths now read the
+  label from the same constant, so one action cannot appear under two different
+  names depending on which path wrote it.
+
+- bbaf839: Registers the MCP approval resource type in the role editor's scope picker so the new mcp_approval:read and mcp_approval:decide permissions can be discovered and granted.
+- 5016dca: Org home now opens with a welcome banner offering three first moves: enter the
+  demo org, get started in a project, or start the enterprise rollout. The third
+  card needs an enterprise admin; the other two are open to any member. The
+  header's "Finish setup" banner stands down while the banner shows. It appears
+  for everyone for now; which orgs count as new is follow-up work.
+
+  Below it, the project search, view toggle, and Add New move into the column they
+  act on, and the two rails cap their height and scroll.
+
+## 0.107.1
+
+### Patch Changes
+
+- d7dca3d: Add exact range-bounded activity totals and independent pagination to assistant sessions.
+- 5737ee7: Add three browser hardening headers to the dashboard HTML responses: `Cross-Origin-Resource-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin`, and `X-Permitted-Cross-Domain-Policies: none`. A penetration test reported all three as missing. Each one is set per location, because an `add_header` inside an nginx location discards every `add_header` inherited from the server block. Static assets under `/assets` and `/external` keep `Access-Control-Allow-Origin: *` and receive no cross-origin policy, so cross-origin image loads continue to work.
+- dda81c1: Land `/explore-demo` on the demo org's default project instead of org home, so new visitors see sample data without having to click into the project themselves.
+- 1b00702: Scope device agent fleet configuration to organization admins. Viewing it
+  (`agent.getConfiguration`) now requires `org:admin`, matching the existing
+  requirement on `agent.updateConfiguration`, and the dashboard hides the Device
+  Agent Configuration tab from non-admins. The Setup tab stays available to
+  organization readers.
+- 1fb8f18: Fix "Suggest with AI" exclusion suggestions being rejected as invalid regexes. The exclusion form now validates regex criteria with the same RE2 engine the platform matches with, so valid suggestions like `(?i)`-prefixed patterns save instead of failing with "Invalid regex pattern", server-side validation errors surface in the form, and a suggestion that fails validation is retried once with corrective feedback before falling back.
+
 ## 0.107.0
 
 ### Minor Changes

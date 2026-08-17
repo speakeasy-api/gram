@@ -810,6 +810,8 @@ tags:
     description: Managing system api keys.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
+  - name: mcpApproval
+    description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata
@@ -830,6 +832,8 @@ tags:
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: platformMcp
+    description: Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features

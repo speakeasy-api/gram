@@ -96,7 +96,8 @@
         "previous_total_tokens",
         "total_change_percent",
         "view_usage_url"
-      ]
+      ],
+      "unused_variables": ["cycle_elapsed_percent"]
     }
   }
 }

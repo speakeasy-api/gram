@@ -548,7 +548,7 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		return localRole{}, oops.E(oops.CodeNotFound, nil, "role not found").LogError(ctx, r.logger)
 	}
 
-	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.Slug, currentRole.PrincipalURN); err != nil {
+	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.PrincipalURN); err != nil {
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").LogError(ctx, r.logger)
 	}
 
@@ -1057,9 +1057,7 @@ func retryWorkOSError(err error) bool {
 
 // roleViewFromLocalRole converts a local role record into the public API role view and attaches local grants.
 func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID string, role localRole) (*gen.Role, error) {
-	// Role grant reads intentionally include both canonical role URNs and
-	// legacy role slugs until old principal_grants rows are backfilled.
-	grants, err := authz.GrantsForRole(ctx, r.logger, r.db, organizationID, role.Slug, role.PrincipalURN)
+	grants, err := authz.GrantsForRole(ctx, r.logger, r.db, organizationID, role.PrincipalURN)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load role grants").LogError(ctx, r.logger)
 	}

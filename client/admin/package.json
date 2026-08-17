@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,11 +20,14 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "1.170.20",
+    "@tanstack/react-table": "9.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "lucide-react": "catalog:",
     "radix-ui": "^1.6.0",
     "react": "^19.2.8",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
@@ -41,6 +44,7 @@
     "happy-dom": "^20.11.1",
     "oxlint": "^1.71.0",
     "oxlint-tsgolint": "^0.23.0",
+    "react-grab": "^0.1.48",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "^4.1.10"

@@ -12,7 +12,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -40,6 +42,12 @@ type EnsureDefaultPluginResult struct {
 // recovering — every caller here already runs inside an outer transaction,
 // so we can't just let a lost race abort the whole thing.
 func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) (*EnsureDefaultPluginResult, error) {
+	if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrDefaultPluginNotFound
+		}
+		return nil, fmt.Errorf("validate default plugin project ownership: %w", err)
+	}
 	q := repo.New(tx)
 
 	plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
@@ -127,6 +135,21 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 	return &EnsureDefaultPluginResult{Plugin: created, Created: true}, nil
 }
 
+var (
+	// ErrDefaultPluginNotFound reports that the requested project has no active
+	// default plugin. Callers that must not provision a plugin use this to return
+	// a bounded repair action instead of creating one implicitly.
+	ErrDefaultPluginNotFound = errors.New("default plugin not found")
+
+	// ErrMcpServerNotFoundForProject reports that the MCP server is not active in
+	// the requested project.
+	ErrMcpServerNotFoundForProject = errors.New("mcp server not found for project")
+
+	// ErrMcpServerNotPublishable reports that the MCP server is disabled or has
+	// no endpoint through which the default plugin can reach it.
+	ErrMcpServerNotPublishable = errors.New("mcp server not publishable")
+)
+
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
 // of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
 // backend-exclusivity constraint.
@@ -161,15 +184,90 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 		return nil, fmt.Errorf("ensure default plugin: %w", err)
 	}
 
+	return attachToPlugin(ctx, repo.New(tx), ensured.Plugin, ensured.Created, params)
+}
+
+// AttachToExistingDefaultPluginAudited attaches one MCP server to a project's
+// existing default plugin and writes the matching plugin-server audit event in
+// the caller's transaction. It never creates or promotes a plugin.
+func AttachToExistingDefaultPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, organizationID string, projectID, mcpServerID uuid.UUID, displayName string) (*AttachToDefaultPluginResult, error) {
+	if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrDefaultPluginNotFound
+		}
+		return nil, fmt.Errorf("validate existing default plugin project ownership: %w", err)
+	}
 	q := repo.New(tx)
 
+	plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDefaultPluginNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get existing default plugin: %w", err)
+	}
+
+	server, err := q.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{
+		McpServerID: mcpServerID,
+		ProjectID:   projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrMcpServerNotFoundForProject
+		}
+		return nil, fmt.Errorf("verify mcp server project ownership: %w", err)
+	}
+	// Unproxied-backed servers are never proxied, so they never gain an
+	// mcp_endpoints row; exempt them from the has_endpoint requirement.
+	if server.Visibility == visibility.Disabled || (!server.HasEndpoint && !server.IsUnproxied) {
+		return nil, ErrMcpServerNotPublishable
+	}
+
+	attached, err := attachToPlugin(ctx, q, plugin, false, AttachToDefaultPluginParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		DisplayName:    displayName,
+	})
+	if err != nil || attached == nil {
+		return attached, err
+	}
+
+	mcpServerURN := urn.NewMcpServer(mcpServerID)
+	if err := auditLogger.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{
+		OrganizationID:    organizationID,
+		ProjectID:         projectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:  authCtx.Email,
+		ActorSlug:         nil,
+		PluginID:          attached.PluginID,
+		PluginName:        attached.PluginName,
+		PluginSlug:        attached.PluginSlug,
+		ServerID:          attached.Server.ID,
+		ServerDisplayName: attached.Server.DisplayName,
+		ServerPolicy:      attached.Server.Policy,
+		ServerSortOrder:   attached.Server.SortOrder,
+		ToolsetURN:        nil,
+		McpServerURN:      &mcpServerURN,
+	}); err != nil {
+		return nil, fmt.Errorf("audit existing default plugin server add: %w", err)
+	}
+
+	return attached, nil
+}
+
+func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pluginCreated bool, params AttachToDefaultPluginParams) (*AttachToDefaultPluginResult, error) {
 	// Check for an existing attachment before inserting rather than relying
 	// on unique-violation classification alone: a duplicate insert of an
 	// attached server trips the (plugin_id, display_name) index (created
 	// before the backend ones, so Postgres reports it first) and the failed
 	// statement aborts the caller's surrounding transaction either way.
-	_, err = q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
-		PluginID:    ensured.Plugin.ID,
+	_, err := q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
+		PluginID:    plugin.ID,
 		ToolsetID:   params.ToolsetID,
 		McpServerID: params.McpServerID,
 	})
@@ -186,13 +284,13 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 	// (plugin_id, display_name) unique index spans across backends. Blocking
 	// the attach — and with it the triggering action, e.g. enabling a server —
 	// over a marketplace display name is disproportionate, so uniquify instead.
-	displayName, err := availableDisplayName(ctx, q, ensured.Plugin.ID, params)
+	displayName, err := availableDisplayName(ctx, q, plugin.ID, params)
 	if err != nil {
 		return nil, err
 	}
 
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
-		PluginID:    ensured.Plugin.ID,
+		PluginID:    plugin.ID,
 		ToolsetID:   params.ToolsetID,
 		McpServerID: params.McpServerID,
 		DisplayName: displayName,
@@ -221,10 +319,10 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 	}
 
 	return &AttachToDefaultPluginResult{
-		PluginID:      ensured.Plugin.ID,
-		PluginName:    ensured.Plugin.Name,
-		PluginSlug:    ensured.Plugin.Slug,
-		PluginCreated: ensured.Created,
+		PluginID:      plugin.ID,
+		PluginName:    plugin.Name,
+		PluginSlug:    plugin.Slug,
+		PluginCreated: pluginCreated,
 		Server:        server,
 	}, nil
 }

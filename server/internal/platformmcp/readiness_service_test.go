@@ -55,15 +55,14 @@ func TestReadinessFreshnessIsSeparateFromState(t *testing.T) {
 	require.Equal(t, ReadinessReady, stale.State)
 }
 
-func TestRepairPlanWithoutEvidenceReturnsBoundedRetryAction(t *testing.T) {
+func TestMissingReadinessNormalizesToAStableRepairProjection(t *testing.T) {
 	t.Parallel()
 
-	output := GetMCPRepairPlanToolOutput{
-		State:     ReadinessDegraded,
-		Freshness: readinessFreshness(Readiness{}, false),
-		Actions:   repairActions(ReadinessDegraded),
-	}
+	readiness := normalizedReadiness(Readiness{}, false)
+	output := readinessToolOutput("project", "registration", readiness, false)
 
+	require.Equal(t, ReadinessDegraded, readiness.State)
+	require.Equal(t, "readiness_unavailable", readiness.EvidenceCode)
 	require.Equal(t, "unavailable", output.Freshness)
 	require.Equal(t, []RepairAction{{Kind: "retry_readiness", Label: "Retry the authenticated readiness check"}}, output.Actions)
 }
