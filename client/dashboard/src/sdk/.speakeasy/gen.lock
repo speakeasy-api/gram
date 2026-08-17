@@ -555,6 +555,7 @@ trackedFiles:
   src/funcs/usageSetBillingMetadata.ts: {}
   src/funcs/userSessionClientsGet.ts: {}
   src/funcs/userSessionClientsList.ts: {}
+  src/funcs/userSessionClientsRefreshCIMD.ts: {}
   src/funcs/userSessionClientsRevoke.ts: {}
   src/funcs/userSessionConsentsList.ts: {}
   src/funcs/userSessionConsentsRevoke.ts: {}
@@ -1806,6 +1807,7 @@ trackedFiles:
   src/models/operations/refreshorganizationremotesession.ts: {}
   src/models/operations/refreshorganizationremotesessionissuermetadata.ts: {}
   src/models/operations/refreshremotesessionissuermetadata.ts: {}
+  src/models/operations/refreshusersessionclientcimd.ts: {}
   src/models/operations/register.ts: {}
   src/models/operations/registerdomain.ts: {}
   src/models/operations/removeoauthserver.ts: {}
@@ -2430,6 +2432,7 @@ trackedFiles:
   src/react-query/refreshOrganizationRemoteSession.ts: {}
   src/react-query/refreshOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/refreshRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/refreshUserSessionClientCIMD.ts: {}
   src/react-query/register.ts: {}
   src/react-query/registerDomain.ts: {}
   src/react-query/remoteMcpServerHeaders.core.ts: {}
@@ -7436,6 +7439,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  refreshUserSessionClientCIMD:
+    speakeasy-default-refresh-user-session-client-CIMD:
+      parameters:
+        query:
+          id: "d0145c45-8a5b-43bc-a9c4-a3a89bdc2f69"
+      responses:
+        "200":
+          application/json: {"active_session_count": 782404, "client_id": "<id>", "client_id_issued_at": "2025-05-10T01:32:30.022Z", "client_name": "<value>", "created_at": "2026-04-04T02:28:40.401Z", "id": "03517621-79fb-45d3-9736-6369306e7c13", "redirect_uris": ["<value 1>"], "updated_at": "2026-04-20T05:37:40.377Z", "user_session_issuer_id": "c4e67dd1-0c9c-4d7a-9704-2f0a9196e432"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   register:
     speakeasy-default-register:
       requestBody:

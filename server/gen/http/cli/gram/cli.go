@@ -166,7 +166,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
-		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
+		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -3257,6 +3257,12 @@ func ParseEndpoint(
 		userSessionClientsGetUserSessionClientApikeyTokenFlag      = userSessionClientsGetUserSessionClientFlags.String("apikey-token", "", "")
 		userSessionClientsGetUserSessionClientProjectSlugInputFlag = userSessionClientsGetUserSessionClientFlags.String("project-slug-input", "", "")
 
+		userSessionClientsRefreshUserSessionClientCIMDFlags                = flag.NewFlagSet("refresh-user-session-client-cimd", flag.ExitOnError)
+		userSessionClientsRefreshUserSessionClientCIMDIDFlag               = userSessionClientsRefreshUserSessionClientCIMDFlags.String("id", "REQUIRED", "")
+		userSessionClientsRefreshUserSessionClientCIMDSessionTokenFlag     = userSessionClientsRefreshUserSessionClientCIMDFlags.String("session-token", "", "")
+		userSessionClientsRefreshUserSessionClientCIMDApikeyTokenFlag      = userSessionClientsRefreshUserSessionClientCIMDFlags.String("apikey-token", "", "")
+		userSessionClientsRefreshUserSessionClientCIMDProjectSlugInputFlag = userSessionClientsRefreshUserSessionClientCIMDFlags.String("project-slug-input", "", "")
+
 		userSessionClientsRevokeUserSessionClientFlags                = flag.NewFlagSet("revoke-user-session-client", flag.ExitOnError)
 		userSessionClientsRevokeUserSessionClientIDFlag               = userSessionClientsRevokeUserSessionClientFlags.String("id", "REQUIRED", "")
 		userSessionClientsRevokeUserSessionClientSessionTokenFlag     = userSessionClientsRevokeUserSessionClientFlags.String("session-token", "", "")
@@ -4093,6 +4099,7 @@ func ParseEndpoint(
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
 	userSessionClientsGetUserSessionClientFlags.Usage = userSessionClientsGetUserSessionClientUsage
+	userSessionClientsRefreshUserSessionClientCIMDFlags.Usage = userSessionClientsRefreshUserSessionClientCIMDUsage
 	userSessionClientsRevokeUserSessionClientFlags.Usage = userSessionClientsRevokeUserSessionClientUsage
 
 	userSessionConsentsFlags.Usage = userSessionConsentsUsage
@@ -6211,6 +6218,9 @@ func ParseEndpoint(
 			case "get-user-session-client":
 				epf = userSessionClientsGetUserSessionClientFlags
 
+			case "refresh-user-session-client-cimd":
+				epf = userSessionClientsRefreshUserSessionClientCIMDFlags
+
 			case "revoke-user-session-client":
 				epf = userSessionClientsRevokeUserSessionClientFlags
 
@@ -8246,6 +8256,9 @@ func ParseEndpoint(
 			case "get-user-session-client":
 				endpoint = c.GetUserSessionClient()
 				data, err = usersessionclientsc.BuildGetUserSessionClientPayload(*userSessionClientsGetUserSessionClientIDFlag, *userSessionClientsGetUserSessionClientSessionTokenFlag, *userSessionClientsGetUserSessionClientApikeyTokenFlag, *userSessionClientsGetUserSessionClientProjectSlugInputFlag)
+			case "refresh-user-session-client-cimd":
+				endpoint = c.RefreshUserSessionClientCIMD()
+				data, err = usersessionclientsc.BuildRefreshUserSessionClientCIMDPayload(*userSessionClientsRefreshUserSessionClientCIMDIDFlag, *userSessionClientsRefreshUserSessionClientCIMDSessionTokenFlag, *userSessionClientsRefreshUserSessionClientCIMDApikeyTokenFlag, *userSessionClientsRefreshUserSessionClientCIMDProjectSlugInputFlag)
 			case "revoke-user-session-client":
 				endpoint = c.RevokeUserSessionClient()
 				data, err = usersessionclientsc.BuildRevokeUserSessionClientPayload(*userSessionClientsRevokeUserSessionClientIDFlag, *userSessionClientsRevokeUserSessionClientSessionTokenFlag, *userSessionClientsRevokeUserSessionClientApikeyTokenFlag, *userSessionClientsRevokeUserSessionClientProjectSlugInputFlag)
@@ -21888,6 +21901,7 @@ func userSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-session-clients: List user_session_clients in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-client: Get a user_session_client by id.`)
+	fmt.Fprintln(os.Stderr, `    refresh-user-session-client-cimd: Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session-client: Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21943,6 +21957,30 @@ func userSessionClientsGetUserSessionClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients get-user-session-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionClientsRefreshUserSessionClientCIMDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients refresh-user-session-client-cimd", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients refresh-user-session-client-cimd --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionClientsRevokeUserSessionClientUsage() {
