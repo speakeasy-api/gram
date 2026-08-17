@@ -687,8 +687,8 @@ func TestStripeInvoiceCreatedDurablyIgnoresNonBillableInvoices(t *testing.T) {
 			billingReason: "subscription_create",
 			currency:      "usd",
 			subscription:  "subscription_placeholder",
-			periodStart:   anchor.Add(-time.Second),
-			periodEnd:     anchor.Add(-time.Second),
+			periodStart:   anchor,
+			periodEnd:     anchor,
 		},
 		{
 			name:          "unsupported billing reason",
