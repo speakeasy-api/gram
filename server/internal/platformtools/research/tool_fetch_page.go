@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -113,15 +114,23 @@ func sameRedirectSite(prev, next *url.URL) bool {
 	return a == b || "www."+a == b || a == "www."+b
 }
 
-// effectivePort resolves the port a URL dials, defaulting the scheme's.
+// effectivePort resolves the port a URL dials, defaulting the scheme's and
+// normalizing numerically — an explicit ":0443" dials 443 and must compare
+// equal to it. A port that does not parse keeps its raw spelling, which can
+// only ever equal itself: unparseable stays fail-closed.
 func effectivePort(u *url.URL) string {
-	if port := u.Port(); port != "" {
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "http" {
+			return "80"
+		}
+		return "443"
+	}
+	numeric, err := strconv.Atoi(port)
+	if err != nil {
 		return port
 	}
-	if u.Scheme == "http" {
-		return "80"
-	}
-	return "443"
+	return strconv.Itoa(numeric)
 }
 
 // NewFetchPageTool builds the page-fetch tool. Pass the client through
