@@ -683,6 +683,275 @@ func TestHooksDrill_CanonicalFold_ExclusionAndTraceList(t *testing.T) {
 	require.Len(t, traces.Traces, 2)
 }
 
+func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "pwork-" + suffix + "@example.com"
+	personalEmail := "ppersonal-" + suffix + "@example.com"
+	strangerB := "pstrangerb-" + suffix + "@example.com"
+	strangerC := "pstrangerc-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	// Staggered last-seen so page order is deterministic; the employee's most
+	// recent row is the personal one, so the merged identity leads the list
+	// and — at Limit 1 — becomes the page-1 cursor value, whose folded max
+	// last-seen (-5m) differs from its literal one (-30m): cursor resolution
+	// must go through the fold or page 2 comes back empty.
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-30*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), strangerB, 10, 10, 0.1)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-20*time.Minute), strangerC, 20, 20, 0.2)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+	page := func(limit int, cursor *string) *gen.SearchUsersResult {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter:   &gen.SearchUsersFilter{From: from, To: to},
+			UserType: "internal",
+			Limit:    limit,
+			Sort:     "desc",
+			Cursor:   cursor,
+		})
+		require.NoError(t, err)
+		return res
+	}
+
+	// Limit 1 walks the list one group at a time, so page 1's cursor IS the
+	// merged canonical key — the case a fold-unaware cursor subquery fails
+	// (its literal max last-seen would mismatch the folded HAVING tuple and
+	// page 2 would be empty).
+	first := page(1, nil)
+	require.Len(t, first.Users, 1)
+	require.Equal(t, workEmail, first.Users[0].UserID, "the merged identity sorts by its latest (personal) row")
+	require.Equal(t, int64(300), first.Users[0].TotalInputTokens, "the merged summary carries both emails' tokens")
+	require.NotNil(t, first.NextCursor)
+	require.Equal(t, workEmail, *first.NextCursor, "the cursor handed out is the merged canonical key")
+
+	second := page(1, first.NextCursor)
+	require.Len(t, second.Users, 1, "a canonical cursor resolves through the fold")
+	require.Equal(t, strangerB, second.Users[0].UserID)
+	require.NotNil(t, second.NextCursor)
+
+	third := page(1, second.NextCursor)
+	require.Len(t, third.Users, 1)
+	require.Equal(t, strangerC, third.Users[0].UserID)
+
+	// A wider page hands out an unmapped cursor instead; pagination must not
+	// duplicate or resurrect the personal key either way.
+	wideFirst := page(2, nil)
+	require.Len(t, wideFirst.Users, 2)
+	require.Equal(t, workEmail, wideFirst.Users[0].UserID)
+	require.Equal(t, strangerB, wideFirst.Users[1].UserID)
+
+	wideSecond := page(2, wideFirst.NextCursor)
+	require.Len(t, wideSecond.Users, 1, "no duplicate and no resurrected personal key on page 2")
+	require.Equal(t, strangerC, wideSecond.Users[0].UserID)
+}
+
+func TestSearchUsers_CanonicalFold_IDDrillReachesFoldedSummary(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "iwork-" + suffix + "@example.com"
+	personalEmail := "ipersonal-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), personalEmail, 200, 100, 2.0)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// An id-shaped key still reaches the summary that folded to an email:
+	// rows match by raw user_id and group under the canonical key.
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    now.Add(-time.Hour).Format(time.RFC3339),
+			To:      now.Add(time.Hour).Format(time.RFC3339),
+			UserIds: []string{userID},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Users, 1)
+	require.Equal(t, workEmail, res.Users[0].UserID)
+	require.Equal(t, int64(100), res.Users[0].TotalInputTokens, "the id drill matches the id-bearing rows")
+}
+
+func TestSearchUsers_CanonicalFold_RoleRollupCountsEmployeeOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "rwork-" + suffix + "@example.com"
+	personalEmail := "rpersonal-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// No role assignments seeded, so everything lands in Unassigned — which is
+	// exactly what pins the fold: one employee is one user in the rollup, not
+	// one per linked email, and the totals merge losslessly.
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: now.Add(-time.Hour).Format(time.RFC3339),
+			To:   now.Add(time.Hour).Format(time.RFC3339),
+		},
+		UserType: "internal",
+		GroupBy:  "role",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Roles, 1)
+	require.Equal(t, "Unassigned", res.Roles[0].RoleName)
+	require.Equal(t, 1, res.Roles[0].UserCount, "one employee, not one per linked email")
+	require.Equal(t, int64(300), res.Roles[0].TotalInputTokens)
+}
+
+func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "uwork-" + suffix + "@example.com"
+	personalEmail := "upersonal-" + suffix + "@example.com"
+	strangerEmail := "ustranger-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	// One employee across three attribution shapes: id+work email, a
+	// case-variant personal-email row, and an id-only tool call (folds in via
+	// the known-emails join). Plus an unmapped stranger.
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9, 9, 0.1)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter:   &gen.SearchUsersFilter{From: from, To: to},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Users, 2)
+
+	byKey := map[string]*gen.UserSummary{}
+	for _, u := range res.Users {
+		byKey[u.UserID] = u
+	}
+	employee := byKey[workEmail]
+	require.NotNil(t, employee, "employee summary keyed by canonical email")
+	// Sum preservation across all three attribution shapes; the display email
+	// matches the canonical key rather than a literal variant.
+	require.Equal(t, workEmail, employee.UserEmail)
+	require.Equal(t, int64(300), employee.TotalInputTokens)
+	require.Equal(t, int64(150), employee.TotalOutputTokens)
+	require.Equal(t, int64(1), employee.TotalToolCalls)
+	require.Contains(t, byKey, strangerEmail)
+	require.NotContains(t, byKey, personalEmail)
+	require.NotContains(t, byKey, strings.ToUpper(personalEmail))
+
+	// Drilling by a linked personal email finds the one canonical summary:
+	// both sides of the key filter fold through the same map.
+	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter:   &gen.SearchUsersFilter{From: from, To: to, UserIds: []string{personalEmail}},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Users, 1)
+	require.Equal(t, workEmail, filtered.Users[0].UserID)
+	require.Equal(t, int64(300), filtered.Users[0].TotalInputTokens)
+}
+
+func TestSearchUsers_CanonicalFold_ShadowServesLiteralList(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFoldShadow, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "vwork-" + suffix + "@example.com"
+	personalEmail := "vpersonal-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// Shadow mode serves the literal list — the employee still splits across
+	// their two email keys — while the folded comparison runs detached.
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: now.Add(-time.Hour).Format(time.RFC3339),
+			To:   now.Add(time.Hour).Format(time.RFC3339),
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Users, 2)
+	keys := []string{res.Users[0].UserID, res.Users[1].UserID}
+	require.Contains(t, keys, workEmail)
+	require.Contains(t, keys, strings.ToUpper(personalEmail))
+}
+
 func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	t.Parallel()
 

@@ -23,6 +23,10 @@ const (
 	meterValuePayloadKey        = "value"
 )
 
+// ErrWebhookNotConfigured indicates that webhook verification cannot run because
+// the Stripe webhook secret is unavailable.
+var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
+
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
 // Catalog contains the Stripe object identifiers used by PAYG billing.
@@ -77,10 +81,20 @@ type CreateMeterEventInput struct {
 
 // WebhookEvent is the verified Stripe event envelope consumed by webhook handlers.
 type WebhookEvent struct {
-	ID      string
-	Type    string
+	// ID is Stripe's globally unique event identifier.
+	ID string
+
+	// Type identifies the event kind.
+	Type string
+
+	// Created is the time Stripe created the event.
 	Created time.Time
-	Data    json.RawMessage
+
+	// ObjectID is the identifier of the event's data object, when present.
+	ObjectID string
+
+	// CustomerID is the normalized customer identifier carried by the data object, when present.
+	CustomerID string
 }
 
 type stripeAPI interface {
@@ -180,7 +194,7 @@ func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInp
 
 func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent, error) {
 	if !IsConfigured(c.webhookSecret) {
-		return nil, errors.New("verify Stripe webhook: webhook secret is not configured")
+		return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
 	}
 
 	event, err := stripewebhook.ConstructEvent(payload, signature, c.webhookSecret)
@@ -191,16 +205,48 @@ func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent,
 		return nil, fmt.Errorf("verify Stripe webhook: expected API version %s, got %s", stripesdk.APIVersion, event.APIVersion)
 	}
 
-	var data json.RawMessage
+	var objectID string
+	var customerID string
 	if event.Data != nil {
-		data = event.Data.Raw
+		objectID, customerID, err = webhookObjectIdentifiers(event.Data.Raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse Stripe webhook data object: %w", err)
+		}
 	}
 	return &WebhookEvent{
-		ID:      event.ID,
-		Type:    string(event.Type),
-		Created: time.Unix(event.Created, 0),
-		Data:    data,
+		ID:         event.ID,
+		Type:       string(event.Type),
+		Created:    time.Unix(event.Created, 0),
+		ObjectID:   objectID,
+		CustomerID: customerID,
 	}, nil
+}
+
+func webhookObjectIdentifiers(raw json.RawMessage) (string, string, error) {
+	var object *struct {
+		ID       string          `json:"id"`
+		Customer json.RawMessage `json:"customer"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return "", "", fmt.Errorf("decode data object: %w", err)
+	}
+	if object == nil {
+		return "", "", errors.New("data object is null")
+	}
+
+	var customerID string
+	if err := json.Unmarshal(object.Customer, &customerID); err == nil {
+		return object.ID, customerID, nil
+	}
+
+	var customer struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(object.Customer, &customer); err == nil {
+		return object.ID, customer.ID, nil
+	}
+
+	return object.ID, "", nil
 }
 
 func (c *client) Catalog() Catalog {
@@ -227,7 +273,7 @@ func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInp
 }
 
 func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
-	return nil, errors.New("verify Stripe webhook: Stripe is not configured")
+	return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
 }
 
 func (s *stubClient) Catalog() Catalog {
