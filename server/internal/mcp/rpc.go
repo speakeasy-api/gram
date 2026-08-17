@@ -108,9 +108,13 @@ func spliceResultProtocolFields(resultBytes []byte, identity serverInfo) (json.R
 	meta := map[string]json.RawMessage{}
 	injectMeta := true
 	if rawMeta, ok := fields["_meta"]; ok {
-		// A non-object _meta is left untouched; resultType is still injected.
-		if err := json.Unmarshal(rawMeta, &meta); err != nil || meta == nil {
+		// A _meta holding anything other than an object or null is left
+		// untouched; resultType is still injected. A null _meta is
+		// equivalent to an absent one, so it is replaced the same way.
+		if err := json.Unmarshal(rawMeta, &meta); err != nil {
 			injectMeta = false
+		} else if meta == nil {
+			meta = map[string]json.RawMessage{}
 		}
 	}
 	if injectMeta {

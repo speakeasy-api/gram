@@ -34,12 +34,15 @@ func TestSpliceResultProtocolFields_PreservesExistingResultType(t *testing.T) {
 	}`, string(out))
 }
 
-func TestSpliceResultProtocolFields_NullMetaLeftAlone(t *testing.T) {
+func TestSpliceResultProtocolFields_NullMetaTreatedAsAbsent(t *testing.T) {
 	t.Parallel()
 
 	out, err := spliceResultProtocolFields([]byte(`{"_meta":null}`), serverInfoHostedToolset)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"resultType":"complete","_meta":null}`, string(out))
+	require.JSONEq(t, `{
+		"resultType": "complete",
+		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}}
+	}`, string(out))
 }
 
 func TestSpliceResultProtocolFields_PreservesUpstreamServerInfo(t *testing.T) {
