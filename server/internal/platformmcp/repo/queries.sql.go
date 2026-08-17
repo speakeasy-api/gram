@@ -464,7 +464,9 @@ INSERT INTO platform_mcp_catalog_registrations (
     catalog_reference,
     status,
     connection_id,
-    connection_generation
+    connection_generation,
+    user_id,
+    acting_surface
 ) VALUES (
     $1,
     $2,
@@ -473,7 +475,9 @@ INSERT INTO platform_mcp_catalog_registrations (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10
 )
 RETURNING id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 `
@@ -487,6 +491,8 @@ type CreatePlatformMCPCatalogRegistrationParams struct {
 	Status               string
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 }
 
 func (q *Queries) CreatePlatformMCPCatalogRegistration(ctx context.Context, arg CreatePlatformMCPCatalogRegistrationParams) (PlatformMcpCatalogRegistration, error) {
@@ -499,6 +505,8 @@ func (q *Queries) CreatePlatformMCPCatalogRegistration(ctx context.Context, arg 
 		arg.Status,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	var i PlatformMcpCatalogRegistration
 	err := row.Scan(
@@ -877,6 +885,8 @@ INSERT INTO platform_mcp_operation_receipts (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     operation,
     idempotency_key,
     input_hash,
@@ -894,7 +904,9 @@ INSERT INTO platform_mcp_operation_receipts (
     $8,
     $9,
     $10,
-    $11
+    $11,
+    $12,
+    $13
 )
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
 `
@@ -905,6 +917,8 @@ type CreatePlatformMCPOperationReceiptParams struct {
 	RegistrationID       uuid.NullUUID
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	Operation            string
 	IdempotencyKey       string
 	InputHash            string
@@ -920,6 +934,8 @@ func (q *Queries) CreatePlatformMCPOperationReceipt(ctx context.Context, arg Cre
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 		arg.Operation,
 		arg.IdempotencyKey,
 		arg.InputHash,
@@ -1168,32 +1184,45 @@ func (q *Queries) DeleteExpiredPlatformMCPFeedback(ctx context.Context, organiza
 
 const deleteExpiredPlatformMCPOperationReceipt = `-- name: DeleteExpiredPlatformMCPOperationReceipt :execrows
 DELETE FROM platform_mcp_operation_receipts AS receipt
-USING platform_mcp_connections AS connection
-WHERE receipt.connection_id = connection.id
-  AND receipt.organization_id = connection.organization_id
-  AND receipt.organization_id = $1
-  AND connection.subject_urn = $2
-  AND receipt.project_id = $3
-  AND receipt.operation = $4
-  AND receipt.idempotency_key = $5
+WHERE receipt.organization_id = $1
+  AND receipt.project_id = $2
+  AND receipt.operation = $3
+  AND receipt.idempotency_key = $4
   AND receipt.expires_at <= clock_timestamp()
+  AND (
+    receipt.user_id = $5
+    OR (
+      receipt.user_id IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM platform_mcp_connections AS connection
+        WHERE connection.id = receipt.connection_id
+          AND connection.organization_id = receipt.organization_id
+          AND connection.subject_urn = $6
+      )
+    )
+  )
 `
 
 type DeleteExpiredPlatformMCPOperationReceiptParams struct {
 	OrganizationID string
-	SubjectUrn     string
 	ProjectID      uuid.UUID
 	Operation      string
 	IdempotencyKey string
+	UserID         pgtype.Text
+	SubjectUrn     string
 }
 
+// Matches GetPlatformMCPOperationReceipt exactly. A receipt this cannot reach
+// never expires, and its idempotency key stays unusable for that user.
 func (q *Queries) DeleteExpiredPlatformMCPOperationReceipt(ctx context.Context, arg DeleteExpiredPlatformMCPOperationReceiptParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPOperationReceipt,
 		arg.OrganizationID,
-		arg.SubjectUrn,
 		arg.ProjectID,
 		arg.Operation,
 		arg.IdempotencyKey,
+		arg.UserID,
+		arg.SubjectUrn,
 	)
 	if err != nil {
 		return 0, err
@@ -1821,10 +1850,10 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationByID(ctx context.Context, arg
 const getPlatformMCPCatalogRegistrationForLifecycle = `-- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
 SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
 FROM platform_mcp_catalog_registrations AS registration
-JOIN platform_mcp_connections AS created_connection
+LEFT JOIN platform_mcp_connections AS created_connection
   ON created_connection.id = registration.connection_id
  AND created_connection.organization_id = registration.organization_id
-JOIN platform_mcp_connections AS current_connection
+LEFT JOIN platform_mcp_connections AS current_connection
   ON current_connection.id = $1
  AND current_connection.organization_id = registration.organization_id
 JOIN projects AS project
@@ -1835,30 +1864,47 @@ WHERE registration.id = $2
   AND registration.organization_id = $3
   AND registration.project_id = $4
   AND registration.deleted IS FALSE
-  AND created_connection.subject_urn = $5
-  AND current_connection.subject_urn = $5
-  AND current_connection.active_generation = $6
-  AND current_connection.revoked_at IS NULL
+  AND (
+    registration.user_id = $5
+    OR (registration.user_id IS NULL AND created_connection.subject_urn = $6)
+  )
+  AND (
+    $1 IS NULL
+    OR (
+      current_connection.id IS NOT NULL
+      AND current_connection.subject_urn = $6
+      AND current_connection.active_generation = $7
+      AND current_connection.revoked_at IS NULL
+    )
+  )
 `
 
 type GetPlatformMCPCatalogRegistrationForLifecycleParams struct {
-	ConnectionID         uuid.UUID
+	ConnectionID         uuid.NullUUID
 	RegistrationID       uuid.UUID
 	OrganizationID       string
 	ProjectID            uuid.UUID
+	UserID               pgtype.Text
 	SubjectUrn           string
-	ConnectionGeneration uuid.UUID
+	ConnectionGeneration uuid.NullUUID
 }
 
 // Registrations are project desired state, not permanently owned by the OAuth
-// client that originally created them. Lifecycle actions require the current
-// active Platform connection to belong to that same user subject.
+// client that originally created them. Lifecycle actions require the caller to
+// be the same user that created the registration.
+//
+// A caller acting through an OAuth connection must additionally present a
+// live, unrevoked generation. A surface that holds no connection — the project
+// assistant acts under assistant identity — passes a null connection and is
+// authorized on every call upstream instead. Ownership still matches on the
+// real user, so a null connection widens nothing.
 func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Context, arg GetPlatformMCPCatalogRegistrationForLifecycleParams) (PlatformMcpCatalogRegistration, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationForLifecycle,
 		arg.ConnectionID,
 		arg.RegistrationID,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.UserID,
 		arg.SubjectUrn,
 		arg.ConnectionGeneration,
 	)
@@ -2144,33 +2190,42 @@ func (q *Queries) GetPlatformMCPOnboardingSelectedProject(ctx context.Context, a
 const getPlatformMCPOperationReceipt = `-- name: GetPlatformMCPOperationReceipt :one
 SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.expires_at, receipt.created_at, receipt.updated_at
 FROM platform_mcp_operation_receipts AS receipt
-JOIN platform_mcp_connections AS connection
+LEFT JOIN platform_mcp_connections AS connection
   ON connection.id = receipt.connection_id
  AND connection.organization_id = receipt.organization_id
 WHERE receipt.organization_id = $1
-  AND connection.subject_urn = $2
-  AND receipt.project_id = $3
-  AND receipt.operation = $4
-  AND receipt.idempotency_key = $5
+  AND receipt.project_id = $2
+  AND receipt.operation = $3
+  AND receipt.idempotency_key = $4
+  AND (
+    receipt.user_id = $5
+    OR (receipt.user_id IS NULL AND connection.subject_urn = $6)
+  )
 ORDER BY receipt.created_at DESC, receipt.id DESC
 LIMIT 1
 `
 
 type GetPlatformMCPOperationReceiptParams struct {
 	OrganizationID string
-	SubjectUrn     string
 	ProjectID      uuid.UUID
 	Operation      string
 	IdempotencyKey string
+	UserID         pgtype.Text
+	SubjectUrn     string
 }
 
+// Idempotency belongs to the real user, not to a connection: reauthorization
+// mints a new connection generation and must not let the same key replay a
+// create. Receipts written before user_id existed carry only a connection, so
+// they are still matched through its subject.
 func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPlatformMCPOperationReceiptParams) (PlatformMcpOperationReceipt, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPOperationReceipt,
 		arg.OrganizationID,
-		arg.SubjectUrn,
 		arg.ProjectID,
 		arg.Operation,
 		arg.IdempotencyKey,
+		arg.UserID,
+		arg.SubjectUrn,
 	)
 	var i PlatformMcpOperationReceipt
 	err := row.Scan(

@@ -127,7 +127,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		return Distribution{}, ErrDistributionInvalid
 	}
 
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Distribution{}, ErrDistributionInvalid
 	}
@@ -253,7 +253,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 		return Distribution{}, ErrDistributionInvalid
 	}
 
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Distribution{}, ErrDistributionInvalid
 	}
