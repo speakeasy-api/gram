@@ -207,7 +207,11 @@ func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 	excludedReason := ""
 	excludedDetail := ""
 	if row.FalsePositiveAt.Valid {
-		falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339)
+		// RFC3339Nano, not RFC3339: the plain layout truncates
+		// clock_timestamp()'s fractional seconds, and the DateTime64(9)
+		// columns this lands in can hold the full precision. The writer's
+		// time.Parse(time.RFC3339, ...) accepts fractional seconds as-is.
+		falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339Nano)
 		excludedReason = chrepo.ExcludedReasonManual
 		excludedDetail = row.FalsePositiveReason.String
 	}

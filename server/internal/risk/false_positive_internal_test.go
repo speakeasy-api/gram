@@ -45,7 +45,7 @@ func TestFPMirrorSurface(t *testing.T) {
 func TestFPMirrorMessage(t *testing.T) {
 	t.Parallel()
 
-	fpAt := time.Date(2026, 8, 1, 12, 30, 0, 0, time.UTC)
+	fpAt := time.Date(2026, 8, 1, 12, 30, 0, 123456789, time.UTC)
 	row := repo.RiskResult{
 		ID:                  uuid.Must(uuid.NewV7()),
 		ProjectID:           uuid.Must(uuid.NewV7()),
@@ -59,8 +59,8 @@ func TestFPMirrorMessage(t *testing.T) {
 	}
 
 	marked := fpMirrorMessage(row)
-	require.Equal(t, "2026-08-01T12:30:00Z", marked.GetFalsePositiveAt())
-	require.Equal(t, "2026-08-01T12:30:00Z", marked.GetExcludedAt(), "excluded_at mirrors the mark timestamp")
+	require.Equal(t, "2026-08-01T12:30:00.123456789Z", marked.GetFalsePositiveAt(), "fractional seconds survive the mirror format")
+	require.Equal(t, "2026-08-01T12:30:00.123456789Z", marked.GetExcludedAt(), "excluded_at mirrors the mark timestamp")
 	require.Equal(t, chrepo.ExcludedReasonManual, marked.GetExcludedReason())
 	require.Equal(t, "test data", marked.GetExcludedDetail())
 
