@@ -866,8 +866,9 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 	txQueries := queries.WithTx(dbtx)
 
 	if _, err := txQueries.LockApprovalRequestForResearch(ctx, repo.LockApprovalRequestForResearchParams{
-		ID:        requestID,
-		ProjectID: projectID,
+		ID:             requestID,
+		OrganizationID: orgID,
+		ProjectID:      projectID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
@@ -880,6 +881,7 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 	// one-run-per-request gate closed forever.
 	if _, err := txQueries.InterruptStaleResearchReports(ctx, repo.InterruptStaleResearchReportsParams{
 		McpApprovalRequestID: requestID,
+		OrganizationID:       orgID,
 		ProjectID:            projectID,
 		StaleBefore:          pgtype.Timestamptz{Time: time.Now().Add(-ResearchRunStaleAfter), Valid: true, InfinityModifier: pgtype.Finite},
 	}); err != nil {
@@ -888,6 +890,7 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 
 	running, err := txQueries.GetRunningResearchReport(ctx, repo.GetRunningResearchReportParams{
 		McpApprovalRequestID: requestID,
+		OrganizationID:       orgID,
 		ProjectID:            projectID,
 	})
 	switch {
@@ -1219,6 +1222,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	if citedReportID.Valid {
 		if _, err := queries.GetResearchReportForDecision(ctx, repo.GetResearchReportForDecisionParams{
 			ID:                   citedReportID.UUID,
+			OrganizationID:       organizationID,
 			McpApprovalRequestID: requestID,
 			ProjectID:            projectID,
 		}); err != nil {
