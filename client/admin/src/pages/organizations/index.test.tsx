@@ -65,6 +65,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   extendTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  rearmTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   bulkUpdateAccountType:
     vi.fn<
       (
@@ -92,6 +94,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
+    rearmTrial: mocks.rearmTrial,
     bulkUpdateAccountType: mocks.bulkUpdateAccountType,
     createOrganization: mocks.createOrganization,
   };
@@ -409,6 +412,9 @@ beforeEach(() => {
   mocks.extendTrial.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
   );
+  // No default answer: the one describe that re-arms owns a record none of the
+  // rows above it carry, so it supplies its own.
+  mocks.rearmTrial.mockReset();
   // Everything the request asked for, and nothing missing. The reversal guards
   // nothing on its own, because only the length of this array is ever read;
   // "names the organizations the server could not find" is the test that holds
@@ -4074,5 +4080,89 @@ describe("organizationsSearchSchema", () => {
 
   it.each(cases)("%s", (_name, search, expected) => {
     expect(organizationsSearchSchema(search)).toEqual(expected);
+  });
+});
+
+// The one action whose own success takes its control off the page: a re-armed
+// record is running rather than demoted, so the peek footer drops the Re-arm
+// button and mounts an Extend button beside it. Its own block and its own
+// fixture list, so nothing above this reads a fourth row.
+describe("re-arming a trial from the peek panel", () => {
+  const DEMOTED_ORG: AdminOrganization = {
+    id: "org_placeholder_five",
+    name: "Placeholder Five",
+    slug: "placeholder-five",
+    account_type: "free",
+    whitelisted: false,
+    trial_state: "demoted",
+    member_count: 2,
+    created_at: "2026-02-02T00:00:00Z",
+    updated_at: "2026-02-07T00:00:00Z",
+  };
+
+  const REARMED_TRIAL_END = "2026-09-04T00:00:00Z";
+
+  beforeEach(() => {
+    mocks.listOrganizations.mockResolvedValue({ organizations: [DEMOTED_ORG] });
+    mocks.rearmTrial.mockResolvedValue({
+      ...DEMOTED_ORG,
+      account_type: "enterprise",
+      whitelisted: true,
+      trial_state: "running",
+      trial_ends_at: REARMED_TRIAL_END,
+    });
+  });
+
+  async function pressRearm(): Promise<HTMLElement> {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(DEMOTED_ORG.name);
+    const control = within(peekPanel()).getByRole("button", {
+      name: `Re-arm trial for ${DEMOTED_ORG.name}`,
+    });
+    fireEvent.click(control);
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Re-arm" }));
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    return control;
+  }
+
+  it("re-arms from the panel and repaints the panel with the answer", async () => {
+    await pressRearm();
+
+    // The default day count, sent without the operator typing anything.
+    expect(mocks.rearmTrial).toHaveBeenCalledWith({
+      id: DEMOTED_ORG.id,
+      days: 14,
+    });
+    expect(peekPanel().textContent).toContain(shortDate(REARMED_TRIAL_END));
+    expect(announcement()).toBe(
+      `${DEMOTED_ORG.name} trial re-armed for 14 days.`,
+    );
+  });
+
+  it("gives the keyboard to the panel when the control that opened the dialog goes", async () => {
+    const control = await pressRearm();
+
+    // Not the same node through the write, unlike extend: the footer's two
+    // trial controls are sibling conditionals in separate slots, so React
+    // unmounts one and mounts the other rather than reusing the element.
+    expect(control.isConnected).toBe(false);
+    expect(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${DEMOTED_ORG.name}`,
+      }),
+    ).toBeTruthy();
+
+    // The panel, and specifically not the body. Radix would have focused a
+    // DialogTrigger that does not exist here, leaving the keyboard at the top
+    // of the page with the panel still open beside it.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(peekPanel());
+    });
+    expect(document.activeElement).not.toBe(document.body);
   });
 });
