@@ -424,6 +424,45 @@ func TestRefreshAPIKeyLimit_NilRepairsLegacyEnabledZeroKey(t *testing.T) {
 	require.EqualValues(t, expected, row.MonthlyCredits)
 }
 
+func TestRefreshAPIKeyLimit_NilPreservesPaygZeroCap(t *testing.T) {
+	t.Parallel()
+
+	for _, keyType := range AllKeyTypes {
+		t.Run(string(keyType), func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierPayg),
+			}))
+
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, keyType)
+			require.NoError(t, err)
+			require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+				MonthlyCredits: 0,
+			}))
+
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, nil)
+			require.NoError(t, err)
+			require.Zero(t, refreshed)
+			require.Empty(t, upstream.recorded(), "generic reconciliation must preserve a PAYG zero-cap lockdown")
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+			})
+			require.NoError(t, err)
+			require.Zero(t, row.MonthlyCredits)
+			require.False(t, row.Disabled)
+		})
+	}
+}
+
 func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
 	t.Parallel()
 

@@ -579,7 +579,6 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
-	repairLegacyZero := key.MonthlyCredits == 0 && !key.Disabled && limit == nil
 	if limit == nil && key.Disabled && !reinstate {
 		// Generic refreshes must never undo a billing lockdown. An explicit
 		// activation, re-subscription, or platform-admin enable is the only path
@@ -591,7 +590,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate && !repairLegacyZero {
+	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate {
 		// OpenRouter is the authority for a PAYG customer's chosen inference cap
 		// on each materialized platform key. Generic tier refreshes preserve both
 		// the mirrored value and the key's
