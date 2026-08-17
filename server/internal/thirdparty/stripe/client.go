@@ -710,7 +710,11 @@ func (c *client) VerifyWebhook(payload []byte, signature string) (*WebhookEvent,
 		return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
 	}
 
-	event, err := stripewebhook.ConstructEvent(payload, signature, c.webhookSecret)
+	event, err := stripewebhook.ConstructEventWithOptions(payload, signature, c.webhookSecret, stripewebhook.ConstructEventOptions{
+		Tolerance:                0,
+		IgnoreTolerance:          false,
+		IgnoreAPIVersionMismatch: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("verify Stripe webhook: %w", err)
 	}
