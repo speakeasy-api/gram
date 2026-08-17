@@ -1,0 +1,362 @@
+import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
+import {
+  inferenceCapAnchor,
+  inferenceCapLabel,
+} from "@/components/billing/inference-caps";
+import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
+import { invalidateAllGetInferenceSpendCaps } from "@gram/client/react-query/getInferenceSpendCaps.js";
+import { useSetSpendCapMutation } from "@gram/client/react-query/setSpendCap.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { type FormEvent, useState } from "react";
+import { Link } from "react-router";
+
+/** The bounds the API accepts for a monthly inference cap, in whole USD. */
+const MIN_CAP_USD = 1;
+const MAX_CAP_USD = 10_000;
+
+// The in-app booking gate, which prefills the form from the session — the same
+// path the trial card sends people to. Not the marketing site's /talk-to-us.
+const SALES_PATH = "/talk-to-us";
+
+function formatUsd(amount: number): string {
+  return `$${amount.toLocaleString("en-US")}`;
+}
+
+const MIN_LABEL = formatUsd(MIN_CAP_USD);
+const MAX_LABEL = formatUsd(MAX_CAP_USD);
+const RANGE_MESSAGE = `Enter a whole dollar amount between ${MIN_LABEL} and ${MAX_LABEL}.`;
+
+const MEMBER_NOTE = "Only organization admins can change this cap.";
+
+// A disabled key is refused at the endpoint, so the field would only invite a
+// request that is going to come back a conflict.
+const DISABLED_NOTE =
+  "This inference is turned off for this organization, so its cap can't be changed.";
+
+/**
+ * One organization's cap on one Gram-managed inference key: what it has spent
+ * this month, what the ceiling is, and — for an admin who can move it — the
+ * field that does.
+ *
+ * Every control owns its own draft, its own save and its own feedback. The caps
+ * are independent limits on unrelated work, so an admin editing one must not
+ * have the other's save reported back at them, or their amount replaced by it.
+ */
+export function InferenceCapControl({
+  cap,
+  locked,
+  refetching = false,
+  announcesLock = false,
+}: {
+  cap: InferenceSpendCap;
+  /**
+   * Whether the cap is enforced but can't be changed from here — during a
+   * trial, or while the subscription behind the bill isn't billing.
+   *
+   * The amount and its meter still show; the field and the save are inert, and
+   * the mutation is never mounted.
+   */
+  locked: boolean;
+  /**
+   * Whether the subscription is being re-read right now, on a control that is
+   * otherwise editable.
+   *
+   * The field and its draft stay exactly where they are; only the writing
+   * stops, until the fresh state confirms there is still a bill to cap.
+   */
+  refetching?: boolean;
+  /**
+   * Whether this control is the one that says the refetch out loud.
+   *
+   * It is one state shared by every control, so the section hands it to a
+   * single control to announce — two live regions carrying identical text get
+   * announced in whichever order the screen reader pleases.
+   */
+  announcesLock?: boolean;
+}): JSX.Element {
+  return (
+    // The banner that reports this cap has been reached links straight here, so
+    // the anchor sits on the whole control: whichever variant this organization
+    // gets, the link lands on the cap it named. `scroll-mt` clears the sticky
+    // page header.
+    <div id={inferenceCapAnchor(cap.keyType)} className="scroll-mt-24">
+      {controlFor(cap, locked, refetching, announcesLock)}
+    </div>
+  );
+}
+
+function controlFor(
+  cap: InferenceSpendCap,
+  locked: boolean,
+  refetching: boolean,
+  announcesLock: boolean,
+): JSX.Element {
+  if (cap.disabled) return <CapReadOnly cap={cap} note={DISABLED_NOTE} />;
+
+  // Nothing writable here, so the mutation is never mounted — the lock holds
+  // whatever an admin's scopes are.
+  if (locked) return <LockedCapField cap={cap} />;
+
+  return (
+    <RequireScope
+      scope="org:admin"
+      level="section"
+      fallback={<CapReadOnly cap={cap} note={MEMBER_NOTE} />}
+    >
+      <CapForm cap={cap} locked={refetching} announcesLock={announcesLock} />
+    </RequireScope>
+  );
+}
+
+/**
+ * The cap as it is being enforced, in the field that would change it.
+ *
+ * The amount is the one upstream is holding — a trial runs on defaults, a
+ * subscription that stopped billing keeps whatever was last set — so it is
+ * shown in the control rather than replaced by a note about it.
+ */
+function LockedCapField({ cap }: { cap: InferenceSpendCap }): JSX.Element {
+  const label = inferenceCapLabel(cap.keyType);
+  const fieldId = `${inferenceCapAnchor(cap.keyType)}-amount`;
+
+  return (
+    <Stack gap={4} className="max-w-md">
+      <Stack gap={2}>
+        <Label htmlFor={fieldId}>{label}</Label>
+        <InferenceCapMeter cap={cap} title={false} />
+        <Input
+          id={fieldId}
+          type="number"
+          value={String(cap.monthlyCredits)}
+          disabled
+          readOnly
+        />
+      </Stack>
+      <Button type="button" disabled>
+        {`SAVE ${label.toUpperCase()}`}
+      </Button>
+    </Stack>
+  );
+}
+
+// A member sees the cap they are spending under but gets no control — the
+// endpoint is admin-only, so a disabled field would only invite a request that
+// is going to be refused. The same shape reports a key this organization can't
+// change at all.
+function CapReadOnly({
+  cap,
+  note,
+}: {
+  cap: InferenceSpendCap;
+  note: string;
+}): JSX.Element {
+  return (
+    <Stack gap={2} className="max-w-md">
+      <Text className="text-eyebrow">{inferenceCapLabel(cap.keyType)}</Text>
+      <InferenceCapMeter cap={cap} title={false} />
+      <Text muted small>
+        {note}
+      </Text>
+    </Stack>
+  );
+}
+
+/** Whether `value` is a cap the API will accept, and why it isn't. */
+function capError(value: string): string | null {
+  const trimmed = value.trim();
+  const amount = Number(trimmed);
+  const valid =
+    trimmed !== "" &&
+    Number.isInteger(amount) &&
+    amount >= MIN_CAP_USD &&
+    amount <= MAX_CAP_USD;
+
+  return valid ? null : RANGE_MESSAGE;
+}
+
+// The field seeds from the loaded cap and re-seeds only while it is pristine: a
+// cap changed elsewhere (another admin, the save's own invalidation) has to
+// reach an untouched field, but a background refetch landing mid-edit must not
+// overwrite what this admin typed.
+function CapForm({
+  cap,
+  locked,
+  announcesLock,
+}: {
+  cap: InferenceSpendCap;
+  locked: boolean;
+  announcesLock: boolean;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const label = inferenceCapLabel(cap.keyType);
+  const fieldId = `${inferenceCapAnchor(cap.keyType)}-amount`;
+  const [amount, setAmount] = useState(() => String(cap.monthlyCredits));
+  // The value the field was last seeded from. Comparing against it — rather
+  // than against a dirty flag — means an admin who edits back to the seeded
+  // amount is pristine again, and it survives a save because the invalidated
+  // query comes back with the amount now in the field.
+  const [seeded, setSeeded] = useState(cap.monthlyCredits);
+
+  // Adjusting state during render rather than in an effect: React re-runs this
+  // component before committing, so the field never paints the stale cap.
+  if (seeded !== cap.monthlyCredits) {
+    setSeeded(cap.monthlyCredits);
+    if (amount === String(seeded)) setAmount(String(cap.monthlyCredits));
+  }
+
+  const mutation = useSetSpendCapMutation({
+    onSuccess: () => {
+      // Every meter on the page reads this list, and the whole key has to be
+      // refreshed rather than the exact one this control subscribes to.
+      void invalidateAllGetInferenceSpendCaps(queryClient);
+    },
+  });
+
+  const validationError = capError(amount);
+
+  const handleChange = (value: string) => {
+    setAmount(value);
+    // "Saved."/failure text left beside a field that has since been edited
+    // reads as feedback about the value now in the field.
+    if (mutation.isSuccess || mutation.isError) mutation.reset();
+  };
+
+  // An out-of-range cap is rejected here, where the amount can be corrected,
+  // instead of coming back as a transient-looking API failure the admin is
+  // invited to retry.
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (validationError !== null) return;
+    // The disabled control is the visible half of the lock; this is the half
+    // that holds if a submission reaches the form some other way.
+    if (locked) return;
+
+    // The key type is what makes this control's save its own: the endpoint
+    // defaults to the invoiced key when it is left off, so every save names the
+    // key it belongs to rather than relying on that default.
+    mutation.mutate({
+      request: {
+        setSpendCapRequestBody: {
+          keyType: cap.keyType,
+          monthlyCredits: Number(amount.trim()),
+        },
+      },
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Stack gap={4} className="max-w-md">
+        <Stack gap={2}>
+          <Label htmlFor={fieldId}>{label}</Label>
+          <InferenceCapMeter cap={cap} title={false} />
+          <Input
+            id={fieldId}
+            type="number"
+            inputMode="numeric"
+            min={MIN_CAP_USD}
+            max={MAX_CAP_USD}
+            step={1}
+            value={amount}
+            onChange={handleChange}
+            disabled={locked}
+            error={validationError !== null}
+          />
+          {validationError === null ? (
+            <Text muted small>
+              This inference stops once the month's spend reaches the cap. Raise
+              or lower it at any time.
+            </Text>
+          ) : (
+            <Text small destructive role="alert">
+              {validationError}
+            </Text>
+          )}
+          {/* The maximum is the ceiling the endpoint enforces, so anything
+              above it is a conversation rather than a form. This sits outside
+              the validation branch on purpose: it is the way forward for the
+              admin who just had a larger amount rejected. */}
+          <Text muted small>
+            Need a cap above {MAX_LABEL}?{" "}
+            <Link to={SALES_PATH} className="underline underline-offset-2">
+              Talk to us
+            </Link>
+            .
+          </Text>
+        </Stack>
+        <Stack direction="horizontal" align="center" gap={3}>
+          <Button type="submit" disabled={mutation.isPending || locked}>
+            {mutation.isPending ? "SAVING..." : `SAVE ${label.toUpperCase()}`}
+          </Button>
+          <CapFormFeedback
+            label={label}
+            failed={mutation.isError}
+            saved={mutation.isSuccess}
+            locked={locked && announcesLock}
+          />
+        </Stack>
+      </Stack>
+    </form>
+  );
+}
+
+/**
+ * The one live message beside this control's save button.
+ *
+ * A single slot rather than three independent conditions: the save's own
+ * invalidation refetches the subscription, so "Saved." and the lock are live at
+ * the same moment, and two simultaneous live regions make a screen reader
+ * announce them in whichever order it pleases — or talk over itself.
+ *
+ * The order is what the admin most needs to hear. A failed save first, because
+ * their amount did not land. Then the save they just made, which also explains
+ * the lock that follows it. The lock speaks only when there is nothing else to
+ * say, which is when it is the only reason the field has gone quiet.
+ *
+ * Every message names its own cap: both controls can be speaking at once, and
+ * an unattributed "Saved." beside two fields belongs to neither.
+ */
+function CapFormFeedback({
+  label,
+  failed,
+  saved,
+  locked,
+}: {
+  label: string;
+  failed: boolean;
+  saved: boolean;
+  locked: boolean;
+}): JSX.Element | null {
+  if (failed) {
+    return (
+      <Text small destructive role="alert">
+        Couldn't save the {label.toLowerCase()}. Try again.
+      </Text>
+    );
+  }
+
+  if (saved) {
+    return (
+      <Text muted small role="status">
+        Saved the {label.toLowerCase()}.
+      </Text>
+    );
+  }
+
+  // A field that has gone quiet with no explanation reads as broken.
+  if (locked) {
+    return (
+      <Text muted small role="status">
+        Checking your subscription...
+      </Text>
+    );
+  }
+
+  return null;
+}

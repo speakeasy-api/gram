@@ -1,3 +1,4 @@
+import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   subscription: vi.fn(),
   summary: vi.fn(),
-  creditUsage: vi.fn(),
+  inferenceCaps: vi.fn(),
 }));
 
 // The shared subscription read is mocked at the wrapper: what the estimate does
@@ -22,8 +23,9 @@ vi.mock("@gram/client/react-query/getPaygBillingSummary.js", () => ({
   useGetPaygBillingSummary: (...args: unknown[]) => mocks.summary(...args),
 }));
 
-vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
-  useGetCreditUsage: (...args: unknown[]) => mocks.creditUsage(...args),
+vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
+  useGetInferenceSpendCaps: (...args: unknown[]) =>
+    mocks.inferenceCaps(...args),
 }));
 
 // Page chrome isn't what's under test; render it as plain boxes so a failure
@@ -100,18 +102,26 @@ function summaryQuery({ data, isError = false }: SummaryQueryState = {}) {
   mocks.summary.mockReturnValue({ data, isError });
 }
 
-type CreditUsage = { creditsUsed: number; monthlyCredits: number };
+function cap(overrides: Partial<InferenceSpendCap> = {}): InferenceSpendCap {
+  return {
+    keyType: "chat",
+    creditsUsed: 10,
+    monthlyCredits: 100,
+    disabled: false,
+    ...overrides,
+  };
+}
 
-const DEFAULT_CREDIT_USAGE: CreditUsage = {
-  creditsUsed: 10,
-  monthlyCredits: 100,
-};
+const DEFAULT_CAPS: InferenceSpendCap[] = [
+  cap({ keyType: "chat" }),
+  cap({ keyType: "internal", creditsUsed: 20, monthlyCredits: 200 }),
+];
 
-function creditUsageQuery(
-  data: CreditUsage | undefined = DEFAULT_CREDIT_USAGE,
+function inferenceCapsQuery(
+  data: InferenceSpendCap[] | undefined = DEFAULT_CAPS,
   isError = false,
 ) {
-  mocks.creditUsage.mockReturnValue({ data, isError });
+  mocks.inferenceCaps.mockReturnValue({ data, isError });
 }
 
 /** The options the estimate passed to its generated query hook. */
@@ -121,14 +131,15 @@ function summaryOptions(): { enabled?: boolean; throwOnError?: boolean } {
 }
 
 const estimatedTotal = () => screen.queryByText("$4.29");
-const meter = () => screen.queryByRole("progressbar");
+const meters = () => screen.queryAllByRole("progressbar");
+const meter = () => meters()[0] ?? null;
 
 describe("PaygUsageSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     billingSubscription();
     summaryQuery({ data: summaryData() });
-    creditUsageQuery();
+    inferenceCapsQuery();
   });
 
   afterEach(cleanup);
@@ -152,8 +163,18 @@ describe("PaygUsageSection", () => {
     ).toBeTruthy();
   });
 
-  // The cutoff is the whole point of the chat figure: today's chat is not in it.
-  it("names the recorded-through cutoff on chat spend", () => {
+  // The estimate's inference line is the invoiced half of the Gram-managed
+  // inference. The analysis Gram funds is not a line here and not in the total.
+  it("names the invoiced inference as its own line", () => {
+    render(<PaygUsageSection />);
+
+    expect(screen.getByText("Other inference spend")).toBeTruthy();
+    expect(screen.queryByText("Chat spend")).toBeNull();
+    expect(screen.getByText(/Billed to you as its own line/)).toBeTruthy();
+  });
+
+  // The cutoff is the whole point of that figure: today's usage is not in it.
+  it("names the recorded-through cutoff on the inference spend", () => {
     render(<PaygUsageSection />);
 
     expect(
@@ -161,13 +182,13 @@ describe("PaygUsageSection", () => {
     ).toBeTruthy();
   });
 
-  it("says so when no completed day of chat spend has landed yet", () => {
+  it("says so when no completed day of inference spend has landed yet", () => {
     summaryQuery({ data: summaryData({ recordedThrough: undefined }) });
 
     render(<PaygUsageSection />);
 
     expect(
-      screen.getByText(/No completed day of chat spend has been recorded/),
+      screen.getByText(/No completed day has been recorded in this cycle yet/),
     ).toBeTruthy();
   });
 
@@ -181,13 +202,14 @@ describe("PaygUsageSection", () => {
     ).toBeTruthy();
   });
 
-  // The total stops at the same cutoff its chat component does, so it has to
-  // say where it stops rather than reading as a complete cycle-to-date figure.
+  // The total stops at the same cutoff its inference component does, so it has
+  // to say where it stops rather than reading as a complete cycle-to-date
+  // figure.
   it("carries the recorded-through cutoff onto the estimated total", () => {
     render(<PaygUsageSection />);
 
     expect(
-      screen.getByText(/Chat spend counted through August 15, 2026/),
+      screen.getByText(/Inference spend counted through August 15, 2026/),
     ).toBeTruthy();
   });
 
@@ -277,27 +299,69 @@ describe("PaygUsageSection", () => {
     expect(screen.queryByText(/72 hours/)).toBeNull();
   });
 
-  describe("chat spend cap meter", () => {
-    // The cap runs on the calendar month while the invoice runs on the Stripe
+  describe("inference cap meters", () => {
+    // Both applicable meters are shown, each named for the cap it reports on.
+    it("renders a meter for every cap the organization has", () => {
+      render(<PaygUsageSection />);
+
+      expect(meters().map((node) => node.getAttribute("aria-label"))).toEqual([
+        "Other inference cap: $10.00 of the $100.00 monthly cap",
+        "Security inference cap: $20.00 of the $200.00 monthly cap",
+      ]);
+    });
+
+    it("renders one meter for an organization with one cap", () => {
+      inferenceCapsQuery([cap({ keyType: "internal" })]);
+
+      render(<PaygUsageSection />);
+
+      expect(meters()).toHaveLength(1);
+      expect(screen.getByText("Security inference cap")).toBeTruthy();
+      expect(screen.queryByText("Other inference cap")).toBeNull();
+    });
+
+    // Nothing is assumed into existence: an empty list means no Gram-managed
+    // key has been materialized yet, so there is nothing to meter.
+    it("renders no meters for an empty list", () => {
+      inferenceCapsQuery([]);
+
+      render(<PaygUsageSection />);
+
+      expect(meters()).toHaveLength(0);
+      expect(estimatedTotal()).not.toBeNull();
+    });
+
+    // The caps run on the calendar month while the invoice runs on the Stripe
     // cycle; the two windows overlap without matching, so the copy has to say
-    // which one this figure belongs to.
-    it("labels the cap meter as the calendar month", () => {
+    // which one these figures belong to.
+    it("says the invoiced cap's month doesn't line up with the cycle", () => {
       render(<PaygUsageSection />);
 
-      expect(screen.getByText("Chat spend this calendar month")).toBeTruthy();
-      expect(screen.getByText(/resets on the first of the month/)).toBeTruthy();
+      expect(
+        screen.getByText(/doesn't line up with the billing cycle above/),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/billed to this organization as its own line/i),
+      ).toBeTruthy();
     });
 
-    it("says the calendar-month spend is not part of the estimate", () => {
+    // The distinction the section exists to make: one of these caps is money
+    // the customer is invoiced for, and the other never reaches their bill.
+    it("says the platform-funded cap is not in the invoice estimate", () => {
       render(<PaygUsageSection />);
 
-      expect(screen.getByText(/isn't part of the estimate/)).toBeTruthy();
+      expect(
+        screen.getByText(
+          /Gram funds this inference, so it never reaches your invoice/,
+        ),
+      ).toBeTruthy();
     });
 
-    // The estimate's chat figure and the meter's figure come from different
-    // windows and different endpoints — the meter must never feed the invoice.
-    it("keeps the meter's spend out of the estimate's figures", () => {
-      creditUsageQuery({ creditsUsed: 61, monthlyCredits: 100 });
+    // The estimate's inference figure and the meters' figures come from
+    // different windows and different endpoints — a meter must never feed the
+    // invoice.
+    it("keeps the meters' spend out of the estimate's figures", () => {
+      inferenceCapsQuery([cap({ creditsUsed: 61, monthlyCredits: 100 })]);
 
       render(<PaygUsageSection />);
 
@@ -306,13 +370,13 @@ describe("PaygUsageSection", () => {
       expect(screen.getByText("$4.10")).toBeTruthy();
     });
 
-    it("renders the meter for a trialing organization with no estimate", () => {
+    it("renders the meters for a trialing organization with no estimate", () => {
       billingSubscription("trialing");
       summaryQuery();
 
       render(<PaygUsageSection />);
 
-      expect(meter()).not.toBeNull();
+      expect(meters()).toHaveLength(2);
       expect(estimatedTotal()).toBeNull();
     });
 
@@ -324,7 +388,7 @@ describe("PaygUsageSection", () => {
       // Overage fills the bar rather than overflowing it.
       [250, 100],
     ])("reports $%s of a $100 cap as %s%% filled", (used, expected) => {
-      creditUsageQuery({ creditsUsed: used, monthlyCredits: 100 });
+      inferenceCapsQuery([cap({ creditsUsed: used, monthlyCredits: 100 })]);
 
       render(<PaygUsageSection />);
 
@@ -338,35 +402,37 @@ describe("PaygUsageSection", () => {
       ["near the cap", 95, /over 90% of this month's cap/],
       ["at the cap", 100, /cap is reached/],
     ])("notes spend %s", (_label, used, note) => {
-      creditUsageQuery({ creditsUsed: used, monthlyCredits: 100 });
+      inferenceCapsQuery([cap({ creditsUsed: used, monthlyCredits: 100 })]);
 
       render(<PaygUsageSection />);
 
       if (note === null) {
-        expect(screen.queryByText(/this month's cap\./)).toBeNull();
+        expect(screen.queryByText(/of this month's cap\./)).toBeNull();
       } else {
-        expect(screen.getByText(note)).toBeTruthy();
+        expect(screen.getByText(note, { exact: false })).toBeTruthy();
       }
     });
 
     // Without a cap the spend has nothing to be a proportion of, and a
-    // full-width bar would read as a limit that was reached.
-    it("draws no meter without a monthly cap", () => {
-      creditUsageQuery({ creditsUsed: 10, monthlyCredits: 0 });
+    // full-width bar would read as a limit that was reached. The figure itself
+    // still has to be somewhere.
+    it("draws no bar without a monthly cap, but still reports the spend", () => {
+      inferenceCapsQuery([cap({ creditsUsed: 10, monthlyCredits: 0 })]);
 
       render(<PaygUsageSection />);
 
-      expect(meter()).toBeNull();
+      expect(meters()).toHaveLength(0);
+      expect(screen.getByText(/\$10\.00 spent this month/)).toBeTruthy();
     });
 
-    it("renders no meter when credit usage fails", () => {
-      creditUsageQuery(undefined, true);
+    it("renders no meters when the cap read fails", () => {
+      inferenceCapsQuery(undefined, true);
 
-      render(<PaygUsageSection />);
+      const { container } = render(<PaygUsageSection />);
 
-      expect(meter()).toBeNull();
-      expect(screen.queryByText(/Chat spend this calendar month/)).toBeNull();
-      expect(screen.queryByTestId("skeleton")).toBeNull();
+      expect(meters()).toHaveLength(0);
+      expect(screen.queryByText("Other inference cap")).toBeNull();
+      expect(container.querySelector(".skeleton")).toBeNull();
     });
   });
 });

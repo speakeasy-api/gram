@@ -159,7 +159,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -3182,6 +3182,9 @@ func ParseEndpoint(
 		usageSetSpendCapBodyFlag         = usageSetSpendCapFlags.String("body", "REQUIRED", "")
 		usageSetSpendCapSessionTokenFlag = usageSetSpendCapFlags.String("session-token", "", "")
 
+		usageGetInferenceSpendCapsFlags            = flag.NewFlagSet("get-inference-spend-caps", flag.ExitOnError)
+		usageGetInferenceSpendCapsSessionTokenFlag = usageGetInferenceSpendCapsFlags.String("session-token", "", "")
+
 		usageGetUsageTiersFlags = flag.NewFlagSet("get-usage-tiers", flag.ExitOnError)
 
 		usageCreateCustomerSessionFlags            = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
@@ -4044,6 +4047,7 @@ func ParseEndpoint(
 	usageGetBillingEmailFlags.Usage = usageGetBillingEmailUsage
 	usageSetBillingEmailFlags.Usage = usageSetBillingEmailUsage
 	usageSetSpendCapFlags.Usage = usageSetSpendCapUsage
+	usageGetInferenceSpendCapsFlags.Usage = usageGetInferenceSpendCapsUsage
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
@@ -6121,6 +6125,9 @@ func ParseEndpoint(
 			case "set-spend-cap":
 				epf = usageSetSpendCapFlags
 
+			case "get-inference-spend-caps":
+				epf = usageGetInferenceSpendCapsFlags
+
 			case "get-usage-tiers":
 				epf = usageGetUsageTiersFlags
 
@@ -8142,6 +8149,9 @@ func ParseEndpoint(
 			case "set-spend-cap":
 				endpoint = c.SetSpendCap()
 				data, err = usagec.BuildSetSpendCapPayload(*usageSetSpendCapBodyFlag, *usageSetSpendCapSessionTokenFlag)
+			case "get-inference-spend-caps":
+				endpoint = c.GetInferenceSpendCaps()
+				data, err = usagec.BuildGetInferenceSpendCapsPayload(*usageGetInferenceSpendCapsSessionTokenFlag)
 			case "get-usage-tiers":
 				endpoint = c.GetUsageTiers()
 			case "create-customer-session":
@@ -21455,7 +21465,8 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    set-billing-metadata: Set an organization's billing contract terms. Restricted to platform admins.`)
 	fmt.Fprintln(os.Stderr, `    get-billing-email: Get the billing notification email for a PAYG organization`)
 	fmt.Fprintln(os.Stderr, `    set-billing-email: Set or clear the billing notification email for a PAYG organization`)
-	fmt.Fprintln(os.Stderr, `    set-spend-cap: Set the monthly chat spend cap for a PAYG organization`)
+	fmt.Fprintln(os.Stderr, `    set-spend-cap: Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys`)
+	fmt.Fprintln(os.Stderr, `    get-inference-spend-caps: List current usage and caps for the organization's materialized platform-managed inference keys`)
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
@@ -21573,7 +21584,7 @@ func usageSetSpendCapUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Set the monthly chat spend cap for a PAYG organization`)
+	fmt.Fprintln(os.Stderr, `Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -21581,7 +21592,25 @@ func usageSetSpendCapUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage set-spend-cap --body '{\n      \"monthly_credits\": 2\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage set-spend-cap --body '{\n      \"key_type\": \"internal\",\n      \"monthly_credits\": 2\n   }' --session-token \"abc123\"")
+}
+
+func usageGetInferenceSpendCapsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage get-inference-spend-caps", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List current usage and caps for the organization's materialized platform-managed inference keys`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-inference-spend-caps --session-token \"abc123\"")
 }
 
 func usageGetUsageTiersUsage() {

@@ -9,6 +9,7 @@ import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js
 import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortalSession.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
+import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
@@ -20,6 +21,7 @@ import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
+import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { SpendCap } from "../models/components/spendcap.js";
@@ -54,6 +56,10 @@ import {
   GetBillingEmailRequest,
   GetBillingEmailSecurity,
 } from "../models/operations/getbillingemail.js";
+import {
+  GetInferenceSpendCapsRequest,
+  GetInferenceSpendCapsSecurity,
+} from "../models/operations/getinferencespendcaps.js";
 import {
   GetPaygBillingSummaryRequest,
   GetPaygBillingSummarySecurity,
@@ -223,6 +229,25 @@ export class Usage extends ClientSDK {
   }
 
   /**
+   * getInferenceSpendCaps usage
+   *
+   * @remarks
+   * List current usage and caps for the organization's materialized platform-managed inference keys
+   */
+  async getInferenceSpendCaps(
+    request?: GetInferenceSpendCapsRequest | undefined,
+    security?: GetInferenceSpendCapsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<InferenceSpendCap>> {
+    return unwrapAsync(usageGetInferenceSpendCaps(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getPaygBillingSummary usage
    *
    * @remarks
@@ -374,7 +399,7 @@ export class Usage extends ClientSDK {
    * setSpendCap usage
    *
    * @remarks
-   * Set the monthly chat spend cap for a PAYG organization
+   * Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
    */
   async setSpendCap(
     request: SetSpendCapRequest,

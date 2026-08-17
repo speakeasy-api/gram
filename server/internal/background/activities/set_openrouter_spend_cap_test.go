@@ -78,21 +78,77 @@ func (l *failFirstSpendCapAuditLogger) LogOpenRouterAPIKeySetSpendCap(
 
 func createSpendCapActivityKey(t *testing.T, db openrouterrepo.DBTX, organizationID string, monthlyCredits int64) {
 	t.Helper()
+	createSpendCapActivityKeyForType(t, db, organizationID, openrouter.KeyTypeChat, monthlyCredits)
+}
+
+func createSpendCapActivityKeyForType(t *testing.T, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, monthlyCredits int64) {
+	t.Helper()
 	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
-		KeyType:        string(openrouter.KeyTypeChat),
-		Key:            pgtype.Text{String: "key_placeholder", Valid: true},
+		KeyType:        string(keyType),
+		Key:            pgtype.Text{String: "key_placeholder_" + string(keyType), Valid: true},
 		KeyEncrypted:   pgtype.Text{},
-		KeyHash:        "hash_placeholder",
+		KeyHash:        "hash_placeholder_" + string(keyType),
 		MonthlyCredits: monthlyCredits,
 	})
 	require.NoError(t, err)
+}
+
+func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
+		t,
+		"payg",
+		pgtype.Text{String: "subscription_placeholder", Valid: true},
+	)
+	createSpendCapActivityKeyForType(t, db, organizationID, openrouter.KeyTypeInternal, 50)
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeInternal,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 75 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 75,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeInternal),
+		}))
+	}).Return(75, nil).Once()
+
+	cacheAdapter := newSpendCapActivityCache(t)
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), cacheAdapter)
+	args := spendCapActivityArgs("operation_internal_placeholder", organizationID, 75)
+	args.KeyType = string(openrouter.KeyTypeInternal)
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(setter.Do)
+	_, err := env.ExecuteActivity(setter.Do, args)
+	require.NoError(t, err)
+	provisioner.AssertExpectations(t)
+
+	entry, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.Equal(t, "Security inference cap", entry.SubjectDisplay)
+	var generation spendCapAlertGenerationFixture
+	require.NoError(t, cacheAdapter.Get(
+		t.Context(),
+		activities.OpenRouterCreditsAlertGenerationKeyForTest(organizationID, openrouter.KeyTypeInternal),
+		&generation,
+	))
+	require.Equal(t, "operation_internal_placeholder", generation.OperationID)
+	require.EqualValues(t, 75, generation.MonthlyCredits)
 }
 
 func spendCapActivityArgs(operationID, organizationID string, limit int) activities.SetOpenRouterSpendCapArgs {
 	return activities.SetOpenRouterSpendCapArgs{
 		OperationID:      operationID,
 		OrganizationID:   organizationID,
+		KeyType:          string(openrouter.KeyTypeChat),
 		Limit:            limit,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"),
 		ActorDisplayName: nil,
@@ -146,6 +202,7 @@ func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) 
 	env.ExecuteWorkflow(background.OpenRouterSpendCapWorkflow, background.OpenRouterSpendCapParams{
 		OperationID:      "operation_retry_placeholder",
 		OrganizationID:   organizationID,
+		KeyType:          string(openrouter.KeyTypeChat),
 		Limit:            600,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"),
 		ActorDisplayName: nil,

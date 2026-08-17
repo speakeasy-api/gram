@@ -37,7 +37,8 @@ import { getTrialLifecycleFromDates } from "@/lib/trial-status";
  * section would otherwise render as "billing isn't managed through Stripe"
  * directly beside the checkout button that is about to set it up. The trial
  * lifecycle is read from the same session clock the checkout CTA and the chat
- * spend cap use, so the three can't disagree about when the trial is over.
+ * inference-cap controls use, so the three can't disagree about when the trial
+ * is over.
  */
 export function PaygPlanSection(): JSX.Element | null {
   const productTier = useProductTier();

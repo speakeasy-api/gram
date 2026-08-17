@@ -90,9 +90,9 @@ type LogOpenRouterAPIKeySetSpendCapEvent struct {
 	OpenRouterAPIKeySnapshotAfter  *OpenRouterAPIKeySpendCapSnapshot
 }
 
-// LogOpenRouterAPIKeySetSpendCap records an administrator-requested chat-key
-// cap change. The workflow applies the after value upstream and mirrors it
-// locally.
+// LogOpenRouterAPIKeySetSpendCap records an administrator-requested inference
+// cap change. The workflow applies the after value to the selected provider
+// key and mirrors it locally.
 func (l *Logger) LogOpenRouterAPIKeySetSpendCap(ctx context.Context, dbtx repo.DBTX, event LogOpenRouterAPIKeySetSpendCapEvent) error {
 	action := ActionOpenRouterAPIKeySetSpendCap
 	metadata, err := json.Marshal(openRouterAPIKeyMetadata{KeyType: event.KeyType, OperationID: event.OperationIdentifier})
@@ -109,6 +109,14 @@ func (l *Logger) LogOpenRouterAPIKeySetSpendCap(ctx context.Context, dbtx repo.D
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 
+	subjectDisplayName := "OpenRouter inference cap"
+	switch event.KeyType {
+	case "chat":
+		subjectDisplayName = "Other inference cap"
+	case "internal":
+		subjectDisplayName = "Security inference cap"
+	}
+
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -122,7 +130,7 @@ func (l *Logger) LogOpenRouterAPIKeySetSpendCap(ctx context.Context, dbtx repo.D
 
 		SubjectID:          event.OpenRouterAPIKeyURN.ID,
 		SubjectType:        string(subjectTypeOpenRouterAPIKey),
-		SubjectDisplayName: conv.ToPGTextEmpty("Chat spend cap"),
+		SubjectDisplayName: conv.ToPGTextEmpty(subjectDisplayName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: beforeSnapshot,

@@ -21,6 +21,7 @@ type Client struct {
 	GetBillingEmailEndpoint           goa.Endpoint
 	SetBillingEmailEndpoint           goa.Endpoint
 	SetSpendCapEndpoint               goa.Endpoint
+	GetInferenceSpendCapsEndpoint     goa.Endpoint
 	GetUsageTiersEndpoint             goa.Endpoint
 	CreateCustomerSessionEndpoint     goa.Endpoint
 	CreateCheckoutEndpoint            goa.Endpoint
@@ -34,7 +35,7 @@ type Client struct {
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:            getPeriodUsage,
 		GetTokensUnderManagementEndpoint:  getTokensUnderManagement,
@@ -42,6 +43,7 @@ func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, get
 		GetBillingEmailEndpoint:           getBillingEmail,
 		SetBillingEmailEndpoint:           setBillingEmail,
 		SetSpendCapEndpoint:               setSpendCap,
+		GetInferenceSpendCapsEndpoint:     getInferenceSpendCaps,
 		GetUsageTiersEndpoint:             getUsageTiers,
 		CreateCustomerSessionEndpoint:     createCustomerSession,
 		CreateCheckoutEndpoint:            createCheckout,
@@ -187,6 +189,29 @@ func (c *Client) SetSpendCap(ctx context.Context, p *SetSpendCapPayload) (res *S
 		return
 	}
 	return ires.(*SpendCap), nil
+}
+
+// GetInferenceSpendCaps calls the "getInferenceSpendCaps" endpoint of the
+// "usage" service.
+// GetInferenceSpendCaps may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetInferenceSpendCaps(ctx context.Context, p *GetInferenceSpendCapsPayload) (res []*InferenceSpendCap, err error) {
+	var ires any
+	ires, err = c.GetInferenceSpendCapsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*InferenceSpendCap), nil
 }
 
 // GetUsageTiers calls the "getUsageTiers" endpoint of the "usage" service.

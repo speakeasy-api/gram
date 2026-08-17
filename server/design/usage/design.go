@@ -99,15 +99,31 @@ var BillingEmail = Type("BillingEmail", func() {
 	})
 })
 
-// SpendCap is the monthly USD ceiling enforced by the organization's
-// customer-facing OpenRouter chat key.
+// SpendCap is the monthly USD ceiling enforced by one of the organization's
+// platform-managed inference keys.
 var SpendCap = Type("SpendCap", func() {
-	Attribute("monthly_credits", Int, "The monthly chat spend cap in USD", func() {
+	Attribute("key_type", String, "The platform-managed inference key whose cap is reported", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("monthly_credits", Int, "The monthly inference spend cap in USD", func() {
 		Minimum(constants.MinimumPaygSpendCapUSD)
 		Maximum(constants.MaximumPaygSpendCapUSD)
 	})
 
-	Required("monthly_credits")
+	Required("key_type", "monthly_credits")
+})
+
+// InferenceSpendCap reports current usage and the enforced monthly ceiling for
+// one materialized platform-managed inference key.
+var InferenceSpendCap = Type("InferenceSpendCap", func() {
+	Attribute("key_type", String, "The platform-managed inference function", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("credits_used", Float64, "Monthly usage in USD")
+	Attribute("monthly_credits", Int, "The enforced monthly spend cap in USD")
+	Attribute("disabled", Boolean, "Whether the platform-managed key is disabled")
+
+	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
 // StripeSubscription reports the live lifecycle state of the organization's
@@ -285,11 +301,14 @@ var _ = Service("usage", func() {
 	})
 
 	Method("setSpendCap", func() {
-		Description("Set the monthly chat spend cap for a PAYG organization")
+		Description("Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys")
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("monthly_credits", Int, "The monthly chat spend cap in USD", func() {
+			Attribute("key_type", String, "The platform-managed inference key to update. Defaults to chat for compatibility.", func() {
+				Enum("chat", "internal")
+			})
+			Attribute("monthly_credits", Int, "The monthly inference spend cap in USD", func() {
 				Minimum(constants.MinimumPaygSpendCapUSD)
 				Maximum(constants.MaximumPaygSpendCapUSD)
 			})
@@ -307,6 +326,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "setSpendCap")
 		Meta("openapi:extension:x-speakeasy-name-override", "setSpendCap")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setSpendCap"}`)
+	})
+
+	Method("getInferenceSpendCaps", func() {
+		Description("List current usage and caps for the organization's materialized platform-managed inference keys")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ArrayOf(InferenceSpendCap))
+
+		HTTP(func() {
+			GET("/rpc/usage.getInferenceSpendCaps")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getInferenceSpendCaps")
+		Meta("openapi:extension:x-speakeasy-name-override", "getInferenceSpendCaps")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getInferenceSpendCaps"}`)
 	})
 
 	Method("getUsageTiers", func() {

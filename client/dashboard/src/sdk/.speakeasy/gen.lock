@@ -547,6 +547,7 @@ trackedFiles:
   src/funcs/usageCreateStripePortalSession.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
   src/funcs/usageGetBillingEmail.ts: {}
+  src/funcs/usageGetInferenceSpendCaps.ts: {}
   src/funcs/usageGetPaygBillingSummary.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetStripeSubscription.ts: {}
@@ -853,6 +854,7 @@ trackedFiles:
   src/models/components/hooktracesummary.ts: {}
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
+  src/models/components/inferencespendcap.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
   src/models/components/ingestrequestbody.ts: {}
@@ -1187,6 +1189,7 @@ trackedFiles:
   src/models/components/setrootmcpendpointrequestbody.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
+  src/models/components/setspendcaprequestbody.ts: {}
   src/models/components/settoolmetadatabatchrequestbody.ts: {}
   src/models/components/settoolmetadatabatchresult.ts: {}
   src/models/components/settoolmetadatarequestbody.ts: {}
@@ -1580,6 +1583,7 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
+  src/models/operations/getinferencespendcaps.ts: {}
   src/models/operations/getinstance.ts: {}
   src/models/operations/getlatestdeployment.ts: {}
   src/models/operations/getmanagedassistant.ts: {}
@@ -2161,6 +2165,8 @@ trackedFiles:
   src/react-query/getGcpKmsKey.ts: {}
   src/react-query/getHooksSummary.core.ts: {}
   src/react-query/getHooksSummary.ts: {}
+  src/react-query/getInferenceSpendCaps.core.ts: {}
+  src/react-query/getInferenceSpendCaps.ts: {}
   src/react-query/getMCPSetupDocs.core.ts: {}
   src/react-query/getMCPSetupDocs.ts: {}
   src/react-query/getMcpEndpoint.core.ts: {}
@@ -4897,6 +4903,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getInferenceSpendCaps:
+    speakeasy-default-get-inference-spend-caps:
+      responses:
+        "200":
+          application/json: [{"credits_used": 4556.75, "disabled": true, "key_type": "internal", "monthly_credits": 488515}]
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getInstance:
     speakeasy-default-get-instance:
       parameters:
@@ -8104,7 +8119,7 @@ examples:
         application/json: {"monthly_credits": 270406}
       responses:
         "200":
-          application/json: {"monthly_credits": 456496}
+          application/json: {"key_type": "chat", "monthly_credits": 456496}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

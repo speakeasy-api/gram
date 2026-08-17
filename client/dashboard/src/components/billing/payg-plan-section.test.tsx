@@ -527,7 +527,7 @@ describe("PaygPlanSection", () => {
     });
 
     // Once the trial is over the section takes over from the CTA, on the same
-    // clock the CTA and the chat spend cap read.
+    // clock the CTA and the inference-cap read.
     it("takes over once the trial has ended", () => {
       mocks.session.mockReturnValue({
         trial: {

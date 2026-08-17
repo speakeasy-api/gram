@@ -25,10 +25,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
 import {
-  PaygCapPausedBanner,
+  PaygCapReachedBanners,
   PaygPaymentFailedBanner,
 } from "@/components/billing/billing-banners";
-import { ChatSpendCapSection } from "@/components/billing/chat-spend-cap-section";
+import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygUsageSection } from "@/components/billing/payg-usage-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
@@ -43,11 +43,11 @@ export default function Billing(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       {/* A failed payment is what stops the whole account, so it precedes the
-          cap warning when both states apply. The global header suppresses its
-          cap banner on this route to avoid a duplicate query and notice. */}
+          cap notices when both states apply. The global header suppresses its
+          cap banners on this route to avoid a duplicate query and notice. */}
       <Page.Banner>
         <PaygPaymentFailedBanner />
-        <PaygCapPausedBanner />
+        <PaygCapReachedBanners />
       </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
@@ -72,7 +72,7 @@ function BillingInner() {
         <StartPaygCheckoutCTA />
         <TumUsageSection />
         {/* Renders only during an active trial — the section owns that rule. */}
-        <ChatSpendCapSection />
+        <InferenceCapsSection />
         {isAdmin && <TumAdminSection />}
       </>
     );
@@ -88,7 +88,7 @@ function BillingInner() {
       {/* Renders only for pay as you go — the section owns that rule. */}
       <PaygPlanSection />
       {/* Renders only for pay as you go — the section owns that rule. */}
-      <ChatSpendCapSection />
+      <InferenceCapsSection />
       {/* Only pay-as-you-go organizations get product billing notifications;
           enterprise contracts are billed through their contract terms. */}
       {productTier === "payg" && <BillingEmailSection />}

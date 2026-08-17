@@ -542,7 +542,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
-	if key.MonthlyCredits == 0 && !key.Disabled {
+	if key.MonthlyCredits == 0 && !key.Disabled && limit == nil {
 		return 0, errors.New("cannot make an update to monthly credits of 0")
 	}
 	if limit == nil && keyType == KeyTypeChat && key.Disabled && !reinstate {
@@ -556,13 +556,13 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	if limit == nil && keyType == KeyTypeChat && org.GramAccountType == string(billing.TierPayg) && !reinstate {
-		// OpenRouter is the authority for a PAYG customer's chosen chat cap.
-		// Generic tier refreshes preserve both the mirrored value and the key's
+	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate {
+		// OpenRouter is the authority for a PAYG customer's chosen inference cap
+		// on each materialized platform key. Generic tier refreshes preserve both
+		// the mirrored value and the key's
 		// disabled state without touching upstream or rewriting the row. Only an
-		// explicit activation/re-subscription or setSpendCap operation passes a
-		// non-nil limit; activation is therefore the sole billing path that can
-		// reinstate a key disabled after subscription loss.
+		// explicit activation/re-subscription, deactivation policy clamp, or
+		// setSpendCap operation passes a non-nil limit.
 		return int(key.MonthlyCredits), nil
 	}
 

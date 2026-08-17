@@ -37,6 +37,11 @@ func SetSpendCapUsagePath() string {
 	return "/rpc/usage.setSpendCap"
 }
 
+// GetInferenceSpendCapsUsagePath returns the URL path to the usage service getInferenceSpendCaps HTTP endpoint.
+func GetInferenceSpendCapsUsagePath() string {
+	return "/rpc/usage.getInferenceSpendCaps"
+}
+
 // GetUsageTiersUsagePath returns the URL path to the usage service getUsageTiers HTTP endpoint.
 func GetUsageTiersUsagePath() string {
 	return "/rpc/usage.getUsageTiers"

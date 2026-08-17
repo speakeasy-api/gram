@@ -358,7 +358,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "openrouter-key:enable":
       return "enabled platform OpenRouter key";
     case "openrouter-key:set_spend_cap":
-      return "changed chat spend cap for";
+      return "changed inference cap for";
 
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";

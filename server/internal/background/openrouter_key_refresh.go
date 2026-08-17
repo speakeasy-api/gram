@@ -33,18 +33,21 @@ type OpenRouterKeyRefresher struct {
 
 // SetOpenRouterSpendCap starts one durable cap operation and waits until its
 // upstream PATCH, local mirror update, and audit entry have all completed.
-func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, operationID, orgID string, limit int, actor urn.Principal, actorDisplayName *string) error {
+func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, operationID, orgID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) error {
 	if operationID == "" {
 		return errors.New("spend-cap operation ID is required")
 	}
 	if orgID == "" {
 		return errors.New("organization ID is required")
 	}
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("invalid OpenRouter key type: %w", err)
+	}
 	if limit < constants.MinimumPaygSpendCapUSD || limit > constants.MaximumPaygSpendCapUSD {
 		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, limit)
 	}
 
-	workflowID := fmt.Sprintf("v1:openrouter-chat-spend-cap:%s", operationID)
+	workflowID := fmt.Sprintf("v1:openrouter-spend-cap:%s:%s", keyType, operationID)
 	run, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             string(w.TemporalEnv.Queue()),
@@ -53,6 +56,7 @@ func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, oper
 	}, OpenRouterSpendCapWorkflow, OpenRouterSpendCapParams{
 		OperationID:      operationID,
 		OrganizationID:   orgID,
+		KeyType:          string(keyType),
 		Limit:            limit,
 		Actor:            actor,
 		ActorDisplayName: actorDisplayName,
@@ -72,8 +76,11 @@ func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, oper
 }
 
 type OpenRouterSpendCapParams struct {
-	OperationID      string
-	OrganizationID   string
+	OperationID    string
+	OrganizationID string
+	// KeyType is empty only for workflows created before per-key caps. Those
+	// legacy payloads continue to target the other-inference (chat) key.
+	KeyType          string
 	Limit            int
 	Actor            urn.Principal
 	ActorDisplayName *string
@@ -95,6 +102,7 @@ func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapP
 	if err := workflow.ExecuteActivity(ctx, a.SetOpenRouterSpendCap, activities.SetOpenRouterSpendCapArgs{
 		OperationID:      params.OperationID,
 		OrganizationID:   params.OrganizationID,
+		KeyType:          params.KeyType,
 		Limit:            params.Limit,
 		Actor:            params.Actor,
 		ActorDisplayName: params.ActorDisplayName,

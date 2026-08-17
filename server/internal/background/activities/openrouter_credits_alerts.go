@@ -230,9 +230,6 @@ func (a *MaybeSendOpenRouterCreditsAlerts) readGeneration(
 	var generation openRouterCreditsAlertGeneration
 	err := a.cache.Get(ctx, openRouterCreditsAlertGenerationKey(orgID, keyType), &generation)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		if keyType != openrouter.KeyTypeChat {
-			return openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}, nil
-		}
 		latest, err := a.auditRepo.GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
 			OrganizationID: orgID,
 			SubjectID:      urn.NewOpenRouterAPIKey(orgID, string(keyType)).ID,
@@ -275,7 +272,7 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 			continue
 		}
 
-		generationAware := keyType == openrouter.KeyTypeChat && m.AccountType == string(billing.TierPayg)
+		generationAware := m.AccountType == string(billing.TierPayg)
 		generation := openRouterCreditsAlertGeneration{OperationID: "", MonthlyCredits: 0}
 		if generationAware {
 			loadedGeneration, err := a.readGeneration(ctx, m.OrganizationID, keyType)
@@ -389,7 +386,7 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 		}
 
 		deliver := func() error {
-			// Cap writes and chat-alert delivery share one per-org lock. The final
+			// Cap writes and alert delivery share one per-org/key lock. The final
 			// generation check therefore orders an in-flight poll either wholly
 			// before the cap change, or skips it after the new ladder is installed.
 			if c.generationAware {
@@ -433,8 +430,8 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 		}
 
 		var deliveryErr error
-		if c.keyType == openrouter.KeyTypeChat {
-			deliveryErr = withOpenRouterChatKeyBillingLock(ctx, a.logger, a.db, c.orgID, func(_ *repo.Queries) error {
+		if c.generationAware {
+			deliveryErr = withOpenRouterKeyBillingLock(ctx, a.logger, a.db, c.orgID, c.keyType, func(_ *repo.Queries) error {
 				return deliver()
 			})
 		} else {

@@ -25,6 +25,7 @@ type Server struct {
 	GetBillingEmail           http.Handler
 	SetBillingEmail           http.Handler
 	SetSpendCap               http.Handler
+	GetInferenceSpendCaps     http.Handler
 	GetUsageTiers             http.Handler
 	CreateCustomerSession     http.Handler
 	CreateCheckout            http.Handler
@@ -70,6 +71,7 @@ func New(
 			{"GetBillingEmail", "GET", "/rpc/usage.getBillingEmail"},
 			{"SetBillingEmail", "POST", "/rpc/usage.setBillingEmail"},
 			{"SetSpendCap", "POST", "/rpc/usage.setSpendCap"},
+			{"GetInferenceSpendCaps", "GET", "/rpc/usage.getInferenceSpendCaps"},
 			{"GetUsageTiers", "GET", "/rpc/usage.getUsageTiers"},
 			{"CreateCustomerSession", "POST", "/rpc/usage.createCustomerSession"},
 			{"CreateCheckout", "POST", "/rpc/usage.createCheckout"},
@@ -87,6 +89,7 @@ func New(
 		GetBillingEmail:           NewGetBillingEmailHandler(e.GetBillingEmail, mux, decoder, encoder, errhandler, formatter),
 		SetBillingEmail:           NewSetBillingEmailHandler(e.SetBillingEmail, mux, decoder, encoder, errhandler, formatter),
 		SetSpendCap:               NewSetSpendCapHandler(e.SetSpendCap, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendCaps:     NewGetInferenceSpendCapsHandler(e.GetInferenceSpendCaps, mux, decoder, encoder, errhandler, formatter),
 		GetUsageTiers:             NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
 		CreateCustomerSession:     NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
 		CreateCheckout:            NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
@@ -111,6 +114,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetBillingEmail = m(s.GetBillingEmail)
 	s.SetBillingEmail = m(s.SetBillingEmail)
 	s.SetSpendCap = m(s.SetSpendCap)
+	s.GetInferenceSpendCaps = m(s.GetInferenceSpendCaps)
 	s.GetUsageTiers = m(s.GetUsageTiers)
 	s.CreateCustomerSession = m(s.CreateCustomerSession)
 	s.CreateCheckout = m(s.CreateCheckout)
@@ -134,6 +138,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetBillingEmailHandler(mux, h.GetBillingEmail)
 	MountSetBillingEmailHandler(mux, h.SetBillingEmail)
 	MountSetSpendCapHandler(mux, h.SetSpendCap)
+	MountGetInferenceSpendCapsHandler(mux, h.GetInferenceSpendCaps)
 	MountGetUsageTiersHandler(mux, h.GetUsageTiers)
 	MountCreateCustomerSessionHandler(mux, h.CreateCustomerSession)
 	MountCreateCheckoutHandler(mux, h.CreateCheckout)
@@ -447,6 +452,59 @@ func NewSetSpendCapHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setSpendCap")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetInferenceSpendCapsHandler configures the mux to serve the "usage"
+// service "getInferenceSpendCaps" endpoint.
+func MountGetInferenceSpendCapsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getInferenceSpendCaps", f)
+}
+
+// NewGetInferenceSpendCapsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getInferenceSpendCaps" endpoint.
+func NewGetInferenceSpendCapsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetInferenceSpendCapsRequest(mux, decoder)
+		encodeResponse = EncodeGetInferenceSpendCapsResponse(encoder)
+		encodeError    = EncodeGetInferenceSpendCapsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInferenceSpendCaps")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

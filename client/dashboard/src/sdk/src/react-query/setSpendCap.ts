@@ -54,7 +54,7 @@ export type SetSpendCapMutationError =
  * setSpendCap usage
  *
  * @remarks
- * Set the monthly chat spend cap for a PAYG organization
+ * Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
  */
 export function useSetSpendCapMutation(
   options?: MutationHookOptions<

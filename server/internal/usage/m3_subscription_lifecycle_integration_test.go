@@ -254,7 +254,8 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 		DesiredState:   openrouter.KeyDesiredStateDisabled,
 	}))
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.disableCalls)
-	require.Empty(t, provisioner.refreshCalls)
+	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeInternal}, provisioner.refreshCalls)
+	require.EqualValues(t, 5, keyState(openrouter.KeyTypeInternal).MonthlyCredits)
 
 	secondAnchor := time.Date(2026, time.October, 2, 0, 0, 0, 0, time.UTC)
 	checkout("event_recheckout", "subscription_replacement", secondAnchor)
@@ -265,6 +266,8 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	}))
 	require.False(t, keyState(openrouter.KeyTypeChat).Disabled)
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
+	require.EqualValues(t, 100, keyState(openrouter.KeyTypeChat).MonthlyCredits)
+	require.EqualValues(t, 100, keyState(openrouter.KeyTypeInternal).MonthlyCredits)
 	require.Equal(t, "hash_placeholder_chat", keyState(openrouter.KeyTypeChat).KeyHash)
 	require.Equal(t, "hash_placeholder_internal", keyState(openrouter.KeyTypeInternal).KeyHash)
 
@@ -288,7 +291,11 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	require.False(t, keyState(openrouter.KeyTypeChat).Disabled)
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.disableCalls)
-	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.refreshCalls)
+	require.Equal(t, []openrouter.KeyType{
+		openrouter.KeyTypeInternal,
+		openrouter.KeyTypeChat,
+		openrouter.KeyTypeInternal,
+	}, provisioner.refreshCalls)
 
 	receipts, err := usagerepo.New(db).CountStripeWebhookReceiptsFixture(t.Context(), m3OrganizationID)
 	require.NoError(t, err)

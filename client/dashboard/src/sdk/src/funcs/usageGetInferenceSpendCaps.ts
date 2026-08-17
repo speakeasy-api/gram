@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  SpendCap,
-  SpendCap$inboundSchema,
-} from "../models/components/spendcap.js";
+  InferenceSpendCap,
+  InferenceSpendCap$inboundSchema,
+} from "../models/components/inferencespendcap.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetSpendCapRequest,
-  SetSpendCapRequest$outboundSchema,
-  SetSpendCapSecurity,
-} from "../models/operations/setspendcap.js";
+  GetInferenceSpendCapsRequest,
+  GetInferenceSpendCapsRequest$outboundSchema,
+  GetInferenceSpendCapsSecurity,
+} from "../models/operations/getinferencespendcaps.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setSpendCap usage
+ * getInferenceSpendCaps usage
  *
  * @remarks
- * Set the monthly spend cap for one of a PAYG organization's platform-managed inference keys
+ * List current usage and caps for the organization's materialized platform-managed inference keys
  */
-export function usageSetSpendCap(
+export function usageGetInferenceSpendCaps(
   client: GramCore,
-  request: SetSpendCapRequest,
-  security?: SetSpendCapSecurity | undefined,
+  request?: GetInferenceSpendCapsRequest | undefined,
+  security?: GetInferenceSpendCapsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    SpendCap,
+    Array<InferenceSpendCap>,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function usageSetSpendCap(
 
 async function $do(
   client: GramCore,
-  request: SetSpendCapRequest,
-  security?: SetSpendCapSecurity | undefined,
+  request?: GetInferenceSpendCapsRequest | undefined,
+  security?: GetInferenceSpendCapsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      SpendCap,
+      Array<InferenceSpendCap>,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,23 +95,21 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(SetSpendCapRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(GetInferenceSpendCapsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetSpendCapRequestBody, {
-    explode: true,
-  });
+  const body = null;
 
-  const path = pathToFunc("/rpc/usage.setSpendCap")();
+  const path = pathToFunc("/rpc/usage.getInferenceSpendCaps")();
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -130,7 +128,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setSpendCap",
+    operationID: "getInferenceSpendCaps",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -144,7 +142,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -174,7 +172,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    SpendCap,
+    Array<InferenceSpendCap>,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +183,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, SpendCap$inboundSchema),
+    M.json(200, z.array(InferenceSpendCap$inboundSchema)),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

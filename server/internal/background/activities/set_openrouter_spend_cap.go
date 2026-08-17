@@ -54,8 +54,11 @@ func NewSetOpenRouterSpendCap(
 }
 
 type SetOpenRouterSpendCapArgs struct {
-	OperationID      string
-	OrganizationID   string
+	OperationID    string
+	OrganizationID string
+	// KeyType is empty only for pre-deployment workflow payloads and defaults
+	// to the other-inference (chat) key for compatibility.
+	KeyType          string
 	Limit            int
 	Actor            urn.Principal
 	ActorDisplayName *string
@@ -75,17 +78,21 @@ func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendC
 	if args.OrganizationID == "" {
 		return errors.New("organization ID is required")
 	}
+	keyType := openrouter.KeyType(args.KeyType).OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("invalid OpenRouter key type: %w", err)
+	}
 	if args.Limit < constants.MinimumPaygSpendCapUSD || args.Limit > constants.MaximumPaygSpendCapUSD {
 		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, args.Limit)
 	}
 
-	return withOpenRouterChatKeyBillingLock(ctx, s.logger, s.db, args.OrganizationID, func(queries *activitiesrepo.Queries) error {
-		return s.setLocked(ctx, queries, args)
+	return withOpenRouterKeyBillingLock(ctx, s.logger, s.db, args.OrganizationID, keyType, func(queries *activitiesrepo.Queries) error {
+		return s.setLocked(ctx, queries, args, keyType)
 	})
 }
 
-func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activitiesrepo.Queries, args SetOpenRouterSpendCapArgs) error {
-	subject := urn.NewOpenRouterAPIKey(args.OrganizationID, string(openrouter.KeyTypeChat))
+func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activitiesrepo.Queries, args SetOpenRouterSpendCapArgs, keyType openrouter.KeyType) error {
+	subject := urn.NewOpenRouterAPIKey(args.OrganizationID, string(keyType))
 	auditQueries := auditrepo.New(s.db)
 	recorded, err := auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: args.OrganizationID,
@@ -123,29 +130,29 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 
 	key, err := openrouterrepo.New(s.db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: args.OrganizationID,
-		KeyType:        string(openrouter.KeyTypeChat),
+		KeyType:        string(keyType),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		if recorded {
 			return nil
 		}
-		return errors.New("chat key must be provisioned before setting its spend cap")
+		return fmt.Errorf("%s key must be provisioned before setting its inference cap", keyType)
 	}
 	if err != nil {
-		return fmt.Errorf("read chat key before setting spend cap: %w", err)
+		return fmt.Errorf("read %s key before setting inference cap: %w", keyType, err)
 	}
 	if key.Disabled {
 		if recorded {
 			return nil
 		}
-		return errors.New("cannot set spend cap while the chat key is disabled")
+		return fmt.Errorf("cannot set inference cap while the %s key is disabled", keyType)
 	}
 	if recorded {
 		// A cache failure after the durable cap mutation must be repairable on
 		// activity retry. The latest-audit check above prevents an older operation
 		// from replacing a newer generation; reconciliation never owns the alert
 		// ladder, so a local mirror drift does not suppress this repair.
-		return s.rearmCreditsAlerts(ctx, args)
+		return s.rearmCreditsAlerts(ctx, args, keyType)
 	}
 	before := key.MonthlyCredits
 	applied := false
@@ -200,16 +207,16 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 
 	refreshed := args.Limit
 	if !applied {
-		refreshed, err = s.openRouter.RefreshAPIKeyLimit(ctx, args.OrganizationID, openrouter.KeyTypeChat, &args.Limit)
+		refreshed, err = s.openRouter.RefreshAPIKeyLimit(ctx, args.OrganizationID, keyType, &args.Limit)
 		if err != nil {
-			return fmt.Errorf("refresh OpenRouter chat spend cap: %w", err)
+			return fmt.Errorf("refresh OpenRouter %s inference cap: %w", keyType, err)
 		}
 		appliedKey, err := openrouterrepo.New(s.db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
 			OrganizationID: args.OrganizationID,
-			KeyType:        string(openrouter.KeyTypeChat),
+			KeyType:        string(keyType),
 		})
 		if err != nil {
-			return fmt.Errorf("read chat key after setting spend cap: %w", err)
+			return fmt.Errorf("read %s key after setting inference cap: %w", keyType, err)
 		}
 		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
 			BeforeMonthlyCredits: before,
@@ -241,7 +248,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 			ActorDisplayName:    args.ActorDisplayName,
 			ActorSlug:           nil,
 			OpenRouterAPIKeyURN: subject,
-			KeyType:             string(openrouter.KeyTypeChat),
+			KeyType:             string(keyType),
 			OperationIdentifier: args.OperationID,
 			OpenRouterAPIKeySnapshotBefore: &audit.OpenRouterAPIKeySpendCapSnapshot{
 				MonthlyCredits: before,
@@ -258,22 +265,22 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, queries *activiti
 		return fmt.Errorf("commit spend-cap audit transaction: %w", err)
 	}
 
-	return s.rearmCreditsAlerts(ctx, args)
+	return s.rearmCreditsAlerts(ctx, args, keyType)
 }
 
-func (s *SetOpenRouterSpendCap) rearmCreditsAlerts(ctx context.Context, args SetOpenRouterSpendCapArgs) error {
+func (s *SetOpenRouterSpendCap) rearmCreditsAlerts(ctx context.Context, args SetOpenRouterSpendCapArgs, keyType openrouter.KeyType) error {
 	now := time.Now().UTC()
 	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
 	if err := s.cache.Set(
 		ctx,
-		openRouterCreditsAlertGenerationKey(args.OrganizationID, openrouter.KeyTypeChat),
+		openRouterCreditsAlertGenerationKey(args.OrganizationID, keyType),
 		openRouterCreditsAlertGeneration{
 			OperationID:    args.OperationID,
 			MonthlyCredits: int64(args.Limit),
 		},
 		cycleEnd.Sub(now)+openRouterCreditsAlertGrace,
 	); err != nil {
-		return fmt.Errorf("re-arm OpenRouter chat credits alerts: %w", err)
+		return fmt.Errorf("re-arm OpenRouter %s credits alerts: %w", keyType, err)
 	}
 	return nil
 }

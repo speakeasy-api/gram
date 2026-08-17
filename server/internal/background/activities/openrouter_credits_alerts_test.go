@@ -446,42 +446,49 @@ func TestMaybeSendOpenRouterCreditsAlerts_SkipsMetricCollectedBeforeCapChange(t 
 
 func TestMaybeSendOpenRouterCreditsAlerts_RecoversGenerationFromAuditAfterCacheLoss(t *testing.T) {
 	t.Parallel()
-	ctx := t.Context()
 
-	act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_generation_recovery")
-	orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
-	operationID := "operation_durable_placeholder"
-	require.NoError(t, audit.NewLogger().LogOpenRouterAPIKeySetSpendCap(ctx, conn, audit.LogOpenRouterAPIKeySetSpendCapEvent{
-		OrganizationID:      orgID,
-		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"),
-		ActorDisplayName:    nil,
-		ActorSlug:           nil,
-		OpenRouterAPIKeyURN: urn.NewOpenRouterAPIKey(orgID, string(openrouter.KeyTypeChat)),
-		KeyType:             string(openrouter.KeyTypeChat),
-		OperationIdentifier: operationID,
-		OpenRouterAPIKeySnapshotBefore: &audit.OpenRouterAPIKeySpendCapSnapshot{
-			MonthlyCredits: 100,
-		},
-		OpenRouterAPIKeySnapshotAfter: &audit.OpenRouterAPIKeySpendCapSnapshot{
-			MonthlyCredits: 200,
-		},
-	}))
+	for _, keyType := range openrouter.AllKeyTypes {
+		t.Run(string(keyType), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
 
-	metric := paygCreditsMetric(orgID, 180, 200)
-	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{metric}))
-	first := captured.Sent()
-	require.Len(t, first, 1)
+			act, conn, captured, cacheAdapter := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_generation_recovery_"+string(keyType))
+			orgID, _ := createAlertOrgWithAccountType(t, ctx, conn, "billing@example.test", "", billing.TierPayg)
+			operationID := "operation_durable_placeholder"
+			require.NoError(t, audit.NewLogger().LogOpenRouterAPIKeySetSpendCap(ctx, conn, audit.LogOpenRouterAPIKeySetSpendCapEvent{
+				OrganizationID:      orgID,
+				Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"),
+				ActorDisplayName:    nil,
+				ActorSlug:           nil,
+				OpenRouterAPIKeyURN: urn.NewOpenRouterAPIKey(orgID, string(keyType)),
+				KeyType:             string(keyType),
+				OperationIdentifier: operationID,
+				OpenRouterAPIKeySnapshotBefore: &audit.OpenRouterAPIKeySpendCapSnapshot{
+					MonthlyCredits: 100,
+				},
+				OpenRouterAPIKeySnapshotAfter: &audit.OpenRouterAPIKeySpendCapSnapshot{
+					MonthlyCredits: 200,
+				},
+			}))
 
-	// Simulate loss of all Redis state for this delivery. The durable audit row
-	// must restore the same provider idempotency key instead of the legacy key.
-	require.NoError(t, cacheAdapter.Delete(ctx, activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, openrouter.KeyTypeChat)))
-	require.NoError(t, cacheAdapter.Delete(ctx, fmt.Sprintf("openrouter-credits-alert:%s:chat:90:%s", orgID, operationID)))
-	require.NoError(t, cacheAdapter.Delete(ctx, "openrouter-credits-alert-recipient:"+first[0].IdempotencyKey))
-	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{metric}))
+			metric := paygCreditsMetric(orgID, 180, 200)
+			metric.KeyType = string(keyType)
+			require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{metric}))
+			first := captured.Sent()
+			require.Len(t, first, 1)
 
-	sent := captured.Sent()
-	require.Len(t, sent, 2)
-	require.Equal(t, sent[0].IdempotencyKey, sent[1].IdempotencyKey)
+			// Simulate loss of all Redis state for this delivery. The durable audit
+			// row must restore the same provider idempotency key for either key type.
+			require.NoError(t, cacheAdapter.Delete(ctx, activities.OpenRouterCreditsAlertGenerationKeyForTest(orgID, keyType)))
+			require.NoError(t, cacheAdapter.Delete(ctx, fmt.Sprintf("openrouter-credits-alert:%s:%s:90:%s", orgID, keyType, operationID)))
+			require.NoError(t, cacheAdapter.Delete(ctx, "openrouter-credits-alert-recipient:"+first[0].IdempotencyKey))
+			require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{metric}))
+
+			sent := captured.Sent()
+			require.Len(t, sent, 2)
+			require.Equal(t, sent[0].IdempotencyKey, sent[1].IdempotencyKey)
+		})
+	}
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_ReconcileLimitFlapDoesNotRearm(t *testing.T) {

@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  SpendCap,
-  SpendCap$Outbound,
-  SpendCap$outboundSchema,
-} from "../components/spendcap.js";
+  SetSpendCapRequestBody,
+  SetSpendCapRequestBody$Outbound,
+  SetSpendCapRequestBody$outboundSchema,
+} from "../components/setspendcaprequestbody.js";
 
 export type SetSpendCapSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type SetSpendCapRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  spendCap: SpendCap;
+  setSpendCapRequestBody: SetSpendCapRequestBody;
 };
 
 /** @internal */
@@ -53,7 +53,7 @@ export function setSpendCapSecurityToJSON(
 /** @internal */
 export type SetSpendCapRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  SpendCap: SpendCap$Outbound;
+  SetSpendCapRequestBody: SetSpendCapRequestBody$Outbound;
 };
 
 /** @internal */
@@ -63,12 +63,12 @@ export const SetSpendCapRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    spendCap: SpendCap$outboundSchema,
+    setSpendCapRequestBody: SetSpendCapRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      spendCap: "SpendCap",
+      setSpendCapRequestBody: "SetSpendCapRequestBody",
     });
   }),
 );

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   subscription: vi.fn(),
   periodUsage: vi.fn(),
   paygBillingSummary: vi.fn(),
+  inferenceCaps: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -83,6 +84,13 @@ vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
   useGetCreditUsage: () => ({ data: undefined }),
   invalidateAllGetCreditUsage: vi.fn(),
 }));
+// The inference caps back both the pay-as-you-go meters and the caps section,
+// so which tiers reach them is part of what these tests are about.
+vi.mock("@gram/client/react-query/getInferenceSpendCaps.js", () => ({
+  useGetInferenceSpendCaps: () =>
+    mocks.inferenceCaps() as { data: undefined; isError: boolean },
+  invalidateAllGetInferenceSpendCaps: vi.fn(),
+}));
 vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
   useSetSpendCapMutation: () => ({
     mutate: vi.fn(),
@@ -130,7 +138,7 @@ vi.mock("@/components/billing/tum-admin-section", () => ({
 // their placement and destructive-before-warning order.
 vi.mock("@/components/billing/billing-banners", () => ({
   PaygPaymentFailedBanner: () => <div data-testid="payment-banner" />,
-  PaygCapPausedBanner: () => <div data-testid="cap-banner" />,
+  PaygCapReachedBanners: () => <div data-testid="cap-banner" />,
 }));
 
 // Scope gating is exercised by the CTA's own RBAC check; the page frame here
@@ -169,8 +177,8 @@ const cta = () =>
 const billingEmailField = () =>
   screen.queryByLabelText(/billing notification email/i);
 
-const spendCapSection = () =>
-  screen.queryByRole("heading", { name: /chat spend cap/i });
+const inferenceCapsSection = () =>
+  screen.queryByRole("heading", { name: /inference caps/i });
 
 const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
 
@@ -230,6 +238,7 @@ describe("Billing", () => {
       data: undefined,
       isError: false,
     });
+    mocks.inferenceCaps.mockReturnValue({ data: undefined, isError: false });
   });
 
   it("places payment failure before the spend cap warning", () => {
@@ -292,17 +301,17 @@ describe("Billing", () => {
     },
   );
 
-  // The spend cap is a pay-as-you-go control. A trialing enterprise org is on
-  // its way onto PAYG, so it gets the cap locked rather than hidden — and the
-  // TUM early return is the path that org takes.
+  // The inference caps are a pay-as-you-go control. A trialing enterprise org
+  // is on its way onto PAYG, so it gets them locked rather than hidden — and
+  // the TUM early return is the path that org takes.
   it.each<ProductTier>(["payg", "enterprise"])(
-    "places the chat spend cap on the %s view",
+    "places the inference caps on the %s view",
     (tier) => {
       mocks.productTier.mockReturnValue(tier);
 
       renderBilling();
 
-      expect(spendCapSection()).not.toBeNull();
+      expect(inferenceCapsSection()).not.toBeNull();
     },
   );
 
@@ -356,22 +365,25 @@ describe("Billing", () => {
     expect(planSection()).toBeNull();
   });
 
-  it("shows no chat spend cap on the pre-checkout view", () => {
+  it("shows no inference caps on the pre-checkout view", () => {
     mocks.productTier.mockReturnValue("base");
 
     renderBilling();
 
-    expect(spendCapSection()).toBeNull();
+    expect(inferenceCapsSection()).toBeNull();
+    // A tier with no pay-as-you-go bill has nothing to cap, so it never asks.
+    expect(mocks.inferenceCaps).not.toHaveBeenCalled();
   });
 
-  it("shows no chat spend cap to enterprise without an active trial", () => {
+  it("shows no inference caps to enterprise without an active trial", () => {
     mocks.productTier.mockReturnValue("enterprise");
     mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
     expect(screen.getByText("tum usage")).toBeTruthy();
-    expect(spendCapSection()).toBeNull();
+    expect(inferenceCapsSection()).toBeNull();
+    expect(mocks.inferenceCaps).not.toHaveBeenCalled();
   });
 
   // Pay as you go bills through Stripe. The Polar usage meters describe a
@@ -399,6 +411,9 @@ describe("Billing", () => {
       expect(paygUsageSection()).toBeNull();
       expect(mocks.periodUsage).toHaveBeenCalled();
       expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
+      // The inference caps belong to the pay-as-you-go surfaces, so a tier
+      // with no PAYG state never issues their query.
+      expect(mocks.inferenceCaps).not.toHaveBeenCalled();
     },
   );
 

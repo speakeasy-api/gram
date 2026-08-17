@@ -1,7 +1,11 @@
 import {
-  CHAT_SPEND_CAP_ANCHOR,
-  isChatSpendCapReached,
-} from "@/components/billing/chat-spend-cap";
+  inferenceCapAnchor,
+  inferenceCapLabel,
+  inferenceCapPausedNote,
+  inferenceCapRaiseLabel,
+  isInferenceCapReached,
+  sortInferenceCaps,
+} from "@/components/billing/inference-caps";
 import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
 import { FullBleedBanner } from "@/components/full-bleed-banner";
@@ -11,7 +15,8 @@ import { Text } from "@/components/ui/Text";
 import { useProductTier } from "@/hooks/useProductTier";
 import { isNotFoundError } from "@/lib/route-errors";
 import { useOrgRoutes } from "@/routes";
-import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
+import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
+import { useGetInferenceSpendCaps } from "@gram/client/react-query/getInferenceSpendCaps.js";
 import { ArrowRight, CreditCard, PauseCircle } from "lucide-react";
 
 /**
@@ -21,7 +26,7 @@ import { ArrowRight, CreditCard, PauseCircle } from "lucide-react";
  * so neither one arrives through anything the user did here — a poll is the
  * only way they appear at all. Five minutes is slow enough that an open tab
  * isn't a load generator and fast enough that a paused organization isn't left
- * wondering why chat stopped.
+ * wondering why its inference stopped.
  *
  * Nothing polls in the background: a tab nobody is looking at can't show a
  * banner, so the request would only be paid for. Coming back to the tab is
@@ -98,54 +103,80 @@ function PaymentFailedBannerBody(): JSX.Element | null {
 }
 
 /**
- * Tells an organization that chat has stopped because it reached its own
- * monthly cap, and points at the field that raises it.
+ * Tells an organization which of its inference has stopped for reaching its own
+ * monthly cap, and points at the control that raises that cap.
  *
- * This one rides along with the page header rather than living on the billing
- * page: an organization whose chat has gone quiet has no reason to visit
- * billing, so the banner has to find them wherever they hit the silence.
+ * These ride along with the page header rather than living on the billing page:
+ * an organization whose assistants have gone quiet has no reason to visit
+ * billing, so the notice has to find them wherever they hit the silence.
+ *
+ * One banner per cap that has been reached. The caps are independent limits on
+ * unrelated work — a month can reach both — and a single merged notice would
+ * name neither the thing that stopped nor the control that starts it again.
  */
-export function PaygCapPausedBanner(): JSX.Element | null {
+export function PaygCapReachedBanners(): JSX.Element | null {
   const productTier = useProductTier();
 
   if (productTier !== "payg") return null;
 
   return (
     <RequireScope scope="org:read" level="section">
-      <CapPausedBannerBody />
+      <CapReachedBannersBody />
     </RequireScope>
   );
 }
 
-function CapPausedBannerBody(): JSX.Element | null {
-  const orgRoutes = useOrgRoutes();
-  const { data } = useGetCreditUsage(
+function CapReachedBannersBody(): JSX.Element | null {
+  const { data } = useGetInferenceSpendCaps(
     undefined,
     undefined,
     BILLING_BANNER_QUERY,
   );
 
-  if (!isChatSpendCapReached(data)) return null;
+  // The banners are whatever the list reports as reached. A read that failed
+  // with nothing cached says nothing rather than guessing at a state it has
+  // never seen — a banner is not the place to report an outage, since it would
+  // appear on every page in the app.
+  const reached = sortInferenceCaps(data ?? []).filter((cap) =>
+    isInferenceCapReached(cap),
+  );
+
+  if (reached.length === 0) return null;
+
+  return (
+    <>
+      {reached.map((cap) => (
+        <CapReachedBanner key={cap.keyType} cap={cap} />
+      ))}
+    </>
+  );
+}
+
+function CapReachedBanner({ cap }: { cap: InferenceSpendCap }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
 
   return (
     <FullBleedBanner
       icon={PauseCircle}
       role="status"
-      title="Chat spend cap reached"
-      description="Chat and the other AI-powered dashboard experiences are paused for the rest of the month. Raise the cap to start them again."
+      title={`${inferenceCapLabel(cap.keyType)} reached`}
+      description={inferenceCapPausedNote(cap.keyType)}
       actions={
         <RequireScope
           scope="org:admin"
           level="section"
           fallback={
             <Text small muted>
-              Ask an organization admin to raise the spend cap.
+              Ask an organization admin to raise this cap.
             </Text>
           }
         >
-          <orgRoutes.billing.Link hash={CHAT_SPEND_CAP_ANCHOR}>
+          {/* The link carries the cap's own anchor, so it lands on the one
+              control that ends this pause rather than the top of the section
+              the other cap also lives in. */}
+          <orgRoutes.billing.Link hash={inferenceCapAnchor(cap.keyType)}>
             <Button variant="secondary" size="sm" className="group">
-              Review spend cap
+              {inferenceCapRaiseLabel(cap.keyType)}
               <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
             </Button>
           </orgRoutes.billing.Link>

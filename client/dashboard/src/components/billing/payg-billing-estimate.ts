@@ -118,7 +118,7 @@ export function formatRecordedThrough(
 }
 
 /**
- * The highest chat spend cap threshold this month's spend has crossed.
+ * The highest inference-cap threshold this month's spend has crossed.
  *
  * The same ladder the alert emails walk, read the same way — the percentage is
  * truncated before it is compared — so the meter can't show a band the customer

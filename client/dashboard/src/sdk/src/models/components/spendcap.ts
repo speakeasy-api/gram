@@ -5,50 +5,52 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * The platform-managed inference key whose cap is reported
+ */
+export const SpendCapKeyType = {
+  Chat: "chat",
+  Internal: "internal",
+} as const;
+/**
+ * The platform-managed inference key whose cap is reported
+ */
+export type SpendCapKeyType = ClosedEnum<typeof SpendCapKeyType>;
+
 export type SpendCap = {
   /**
-   * The monthly chat spend cap in USD
+   * The platform-managed inference key whose cap is reported
+   */
+  keyType: SpendCapKeyType;
+  /**
+   * The monthly inference spend cap in USD
    */
   monthlyCredits: number;
 };
 
 /** @internal */
+export const SpendCapKeyType$inboundSchema: z.ZodMiniEnum<
+  typeof SpendCapKeyType
+> = z.enum(SpendCapKeyType);
+
+/** @internal */
 export const SpendCap$inboundSchema: z.ZodMiniType<SpendCap, unknown> = z.pipe(
   z.object({
+    key_type: SpendCapKeyType$inboundSchema,
     monthly_credits: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "key_type": "keyType",
       "monthly_credits": "monthlyCredits",
     });
   }),
 );
-/** @internal */
-export type SpendCap$Outbound = {
-  monthly_credits: number;
-};
 
-/** @internal */
-export const SpendCap$outboundSchema: z.ZodMiniType<
-  SpendCap$Outbound,
-  SpendCap
-> = z.pipe(
-  z.object({
-    monthlyCredits: z.int(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      monthlyCredits: "monthly_credits",
-    });
-  }),
-);
-
-export function spendCapToJSON(spendCap: SpendCap): string {
-  return JSON.stringify(SpendCap$outboundSchema.parse(spendCap));
-}
 export function spendCapFromJSON(
   jsonString: string,
 ): SafeParseResult<SpendCap, SDKValidationError> {

@@ -12,16 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acquirePaygOpenRouterChatKeyLock = `-- name: AcquirePaygOpenRouterChatKeyLock :exec
-SELECT pg_advisory_lock(hashtextextended('openrouter-chat-billing:' || $1::text, 0))
+const acquireOpenRouterKeyBillingLock = `-- name: AcquireOpenRouterKeyBillingLock :exec
+SELECT pg_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))
 `
+
+type AcquireOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
 
 // A session lock lets the reconciler serialize a billing projection read and
 // its upstream PATCH without holding a database transaction across the
 // network call. Billing writers take the same key transactionally before
 // changing the projection.
-func (q *Queries) AcquirePaygOpenRouterChatKeyLock(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, acquirePaygOpenRouterChatKeyLock, organizationID)
+func (q *Queries) AcquireOpenRouterKeyBillingLock(ctx context.Context, arg AcquireOpenRouterKeyBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
 	return err
 }
 
@@ -2139,12 +2144,17 @@ func (q *Queries) ReconcileAndRotateStripeInvoiceAllocation(ctx context.Context,
 	return idempotency_key, err
 }
 
-const releasePaygOpenRouterChatKeyLock = `-- name: ReleasePaygOpenRouterChatKeyLock :one
-SELECT pg_advisory_unlock(hashtextextended('openrouter-chat-billing:' || $1::text, 0)) AS unlocked
+const releaseOpenRouterKeyBillingLock = `-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)) AS unlocked
 `
 
-func (q *Queries) ReleasePaygOpenRouterChatKeyLock(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, releasePaygOpenRouterChatKeyLock, organizationID)
+type ReleaseOpenRouterKeyBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg ReleaseOpenRouterKeyBillingLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterKeyBillingLock, arg.KeyType, arg.OrganizationID)
 	var unlocked bool
 	err := row.Scan(&unlocked)
 	return unlocked, err

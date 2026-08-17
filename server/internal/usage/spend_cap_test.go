@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -23,14 +26,42 @@ import (
 type captureSpendCapScheduler struct {
 	operationID    string
 	organizationID string
+	keyType        openrouter.KeyType
 	limit          int
 	actor          urn.Principal
 	err            error
 }
 
-func (c *captureSpendCapScheduler) SetOpenRouterSpendCap(_ context.Context, operationID, organizationID string, limit int, actor urn.Principal, _ *string) error {
+type captureInferenceCredits struct {
+	openrouter.Provisioner
+	mu    sync.Mutex
+	calls []openrouter.KeyType
+}
+
+func (c *captureInferenceCredits) GetCreditsUsed(_ context.Context, _ string, keyType openrouter.KeyType) (float64, int, error) {
+	c.mu.Lock()
+	c.calls = append(c.calls, keyType)
+	c.mu.Unlock()
+	switch keyType {
+	case openrouter.KeyTypeChat:
+		return 25.5, 100, nil
+	case openrouter.KeyTypeInternal:
+		return 7.25, 50, nil
+	default:
+		return 0, 0, errors.New("unexpected key type")
+	}
+}
+
+func (c *captureInferenceCredits) capturedCalls() []openrouter.KeyType {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]openrouter.KeyType(nil), c.calls...)
+}
+
+func (c *captureSpendCapScheduler) SetOpenRouterSpendCap(_ context.Context, operationID, organizationID string, keyType openrouter.KeyType, limit int, actor urn.Principal, _ *string) error {
 	c.operationID = operationID
 	c.organizationID = organizationID
+	c.keyType = keyType
 	c.limit = limit
 	c.actor = actor
 	return c.err
@@ -41,16 +72,30 @@ func configureSpendCapSubscription(t *testing.T, service *Service, db repo.DBTX,
 
 	require.NoError(t, repo.New(db).CreateStripeSubscriptionBillingMetadataFixture(t.Context(), repo.CreateStripeSubscriptionBillingMetadataFixtureParams{
 		OrganizationID:       organizationID,
-		StripeCustomerID:     pgtype.Text{String: "cus_spend_cap", Valid: true},
+		StripeCustomerID:     pgtype.Text{String: "customer_placeholder", Valid: true},
 		StripeSubscriptionID: pgtype.Text{String: "sub_spend_cap", Valid: true},
 	}))
 	service.stripeClient = &checkoutStripeClient{subscriptionState: &stripeclient.SubscriptionState{
 		ID:                 "sub_spend_cap",
-		CustomerID:         "cus_spend_cap",
+		CustomerID:         "customer_placeholder",
 		Status:             status,
 		CurrentPeriodStart: time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
 		CurrentPeriodEnd:   time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC),
 	}}
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
+}
+
+func createUsageInferenceKey(t *testing.T, db repo.DBTX, organizationID string, keyType openrouter.KeyType, monthlyCredits int64) {
+	t.Helper()
+	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        string(keyType),
+		Key:            pgtype.Text{String: "key_placeholder_" + string(keyType), Valid: true},
+		KeyEncrypted:   pgtype.Text{},
+		KeyHash:        "hash_placeholder_" + string(keyType),
+		MonthlyCredits: monthlyCredits,
+	})
+	require.NoError(t, err)
 }
 
 func TestSetSpendCapWaitsForDedicatedOperation(t *testing.T) {
@@ -68,8 +113,123 @@ func TestSetSpendCapWaitsForDedicatedOperation(t *testing.T) {
 	require.Equal(t, 600, result.MonthlyCredits)
 	require.NotEmpty(t, scheduler.operationID)
 	require.Equal(t, organizationID, scheduler.organizationID)
+	require.Equal(t, openrouter.KeyTypeChat, scheduler.keyType)
 	require.Equal(t, 600, scheduler.limit)
 	require.Equal(t, "user-billing-email-admin", scheduler.actor.ID)
+}
+
+func TestSetSpendCapTargetsSecurityInferenceKey(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-security-inference-cap"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "active")
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeInternal, 50)
+	scheduler := &captureSpendCapScheduler{}
+	service.keyRefresher = scheduler
+	keyType := string(openrouter.KeyTypeInternal)
+
+	result, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{
+		KeyType:        &keyType,
+		MonthlyCredits: 75,
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(openrouter.KeyTypeInternal), result.KeyType)
+	require.Equal(t, openrouter.KeyTypeInternal, scheduler.keyType)
+	require.Equal(t, 75, scheduler.limit)
+}
+
+func TestSetSpendCapRejectsDisabledTargetWithoutScheduling(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-disabled-inference-cap"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "active")
+	require.NoError(t, openrouterrepo.New(db).DisableOpenRouterAPIKey(t.Context(), openrouterrepo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	}))
+	scheduler := &captureSpendCapScheduler{}
+	service.keyRefresher = scheduler
+
+	_, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{MonthlyCredits: 200})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Empty(t, scheduler.operationID)
+}
+
+func TestSetSpendCapRejectsAbsentTargetWithoutScheduling(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-absent-inference-cap"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	configureSpendCapSubscription(t, service, db, organizationID, "active")
+	scheduler := &captureSpendCapScheduler{}
+	service.keyRefresher = scheduler
+	keyType := string(openrouter.KeyTypeInternal)
+
+	_, err := service.SetSpendCap(billingEmailAdminContext(t, organizationID), &gen.SetSpendCapPayload{
+		KeyType:        &keyType,
+		MonthlyCredits: 200,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Empty(t, scheduler.operationID)
+}
+
+func TestGetInferenceSpendCapsListsOnlyMaterializedPlatformKeys(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-inference-cap-list"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeInternal, 50)
+	credits := &captureInferenceCredits{Provisioner: openrouter.NewDevelopment("key_placeholder")}
+	service.openRouter = credits
+
+	result, err := service.GetInferenceSpendCaps(
+		authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID)),
+		&gen.GetInferenceSpendCapsPayload{},
+	)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, credits.capturedCalls())
+	require.Equal(t, []*gen.InferenceSpendCap{
+		{KeyType: "chat", CreditsUsed: 25.5, MonthlyCredits: 100, Disabled: false},
+		{KeyType: "internal", CreditsUsed: 7.25, MonthlyCredits: 50, Disabled: false},
+	}, result)
+}
+
+func TestGetInferenceSpendCapsReturnsEmptyBeforeKeyMaterialization(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-inference-cap-empty"
+	service, _, _, _ := newTUMTestService(t, organizationID)
+	credits := &captureInferenceCredits{Provisioner: openrouter.NewDevelopment("key_placeholder")}
+	service.openRouter = credits
+
+	result, err := service.GetInferenceSpendCaps(
+		authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID)),
+		&gen.GetInferenceSpendCapsPayload{},
+	)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Empty(t, credits.capturedCalls())
+}
+
+func TestGetInferenceSpendCapsRequiresOrganizationRead(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-inference-cap-forbidden"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
+	credits := &captureInferenceCredits{Provisioner: openrouter.NewDevelopment("key_placeholder")}
+	service.openRouter = credits
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID))
+
+	_, err := service.GetInferenceSpendCaps(ctx, &gen.GetInferenceSpendCapsPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Empty(t, credits.capturedCalls())
 }
 
 func TestSetSpendCapRejectsStripeTrial(t *testing.T) {

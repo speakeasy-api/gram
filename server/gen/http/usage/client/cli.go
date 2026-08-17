@@ -143,7 +143,12 @@ func BuildSetSpendCapPayload(usageSetSpendCapBody string, usageSetSpendCapSessio
 	{
 		err = json.Unmarshal([]byte(usageSetSpendCapBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"monthly_credits\": 2\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"key_type\": \"internal\",\n      \"monthly_credits\": 2\n   }'")
+		}
+		if body.KeyType != nil {
+			if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+			}
 		}
 		if body.MonthlyCredits < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 1, true))
@@ -162,8 +167,24 @@ func BuildSetSpendCapPayload(usageSetSpendCapBody string, usageSetSpendCapSessio
 		}
 	}
 	v := &usage.SetSpendCapPayload{
+		KeyType:        body.KeyType,
 		MonthlyCredits: body.MonthlyCredits,
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetInferenceSpendCapsPayload builds the payload for the usage
+// getInferenceSpendCaps endpoint from CLI flags.
+func BuildGetInferenceSpendCapsPayload(usageGetInferenceSpendCapsSessionToken string) (*usage.GetInferenceSpendCapsPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetInferenceSpendCapsSessionToken != "" {
+			sessionToken = &usageGetInferenceSpendCapsSessionToken
+		}
+	}
+	v := &usage.GetInferenceSpendCapsPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

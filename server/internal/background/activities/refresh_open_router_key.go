@@ -44,7 +44,7 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 		return oops.E(oops.CodeInvalid, err, "invalid openrouter key type").LogError(ctx, o.logger)
 	}
 	if keyType == openrouter.KeyTypeChat {
-		return withOpenRouterChatKeyBillingLock(ctx, o.logger, o.db, args.OrgID, func(queries *repo.Queries) error {
+		return withOpenRouterKeyBillingLock(ctx, o.logger, o.db, args.OrgID, keyType, func(queries *repo.Queries) error {
 			projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrgID)
 			if err != nil {
 				return fmt.Errorf("read billing state before OpenRouter chat key refresh: %w", err)
