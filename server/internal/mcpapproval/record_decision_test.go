@@ -219,8 +219,8 @@ func TestRecordDecision_InvalidID(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// Reading the queue does not carry the right to commit the organisation to a
-// server.
+// Holding write access to a project does not carry the right to commit the
+// organisation to a server — deciding is org-admin authority.
 func TestRecordDecision_NonAdminCannotDecide(t *testing.T) {
 	t.Parallel()
 
