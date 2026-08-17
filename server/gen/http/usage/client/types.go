@@ -39,9 +39,10 @@ type GetPeriodUsageResponseBody struct {
 	IncludedServers *int `form:"included_servers,omitempty" json:"included_servers,omitempty" xml:"included_servers,omitempty"`
 	// The number of servers enabled at the time of the request
 	ActualEnabledServerCount *int `form:"actual_enabled_server_count,omitempty" json:"actual_enabled_server_count,omitempty" xml:"actual_enabled_server_count,omitempty"`
-	// The number of credits used
+	// The number of credits used. Only populated for platform admins.
 	Credits *int `form:"credits,omitempty" json:"credits,omitempty" xml:"credits,omitempty"`
-	// The number of credits included in the tier
+	// The number of credits included in the tier. Only populated for platform
+	// admins.
 	IncludedCredits *int `form:"included_credits,omitempty" json:"included_credits,omitempty" xml:"included_credits,omitempty"`
 	// Whether the project has an active subscription
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
@@ -1465,8 +1466,8 @@ func NewGetPeriodUsagePeriodUsageOK(body *GetPeriodUsageResponseBody) *usage.Per
 		Servers:                  *body.Servers,
 		IncludedServers:          *body.IncludedServers,
 		ActualEnabledServerCount: *body.ActualEnabledServerCount,
-		Credits:                  *body.Credits,
-		IncludedCredits:          *body.IncludedCredits,
+		Credits:                  body.Credits,
+		IncludedCredits:          body.IncludedCredits,
 		HasActiveSubscription:    *body.HasActiveSubscription,
 	}
 
@@ -2600,12 +2601,6 @@ func ValidateGetPeriodUsageResponseBody(body *GetPeriodUsageResponseBody) (err e
 	}
 	if body.ActualEnabledServerCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("actual_enabled_server_count", "body"))
-	}
-	if body.Credits == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("credits", "body"))
-	}
-	if body.IncludedCredits == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("included_credits", "body"))
 	}
 	if body.HasActiveSubscription == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("has_active_subscription", "body"))

@@ -656,14 +656,16 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 
 // readPeriodUsage reads the period usage from the customer state if available, otherwise reads the usage from the meters directly.
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
+	credits := -1
+	includedCredits := -1
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
 		ToolCalls:                -1,
 		IncludedToolCalls:        -1,
 		Servers:                  -1,
 		IncludedServers:          -1,
-		Credits:                  -1,
-		IncludedCredits:          -1,
+		Credits:                  nil,
+		IncludedCredits:          nil,
 		HasActiveSubscription:    false,
 		ActualEnabledServerCount: 0, // Not related to polar, populated elsewhere
 	}
@@ -712,9 +714,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		}
 
 		if creditMeter != nil {
-			usage.Credits = int(creditMeter.ConsumedUnits)
+			credits = int(creditMeter.ConsumedUnits)
 			if creditMeter.CreditedUnits > 0 {
-				usage.IncludedCredits = int(creditMeter.CreditedUnits)
+				includedCredits = int(creditMeter.CreditedUnits)
 			}
 		}
 	}
@@ -729,7 +731,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	// ran sequentially (~1s each to api.polar.sh), causing ~3s of unnecessary latency.
 	needToolCalls := usage.ToolCalls == -1
 	needServers := usage.Servers == -1
-	needCredits := usage.Credits == -1
+	needCredits := credits == -1
 
 	if needToolCalls || needServers || needCredits {
 		now := time.Now()
@@ -794,11 +796,11 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			usage.Servers = int(res.Total)
 		}
 		if res := <-creditsCh; res != nil {
-			usage.Credits = int(res.Total)
+			credits = int(res.Total)
 		}
 	}
 
-	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || usage.IncludedCredits == -1 {
+	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || includedCredits == -1 {
 		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDBase)
 		if err != nil {
 			return nil, fmt.Errorf("get free tier product: %w", err)
@@ -816,9 +818,11 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 
 		usage.IncludedToolCalls = conv.Ternary(usage.IncludedToolCalls == -1, freeTierLimits.ToolCalls, usage.IncludedToolCalls)
 		usage.IncludedServers = conv.Ternary(usage.IncludedServers == -1, freeTierLimits.Servers, usage.IncludedServers)
-		usage.IncludedCredits = conv.Ternary(usage.IncludedCredits == -1, freeTierLimits.Credits, usage.IncludedCredits)
+		includedCredits = conv.Ternary(includedCredits == -1, freeTierLimits.Credits, includedCredits)
 	}
 
+	usage.Credits = &credits
+	usage.IncludedCredits = &includedCredits
 	return &usage, nil
 }
 

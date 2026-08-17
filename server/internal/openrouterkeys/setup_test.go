@@ -179,9 +179,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-// seedKey inserts an organization and one OpenRouter key row. plaintext and
-// ciphertext control the two storage columns: pass "" to leave a column NULL.
-func seedKey(t *testing.T, ctx context.Context, ti *testInstance, orgSuffix string, keyType string, plaintext string, ciphertext string) string {
+// seedKey inserts an organization and one OpenRouter key row storing the
+// given key material encrypted. Pass "" as the key to leave the encrypted
+// column NULL, seeding a row that holds no key material.
+func seedKey(t *testing.T, ctx context.Context, ti *testInstance, orgSuffix string, keyType string, key string) string {
 	t.Helper()
 
 	orgID := "org-" + orgSuffix + "-" + uuid.NewString()[:8]
@@ -191,10 +192,16 @@ func seedKey(t *testing.T, ctx context.Context, ti *testInstance, orgSuffix stri
 		Slug: orgID,
 	}))
 
+	var ciphertext string
+	if key != "" {
+		var err error
+		ciphertext, err = ti.enc.Encrypt([]byte(key))
+		require.NoError(t, err)
+	}
+
 	_, err := orgrepo.New(ti.conn).CreateOpenRouterAPIKey(ctx, orgrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        keyType,
-		Key:            conv.ToPGTextEmpty(plaintext),
 		KeyEncrypted:   conv.ToPGTextEmpty(ciphertext),
 		KeyHash:        "hash-" + orgSuffix,
 		MonthlyCredits: 5,

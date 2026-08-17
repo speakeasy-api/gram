@@ -277,10 +277,12 @@ func TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy(t *testing.T) {
 	ctx := t.Context()
 	fixture := newTrialCapFixture(t)
 
-	_, err := repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+	ciphertext, err := fixture.provisioner.enc.Encrypt([]byte("sk-or-legacy-zero"))
+	require.NoError(t, err)
+	_, err = repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: fixture.orgID,
 		KeyType:        string(KeyTypeChat),
-		Key:            conv.ToPGText("sk-or-legacy-zero"),
+		KeyEncrypted:   conv.ToPGText(ciphertext),
 		KeyHash:        "hash-legacy",
 		MonthlyCredits: 0,
 	})

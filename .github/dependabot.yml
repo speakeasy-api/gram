@@ -60,30 +60,87 @@ updates:
       assistant-ui:
         patterns:
           - "@assistant-ui/*"
+      chartjs:
+        patterns:
+          - "chart.js"
+          - "chartjs-plugin-zoom"
+          - "react-chartjs-2"
       class-names:
         patterns:
           - "clsx"
           - "tailwind-merge"
+      logtape:
+        patterns:
+          - "@logtape/*"
+      mcp-sdk:
+        patterns:
+          - "@modelcontextprotocol/*"
+      monaco:
+        patterns:
+          - "@monaco-editor/*"
+          - "monaco-editor"
+      openrouter:
+        patterns:
+          - "@openrouter/*"
+      oxc-tooling:
+        patterns:
+          - "oxfmt"
+          - "oxlint"
+          - "oxlint-tsgolint"
+      polar-stripe:
+        patterns:
+          - "@polar-sh/checkout"
+          - "@stripe/*"
+      radix:
+        patterns:
+          - "@radix-ui/*"
+          - "radix-ui"
       react:
         patterns:
           - "react"
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
-      tanstack:
+      react-router:
         patterns:
-          - "@tanstack/*"
+          - "react-router"
+          - "react-router-dom"
+      storybook:
+        patterns:
+          - "@storybook/*"
+          - "storybook"
+      svix:
+        patterns:
+          - "svix"
+          - "svix-react"
       tailwind:
         patterns:
           - "tailwindcss"
           - "@tailwindcss/postcss"
           - "@tailwindcss/typography"
           - "@tailwindcss/vite"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      testing-library:
+        patterns:
+          - "@testing-library/*"
+      vega:
+        patterns:
+          - "vega"
+          - "vega-interpreter"
       vite:
         patterns:
           - "vite"
           - "@vitejs/*"
           - "vitest"
+      xstate:
+        patterns:
+          - "@xstate/*"
+          - "xstate"
+      zod:
+        patterns:
+          - "zod"
   - package-ecosystem: "docker"
     directories:
       - "/server"

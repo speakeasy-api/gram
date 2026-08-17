@@ -289,50 +289,21 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 	}
 }
 
-// plaintextKey resolves the usable API key material for a row, preferring the
-// encrypted column and treating the plaintext column as the legacy fallback.
-// A plaintext-only row lazily records its ciphertext (read-repair) without
-// touching the plaintext column; the platform-admin encrypt action is the
-// only writer that clears plaintext. Reads through the provisioning
-// transaction must pass its queries handle so the repair cannot deadlock
-// against the advisory lock it already holds.
-func (o *OpenRouter) plaintextKey(ctx context.Context, queries *repo.Queries, key repo.OpenrouterApiKey) (string, error) {
-	if key.KeyEncrypted.Valid {
-		plaintext, err := o.enc.Decrypt(key.KeyEncrypted.String)
-		if err != nil {
-			// Never fall back to the plaintext column here: a decrypt failure
-			// means this process runs with the wrong encryption key, and
-			// masking that would hide the misconfiguration until it reaches a
-			// scrubbed row where no fallback exists.
-			return "", fmt.Errorf("decrypt openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
-		}
-		return plaintext, nil
+// keyMaterial resolves the usable API key for a row by decrypting the
+// encrypted column, the only place key material lives. A row without a
+// ciphertext is a hard error, as is a decrypt failure, which means this
+// process runs with the wrong encryption key.
+func (o *OpenRouter) keyMaterial(key repo.OpenrouterApiKey) (string, error) {
+	if !key.KeyEncrypted.Valid {
+		return "", fmt.Errorf("openrouter key row for organization %s (%s) holds no encrypted key material", key.OrganizationID, key.KeyType)
 	}
 
-	if key.Key.String == "" {
-		return "", fmt.Errorf("openrouter key row for organization %s (%s) holds no key material", key.OrganizationID, key.KeyType)
-	}
-
-	ciphertext, err := o.enc.Encrypt([]byte(key.Key.String))
+	plaintext, err := o.enc.Decrypt(key.KeyEncrypted.String)
 	if err != nil {
-		return "", fmt.Errorf("encrypt openrouter key for read-repair: %w", err)
-	}
-	if err := queries.BackfillOpenRouterKeyEncryption(ctx, repo.BackfillOpenRouterKeyEncryptionParams{
-		OrganizationID: key.OrganizationID,
-		KeyType:        key.KeyType,
-		KeyEncrypted:   conv.ToPGText(ciphertext),
-	}); err != nil {
-		// Read-repair is best-effort: the plaintext column is still
-		// authoritative for this row and the platform-admin encrypt action can
-		// finish the job.
-		o.logger.ErrorContext(ctx, "failed to backfill openrouter key encryption",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(key.OrganizationID),
-			attr.SlogOpenRouterKeyType(key.KeyType),
-		)
+		return "", fmt.Errorf("decrypt openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
 	}
 
-	return key.Key.String, nil
+	return plaintext, nil
 }
 
 func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
@@ -347,13 +318,13 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		KeyType:        string(keyType),
 	})
 	switch {
-	// A real read failure must be checked before the missing-key case: a
-	// failed lookup returns a zero-valued row, so key.Key == "" would
-	// otherwise swallow the error and mint an upstream key.
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
-	case errors.Is(err, pgx.ErrNoRows), key.Key.String == "" && !key.KeyEncrypted.Valid:
+	// Only a missing row triggers provisioning. An existing row without a
+	// ciphertext hard-errors in keyMaterial below instead: minting a
+	// replacement would orphan the upstream key the row already names.
+	case errors.Is(err, pgx.ErrNoRows):
 		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
@@ -366,7 +337,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		if key.Disabled {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		openrouterKey, err = o.plaintextKey(ctx, o.repo, key)
+		openrouterKey, err = o.keyMaterial(key)
 		if err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 		}
@@ -410,25 +381,20 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		KeyType:        string(keyType),
 	})
 	switch {
-	// Read-failure check must precede the missing-key case — see
-	// ProvisionAPIKey.
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
-	case errors.Is(err, pgx.ErrNoRows), key.Key.String == "" && !key.KeyEncrypted.Valid:
+	case errors.Is(err, pgx.ErrNoRows):
 	default:
 		// The lockdown binds here too: the key may have been disabled between
-		// the caller's read and this re-read under the lock.
+		// the caller's read and this re-read under the lock. A row without a
+		// ciphertext hard-errors in keyMaterial rather than falling through to
+		// mint a replacement upstream key.
 		if key.Disabled {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		plaintext, keyErr := o.plaintextKey(ctx, txRepo, key)
+		plaintext, keyErr := o.keyMaterial(key)
 		if keyErr != nil {
 			return "", oops.E(oops.CodeUnexpected, keyErr, "error reading open router key data").LogError(ctx, o.logger)
-		}
-		// Commit so a lazy read-repair performed through the transaction
-		// persists; the deferred rollback would otherwise discard it.
-		if err := dbtx.Commit(ctx); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 		}
 		return plaintext, nil
 	}
@@ -459,13 +425,9 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", oops.E(oops.CodeUnexpected, err, "failed to encrypt openrouter key").LogError(ctx, o.logger)
 	}
 
-	// Dual-write during the expand phase: pods running the previous release
-	// still read the plaintext column, so new rows keep both copies until the
-	// contract release flips creation to encrypted-only.
 	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
-		Key:            conv.ToPGText(*keyResponse.Key),
 		KeyEncrypted:   conv.ToPGText(keyCiphertext),
 		KeyHash:        keyResponse.Data.Hash,
 		MonthlyCredits: int64(creditAmount),
@@ -624,7 +586,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
-	apiKey, err := o.plaintextKey(ctx, o.repo, key)
+	apiKey, err := o.keyMaterial(key)
 	if err != nil {
 		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
 	}
@@ -916,7 +878,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
-	apiKey, err := o.plaintextKey(ctx, o.repo, key)
+	apiKey, err := o.keyMaterial(key)
 	if err != nil {
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
 	}

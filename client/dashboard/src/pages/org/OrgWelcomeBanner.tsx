@@ -3,7 +3,9 @@ import {
   BrandMeshLayers,
 } from "@/components/brand-mesh";
 import { useOrganization } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { useOnboardingCta } from "@/hooks/useOnboardingCta";
+import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ type RouteCard = {
   meta: string;
   to: string;
   recommended?: boolean;
+  onClick?: () => void;
 };
 
 /**
@@ -29,8 +32,10 @@ type RouteCard = {
  */
 export function OrgWelcomeBanner(): JSX.Element | null {
   const organization = useOrganization();
+  const { orgSlug } = useSlugs();
   const orgRoutes = useOrgRoutes();
   const { visible } = useOrgWelcomeBanner();
+  const { setupStarted, markSetupStarted } = useOrgSetupStarted(orgSlug);
   // Same gate as the header's "Finish setup" banner: the wizard is an
   // enterprise org-admin surface.
   const { eligible: canSetUpOrg } = useOnboardingCta();
@@ -68,11 +73,14 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   if (canSetUpOrg) {
     cards.push({
       index: "03",
-      title: "Start enterprise rollout",
+      title: setupStarted
+        ? "Continue enterprise rollout"
+        : "Start enterprise rollout",
       body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
-      cta: "Begin rollout",
+      cta: setupStarted ? "Resume rollout" : "Begin rollout",
       meta: "5 steps · resumable",
       to: orgRoutes.setup.href(),
+      onClick: markSetupStarted,
     });
   }
 
@@ -125,6 +133,7 @@ function RouteCardLink({ card }: { card: RouteCard }): JSX.Element {
   return (
     <Link
       to={card.to}
+      onClick={card.onClick}
       className="group bg-card border-border hover:border-foreground relative flex min-h-[250px] flex-col gap-3 border px-6.5 pt-7.5 pb-6.5 no-underline transition-colors hover:no-underline"
     >
       {card.recommended && (
