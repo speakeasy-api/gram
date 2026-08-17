@@ -618,9 +618,10 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("slug", String, "Rename the slug.")
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
 	Attribute("name", String, "Set or clear the display name. An empty string clears it to NULL.")
-	Attribute("logo_asset_id", String, "Set the logo asset id.", func() {
-		Format(FormatUUID)
-	})
+	// No FormatUUID: the empty string is the "clear to NULL" sentinel and a
+	// format check would reject it before the handler runs. The handler
+	// validates any non-empty value as a uuid.
+	Attribute("logo_asset_id", String, "Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.")
 	Attribute("client_setup_documentation_url", String, "Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")

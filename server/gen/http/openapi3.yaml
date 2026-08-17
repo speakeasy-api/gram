@@ -78070,8 +78070,7 @@ components:
                     description: Upstream JWKS URI.
                 logo_asset_id:
                     type: string
-                    description: Set the logo asset id.
-                    format: uuid
+                    description: Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.
                 name:
                     type: string
                     description: Set or clear the display name. An empty string clears it to NULL.
