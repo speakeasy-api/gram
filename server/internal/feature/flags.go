@@ -43,8 +43,16 @@ const (
 	// project ID, so a project is consistently on or off and a single session's
 	// rows never split across both paths.
 	//
-	// Degrades to the synchronous write on any error: a slower write is always
+	// A failed flag lookup degrades to the synchronous write: a slower write is
 	// safer than a dropped transcript row.
+	//
+	// A failed *publish* does not, and cannot. The publish result is never
+	// awaited — awaiting it would put a broker round trip back on the request
+	// path and undo the change — so by the time a failure is known the hook has
+	// already responded. Those rows are lost, and the only trace is the
+	// chat_message_publish_failed log line. That is the accepted cost of the
+	// flag being on, and the reason to roll it out per project rather than
+	// globally.
 	FlagChatMessageAsyncPersist Flag = "chat-message-async-persist"
 
 	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document

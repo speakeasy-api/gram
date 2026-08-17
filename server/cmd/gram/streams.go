@@ -79,17 +79,21 @@ func newStreamsCommand() *cli.Command {
 		// Unset means no wake, announced loudly at boot rather than discovered
 		// as missing risk findings. Leaving these unset is only safe while the
 		// async transcript path is off everywhere.
+		// No Value defaults on address/namespace, deliberately: newTemporalClient
+		// returns a nil environment only when one of them is empty, and that nil
+		// is what the "unset disables wakes" contract above is built on. A
+		// default would make unset mean "dial localhost", so an operator who
+		// left it unset would get failing wakes against a dead address instead
+		// of the announced no-op.
 		&cli.StringFlag{
 			Name:    "temporal-address",
 			Usage:   "The address of the temporal server. Unset disables coordinator wakes for persisted transcript rows.",
 			EnvVars: []string{"TEMPORAL_ADDRESS"},
-			Value:   "localhost:7233",
 		},
 		&cli.StringFlag{
 			Name:    "temporal-namespace",
-			Usage:   "The temporal namespace to use",
+			Usage:   "The temporal namespace to use. Unset disables coordinator wakes for persisted transcript rows.",
 			EnvVars: []string{"TEMPORAL_NAMESPACE"},
-			Value:   "default",
 		},
 		&cli.StringFlag{
 			Name:    "temporal-task-queue",

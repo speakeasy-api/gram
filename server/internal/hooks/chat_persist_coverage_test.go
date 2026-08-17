@@ -258,3 +258,43 @@ func TestChatPersister_MalformedMessageErrorsSoItDeadLetters(t *testing.T) {
 		require.Error(t, handler.Handle(t.Context(), msg, gcp.MessageMetadata{ID: "bad-time"}))
 	})
 }
+
+// A proxied event that produces no transcript row still has to flag the chat.
+// The marker is the only durable trace that a natively captured session was
+// routed through LiteLLM, and moving the insert to the handler moved the mark
+// with it — but the handler only ever sees events that published a row, so the
+// filtered ones would otherwise lose the mark that the synchronous path sets.
+func TestIngest_AsyncPersist_FilteredProxiedEventStillMarksChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "filtered-proxied-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	// The session's chat already exists, created by the native hook stream.
+	prompt := "native prompt " + uuid.NewString()
+	native := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	native.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.IngestAuthenticated(t.Context(), authCtx, native)
+	require.NoError(t, err)
+
+	// A proxied event carrying nothing persistable, with the async path on.
+	enableAsyncChatPersist(t, ti, authCtx)
+	filtered := canonicalIngestPayload("litellm", "tool.requested", sessionID)
+	_, err = ti.service.IngestAuthenticated(t.Context(), authCtx, filtered)
+	require.NoError(t, err)
+
+	require.Empty(t, ti.chatMessages.published(), "a filtered event has no row to publish")
+
+	chatRow, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.True(t, chatRow.LitellmProxied,
+		"a proxied event must mark the chat even when it writes no transcript row")
+}

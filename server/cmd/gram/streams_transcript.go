@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -19,11 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 )
-
-// riskAnalysisSignalCooldown mirrors the value the worker uses. A wake carries
-// no payload, so a burst of them coalesces into the single pass they all ask
-// for.
-const riskAnalysisSignalCooldown = 30 * time.Second
 
 // newTranscriptWriter builds the chat message writer whose observers wake the
 // coordinators that consume transcript rows: risk analysis, skill efficacy, and
@@ -76,41 +70,53 @@ func newTranscriptWriter(
 
 	auditLogger := newAuditLogger()
 
-	writer.AddObserver(risk.NewObserver(
-		logger,
-		tracerProvider,
-		db,
-		background.NewThrottledSignaler(
-			&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-			riskAnalysisSignalCooldown,
-			logger.With(attr.SlogComponent("risk")),
-		),
-		auditLogger,
-	))
+	// Held so shutdown can flush them. A ThrottledSignaler coalesces wakes and
+	// fires the last one on the trailing edge of its cooldown; dropped on exit,
+	// that final wake never happens and the rows it would have announced sit
+	// unanalysed until some later write happens to wake the coordinator again.
+	riskSignaler := background.NewThrottledSignaler(
+		&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
+		background.RiskAnalysisSignalCooldown,
+		logger.With(attr.SlogComponent("risk")),
+	)
+	efficacySignaler := background.NewThrottledSignaler(
+		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+		background.SkillEfficacySignalCooldown,
+		logger.With(attr.SlogComponent("skill-efficacy")),
+	)
+	chatAnalysisSignaler := background.NewThrottledSignaler(
+		&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
+		background.ChatAnalysisSignalCooldown,
+		logger.With(attr.SlogComponent("chat-analysis")),
+	)
 
-	writer.AddObserver(efficacy.NewObserver(
-		logger,
-		background.NewThrottledSignaler(
-			&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
-			background.SkillEfficacySignalCooldown,
-			logger.With(attr.SlogComponent("skill-efficacy")),
-		),
-	))
-
-	writer.AddObserver(analysis.NewObserver(
-		logger,
-		background.NewThrottledSignaler(
-			&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-			background.ChatAnalysisSignalCooldown,
-			logger.With(attr.SlogComponent("chat-analysis")),
-		),
-	))
+	writer.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+	writer.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
+	writer.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
 
 	shutdown := func(ctx context.Context) error {
-		// Writer first: it owns the goroutines that call into the signalers, so
-		// closing the Temporal connection under them would race.
+		// Order matters, and mirrors the API server's drain (see start.go):
+		//
+		// Writer first — it owns the goroutines that call into the signalers, so
+		// flushing under them would race new signals against the flush.
+		//
+		// Then the signalers, sequentially and while Temporal is still open: a
+		// trailing-edge flush signals over the same gRPC connection, so closing
+		// Temporal first turns the flush into "the client connection is closing".
 		if err := writerShutdown(ctx); err != nil {
 			return fmt.Errorf("shutdown transcript writer: %w", err)
+		}
+		for _, s := range []struct {
+			name     string
+			signaler *background.ThrottledSignaler
+		}{
+			{name: "risk", signaler: riskSignaler},
+			{name: "skill-efficacy", signaler: efficacySignaler},
+			{name: "chat-analysis", signaler: chatAnalysisSignaler},
+		} {
+			if err := s.signaler.Shutdown(ctx); err != nil {
+				return fmt.Errorf("flush %s coordinator signals: %w", s.name, err)
+			}
 		}
 		if err := temporalShutdown(ctx); err != nil {
 			return fmt.Errorf("shutdown transcript writer temporal client: %w", err)

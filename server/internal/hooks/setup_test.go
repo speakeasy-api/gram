@@ -116,20 +116,10 @@ func (p *recordingChatMessagePublisher) Publish(_ context.Context, msg *chatv1.H
 	defer p.mu.Unlock()
 	p.messages = append(p.messages, msg)
 	if p.err != nil {
-		return failedPublishResult{err: p.err}
+		return gcp.NewErrPublishResult(p.err)
 	}
 	return gcp.NewSuccessPublishResult()
 }
-
-type failedPublishResult struct{ err error }
-
-func (r failedPublishResult) Ready() <-chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}
-
-func (r failedPublishResult) Get(context.Context) (string, error) { return "", r.err }
 
 func (p *recordingChatMessagePublisher) Stop(context.Context) error { return nil }
 

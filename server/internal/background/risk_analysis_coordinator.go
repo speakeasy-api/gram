@@ -30,6 +30,13 @@ const (
 	riskCoordinatorBatchSize  int   = 100
 
 	analyzeBatchStartToCloseTimeout = 50 * time.Minute
+
+	// RiskAnalysisSignalCooldown is the per-project window a ThrottledSignaler
+	// coalesces risk analysis wakes into. Exported for the same reason its
+	// siblings are: every process that writes chat messages has to wake this
+	// coordinator, and a second copy of the value in one of them drifts silently
+	// — the symptom is wakes at the wrong rate, which nothing fails on.
+	RiskAnalysisSignalCooldown = 30 * time.Second
 )
 
 // RiskAnalysisCoordinatorParams identifies the project this coordinator runs for.

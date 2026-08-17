@@ -1399,8 +1399,21 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	//
 	// On the async path the handler owns this, for the same reason it owns the
 	// insert — marking here would put the write back on the request path.
-	if !async && proxiedTranscriptSource(hookSource) {
-		defer s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
+	//
+	// But only when there is a row for it to own. Several event kinds below
+	// return without producing one (permission previews, unnamed tools, empty
+	// tool results, unhandled types), and those publish nothing, so nothing
+	// downstream can mark the chat. Falling back to marking here keeps the
+	// marker's meaning identical on both paths; it costs one UPDATE on the
+	// request path for exactly the events that were never going to write a row.
+	published := false
+	if proxiedTranscriptSource(hookSource) {
+		defer func() {
+			if async && published {
+				return
+			}
+			s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
+		}()
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
@@ -1527,6 +1540,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		// and the caller only uses that answer to mark the session natively
 		// captured. The handler makes the same mark once it knows.
 		err := s.publishChatMessage(ctx, metadata, authCtx, msg, title, hookSource, payload.Source.Adapter, uncorrelatedPrompt, nativePrompt)
+		// Hands the LiteLLM marker to the handler: it owns the chat row this
+		// message creates, so it can mark without touching the request path.
+		published = err == nil
 		return false, err
 	}
 
