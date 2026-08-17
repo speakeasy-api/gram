@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,17 +148,27 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           <span className="text-sm">{org.name}</span>
         </Row>
         <Row label="Slug">
-          <span className="text-sm">{org.slug}</span>
+          <CopyValue label="Slug" value={org.slug} className="text-sm" />
         </Row>
         <Row label="Organization id">
-          <span className="text-sm">{org.id}</span>
+          <CopyValue
+            label="Organization id"
+            value={org.id}
+            className="text-sm"
+          />
         </Row>
         <Row label="WorkOS id">
-          <span
-            className={cn("text-sm", !org.workos_id && "text-muted-foreground")}
-          >
-            {org.workos_id ?? "-"}
-          </span>
+          {/* No control over an absent value: a button that copies "-" is
+              worse than no button. */}
+          {org.workos_id ? (
+            <CopyValue
+              label="WorkOS id"
+              value={org.workos_id}
+              className="text-sm"
+            />
+          ) : (
+            <span className="text-muted-foreground text-sm">-</span>
+          )}
         </Row>
         <Row label="Created">
           <span className="text-sm">{fmtDateShort(org.created_at)}</span>

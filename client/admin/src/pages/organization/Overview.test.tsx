@@ -81,7 +81,17 @@ function labelsIn(group: string): string[] {
   );
 }
 
+const writeText = vi.fn<(text: string) => Promise<void>>(() =>
+  Promise.resolve(),
+);
+
 beforeEach(() => {
+  writeText.mockClear();
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+    writable: true,
+  });
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
@@ -461,6 +471,54 @@ describe("Overview", () => {
         whitelisted: false,
       });
     });
+  });
+
+  it("copies each identifier off its own row", async () => {
+    const identified = {
+      ...ORG,
+      workos_id: "org_workos_placeholder_identifier",
+    };
+    mocks.getOrganization.mockResolvedValue(identified);
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${identified.slug}`,
+    });
+
+    // Row by row, each against its own value. Three controls stand side by
+    // side, and one wired to a neighbour hands the operator an identifier that
+    // belongs to a different field of the same record, which reads as right.
+    const rows: [string, string][] = [
+      ["Copy Slug", identified.slug],
+      ["Copy Organization id", identified.id],
+      ["Copy WorkOS id", identified.workos_id],
+    ];
+    for (const [name, value] of rows) {
+      const control = await screen.findByRole("button", { name });
+      fireEvent.click(control);
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith(value);
+      });
+      expect(
+        await screen.findByRole("button", {
+          name: `${name.replace("Copy ", "")} copied`,
+        }),
+      ).toBeTruthy();
+    }
+    expect(writeText).toHaveBeenCalledTimes(rows.length);
+    // The three values are told apart, so a control pointed at a neighbour
+    // cannot pass by writing the same string twice.
+    expect(new Set(rows.map(([, value]) => value)).size).toBe(rows.length);
+  });
+
+  it("offers no copy control over an absent WorkOS id", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByText("WorkOS id");
+    expect(ORG.workos_id).toBeUndefined();
+    // A button that copies "-" is worse than no button.
+    expect(valueBeside("WorkOS id").textContent).toBe("-");
+    expect(screen.queryByRole("button", { name: "Copy WorkOS id" })).toBeNull();
   });
 
   it("renders a dash for a record that was never disabled", async () => {
