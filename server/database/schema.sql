@@ -6809,6 +6809,53 @@ ON platform_mcp_readiness (organization_id, project_id);
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_connection_idx
 ON platform_mcp_readiness (organization_id, connection_id);
 
+-- Session handoff links: short-lived capability URLs through which a rendered
+-- session-handoff document can be fetched by a cloud agent or another machine
+-- (session portability). The unguessable token IS the capability: the serving
+-- route is unauthenticated by design. Rows expire minutes after minting and
+-- are consumed on first read (burn-after-read), so a leaked link's exposure
+-- window is a single fetch or the TTL, whichever ends first.
+CREATE TABLE IF NOT EXISTS session_handoff_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- The harness session id the handoff was rendered from (matches
+  -- chats.external_chat_id semantics for captured coding-agent sessions).
+  session_id TEXT NOT NULL,
+  token TEXT NOT NULL,
+  -- Object-store URL of the rendered handoff document (Tigris via the assets
+  -- abstraction). The document itself never lands in Postgres: this row holds
+  -- the capability token, tenancy, and the atomic consume claim; the blob is
+  -- deleted on first read (bucket lifecycle policies are the backstop).
+  blob_url TEXT NOT NULL,
+  created_by_email TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  -- Set on the first successful read; once set, the link serves 404.
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT session_handoff_links_pkey PRIMARY KEY (id),
+  CONSTRAINT session_handoff_links_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite tenancy pin: the database, not the application, guarantees the
+  -- organization_id agrees with the project's real owner. Matters here because
+  -- the serving route is unauthenticated and scopes solely on these columns.
+  CONSTRAINT session_handoff_links_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_token_key ON session_handoff_links (token);
+
+-- Serves both cascade paths: an organization delete scans by the leading
+-- organization_id, a project delete by the full (organization_id, project_id)
+-- pair. Nothing reads this table by project_id alone -- links are fetched by
+-- token -- so a standalone project_id index would only cost write throughput.
+CREATE INDEX IF NOT EXISTS session_handoff_links_organization_project_idx
+ON session_handoff_links (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS session_handoff_links_expires_at_idx ON session_handoff_links (expires_at);
+
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_workflows (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
