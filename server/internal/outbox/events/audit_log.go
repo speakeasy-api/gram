@@ -93,9 +93,14 @@ type AuditLogCreatedPayloadV1 struct {
 
 	// ActingSurface is how the change was made — a dashboard session, an API
 	// key, Platform MCP, a project assistant — drawn from a closed server-side
-	// set. It is always present; 'unknown' means no surface was identifiable,
-	// never that one was omitted.
-	ActingSurface string `json:"acting_surface"`
+	// set. Every record Gram writes carries one, and 'unknown' means no surface
+	// was identifiable rather than that the field was omitted.
+	//
+	// It is optional in the schema even so. This payload is published under 62
+	// event types that consumers already validate against, and a newly required
+	// property breaks every one of them; optional keeps the addition additive
+	// while the value is in fact always sent.
+	ActingSurface string `json:"acting_surface,omitzero"`
 
 	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
 	ActorDisplayName   string          `json:"actor_display_name,omitzero"`

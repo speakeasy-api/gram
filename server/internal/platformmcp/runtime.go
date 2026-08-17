@@ -247,8 +247,15 @@ func contextWithPrincipal(ctx context.Context, principal Principal) context.Cont
 	// name. Other surfaces carry an internal client identifier that is not an
 	// OAuth client record, and recording it would misrepresent where the
 	// identity came from; the surface already says who acted.
-	if principal.HasConnection() && principal.ClientID != "" {
+	//
+	// The connection-less path clears the value rather than leaving it alone.
+	// This context may descend from a request that authenticated as some other
+	// OAuth client — the assistant adapter runs inside one — and inheriting it
+	// would attribute the write to a client that had no part in it.
+	if principal.HasConnection() {
 		ctx = contextvalues.SetOAuthClientID(ctx, principal.ClientID)
+	} else {
+		ctx = contextvalues.SetOAuthClientID(ctx, "")
 	}
 	return context.WithValue(ctx, principalContextKey{}, principal)
 }

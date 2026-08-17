@@ -490,6 +490,11 @@ function OrgAuditLogsInner() {
     if (selectedActor !== "all") {
       parts.push(`Filtered to actor: ${selectedActor}`);
     }
+    if (selectedSurface !== "all") {
+      parts.push(
+        `Filtered to acting surface: ${formatActingSurfaceLabel(selectedSurface)}`,
+      );
+    }
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
       const firstDate = dateGroups[0]!.date!;
@@ -505,6 +510,7 @@ function OrgAuditLogsInner() {
     selectedProjectSlug,
     selectedAction,
     selectedActor,
+    selectedSurface,
     logs.length,
     dateGroups,
     tsMode,

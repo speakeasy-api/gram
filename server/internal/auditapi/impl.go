@@ -326,44 +326,43 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	}, nil
 }
 
-func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+// facetOptions maps one facet query's rows onto the wire type.
+//
+// The three facet queries return distinct generated row types that happen to
+// carry the same three columns, so an accessor keeps the mapping itself in one
+// place: a change to how a facet option is built cannot land for actors and be
+// missed for surfaces.
+func facetOptions[Row any](rows []Row, read func(Row) (value string, displayName string, count int64)) []*gen.AuditLogFacetOption {
 	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
 	for _, row := range rows {
+		value, displayName, count := read(row)
 		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
+			Value:       value,
+			DisplayName: displayName,
+			Count:       count,
 		})
 	}
 
 	return options
+}
+
+func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditActorFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
 }
 
 // toAuditSurfaceFacetOptions passes surface values through unlabelled, as the
 // action facets do. The dashboard owns the wording for both, so the label lives
 // in one place rather than being split between here and the client.
 func toAuditSurfaceFacetOptions(rows []repo.ListAuditSurfaceFacetsRow) []*gen.AuditLogFacetOption {
-	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
-	for _, row := range rows {
-		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
-		})
-	}
-
-	return options
+	return facetOptions(rows, func(row repo.ListAuditSurfaceFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
 }
 
 func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.AuditLogFacetOption {
-	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
-	for _, row := range rows {
-		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
-		})
-	}
-
-	return options
+	return facetOptions(rows, func(row repo.ListAuditActionFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
 }
