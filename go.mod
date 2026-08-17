@@ -70,7 +70,7 @@ require (
 	github.com/samber/slog-multi v1.8.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
-	github.com/speakeasy-api/agenthooks v0.6.0
+	github.com/speakeasy-api/agenthooks v0.6.1-0.20260816234923-46452cc13fca
 	github.com/speakeasy-api/mcp-setup-docs/go v0.3.0
 	github.com/speakeasy-api/openapi v1.24.0
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
@@ -351,8 +351,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.3 // indirect
 )
-
-// TEMPORARY (Phase 2 of copilot support): consume the unreleased
-// ProviderCopilot from the local agenthooks checkout. Removed in Phase 4 once
-// the upstream tag is cut and pinned.
-replace github.com/speakeasy-api/agenthooks => ../agenthooks
