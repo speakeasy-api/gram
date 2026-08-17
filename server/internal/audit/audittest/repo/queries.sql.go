@@ -51,7 +51,9 @@ SELECT
   subject_slug,
   metadata,
   before_snapshot,
-  after_snapshot
+  after_snapshot,
+  acting_surface,
+  acting_client_id
 FROM audit_logs
 WHERE action = $1
 ORDER BY seq DESC
@@ -72,6 +74,8 @@ type GetLatestAuditLogByActionRow struct {
 	Metadata           []byte
 	BeforeSnapshot     []byte
 	AfterSnapshot      []byte
+	ActingSurface      string
+	ActingClientID     pgtype.Text
 }
 
 func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) (GetLatestAuditLogByActionRow, error) {
@@ -91,6 +95,8 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 		&i.Metadata,
 		&i.BeforeSnapshot,
 		&i.AfterSnapshot,
+		&i.ActingSurface,
+		&i.ActingClientID,
 	)
 	return i, err
 }

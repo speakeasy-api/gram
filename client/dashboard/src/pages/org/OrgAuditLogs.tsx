@@ -13,6 +13,10 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { subjectHref } from "@/components/auditlogs/subject-href";
+import {
+  formatActingSurfaceLabel,
+  isNotableActingSurface,
+} from "@/lib/audit-surfaces";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -218,6 +222,18 @@ function AuditLogRow({
             {highlightMatch ? highlightMatch(verbText) : verbText}
           </span>{" "}
           {renderSubject(log, orgSlug)}
+          {isNotableActingSurface(log.actingSurface) && (
+            <span
+              className="border-border text-muted-foreground ml-2 border px-1.5 py-0.5 align-middle text-xs whitespace-nowrap"
+              title={
+                log.actingClientId
+                  ? `OAuth client: ${log.actingClientId}`
+                  : undefined
+              }
+            >
+              via {formatActingSurfaceLabel(log.actingSurface)}
+            </span>
+          )}
         </span>
         {showDiff && (
           <button
@@ -393,6 +409,9 @@ function OrgAuditLogsInner() {
   const [selectedActor, setSelectedActor] = useQueryState("actor", {
     defaultValue: "all",
   });
+  const [selectedSurface, setSelectedSurface] = useQueryState("surface", {
+    defaultValue: "all",
+  });
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
@@ -421,6 +440,14 @@ function OrgAuditLogsInner() {
     [facetsData?.actions],
   );
   const actorOptions: Array<FacetOption> = facetsData?.actors ?? [];
+  const surfaceOptions: Array<FacetOption> = useMemo(
+    () =>
+      (facetsData?.surfaces ?? []).map((option) => ({
+        ...option,
+        displayName: formatActingSurfaceLabel(option.value),
+      })),
+    [facetsData?.surfaces],
+  );
 
   const {
     data,
@@ -435,6 +462,7 @@ function OrgAuditLogsInner() {
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
+    actingSurface: selectedSurface === "all" ? undefined : selectedSurface,
   });
 
   const logs = useMemo(
@@ -496,7 +524,8 @@ function OrgAuditLogsInner() {
   const hasActiveFilters =
     selectedProjectSlug !== "all" ||
     selectedAction !== "all" ||
-    selectedActor !== "all";
+    selectedActor !== "all" ||
+    selectedSurface !== "all";
 
   // --- Search & keyboard navigation state ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -775,6 +804,16 @@ function OrgAuditLogsInner() {
             allLabel="All actors"
             options={actorOptions}
           />
+          <FacetSelect
+            label="Surface"
+            value={selectedSurface}
+            onValueChange={(value) => {
+              void setSelectedSurface(value);
+            }}
+            placeholder="All surfaces"
+            allLabel="All surfaces"
+            options={surfaceOptions}
+          />
           <div className="flex flex-col gap-1.5">
             <Text small muted>
               Filters
@@ -788,6 +827,7 @@ function OrgAuditLogsInner() {
                   setSelectedProjectSlug("all"),
                   setSelectedAction("all"),
                   setSelectedActor("all"),
+                  setSelectedSurface("all"),
                 ]);
               }}
             >

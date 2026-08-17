@@ -13,7 +13,9 @@ INSERT INTO audit_logs (
   subject_slug,
   before_snapshot,
   after_snapshot,
-  metadata
+  metadata,
+  acting_surface,
+  acting_client_id
 ) VALUES (
   @organization_id,
   @project_id,
@@ -28,7 +30,9 @@ INSERT INTO audit_logs (
   @subject_slug,
   @before_snapshot,
   @after_snapshot,
-  @metadata
+  @metadata,
+  @acting_surface,
+  @acting_client_id
 )
 RETURNING id, organization_id;
 
@@ -63,6 +67,10 @@ WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
+  )
+  AND (
+    sqlc.narg(acting_surface)::text IS NULL
+    OR a.acting_surface = sqlc.narg(acting_surface)::text
   )
 ORDER BY a.seq DESC
 LIMIT 51;
@@ -105,6 +113,23 @@ SELECT
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
+
+-- name: ListAuditSurfaceFacets :many
+-- Assistant activity events are excluded: facets power the platform audit
+-- feed, which hides them (see ListAuditLogs).
+SELECT
+  acting_surface AS value,
+  acting_surface AS display_name,
+  COUNT(*)::bigint AS count
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND subject_type <> 'assistant'
+  AND (
+    sqlc.narg(project_id)::uuid IS NULL
+    OR project_id = sqlc.narg(project_id)::uuid
+  )
+GROUP BY acting_surface
+ORDER BY count DESC, acting_surface ASC;
 
 -- name: ListAuditActionFacets :many
 -- Assistant activity events are excluded: facets power the platform audit

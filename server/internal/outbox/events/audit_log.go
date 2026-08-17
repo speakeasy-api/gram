@@ -91,6 +91,12 @@ type AuditLogCreatedPayloadV1 struct {
 	SubjectID   string `json:"subject_id"`
 	SubjectType string `json:"subject_type"`
 
+	// ActingSurface is how the change was made — a dashboard session, an API
+	// key, Platform MCP, a project assistant — drawn from a closed server-side
+	// set. It is always present; 'unknown' means no surface was identifiable,
+	// never that one was omitted.
+	ActingSurface string `json:"acting_surface"`
+
 	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
 	ActorDisplayName   string          `json:"actor_display_name,omitzero"`
 	ActorSlug          string          `json:"actor_slug,omitzero"`
@@ -99,4 +105,9 @@ type AuditLogCreatedPayloadV1 struct {
 	BeforeSnapshot     json.RawMessage `json:"before_snapshot,omitempty"`
 	AfterSnapshot      json.RawMessage `json:"after_snapshot,omitempty"`
 	Metadata           json.RawMessage `json:"metadata,omitempty"`
+
+	// ActingClientID is the registered OAuth client the call authenticated as,
+	// taken from its client record rather than any header the caller sent.
+	// Omitted when the call carried no OAuth client.
+	ActingClientID string `json:"acting_client_id,omitzero"`
 }

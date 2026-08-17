@@ -12,7 +12,9 @@ SELECT
   subject_slug,
   metadata,
   before_snapshot,
-  after_snapshot
+  after_snapshot,
+  acting_surface,
+  acting_client_id
 FROM audit_logs
 WHERE action = @action
 ORDER BY seq DESC

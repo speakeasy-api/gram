@@ -28,6 +28,8 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 		BeforeSnapshot:     input.BeforeSnapshot,
 		AfterSnapshot:      input.AfterSnapshot,
 		Metadata:           input.Metadata,
+		ActingSurface:      input.ActingSurface,
+		ActingClientID:     conv.FromPGTextOrEmpty[string](input.ActingClientID),
 	}); err != nil {
 		return fmt.Errorf("append to outbox: %w", err)
 	}

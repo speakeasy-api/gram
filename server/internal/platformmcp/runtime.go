@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 const (
@@ -231,7 +232,24 @@ func ContextWithPrincipal(ctx context.Context, principal Principal) context.Cont
 	return contextWithPrincipal(ctx, principal)
 }
 
+// contextWithPrincipal binds the acting identity, and with it the attribution
+// audit records for any write the call goes on to make.
+//
+// Platform MCP authenticates its own way, so nothing else on the context tells
+// audit which surface is acting; without this mark a registration made by an
+// agent would be recorded exactly like one made from the dashboard. Marking
+// here rather than at each call site means every path that establishes a
+// principal — the HTTP endpoint and the assistant adapter alike — is attributed
+// by construction.
 func contextWithPrincipal(ctx context.Context, principal Principal) context.Context {
+	ctx = contextvalues.SetActingSurface(ctx, string(principal.surface()))
+	// Only a principal holding an OAuth connection has a registered client to
+	// name. Other surfaces carry an internal client identifier that is not an
+	// OAuth client record, and recording it would misrepresent where the
+	// identity came from; the surface already says who acted.
+	if principal.HasConnection() && principal.ClientID != "" {
+		ctx = contextvalues.SetOAuthClientID(ctx, principal.ClientID)
+	}
 	return context.WithValue(ctx, principalContextKey{}, principal)
 }
 

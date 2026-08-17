@@ -100,10 +100,11 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Int64: 0,
 			Valid: false,
 		},
-		ActorID:     conv.PtrToPGTextEmpty(payload.ActorID),
-		Action:      conv.PtrToPGTextEmpty(payload.Action),
-		SubjectType: conv.PtrToPGTextEmpty(payload.SubjectType),
-		SubjectID:   conv.PtrToPGTextEmpty(payload.SubjectID),
+		ActorID:       conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:        conv.PtrToPGTextEmpty(payload.Action),
+		SubjectType:   conv.PtrToPGTextEmpty(payload.SubjectType),
+		SubjectID:     conv.PtrToPGTextEmpty(payload.SubjectID),
+		ActingSurface: conv.PtrToPGTextEmpty(payload.ActingSurface),
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
@@ -213,6 +214,14 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
 	}
 
+	surfaceRows, err := queries.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+	}
+
 	actors := toAuditActorFacetOptions(actorRows)
 
 	// Facet values are actor IDs, so mask their display names the same way the
@@ -235,8 +244,9 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	}
 
 	return &gen.ListAuditLogFacetsResult{
-		Actors:  actors,
-		Actions: toAuditActionFacetOptions(actionRows),
+		Actors:   actors,
+		Actions:  toAuditActionFacetOptions(actionRows),
+		Surfaces: toAuditSurfaceFacetOptions(surfaceRows),
 	}, nil
 }
 
@@ -310,11 +320,29 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		BeforeSnapshot:     row.BeforeSnapshot,
 		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
+		ActingSurface:      row.ActingSurface,
+		ActingClientID:     conv.FromPGText[string](row.ActingClientID),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
 func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
+	for _, row := range rows {
+		options = append(options, &gen.AuditLogFacetOption{
+			Value:       row.Value,
+			DisplayName: row.DisplayName,
+			Count:       row.Count,
+		})
+	}
+
+	return options
+}
+
+// toAuditSurfaceFacetOptions passes surface values through unlabelled, as the
+// action facets do. The dashboard owns the wording for both, so the label lives
+// in one place rather than being split between here and the client.
+func toAuditSurfaceFacetOptions(rows []repo.ListAuditSurfaceFacetsRow) []*gen.AuditLogFacetOption {
 	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
 	for _, row := range rows {
 		options = append(options, &gen.AuditLogFacetOption{
