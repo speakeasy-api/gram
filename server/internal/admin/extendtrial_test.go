@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"testing"
 	"time"
@@ -11,8 +12,16 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -173,6 +182,9 @@ func TestExtendTrial_OrganizationWithNoTrialRow(t *testing.T) {
 
 	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_no_trial", Days: 3})
 	requireOopsCode(t, err, oops.CodeConflict)
+	// Extend and re-arm share one rejection helper, so each has to name its own
+	// message or the two can be swapped without a test noticing.
+	require.ErrorContains(t, err, "organization has no running enterprise trial to extend")
 
 	// Extend moves an end date; it must never be a way to arm a trial that was
 	// never granted, which is the auth flow's job.
@@ -413,4 +425,258 @@ func TestExtendTrial_ExtensionsAccumulate(t *testing.T) {
 	after := readTrial(t, ctx, conn, "org_ext_twice")
 	require.WithinDuration(t, seededEndsAt.Add(8*24*time.Hour), after.EndsAt.Time, time.Second,
 		"a second extension must build on the first")
+}
+
+func TestExtendTrial_WritesAnAuditEntry(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// id, name and slug all differ, so an assertion on one cannot pass on
+	// another. The seeded end date is ten days out and the extension is three,
+	// so the two dates in the metadata are far apart and neither is now().
+	seededEndsAt := time.Now().UTC().Add(10 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_audit", name: "org_ext_audit Name", slug: "org_ext_audit-slug", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_audit", endsAt: seededEndsAt})
+	before := readTrial(t, ctx, conn, "org_ext_audit")
+
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID:   "session-ext-audit",
+		Email:       "operator@example.test",
+		OIDCSubject: "oidc-subject-ext-audit",
+		Name:        "Test Operator",
+		HD:          "example.test",
+	})
+
+	countBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+
+	_, err = svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_audit", Days: 3})
+	require.NoError(t, err)
+
+	countAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+	require.Equal(t, countBefore+1, countAfter, "an extension must leave a trace in the organization's feed")
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+	require.Equal(t, "organization", entry.SubjectType)
+	require.Equal(t, "org_ext_audit", entry.SubjectID)
+	require.Equal(t, "org_ext_audit Name", entry.SubjectDisplay, "the customer's feed must name the organization, not only its id")
+	require.Equal(t, "org_ext_audit-slug", entry.SubjectSlug)
+
+	// A trial belongs to the organization, not to one of its projects. There is
+	// no foreign key here, so a project id that is set but names nothing would
+	// insert and then hide the entry behind the feed's project filter.
+	require.False(t, entry.ProjectID.Valid, "a trial extension must not be scoped to a project")
+
+	require.NotNil(t, entry.ActorDisplayName, "the entry must name who extended the trial")
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+
+	var metadata struct {
+		ExtendedByDays      int       `json:"extended_by_days"`
+		PreviousTrialEndsAt time.Time `json:"previous_trial_ends_at"`
+		TrialEndsAt         time.Time `json:"trial_ends_at"`
+	}
+	require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
+	require.Equal(t, 3, metadata.ExtendedByDays)
+
+	// The two dates the database wrote, in the order they happened. Reading them
+	// back to front would describe a trial that was cut short.
+	after := readTrial(t, ctx, conn, "org_ext_audit")
+	require.WithinDuration(t, before.EndsAt.Time, metadata.PreviousTrialEndsAt, 0, "the entry must carry the end date the row held before the extension")
+	require.WithinDuration(t, after.EndsAt.Time, metadata.TrialEndsAt, 0, "the entry must carry the end date the row holds now")
+	require.True(t, metadata.TrialEndsAt.After(metadata.PreviousTrialEndsAt), "an extension must read forwards")
+
+	// The trial lifecycle event; any other would deliver this to nobody.
+	_, err = audittestrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, audittestrepo.GetLatestOutboxPayloadByOrgParams{
+		OrganizationID: "org_ext_audit",
+		EventType:      string(events.OrganizationEnterpriseTrialV1.EventType()),
+	})
+	require.NoError(t, err, "an extension must enqueue an outbox entry on the enterprise trial event")
+}
+
+func TestExtendTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_actor", name: "Actor Co", slug: "ext-actor", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_actor", endsAt: time.Now().UTC().Add(10 * 24 * time.Hour)})
+
+	const operatorEmail = "operator@example.test"
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID:   "session-ext-actor",
+		Email:       operatorEmail,
+		OIDCSubject: "oidc-subject-ext-actor",
+		Name:        "Test Operator",
+		HD:          "example.test",
+	})
+
+	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_actor", Days: 3})
+	require.NoError(t, err)
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+
+	// The customer reads this feed, so a Speakeasy action carries the collective
+	// label. The read-side mask cannot reach this entry: it matches an actor id
+	// against a Gram user, and an admin session has an OIDC subject instead.
+	require.NotNil(t, entry.ActorDisplayName)
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+
+	// Without this, an entry naming nobody at all would satisfy the one above.
+	require.Equal(t, "oidc-subject-ext-actor", entry.ActorID,
+		"the entry must still record which operator acted, in the field the customer's feed does not render")
+	require.Equal(t, "user", entry.ActorType)
+
+	for name, field := range map[string]string{
+		"actor display name": conv.PtrValOr(entry.ActorDisplayName, ""),
+		"actor slug":         entry.ActorSlug,
+		"actor id":           entry.ActorID,
+		"subject display":    entry.SubjectDisplay,
+		"subject slug":       entry.SubjectSlug,
+		"metadata":           string(entry.Metadata),
+		"before snapshot":    string(entry.BeforeSnapshot),
+		"after snapshot":     string(entry.AfterSnapshot),
+	} {
+		require.NotContains(t, field, operatorEmail, "the operator's email must not reach the customer's audit feed through the %s", name)
+	}
+}
+
+// TestExtendTrial_AFailedAuditEntryRollsBackTheExtension pins that the write and
+// its entry commit together. An extension that outlived a failed entry would
+// leave the feed silent, which is the whole point of this slice.
+func TestExtendTrial_AFailedAuditEntryRollsBackTheExtension(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	seededEndsAt := time.Now().UTC().Add(10 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_atomic", name: "Atomic Co", slug: "ext-atomic", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_atomic", endsAt: seededEndsAt})
+	before := readTrial(t, ctx, conn, "org_ext_atomic")
+
+	// Failing the audit insert deterministically, from outside the handler. The
+	// test owns its database, so the constraint reaches no other test.
+	require.NoError(t, audittest.RejectAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended))
+
+	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_atomic", Days: 3})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	after := readTrial(t, ctx, conn, "org_ext_atomic")
+	require.Equal(t, before.EndsAt.Time, after.EndsAt.Time,
+		"an extension whose audit entry failed must not survive: was %s, now %s", before.EndsAt.Time, after.EndsAt.Time)
+	require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
+
+	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+// TestExtendTrial_ASecondExtensionThatUnblocksOntoAnExtendedTrialSucceeds is the
+// concurrency case the CTE created. Two operators extend the same trial in its
+// last moments: the first holds a row lock, the second blocks behind it, and the
+// seeded end date passes while it waits. By the time the second one unblocks the
+// trial has two more weeks on it, so the only correct answer is another
+// extension. A conflict here would tell an operator there is no running trial to
+// extend, about a trial that was just extended in front of them.
+//
+// The predicates therefore have to be evaluated by the locking read, which
+// re-evaluates against the newest row version once it unblocks. Left on the
+// outer UPDATE they run against the statement's own snapshot, which under READ
+// COMMITTED still shows the pre-extension row, and a row skipped by the qual
+// never reaches the recheck.
+func TestExtendTrial_ASecondExtensionThatUnblocksOntoAnExtendedTrialSucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// Close enough that it expires while the second call is blocked, far enough
+	// that the first call still finds a running trial. Five seconds is the budget
+	// for two round trips and a BeginTx on a loaded box, plus any drift between
+	// this process's clock and the database's, and it sets the test's runtime
+	// because the wait below runs it out.
+	seededEndsAt := time.Now().UTC().Add(5 * time.Second)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_race", name: "Race Co", slug: "ext-race", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_race", endsAt: seededEndsAt})
+
+	// The first operator extends by a fortnight and holds the transaction open.
+	first := testenv.BeginTx(t, ctx, conn)
+	extended, err := trialsRepo.New(first).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: "org_ext_race",
+		ExtendByDays:   14,
+	})
+	require.NoError(t, err)
+
+	second := make(chan error, 1)
+	go func() {
+		_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_race", Days: 3})
+		second <- err
+	}()
+
+	testenv.WaitForBlockedBackend(t, ctx, conn)
+
+	// The database's own clock, not the test process's: the seeded date has to
+	// have passed where the predicate is evaluated.
+	require.Eventually(t, func() bool {
+		clock, err := testrepo.New(conn).GetTransactionClockFixture(ctx)
+		return err == nil && clock.TransactionNow.Time.After(seededEndsAt)
+	}, 30*time.Second, 50*time.Millisecond, "expected the seeded end date to pass while the second extension was blocked")
+
+	select {
+	case err := <-second:
+		t.Fatalf("the second extension must still be blocked on the first, got %v", err)
+	default:
+	}
+
+	require.NoError(t, first.Commit(ctx))
+
+	require.NoError(t, <-second,
+		"an extension that unblocks onto a trial another operator just extended must not be reported as a conflict")
+
+	after := readTrial(t, ctx, conn, "org_ext_race")
+	require.WithinDuration(t, extended.EndsAt.Time.Add(3*24*time.Hour), after.EndsAt.Time, time.Second,
+		"the second extension must build on the first: first landed on %s, row now holds %s", extended.EndsAt.Time, after.EndsAt.Time)
+
+	// This is what the lock buys. FOR UPDATE returns the row version it waited
+	// for; a plain read returns the one its own snapshot shows, and the entry
+	// would claim the trial had been running only to the seeded date.
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
+	require.NoError(t, err)
+
+	var metadata struct {
+		PreviousTrialEndsAt time.Time `json:"previous_trial_ends_at"`
+	}
+	require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
+	require.WithinDuration(t, extended.EndsAt.Time, metadata.PreviousTrialEndsAt, 0,
+		"the entry must carry the date the first extension left the row on")
+}
+
+// TestExtendTrial_ADatabaseFailureIsNotReportedAsAConflict pins the branch that
+// tells pgx.ErrNoRows apart from every other error the extend query can answer.
+// Collapsing the two would tell an operator whose connection dropped, or whose
+// statement deadlocked, that the organization has no running trial to extend,
+// and would log nothing about the real fault.
+func TestExtendTrial_ADatabaseFailureIsNotReportedAsAConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	// A trial that is running in every respect, so a conflict here could only
+	// come from the handler collapsing the error, never from the guard.
+	seededEndsAt := time.Now().UTC().Add(10 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_ext_dberr", name: "DB Err Co", slug: "ext-dberr", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: "org_ext_dberr", endsAt: seededEndsAt})
+	before := readTrial(t, ctx, conn, "org_ext_dberr")
+
+	// Failing the write deterministically, from outside the handler, with an
+	// error that is emphatically not a missing row.
+	testenv.RejectWritesTo(t, ctx, conn, "trials")
+
+	_, err := svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: "org_ext_dberr", Days: 3})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	after := readTrial(t, ctx, conn, "org_ext_dberr")
+	require.Equal(t, before.EndsAt.Time, after.EndsAt.Time, "a failed extension must not move ends_at")
 }
