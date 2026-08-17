@@ -293,8 +293,8 @@ func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principa
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            project.ID,
 		RegistrationID:       uuid.NullUUID{},
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		Operation:            operationRegisterCatalogMCP,
 		IdempotencyKey:       request.IdempotencyKey,
 		InputHash:            request.InputHash,
@@ -444,8 +444,8 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 			CatalogProvider:      request.CatalogProvider,
 			CatalogReference:     request.CatalogReference,
 			Status:               registrationStatusPending,
-			ConnectionID:         connectionID,
-			ConnectionGeneration: generation,
+			ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+			ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
 		})
 		if err != nil {
 			return OperationReceipt{}, fmt.Errorf("create platform mcp catalog registration: %w", err)
@@ -860,8 +860,8 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 		InputHash:            row.InputHash,
 		ExpiresAt:            row.ExpiresAt.Time,
 		Replayed:             replayed,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 	}
 }
 
