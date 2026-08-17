@@ -1,6 +1,5 @@
 import { CalendarIcon, MoreHorizontalIcon } from "lucide-react";
 import {
-  createContext,
   useContext,
   useId,
   useRef,
@@ -35,30 +34,54 @@ import {
 import {
   errorMessage,
   MAX_TRIAL_EXTENSION_DAYS,
+  MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
+  MIN_TRIAL_REARM_DAYS,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 import { calendarDate, dayISO, dayOf, trialEndDay } from "@/lib/trialDates";
 import { fmtDateShort } from "@/lib/utils";
 
+import { PEEK_PANEL_ID } from "./PeekPanel";
 import {
   canExtendTrial,
+  canRearmTrial,
   useDisableOrganization,
   useEnableOrganization,
   useExtendTrial,
+  useRearmTrial,
 } from "./rowActions";
+import { WriteReportContext, type WriteReporter } from "./writeReport";
 
-// The trial length the rest of the system assumes, so the operator extending a
-// trial by the usual amount picks nothing.
-const DEFAULT_EXTENSION_DAYS = 14;
+export type { WriteReporter } from "./writeReport";
 
-const BOUNDS_HINT = `Enter a whole number of days between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}.`;
+// The trial length the rest of the system assumes, so the operator doing the
+// usual thing picks nothing. It is the starting value of both day counts.
+const DEFAULT_TRIAL_DAYS = 14;
+
+// Each action carries the bounds of its own endpoint. They hold the same pair
+// today and they are separate on the server so they can stop doing that.
+type DayBounds = { min: number; max: number };
+
+const EXTEND_BOUNDS: DayBounds = {
+  min: MIN_TRIAL_EXTENSION_DAYS,
+  max: MAX_TRIAL_EXTENSION_DAYS,
+};
+
+const REARM_BOUNDS: DayBounds = {
+  min: MIN_TRIAL_REARM_DAYS,
+  max: MAX_TRIAL_REARM_DAYS,
+};
+
+function boundsHint({ min, max }: DayBounds): string {
+  return `Enter a whole number of days between ${min} and ${max}.`;
+}
+
+type DayRange = { anchor: number; earliest: number; latest: number };
 
 // The days the server would accept, as the calendar's own range. `undefined`
 // where the record carries no end date to add days to.
-function extensionRange(
-  org: AdminOrganization,
-): { anchor: number; earliest: number; latest: number } | undefined {
+function extensionRange(org: AdminOrganization): DayRange | undefined {
   const anchor = trialEndDay(org.trial_ends_at);
   if (anchor === undefined) return undefined;
   return {
@@ -67,32 +90,6 @@ function extensionRange(
     latest: anchor + MAX_TRIAL_EXTENSION_DAYS,
   };
 }
-
-/**
- * How these controls report a write.
- *
- * The list owns both surfaces a write can report on, the live region and the
- * failure banner, and these controls are drawn inside table cells the list
- * cannot pass props to, so they reach them through context the way the peek
- * controls do.
- *
- * The default is a no-op rather than a throw: the peek panel renders these
- * actions too and it is mounted on its own in tests.
- */
-export type WriteReporter = {
-  // Speaks. Every write ends in one of these, whether it succeeded or not.
-  announce: (text: string) => void;
-  // Shows, and only for a failure with no dialog of its own to report in.
-  // `null` clears whatever is showing.
-  showFailure: (text: string | null) => void;
-};
-
-const NO_REPORTER: WriteReporter = {
-  announce: () => {},
-  showFailure: () => {},
-};
-
-const WriteReportContext = createContext<WriteReporter>(NO_REPORTER);
 
 export function WriteReportProvider({
   value,
@@ -108,15 +105,15 @@ export function WriteReportProvider({
   );
 }
 
-type OpenDialog = "disable" | "extend";
+type OpenDialog = "disable" | "extend" | "rearm";
 
 /**
- * Disable, re-enable and extend, wherever the record is on screen: the row
- * menu, the peek panel footer and the record header.
+ * Disable, re-enable, extend and re-arm, wherever the record is on screen: the
+ * row menu, the peek panel footer and the record header.
  *
- * One component for all three, because they are the same three actions
- * against the same record: two implementations would be two answers to
- * "can this trial be extended" and two confirmations to keep in step.
+ * One component for all of them, because they are the same actions against the
+ * same record: two implementations would be two answers to "can this trial be
+ * extended" and two confirmations to keep in step.
  *
  * `buttons` names the shape rather than the place. It was `footer` while the
  * peek panel was the only surface that drew it that way.
@@ -146,9 +143,23 @@ export function OrganizationActions({
   const disable = useDisableOrganization();
   const enable = useEnableOrganization();
   const extend = useExtendTrial();
+  const rearm = useRearmTrial();
 
   const isDisabled = Boolean(org.disabled_at);
-  const busy = disable.isPending || enable.isPending || extend.isPending;
+  const busy =
+    disable.isPending ||
+    enable.isPending ||
+    extend.isPending ||
+    rearm.isPending;
+
+  // The two failures a trial dialog reports, written once so the bounds refusal
+  // and the server's own refusal are led by the same words.
+  const extendFailureLead = `Could not extend the trial for ${org.name}`;
+  const rearmFailureLead = `Could not re-arm the trial for ${org.name}`;
+
+  // Only extend has a date to add days to. Re-arm counts from now, so it gets
+  // no calendar and its dialog falls back to a day count.
+  const extendRange = extensionRange(org);
 
   // Read once and used by both layouts, so a menu caller cannot get a
   // different answer from a buttons caller passing the same `actions`.
@@ -161,10 +172,8 @@ export function OrganizationActions({
   // `DialogTrigger`, and these dialogs have none: its `onCloseAutoFocus`
   // cancels FocusScope's own restore and then focuses `triggerRef.current`,
   // which is null here, so without this every close drops the keyboard onto
-  // `document.body`. The control that opened the dialog is still mounted on
-  // all six exit paths, the peek footer button being the same node after the
-  // write it started, so one handler covers success, Escape, Cancel, the
-  // backdrop and the X.
+  // `document.body`. One handler covers all five exits: success, Escape,
+  // Cancel, the backdrop and the X.
   const openedFrom = useRef<HTMLElement | null>(null);
 
   const openDialog = (dialog: OpenDialog, from: HTMLElement | null): void => {
@@ -173,16 +182,27 @@ export function OrganizationActions({
     // should open holding.
     disable.reset();
     extend.reset();
+    rearm.reset();
     setOpen(dialog);
   };
 
   const restoreFocus = (event: Event): void => {
     const control = openedFrom.current;
-    // A control that has left the page is not somewhere to put the keyboard.
-    // Radix's own restore is no better in that case, so this leaves it alone.
-    if (!control?.isConnected) return;
+    if (control?.isConnected) {
+      event.preventDefault();
+      control.focus();
+      return;
+    }
+
+    // A re-armed record is running rather than demoted, so the bar takes the
+    // Re-arm button down and mounts an Extend button in a sibling slot rather
+    // than reusing the node. The peek panel is already focusable, so the
+    // keyboard goes there. Nothing to fall back to on any other surface.
+    if (layout !== "buttons") return;
+    const panel = document.getElementById(PEEK_PANEL_ID);
+    if (!panel) return;
     event.preventDefault();
-    control.focus();
+    panel.focus();
   };
 
   const runDisable = (): void => {
@@ -226,9 +246,22 @@ export function OrganizationActions({
           announce(`${org.name} trial extended by ${dayCount(days)}.`);
         },
         onError: (error) =>
-          announce(
-            `Could not extend the trial for ${org.name}: ${errorMessage(error)}`,
-          ),
+          announce(`${extendFailureLead}: ${errorMessage(error)}`),
+      },
+    );
+  };
+
+  const runRearm = (days: number): void => {
+    rearm.mutate(
+      { id: org.id, days },
+      {
+        onSuccess: () => {
+          setOpen(undefined);
+          showFailure(null);
+          announce(`${org.name} trial re-armed for ${dayCount(days)}.`);
+        },
+        onError: (error) =>
+          announce(`${rearmFailureLead}: ${errorMessage(error)}`),
       },
     );
   };
@@ -246,13 +279,42 @@ export function OrganizationActions({
         />
       )}
       {open === "extend" && (
-        <ExtendTrial
-          org={org}
+        <TrialDaysDialog
+          bounds={EXTEND_BOUNDS}
+          range={extendRange}
+          title={`Extend the trial for ${org.name}?`}
+          description={
+            extendRange
+              ? `The trial ends on ${fmtDateShort(org.trial_ends_at)} now.`
+              : "The days are added to the date the trial ends on now, not to today."
+          }
+          submitLabel="Extend"
+          pendingLabel="Extending..."
+          failureLead={extendFailureLead}
           pending={extend.isPending}
           failure={extend.error}
           onCancel={() => setOpen(undefined)}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runExtend}
+        />
+      )}
+      {open === "rearm" && (
+        <TrialDaysDialog
+          bounds={REARM_BOUNDS}
+          range={undefined}
+          title={`Re-arm the trial for ${org.name}?`}
+          // Everything the write does, because an operator who reads "days" and
+          // expects only a new date has been told less than half of it. The
+          // gate is what the whitelist flag is called outside the schema.
+          description="Restores the account type, brings the model provider keys back, and takes the organization out from behind the book-a-demo gate. The trial then runs for the days below, counted from now rather than from the date the old one ended."
+          submitLabel="Re-arm"
+          pendingLabel="Re-arming..."
+          failureLead={rearmFailureLead}
+          pending={rearm.isPending}
+          failure={rearm.error}
+          onCancel={() => setOpen(undefined)}
+          onCloseAutoFocus={restoreFocus}
+          onSubmit={runRearm}
         />
       )}
     </>
@@ -318,6 +380,17 @@ export function OrganizationActions({
             Extend trial
           </Button>
         )}
+        {canRearmTrial(org) && (
+          <Button
+            variant="outline"
+            size="xs"
+            aria-label={`Re-arm trial for ${org.name}`}
+            aria-busy={busy}
+            onClick={(event) => openDialog("rearm", event.currentTarget)}
+          >
+            Re-arm trial
+          </Button>
+        )}
         {dialogs}
       </>,
     );
@@ -368,6 +441,13 @@ export function OrganizationActions({
               Extend trial
             </DropdownMenuItem>
           )}
+          {canRearmTrial(org) && (
+            <DropdownMenuItem
+              onSelect={() => openDialog("rearm", menuTrigger.current)}
+            >
+              Re-arm trial
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {dialogs}
@@ -379,8 +459,10 @@ function dayCount(days: number): string {
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
-// A modal takes the rest of the page out of the accessibility tree, the live
-// region included, so a failure the operator is looking at needs its own.
+// The dialog's own account of a failure, beside the field it is about. The
+// page's region does survive an open modal, because `hideOthers` exempts a node
+// that carries `aria-live` by name, but it is sr-only and polite: on its own it
+// leaves a sighted operator reading a dialog that reports nothing.
 function Failure({
   id,
   children,
@@ -452,15 +534,38 @@ function ConfirmDisable({
   );
 }
 
-function ExtendTrial({
-  org,
+// One day-count dialog for both trial writes. Extend and re-arm ask the same
+// question of the operator, refuse the same values and report a failure the
+// same way; only their bounds and their words differ. Two copies would be two
+// places to keep the refusal path honest.
+//
+// Exported for a test that renders it on a bounds pair neither endpoint uses.
+// Both real pairs hold 1 and 365, so nothing else can tell a dialog that reads
+// the `bounds` prop from one that hardcodes the extension bounds.
+export function TrialDaysDialog({
+  bounds,
+  range,
+  title,
+  description,
+  submitLabel,
+  pendingLabel,
+  failureLead,
   pending,
   failure,
   onCancel,
   onCloseAutoFocus,
   onSubmit,
 }: {
-  org: AdminOrganization;
+  bounds: DayBounds;
+  // The dates the operator can pick between, where the write has an end date to
+  // add days to. Without one there is nothing to pick against, so the dialog
+  // falls back to a day count. Re-arm is always that case.
+  range: DayRange | undefined;
+  title: string;
+  description: string;
+  submitLabel: string;
+  pendingLabel: string;
+  failureLead: string;
   pending: boolean;
   failure: Error | null;
   onCancel: () => void;
@@ -468,14 +573,9 @@ function ExtendTrial({
   onSubmit: (days: number) => void;
 }): JSX.Element {
   const { announce } = useContext(WriteReportContext);
-  // The record's own end date is what the server adds days to, so it is what
-  // the operator picks from. Without one there is no anchor to pick against and
-  // the day count stays: an anchor guessed from today would extend the trial
-  // from a date the server is not holding.
-  const range = extensionRange(org);
-  const [days, setDays] = useState(String(DEFAULT_EXTENSION_DAYS));
+  const [days, setDays] = useState(String(DEFAULT_TRIAL_DAYS));
   const [endsOn, setEndsOn] = useState<Date | undefined>(
-    () => range && calendarDate(range.anchor + DEFAULT_EXTENSION_DAYS),
+    () => range && calendarDate(range.anchor + DEFAULT_TRIAL_DAYS),
   );
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -484,7 +584,7 @@ function ExtendTrial({
 
   const hint = range
     ? `Pick a date between ${fmtDateShort(dayISO(range.earliest))} and ${fmtDateShort(dayISO(range.latest))}.`
-    : BOUNDS_HINT;
+    : boundsHint(bounds);
 
   // What the picked date is worth as the request the server takes. NaN where
   // nothing is picked, so the guard below refuses it rather than sending it.
@@ -495,13 +595,13 @@ function ExtendTrial({
     // A disabled day is not an enforced value: the calendar can still be left
     // holding nothing, and the day count has no calendar at all.
     const parsed = range ? picked : Number(days);
-    // The server's own bounds, refused here so a request that cannot succeed
+    // The endpoint's own bounds, refused here so a request that cannot succeed
     // never leaves the browser. A whole number, because the interval the
-    // server adds is a count of days.
+    // server works in is a count of days.
     if (
       !Number.isInteger(parsed) ||
-      parsed < MIN_TRIAL_EXTENSION_DAYS ||
-      parsed > MAX_TRIAL_EXTENSION_DAYS
+      parsed < bounds.min ||
+      parsed > bounds.max
     ) {
       setRejected(true);
       // Spoken as well as shown, because showing it a second time shows
@@ -509,7 +609,7 @@ function ExtendTrial({
       // repeated leaves the DOM untouched and a `role="alert"` announces only
       // what is inserted or changed. The live region alternates a zero-width
       // space, so it speaks every time.
-      announce(`Could not extend the trial for ${org.name}: ${hint}`);
+      announce(`${failureLead}: ${hint}`);
       return;
     }
     setRejected(false);
@@ -530,13 +630,11 @@ function ExtendTrial({
             and is not part of the accessibility tree. */}
         <form noValidate onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>Extend the trial for {org.name}?</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             {/* Radix points the dialog's description at this, so the bounds
                 are announced with the title rather than only after a refusal. */}
             <DialogDescription>
-              {range
-                ? `The trial ends on ${fmtDateShort(org.trial_ends_at)} now. ${hint}`
-                : `The days are added to the date the trial ends on now, not to today. ${hint}`}
+              {description} {hint}
             </DialogDescription>
           </DialogHeader>
 
@@ -591,8 +689,8 @@ function ExtendTrial({
               <Input
                 id={fieldID}
                 type="number"
-                min={MIN_TRIAL_EXTENSION_DAYS}
-                max={MAX_TRIAL_EXTENSION_DAYS}
+                min={bounds.min}
+                max={bounds.max}
                 step={1}
                 value={days}
                 disabled={pending}
@@ -637,7 +735,7 @@ function ExtendTrial({
               Cancel
             </Button>
             <Button type="submit" size="sm" disabled={pending}>
-              {pending ? "Extending..." : "Extend"}
+              {pending ? pendingLabel : submitLabel}
             </Button>
           </DialogFooter>
         </form>

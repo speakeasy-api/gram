@@ -125,6 +125,16 @@ func (s *Service) shadowCompareCanonicalFold(ctx context.Context, orgID string, 
 	}()
 }
 
+// canonicalOrgFor resolves the fold flag to the org id the repo params carry:
+// the org id when folding is enabled, "" when the org serves literal
+// identities. The single choke point for fold gating on org-scoped reads.
+func (s *Service) canonicalOrgFor(ctx context.Context, orgID string) string {
+	if fold, _ := s.canonicalIdentityMode(ctx, orgID); fold {
+		return orgID
+	}
+	return ""
+}
+
 // resolveUserScope resolves an employee identifier into either a canonical
 // map-backed identity (fold flag on) or the legacy Postgres-expanded set —
 // exactly one of the two is populated, and the repo's identity filter prefers
