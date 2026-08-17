@@ -29,13 +29,11 @@ import {
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { useProject } from "@/contexts/Auth";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { encodeCrumb } from "@/pages/costs/taxonomy";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
 import type { ShadowMCPInventoryUserSource } from "@gram/client/models/components/shadowmcpinventoryusersource.js";
-import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -411,9 +409,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const onOpenUser = (user: ShadowMCPInventoryUser) => {
     if (!user.email) return;
 
-    void navigate(
-      `${routes.costs.href()}/${encodeCrumb({ dim: Dimension.Email, value: user.email })}`,
-    );
+    // The employee detail route resolves a raw email segment, so no
+    // name-slug lookup is needed here.
+    void navigate(routes.employees.detail.href(encodeURIComponent(user.email)));
   };
 
   useEffect(() => {

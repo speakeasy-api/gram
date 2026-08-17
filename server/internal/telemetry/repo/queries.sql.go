@@ -99,7 +99,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, ca
 	if len(identity.Emails) > 0 {
 		match = append(match, squirrel.And{
 			squirrel.Eq{"telemetry_logs.user_id": ""},
-			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails},
+			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails}, //nolint:glint // legacy flag-off identity path; deleted at GA with the canonical fold rollout
 		})
 	}
 
@@ -1582,7 +1582,7 @@ func (q *Queries) GetUnproxiedMcpServerUserUsage(ctx context.Context, arg GetUnp
 		FromSelect(innerSb, "per_trace").
 		Where("server_url != ''").
 		Where(unproxiedMcpServerUsageURLMatch(arg.CanonicalURL)).
-		GroupBy("user_email").
+		GroupBy("user_email"). //nolint:glint // searchUsers raw-logs path, not yet folded; needs its own shadow comparison (DNO-857 tail)
 		OrderBy("call_count DESC", "user_email ASC").
 		Limit(uint64(limit + 1)). //nolint:gosec // limit is clamped to 1..500 by clampUnproxiedMcpServerUsageLimit.
 		Offset(uint64(offset))    //nolint:gosec // offset comes from a decoded, non-negative cursor.
@@ -5679,8 +5679,8 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
-	sb = sb.GroupBy("user_email").
-		OrderBy("event_count DESC")
+	sb = sb.GroupBy("user_email"). //nolint:glint // hooks user summary, not yet folded (DNO-857 tail)
+					OrderBy("event_count DESC")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5803,8 +5803,8 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
-	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC").
-		Limit(10000) // Defensive cap
+	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC"). //nolint:glint // skill breakdown, not yet folded (DNO-857 tail)
+												Limit(10000) // Defensive cap
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5871,9 +5871,9 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
-	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name").
-		OrderBy("event_count DESC").
-		Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
+	sb = sb.GroupBy("user_email", "server_name", "hook_source", "tool_name"). //nolint:glint // hooks breakdown, not yet folded (DNO-857 tail)
+											OrderBy("event_count DESC").
+											Limit(1000) // Defensive cap: top 1000 combinations ordered by volume
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -5941,9 +5941,9 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 
 	sb = applyHookFiltersToBuilder(sb, arg.Filters, arg.TypesToInclude)
 
-	sb = sb.GroupBy("bucket_start", "server_name", "user_email").
-		OrderBy("bucket_start ASC").
-		Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
+	sb = sb.GroupBy("bucket_start", "server_name", "user_email"). //nolint:glint // unproxied MCP usage, not yet folded (DNO-857 tail)
+									OrderBy("bucket_start ASC").
+									Limit(10000) // Defensive cap: 288 buckets/day * ~34 server/user combos at 5min resolution
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -6146,7 +6146,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name")
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // hooks timeseries, not yet folded (DNO-857 tail)
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {

@@ -8,14 +8,19 @@ import { useCallback } from "react";
 
 import {
   cancelOrganizationFetches,
+  invalidateOrganizations,
+  invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
+  bulkUpdateAccountType,
   disableOrganization,
   enableOrganization,
   extendTrial,
   type AdminOrganization,
+  type BulkUpdateAccountTypeRequest,
+  type BulkUpdateAccountTypeResult,
   type ExtendTrialRequest,
   type TrialState,
 } from "@/lib/gramAdminApi";
@@ -81,12 +86,16 @@ type OrganizationWrite<TVariables> = UseMutationResult<
 // All three drop the reads already in flight first. React Query awaits
 // `onMutate` before it sends the request, so the stale fetch is cancelled
 // before the write leaves rather than racing it home.
+//
+// A write that fails replaces none of what it cancelled, so all three ask for
+// the totals again on that path. The row needs nothing: it was never repainted.
 export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => disableOrganization({ id }),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
   });
 }
 
@@ -96,6 +105,23 @@ export function useEnableOrganization(): OrganizationWrite<string> {
     mutationFn: (id: string) => enableOrganization({ id }),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+// The one write that does not answer with a record, so it invalidates rather
+// than repainting from the response: the answer is two lists of ids.
+export function useBulkUpdateAccountType(): UseMutationResult<
+  BulkUpdateAccountTypeResult,
+  Error,
+  BulkUpdateAccountTypeRequest
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BulkUpdateAccountTypeRequest) =>
+      bulkUpdateAccountType(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: () => invalidateOrganizations(qc),
   });
 }
 
@@ -107,5 +133,6 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
     mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
   });
 }

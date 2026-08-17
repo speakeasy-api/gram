@@ -8,13 +8,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func registerListProjectsTool(server *mcp.Server, reader Reader) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerListProjectsTool(reg *Registrar, reader Reader) {
+	addTool(reg, &mcp.Tool{
 		Name:        "list_projects",
 		Title:       "List Projects",
 		Description: "List projects in the selected organization. Results contain only project identifiers, names, and slugs.",
 		Annotations: readOnlyAnnotations(),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListProjectsOutput{}, err

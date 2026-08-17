@@ -219,17 +219,17 @@ func TestRecordDecision_InvalidID(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// Reading the queue does not carry the right to commit the organisation to a
-// server.
-func TestRecordDecision_ReadScopeIsNotEnough(t *testing.T) {
+// Holding write access to a project does not carry the right to commit the
+// organisation to a server — deciding is org-admin authority.
+func TestRecordDecision_NonAdminCannotDecide(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	nonAdmin := withProject(t, ctx, ti, ti.projectID, authz.ScopeProjectWrite)
 
-	_, err := ti.service.RecordDecision(readOnly, decisionPayload(requestID.String(), "approved"))
+	_, err := ti.service.RecordDecision(nonAdmin, decisionPayload(requestID.String(), "approved"))
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
@@ -311,18 +311,19 @@ func TestRecordDecision_WritesAnAuditEntry(t *testing.T) {
 	require.Equal(t, denyBefore+1, denyAfter)
 }
 
-// Holding the scope must not bypass a disabled product feature: the grant says
-// who may use the surface, the feature says whether the organization has it.
-func TestRecordDecision_FeatureDisabledIsForbidden(t *testing.T) {
+// An org admin must not bypass a closed rollout gate: authorization says who
+// may use the surface, the flag says whether the organization has it yet.
+func TestRecordDecision_GateOffIsForbidden(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
-	disableMCPApproval(t, ctx, ti)
+	disableMCPApproval(ti)
 
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
 	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 
 	_, err = ti.service.ListRequests(ctx, listPayload())
 	requireOopsCode(t, err, oops.CodeForbidden)

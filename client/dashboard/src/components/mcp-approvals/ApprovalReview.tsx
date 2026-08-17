@@ -454,14 +454,10 @@ function ResearchReports({
         <Heading variant="h3" className="text-lg font-thin">
           Web research
         </Heading>
-        {/* Scoped to this project, like the endpoint behind it: a grant on
-            some other project must not enable a button whose click spends
-            here and comes back 403. */}
-        <RequireScope
-          scope="mcp_approval:decide"
-          resourceId={project.id}
-          level="component"
-        >
+        {/* The same org-admin gate as the endpoint behind it: research
+            spends the org's money, so a non-admin must not see a button
+            whose click comes back 403. */}
+        <RequireScope scope="org:admin" level="component">
           <Button
             size="sm"
             variant="secondary"

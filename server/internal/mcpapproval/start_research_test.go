@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -122,11 +121,10 @@ func TestStartResearch_UnknownRequest(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-// Research spends the org's money, so it requires the decide scope. The
-// caller here holds read — enough to open the request and see its evidence —
-// which is exactly the boundary being asserted: reading a review is not
-// permission to spend against it.
-func TestStartResearch_RequiresDecideScope(t *testing.T) {
+// Research spends the org's money behind the same org-admin gate as every
+// other approval surface: a caller without admin cannot buy a run, whatever
+// else they hold.
+func TestStartResearch_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -134,8 +132,8 @@ func TestStartResearch_RequiresDecideScope(t *testing.T) {
 		targetKey: "https://mcp.example.com/research-scope", status: "requested", evidence: "", version: 0,
 	})
 
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
-	_, err := ti.service.StartResearch(readOnly, startResearchPayload(requestID.String()))
+	nonAdmin := withProject(t, ctx, ti, ti.projectID)
+	_, err := ti.service.StartResearch(nonAdmin, startResearchPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
