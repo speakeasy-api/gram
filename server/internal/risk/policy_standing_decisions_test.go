@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -22,7 +23,6 @@ import (
 	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -35,14 +35,12 @@ import (
 func newTestRiskServiceWithRealIntake(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestRiskService(t, func(instance *testInstance) {
+	flags := &feature.InMemory{}
+	ctx, instance := newTestRiskService(t, func(instance *testInstance) {
 		logger := testenv.NewLogger(t)
 		tracerProvider := testenv.NewTracerProvider(t)
-		redisClient, err := infra.NewRedisClient(t, 0)
-		require.NoError(t, err)
 
 		authzEngine := authz.NewEngine(logger, instance.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-		features := productfeatures.NewClient(logger, tracerProvider, instance.conn, redisClient)
 		assembler := evidence.NewAssembler(
 			packagemeta.NewClient(riskIntakeNotFoundRegistry{}),
 			repometa.NewClient(riskIntakeNotFoundRegistry{}),
@@ -54,8 +52,14 @@ func newTestRiskServiceWithRealIntake(t *testing.T) (context.Context, *testInsta
 			riskIntakeQuietProbes{},
 		)
 
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, features, audit.NewLogger(), assembler, nil)
+		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
 	})
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	flags.SetFlag(feature.FlagMCPApproval, authCtx.ActiveOrganizationID, true)
+
+	return ctx, instance
 }
 
 // seedStandingDecision plants a decided review the way history would have
