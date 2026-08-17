@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
@@ -87,6 +88,9 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       setDraft({});
       writeOrganizationToCache(qc, updated);
     },
+    // A failed write replaces nothing it cancelled, so the totals have to be
+    // asked for again. The record needs nothing: it was never repainted.
+    onError: () => invalidateOrganizationStats(qc),
   });
 
   const dirty =

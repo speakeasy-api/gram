@@ -8,7 +8,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import {
+  organizationQuery,
+  organizationsListQuery,
+  organizationsStatsQuery,
+} from "@/lib/adminQueries";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -18,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizations: vi.fn(),
+  getOrganizationStats: vi.fn(),
   updateOrganization: vi.fn(),
 }));
 
@@ -29,6 +34,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizations: mocks.listOrganizations,
+    getOrganizationStats: mocks.getOrganizationStats,
     updateOrganization: mocks.updateOrganization,
   };
 });
@@ -75,6 +81,7 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockReset();
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizations.mockReset();
+  mocks.getOrganizationStats.mockReset();
   mocks.updateOrganization.mockReset();
 });
 
@@ -269,6 +276,69 @@ describe("Overview", () => {
       ?.organizations[0];
     expect(row?.account_type).toBe("enterprise");
     expect(ORG.account_type).not.toBe("enterprise");
+  });
+
+  it("asks for the totals again when the save fails", async () => {
+    mocks.updateOrganization.mockRejectedValue(new Error("update failed"));
+
+    // Held open, so the cancel in `onMutate` has a real read to drop. Without
+    // one there is nothing for the failed write to owe the strip.
+    let answerStatsRead = () => {};
+    mocks.getOrganizationStats.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answerStatsRead = () =>
+            resolve({
+              total: 1,
+              created_last_7_days: 0,
+              trials_ending_soon: 0,
+              disabled: 0,
+              disabled_last_7_days: 0,
+            });
+        }),
+    );
+
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+    qc.setQueryData(organizationsStatsQuery.queryKey, {
+      total: 2,
+      created_last_7_days: 0,
+      trials_ending_soon: 0,
+      disabled: 0,
+      disabled_last_7_days: 0,
+    });
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+
+    void qc.fetchQuery(organizationsStatsQuery).catch(() => {});
+    await waitFor(() => {
+      expect(mocks.getOrganizationStats).toHaveBeenCalled();
+    });
+
+    const select = await screen.findByRole("combobox");
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await screen.findByText(/update failed/);
+    answerStatsRead();
+
+    // Cancelled and replaced by nothing: a failed write repaints no record, so
+    // the strip would hold totals from before the save until a refocus or a
+    // remount asked again.
+    await waitFor(() => {
+      const state = qc.getQueryState(organizationsStatsQuery.queryKey);
+      expect(state?.fetchStatus).toBe("idle");
+      expect(state?.isInvalidated).toBe(true);
+    });
   });
 
   it("does not carry an unsaved draft to the next record", async () => {
