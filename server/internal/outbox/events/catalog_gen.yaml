@@ -762,7 +762,7 @@ webhooks:
                 required: true
     audit_log.chat_session_event_v1:
         post:
-            description: Emitted when a chat session is accessed
+            description: Emitted when a chat session is accessed or moved to another harness
             operationId: audit_log.chat_session_event_v1
             requestBody:
                 content:

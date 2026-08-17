@@ -31,19 +31,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// ProductFeaturesClient is the slice of the product-features client the agent
+// service needs; declared here (mirroring hooks.ProductFeaturesClient) so
+// tests can stub feature state without a database round-trip.
+type ProductFeaturesClient interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	repo      *repo.Queries
-	auth      *auth.Auth
-	authz     *authz.Engine
-	audit     *audit.Logger
-	serverURL string
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	auth            *auth.Auth
+	authz           *authz.Engine
+	audit           *audit.Logger
+	productFeatures ProductFeaturesClient
+	serverURL       string
 }
 
 var (
@@ -59,18 +68,20 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	productFeatures ProductFeaturesClient,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
-		audit:     auditLogger,
-		serverURL: serverURL,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		audit:           auditLogger,
+		productFeatures: productFeatures,
+		serverURL:       serverURL,
 	}
 }
 
