@@ -364,6 +364,7 @@ type Chat struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 	UserAccountID      uuid.NullUUID
 	LitellmProxied     bool
+	Cwd                pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
