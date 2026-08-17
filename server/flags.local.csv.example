@@ -3,8 +3,14 @@ distinct_id,flag,enabled,variant
 550e8400-e29b-41d4-a716-446655440000,clickhouse-tool-metrics,true
 # The fourth column is optional and only matters for multivariate flags: it is
 # the variant key the flag resolves to. Without it a local run can only express
-# the boolean contract, so a multivariate flag silently resolves to its
-# fail-safe default and the behaviour it gates cannot be exercised.
-# distinct_id is whatever the evaluating call site passes — for org-scoped
-# flags that is the organization id.
-550e8400-e29b-41d4-a716-446655440000,assistant-platform-mcp,true,platformmcp
+# the boolean contract, so a multivariate flag resolves to its fail-safe
+# default and the behaviour it gates cannot be exercised.
+#
+# distinct_id is whatever the evaluating call site passes. For the org-scoped
+# flags below that is YOUR OWN organization id — copying the row verbatim
+# matches no organization and silently leaves the flag on its default. Read it
+# from the database:
+#
+#   select id, slug from organization_metadata;
+#
+# <your-organization-id>,assistant-platform-mcp,true,platformmcp
