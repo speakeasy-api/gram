@@ -81,7 +81,7 @@ func NewManager(
 	return &Manager{
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		billingRepo:  billingRepo,
@@ -120,9 +120,14 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	if session.ActiveOrganizationID == "" {
-		// Populate IsAdmin from cached user info. A cache miss leaves it false
-		// (safe default). No org membership check needed for org-less sessions.
-		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
+		// Organization-less sessions still need identity attributes for
+		// request handling and audit attribution.
+		userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID)
+		if err == nil {
+			email := userInfo.Email
+			authCtx.Email = &email
+			authCtx.IsAdmin = userInfo.Admin
+		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}

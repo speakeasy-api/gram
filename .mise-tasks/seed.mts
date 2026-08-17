@@ -382,6 +382,437 @@ async function seedShadowMCPInventoryData(init: {
   }
 }
 
+/**
+ * MCP approval queue: requests in every state the approval page renders —
+ * an in-use server, a pinned package, a gathering gap, an unresolvable
+ * reference, a denial with its frozen evidence, and an approval citing a
+ * research report. Evidence documents match the assembler's version-1 shape
+ * (server/internal/mcpapproval/evidence); timestamps reuse the shadow-MCP
+ * inventory formulas so "are we already exposed?" agrees with the inventory
+ * page for the same server.
+ */
+async function seedMCPApprovalData(init: {
+  projectId: string;
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { projectId, organizationId, userId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const now = Date.now();
+  const msPerHour = 60 * 60 * 1000;
+  const iso = (date: Date) => date.toISOString();
+
+  // Linear is inventory serverIndex 2, Sentry is 4 — mirror their formulas.
+  const linearEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.linear.app/mcp",
+      version_pinned: false,
+      host: "mcp.linear.app",
+      registrable_domain: "linear.app",
+    },
+    exposure: {
+      status: "seen",
+      canonical_url: "https://mcp.linear.app/mcp",
+      url_host: "mcp.linear.app",
+      server_name: "Linear",
+      first_seen: iso(new Date(now - (720 - 2 * 31) * msPerHour)),
+      last_seen: iso(new Date(now - 6 * msPerHour)),
+      first_called: iso(new Date(now - (720 - 2 * 31 - 4) * msPerHour)),
+      last_called: iso(new Date(now - 6 * msPerHour)),
+      call_count: 14,
+      user_count: 5,
+      in_use: true,
+    },
+  });
+  const filesystemEvidence = JSON.stringify({
+    identity: {
+      kind: "package",
+      artifact_ref: "npm:@modelcontextprotocol/server-filesystem@2025.7.1",
+      version_pinned: true,
+      registry: "npm",
+      package_name: "@modelcontextprotocol/server-filesystem",
+      package_version: "2025.7.1",
+    },
+    package: {
+      registry: "npm",
+      name: "@modelcontextprotocol/server-filesystem",
+      license: "MIT",
+      latest_version: "2025.7.1",
+      first_published: "2024-11-19T00:00:00Z",
+      last_published: iso(new Date(now - 21 * 24 * msPerHour)),
+      version_count: 34,
+      maintainer_count: 3,
+    },
+  });
+  const internalToolsEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.internal-tools.dev/sse",
+      version_pinned: false,
+      host: "mcp.internal-tools.dev",
+      registrable_domain: "internal-tools.dev",
+    },
+    gaps: ["exposure_lookup_failed"],
+  });
+  const unresolvedEvidence = JSON.stringify({
+    identity: { kind: "unresolved", version_pinned: false },
+  });
+  const pastebinEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.pastebin-tools.example/mcp",
+      version_pinned: false,
+      host: "mcp.pastebin-tools.example",
+    },
+    exposure: { status: "unseen", in_use: false },
+  });
+  const sentryEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.sentry.dev/mcp",
+      version_pinned: false,
+      host: "mcp.sentry.dev",
+      registrable_domain: "sentry.dev",
+    },
+    exposure: {
+      status: "seen",
+      canonical_url: "https://mcp.sentry.dev/mcp",
+      url_host: "mcp.sentry.dev",
+      server_name: "Sentry",
+      first_seen: iso(new Date(now - (720 - 4 * 31) * msPerHour)),
+      last_seen: iso(new Date(now - 10 * msPerHour)),
+      first_called: iso(new Date(now - (720 - 4 * 31 - 4) * msPerHour)),
+      last_called: iso(new Date(now - 10 * msPerHour)),
+      call_count: 20,
+      user_count: 7,
+      in_use: true,
+    },
+  });
+  // The showcase request: every panel section carries content. A catalogued
+  // remote server whose registry entry also names its npm package, with
+  // declared authority and per-tool capability — the shape a registry-backed
+  // gather produces once those inputs are wired.
+  const notionEvidence = JSON.stringify({
+    identity: {
+      kind: "remote",
+      artifact_ref: "url:https://mcp.notion.com/mcp",
+      version_pinned: false,
+      host: "mcp.notion.com",
+      registrable_domain: "notion.com",
+    },
+    package: {
+      registry: "npm",
+      name: "@notionhq/notion-mcp-server",
+      license: "MIT",
+      latest_version: "1.9.0",
+      first_published: "2025-03-03T00:00:00Z",
+      last_published: iso(new Date(now - 9 * 24 * msPerHour)),
+      version_count: 21,
+      maintainer_count: 4,
+    },
+    authority: {
+      mode: "oauth",
+      transport: "streamable-http",
+      scopes: ["read_content", "update_content", "insert_content"],
+      dynamic_registration: true,
+      demanded_secrets: [
+        {
+          name: "NOTION_API_KEY",
+          required: true,
+          description:
+            "Internal integration token, used when OAuth is not configured",
+        },
+      ],
+      unauthenticated_tools: ["ping"],
+    },
+    capabilities: [
+      { tool: "search_pages", declared: ["open_world"], schema_implied: [] },
+      {
+        tool: "create_page",
+        declared: [],
+        schema_implied: ["arbitrary_url"],
+        acts_on_behalf: true,
+      },
+      {
+        tool: "delete_block",
+        declared: ["destructive"],
+        schema_implied: [],
+        acts_on_behalf: true,
+      },
+      { tool: "get_self", unannotated: true },
+    ],
+    exposure: {
+      status: "seen",
+      canonical_url: "https://mcp.notion.com/mcp",
+      url_host: "mcp.notion.com",
+      server_name: "Notion",
+      first_seen: iso(new Date(now - (720 - 31) * msPerHour)),
+      last_seen: iso(new Date(now - 4 * msPerHour)),
+      first_called: iso(new Date(now - (720 - 35) * msPerHour)),
+      last_called: iso(new Date(now - 4 * msPerHour)),
+      call_count: 11,
+      user_count: 4,
+      in_use: true,
+    },
+  });
+  const notionReport = JSON.stringify({
+    claims: [
+      {
+        text: "The server is published by the vendor from its primary domain and the npm package is referenced from the official developer docs.",
+        tier: "independently_reported",
+        citations: ["https://developers.notion.com/docs/mcp"],
+      },
+      {
+        text: "Vendor states OAuth scopes are granted per workspace and revocable by a workspace admin.",
+        tier: "vendor_claim",
+        citations: ["https://developers.notion.com/docs/authorization"],
+      },
+      {
+        text: "Community reports describe rate limits, not security incidents, over the last year.",
+        tier: "independently_reported",
+        citations: ["https://github.com/makenotion/notion-mcp-server/issues"],
+      },
+    ],
+  });
+
+  const sentryReport = JSON.stringify({
+    claims: [
+      {
+        text: "Sentry publishes this MCP server from its primary domain and documents it in the official product docs.",
+        tier: "independently_reported",
+        citations: ["https://docs.sentry.io/product/sentry-mcp/"],
+      },
+      {
+        text: "The vendor states the server requests read scopes plus issue-write for triage actions.",
+        tier: "vendor_claim",
+        citations: ["https://docs.sentry.io/product/sentry-mcp/#permissions"],
+      },
+    ],
+  });
+
+  const pgSQL = `
+    BEGIN;
+    -- Idempotent reset for this project's seeded approval data.
+    DELETE FROM mcp_approval_decisions WHERE project_id = '${projectId}';
+    DELETE FROM mcp_research_reports WHERE project_id = '${projectId}';
+    DELETE FROM mcp_approval_request_requesters WHERE project_id = '${projectId}';
+    DELETE FROM mcp_approval_requests WHERE project_id = '${projectId}';
+
+    WITH linear_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.linear.app/mcp', 'https://mcp.linear.app/mcp',
+        'url:https://mcp.linear.app/mcp', FALSE, 'requested',
+        '${linearEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', linear_req.id, v.user_id, v.user_email, v.note
+    FROM linear_req, (VALUES
+      ('seed-user-maya', 'maya.chen@example.com', 'Half the team already tracks sprints in Linear and keeps pasting issue links into chats by hand.'),
+      ('seed-user-liam', 'liam.oconnor@example.com', 'Need it for triage rotation.'),
+      ('seed-user-priya', 'priya.shah@example.com', 'Same as Maya - this is our system of record.')
+    ) AS v(user_id, user_email, note);
+
+    WITH fs_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'stdio_command',
+        'npx -y @modelcontextprotocol/server-filesystem@2025.7.1',
+        'npx -y @modelcontextprotocol/server-filesystem@2025.7.1',
+        'npm:@modelcontextprotocol/server-filesystem@2025.7.1', TRUE, 'requested',
+        '${filesystemEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', fs_req.id,
+      'seed-user-noah', 'noah.williams@example.com',
+      'Want the reference filesystem server for local docs indexing. Pinned the exact version.'
+    FROM fs_req;
+
+    WITH internal_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.internal-tools.dev/sse', 'https://mcp.internal-tools.dev/sse',
+        'url:https://mcp.internal-tools.dev/sse', FALSE, 'requested',
+        '${internalToolsEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', internal_req.id,
+      'seed-user-sofia', 'sofia.martinez@example.com',
+      'A contractor recommended this one. Not sure who runs it.'
+    FROM internal_req;
+
+    WITH local_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'stdio_command',
+        './run-local-mcp --stdio', './run-local-mcp --stdio',
+        NULL, FALSE, 'requested',
+        '${unresolvedEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    )
+    INSERT INTO mcp_approval_request_requesters (
+      organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+    )
+    SELECT '${organizationId}', '${projectId}', local_req.id,
+      'seed-user-ethan', 'ethan.kim@example.com',
+      'Found this in a gist, it automates our deploy checklist.'
+    FROM local_req;
+
+    WITH denied_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.pastebin-tools.example/mcp', 'https://mcp.pastebin-tools.example/mcp',
+        'url:https://mcp.pastebin-tools.example/mcp', FALSE, 'denied',
+        '${pastebinEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    ), denied_requester AS (
+      INSERT INTO mcp_approval_request_requesters (
+        organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+      )
+      SELECT '${organizationId}', '${projectId}', denied_req.id,
+        'seed-user-ava', 'ava.johnson@example.com', 'Quick way to share query results.'
+      FROM denied_req
+    )
+    INSERT INTO mcp_approval_decisions (
+      organization_id, project_id, mcp_approval_request_id, decision, decided_by,
+      rationale, evidence_snapshot, evidence_version, granted_principal_urns, decided_at
+    )
+    SELECT '${organizationId}', '${projectId}', denied_req.id, 'denied', '${userId}',
+      'Unknown operator, no registrable publisher, and it exists to move data off our systems. Use the sanctioned export tooling instead.',
+      '${pastebinEvidence}'::jsonb, 1, ARRAY[]::TEXT[],
+      clock_timestamp() - interval '9 days'
+    FROM denied_req;
+
+    WITH sentry_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.sentry.dev/mcp', 'https://mcp.sentry.dev/mcp',
+        'url:https://mcp.sentry.dev/mcp', FALSE, 'approved',
+        '${sentryEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    ), sentry_requesters AS (
+      INSERT INTO mcp_approval_request_requesters (
+        organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+      )
+      SELECT '${organizationId}', '${projectId}', sentry_req.id, v.user_id, v.user_email, v.note
+      FROM sentry_req, (VALUES
+        ('seed-user-lucas', 'lucas.brown@example.com', 'On call needs stack traces without leaving the editor.'),
+        ('seed-user-isabella', 'isabella.rossi@example.com', 'Sentry is already our error tracker of record.')
+      ) AS v(user_id, user_email, note)
+    ), sentry_report AS (
+      INSERT INTO mcp_research_reports (
+        organization_id, project_id, mcp_approval_request_id, status, report,
+        report_version, model, requested_by, started_at, completed_at
+      )
+      SELECT '${organizationId}', '${projectId}', sentry_req.id, 'completed',
+        '${sentryReport}'::jsonb, 1, 'seed', '${userId}',
+        clock_timestamp() - interval '12 days', clock_timestamp() - interval '12 days' + interval '4 minutes'
+      FROM sentry_req
+      RETURNING id, mcp_approval_request_id
+    )
+    INSERT INTO mcp_approval_decisions (
+      organization_id, project_id, mcp_approval_request_id, decision, decided_by,
+      rationale, evidence_snapshot, evidence_version, granted_principal_urns,
+      mcp_research_report_id, decided_at
+    )
+    SELECT '${organizationId}', '${projectId}', sentry_report.mcp_approval_request_id,
+      'approved', '${userId}',
+      'Official vendor server on the vendor primary domain, already in active use by seven people here, and the research run corroborates the documented scopes.',
+      '${sentryEvidence}'::jsonb, 1, ARRAY[]::TEXT[], sentry_report.id,
+      clock_timestamp() - interval '11 days'
+    FROM sentry_report;
+
+    WITH notion_req AS (
+      INSERT INTO mcp_approval_requests (
+        organization_id, project_id, target_kind, target_raw, target_key,
+        artifact_ref, version_pinned, status, current_evidence,
+        evidence_version, evidence_collected_at
+      ) VALUES (
+        '${organizationId}', '${projectId}', 'server_url',
+        'https://mcp.notion.com/mcp', 'https://mcp.notion.com/mcp',
+        'url:https://mcp.notion.com/mcp', FALSE, 'requested',
+        '${notionEvidence}'::jsonb, 1, clock_timestamp()
+      ) RETURNING id
+    ), notion_requesters AS (
+      INSERT INTO mcp_approval_request_requesters (
+        organization_id, project_id, mcp_approval_request_id, user_id, user_email, note
+      )
+      SELECT '${organizationId}', '${projectId}', notion_req.id, v.user_id, v.user_email, v.note
+      FROM notion_req, (VALUES
+        ('seed-user-oliver', 'oliver.smith@example.com', 'Docs team lives in Notion. We want meeting notes searchable from the editor.'),
+        ('seed-user-maya', 'maya.chen@example.com', 'Asked for this last quarter too - it would replace two manual steps in our release notes flow.'),
+        ('seed-user-isabella', 'isabella.rossi@example.com', 'Same use case as Oliver.')
+      ) AS v(user_id, user_email, note)
+    ), notion_report AS (
+      INSERT INTO mcp_research_reports (
+        organization_id, project_id, mcp_approval_request_id, status, report,
+        report_version, model, requested_by, started_at, completed_at
+      )
+      SELECT '${organizationId}', '${projectId}', notion_req.id, 'completed',
+        '${notionReport}'::jsonb, 1, 'seed', '${userId}',
+        clock_timestamp() - interval '2 days', clock_timestamp() - interval '2 days' + interval '6 minutes'
+      FROM notion_req
+      RETURNING id, mcp_approval_request_id
+    )
+    INSERT INTO mcp_approval_decisions (
+      organization_id, project_id, mcp_approval_request_id, decision, decided_by,
+      rationale, evidence_snapshot, evidence_version, granted_principal_urns, decided_at
+    )
+    SELECT '${organizationId}', '${projectId}', notion_report.mcp_approval_request_id,
+      'denied', '${userId}',
+      'Denied in the spring: at the time the server demanded a static integration token with workspace-wide reach. Re-review now that OAuth with scoped grants is available.',
+      '${notionEvidence}'::jsonb, 1, ARRAY[]::TEXT[],
+      clock_timestamp() - interval '96 days'
+    FROM notion_report;
+
+    COMMIT;`;
+
+  try {
+    await $({
+      input: pgSQL,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -tA -f -`.quiet();
+    log.info("Seeded MCP approval requests, decisions, and research report");
+  } catch (e) {
+    const err = e as { message?: string; stderr?: string };
+    log.stepFailed(
+      `Failed to seed MCP approval data: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+}
+
 async function seedCurrentUserAdminRole(init: {
   organizationId: string;
   userId: string;
@@ -505,21 +936,15 @@ WITH system_role_scopes (role_slug, scope, resource_kind) AS (
     ('member', 'mcp:connect', 'mcp'),
     ('member', 'skill:read', 'skill')
 ),
-roles_without_grants AS (
+-- Additive on purpose: a role that already has grants still picks up scopes
+-- added to the list above on re-seed, and the ON CONFLICT below keeps the
+-- whole thing idempotent.
+system_roles AS (
   SELECT global_roles.id, global_roles.workos_slug
   FROM global_roles
   WHERE global_roles.workos_slug IN ('admin', 'member')
     AND global_roles.deleted IS FALSE
     AND global_roles.workos_deleted IS FALSE
-    AND NOT EXISTS (
-      SELECT 1
-      FROM principal_grants
-      WHERE principal_grants.organization_id = :'organization_id'
-        AND principal_grants.principal_urn IN (
-          'role:global:' || global_roles.id::text,
-          'role:' || global_roles.workos_slug
-        )
-    )
 )
 INSERT INTO principal_grants (
   organization_id,
@@ -530,16 +955,16 @@ INSERT INTO principal_grants (
 )
 SELECT
   :'organization_id',
-  'role:global:' || roles_without_grants.id::text,
+  'role:global:' || system_roles.id::text,
   system_role_scopes.scope,
   NULL,
   jsonb_build_object(
     'resource_kind', system_role_scopes.resource_kind,
     'resource_id', '*'
   )
-FROM roles_without_grants
+FROM system_roles
 JOIN system_role_scopes
-  ON system_role_scopes.role_slug = roles_without_grants.workos_slug
+  ON system_role_scopes.role_slug = system_roles.workos_slug
 ON CONFLICT (
   organization_id,
   principal_urn,
@@ -5305,10 +5730,12 @@ async function seed() {
     const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
     // session_capture gates Claude hook chat persistence; without it,
     // hooks.ingest accepts events but silently skips writing chat_messages.
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
-    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills:`.quiet();
+    // platform_mcp is the default-on organization entitlement; PostHog rollout
+    // flags separately control whether its runtime and dashboard are exposed.
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO organization_features (organization_id, feature_name) VALUES ('${activeOrgID}', 'logs'), ('${activeOrgID}', 'tool_io_logs'), ('${activeOrgID}', 'session_capture'), ('${activeOrgID}', 'skills'), ('${activeOrgID}', 'platform_mcp') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL feature:${activeOrgID}:logs: feature:${activeOrgID}:tool_io_logs: feature:${activeOrgID}:session_capture: feature:${activeOrgID}:skills: feature:${activeOrgID}:platform_mcp:`.quiet();
     log.info(
-      "Enabled local logs, tool_io_logs, session_capture, and skills features",
+      "Enabled local logs, tool_io_logs, session_capture, skills, and platform_mcp features",
     );
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
@@ -5455,6 +5882,13 @@ async function seed() {
       toolUrns,
     });
     await seedShadowMCPInventoryData({ projectId: firstProject.id });
+    // The approval queue references the inventory's servers, so it seeds
+    // after the inventory to stay coherent with it.
+    await seedMCPApprovalData({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+      userId: activeUserID,
+    });
     // Risk findings depend on the chats/messages seeded above (FK +
     // attachment), so seed them after observability data.
     await seedRiskFindings({

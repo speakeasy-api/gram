@@ -289,6 +289,95 @@ func (q *Queries) GetGcpKmsKey(ctx context.Context, arg GetGcpKmsKeyParams) (Get
 	return i, err
 }
 
+const getGcpKmsKeyForVerify = `-- name: GetGcpKmsKeyForVerify :one
+SELECT
+  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
+  gcp.external_key_id, gcp.external_keys_provider, gcp.resource_name, gcp.created_at, gcp.updated_at,
+  ec.id AS credential_id,
+  gic.impersonate_service_account,
+  gic.wif_pool_id,
+  gic.wif_provider_id,
+  gic.wif_project_number
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+LEFT JOIN external_credentials AS ec
+       ON ec.id = ek.external_credential_id
+      AND ec.organization_id = ek.organization_id
+      AND ec.project_id IS NULL
+      AND ec.provider = 'gcp_iam'
+      AND ec.deleted IS FALSE
+LEFT JOIN gcp_iam_credentials AS gic
+       ON gic.external_credential_id = ec.id
+WHERE ek.id = $1
+  AND ek.organization_id = $2
+  AND ek.provider = 'gcp_kms'
+  AND ek.deleted IS FALSE
+`
+
+type GetGcpKmsKeyForVerifyParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetGcpKmsKeyForVerifyRow struct {
+	ExternalKey               ExternalKey
+	GcpKmsKey                 GcpKmsKey
+	CredentialID              uuid.NullUUID
+	ImpersonateServiceAccount pgtype.Text
+	WifPoolID                 pgtype.Text
+	WifProviderID             pgtype.Text
+	WifProjectNumber          pgtype.Text
+}
+
+// Loads everything the verify probe needs in one read: the key, its provider
+// subtype, and the GCP identity of the credential that reaches it.
+//
+// The credential joins are LEFT so a key whose credential was soft-deleted still
+// returns the key. An inner join would surface that as no rows, which the caller
+// can only report as "key not found" — a lie about a key that plainly exists,
+// and a reachable one: external_credentials.deleted is a generated column, so a
+// soft delete never fires the external_keys foreign key. credential_id is NULL
+// in exactly that case, which is what lets the caller say so.
+//
+// The join predicate spells out every condition the credential must meet rather
+// than matching on id alone, so a row that fails one of them reads as an absent
+// credential instead of joining and reporting some later, more confusing
+// symptom. validateBackingCredential already enforces all of them on both write
+// paths, so only a direct database edit reaches those cases.
+//
+// No row lock is taken. Verify performs no write, so there is nothing for a
+// concurrent credential change to race: the probe reports the configuration as
+// it stood when it was read, which is all it ever claims to do.
+func (q *Queries) GetGcpKmsKeyForVerify(ctx context.Context, arg GetGcpKmsKeyForVerifyParams) (GetGcpKmsKeyForVerifyRow, error) {
+	row := q.db.QueryRow(ctx, getGcpKmsKeyForVerify, arg.ID, arg.OrganizationID)
+	var i GetGcpKmsKeyForVerifyRow
+	err := row.Scan(
+		&i.ExternalKey.ID,
+		&i.ExternalKey.OrganizationID,
+		&i.ExternalKey.ProjectID,
+		&i.ExternalKey.ExternalCredentialID,
+		&i.ExternalKey.Provider,
+		&i.ExternalKey.Algorithm,
+		&i.ExternalKey.Name,
+		&i.ExternalKey.CustomerGrantReference,
+		&i.ExternalKey.CreatedAt,
+		&i.ExternalKey.UpdatedAt,
+		&i.ExternalKey.DeletedAt,
+		&i.ExternalKey.Deleted,
+		&i.GcpKmsKey.ExternalKeyID,
+		&i.GcpKmsKey.ExternalKeysProvider,
+		&i.GcpKmsKey.ResourceName,
+		&i.GcpKmsKey.CreatedAt,
+		&i.GcpKmsKey.UpdatedAt,
+		&i.CredentialID,
+		&i.ImpersonateServiceAccount,
+		&i.WifPoolID,
+		&i.WifProviderID,
+		&i.WifProjectNumber,
+	)
+	return i, err
+}
+
 const listExternalKeys = `-- name: ListExternalKeys :many
 SELECT id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, created_at, updated_at, deleted_at, deleted
 FROM external_keys

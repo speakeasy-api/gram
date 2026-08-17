@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	ListChatsDoer goahttp.Doer
 
+	// GetAssistantSessionSummary Doer is the HTTP client used to make requests to
+	// the getAssistantSessionSummary endpoint.
+	GetAssistantSessionSummaryDoer goahttp.Doer
+
 	// GetWorkUnitsTrend Doer is the HTTP client used to make requests to the
 	// getWorkUnitsTrend endpoint.
 	GetWorkUnitsTrendDoer goahttp.Doer
@@ -48,6 +52,10 @@ type Client struct {
 	// Summarize Doer is the HTTP client used to make requests to the summarize
 	// endpoint.
 	SummarizeDoer goahttp.Doer
+
+	// SummarizeToolCall Doer is the HTTP client used to make requests to the
+	// summarizeToolCall endpoint.
+	SummarizeToolCallDoer goahttp.Doer
 
 	// SubmitFeedback Doer is the HTTP client used to make requests to the
 	// submitFeedback endpoint.
@@ -77,21 +85,23 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:         doer,
-		GetWorkUnitsTrendDoer: doer,
-		LoadChatDoer:          doer,
-		GenerateTitleDoer:     doer,
-		CreditUsageDoer:       doer,
-		DeleteChatDoer:        doer,
-		SetPinnedDoer:         doer,
-		SummarizeDoer:         doer,
-		SubmitFeedbackDoer:    doer,
-		ListSourcesDoer:       doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		ListChatsDoer:                  doer,
+		GetAssistantSessionSummaryDoer: doer,
+		GetWorkUnitsTrendDoer:          doer,
+		LoadChatDoer:                   doer,
+		GenerateTitleDoer:              doer,
+		CreditUsageDoer:                doer,
+		DeleteChatDoer:                 doer,
+		SetPinnedDoer:                  doer,
+		SummarizeDoer:                  doer,
+		SummarizeToolCallDoer:          doer,
+		SubmitFeedbackDoer:             doer,
+		ListSourcesDoer:                doer,
+		RestoreResponseBody:            restoreBody,
+		scheme:                         scheme,
+		host:                           host,
+		decoder:                        dec,
+		encoder:                        enc,
 	}
 }
 
@@ -114,6 +124,30 @@ func (c *Client) ListChats() goa.Endpoint {
 		resp, err := c.ListChatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listChats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAssistantSessionSummary returns an endpoint that makes HTTP requests to
+// the chat service getAssistantSessionSummary server.
+func (c *Client) GetAssistantSessionSummary() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAssistantSessionSummaryRequest(c.encoder)
+		decodeResponse = DecodeGetAssistantSessionSummaryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAssistantSessionSummaryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAssistantSessionSummaryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "getAssistantSessionSummary", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -282,6 +316,30 @@ func (c *Client) Summarize() goa.Endpoint {
 		resp, err := c.SummarizeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "summarize", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SummarizeToolCall returns an endpoint that makes HTTP requests to the chat
+// service summarizeToolCall server.
+func (c *Client) SummarizeToolCall() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSummarizeToolCallRequest(c.encoder)
+		decodeResponse = DecodeSummarizeToolCallResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSummarizeToolCallRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SummarizeToolCallDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "summarizeToolCall", err)
 		}
 		return decodeResponse(resp)
 	}

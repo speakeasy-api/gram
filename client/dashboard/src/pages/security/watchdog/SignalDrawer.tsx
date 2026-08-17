@@ -10,16 +10,32 @@ import {
 } from "@/components/ui/Sheet";
 import { Separator } from "@/components/ui/Separator";
 import { Text } from "@/components/ui/Text";
+import { useSdkClient } from "@/contexts/Sdk";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
-import { MaskedMatch, RevealAllProvider, RevealAllToggle } from "../risk-ui";
-import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
+import {
+  EventMatchDialog,
+  MaskedMatch,
+  RevealAllProvider,
+  RevealAllToggle,
+} from "../risk-ui";
+import {
+  getCategoryCodeForFinding,
+  getRuleTitleFallback,
+  hasJudgeSource,
+  isJudgeSource,
+  scoreToRating,
+} from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
+import { collectFindingsForRules } from "./collect-findings";
+import { DismissFindingsDialog } from "./DismissFindingsDialog";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
 import { SignalTrend } from "./SignalsList";
 
@@ -101,6 +117,16 @@ function EvidenceRow({
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
 }): JSX.Element {
+  // A judge finding's "match" is the entire flagged event (often absent on
+  // the realtime path), and its description carries the verdict rationale —
+  // so the evidence cell shows the rationale with the audited event dialog
+  // behind it instead of a redaction chip over content that may not exist.
+  // Judge findings also can't be excluded (their rule id is a constant for
+  // the whole detector), so the row offers only false-positive dismissal.
+  // Every other detector gets only Exclude: exclusion rules are the reviewed
+  // dismissal path for pattern detectors, and offering both actions side by
+  // side made per-row false-positive marking the path of least resistance.
+  const judge = isJudgeSource(result.source);
   return (
     <div className="border-border overflow-hidden rounded-md border">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -111,36 +137,52 @@ function EvidenceRow({
           {formatDistanceToNow(result.createdAt, { addSuffix: true })}
         </span>
       </div>
-      {/* The redacted match sits on an inverse code-block backdrop so the
-          red redaction chip carries the reference design's contrast. */}
-      <div className="bg-foreground px-3 py-4">
-        <MaskedMatch
-          tone="contrast"
-          wrap
-          resultId={result.id}
-          matchRedacted={result.matchRedacted}
-        />
-      </div>
+      {judge ? (
+        <div className="px-3 py-3">
+          <EventMatchDialog
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+            rationale={result.description}
+          />
+        </div>
+      ) : (
+        // The redacted match sits on an inverse code-block backdrop so the
+        // red redaction chip carries the reference design's contrast.
+        <div className="bg-foreground px-3 py-4">
+          <MaskedMatch
+            tone="contrast"
+            wrap
+            resultId={result.id}
+            matchRedacted={result.matchRedacted}
+          />
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <Text small muted className="truncate font-mono">
-          Triggered: {result.source} · {getRuleTitleFallback(result.ruleId)}{" "}
-          (conf {(result.confidence ?? 0).toFixed(2)})
+          {/* Category code, never the raw scanner source — and no rule title
+              for judge findings, whose single rule restates the category. */}
+          Triggered: {getCategoryCodeForFinding(result.source, result.ruleId)}
+          {!judge && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
+          {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => onExclude(result)}
-          >
-            <Button.Text>Exclude</Button.Text>
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => onDismiss(result)}
-          >
-            <Button.Text>False positive</Button.Text>
-          </Button>
+          {judge ? (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => onDismiss(result)}
+            >
+              <Button.Text>False positive</Button.Text>
+            </Button>
+          ) : (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => onExclude(result)}
+            >
+              <Button.Text>Exclude</Button.Text>
+            </Button>
+          )}
         </span>
       </div>
     </div>
@@ -154,14 +196,23 @@ function EvidenceRow({
  */
 export function SignalDrawer({
   signal,
+  window,
   onClose,
 }: {
   signal: RiskSignal | null;
+  /** The page's active time window; scopes signal-level dismissal the same
+   * way the list's bulk "Mark as false positive" is scoped. */
+  window: { from?: Date; to?: Date };
   onClose: () => void;
 }): JSX.Element {
+  const client = useSdkClient();
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
+  const [pendingDismiss, setPendingDismiss] = useState<RiskResult[] | null>(
+    null,
+  );
+  const [collecting, setCollecting] = useState(false);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
@@ -196,11 +247,87 @@ export function SignalDrawer({
 
   const openSignalExclusion = () => {
     if (!signal) return;
-    // The sheet derives its ready-made rule options from the findings it is
-    // handed; the loaded evidence rows all share this signal's rule, so the
-    // "Any <rule> finding" option is on offer. Before evidence loads the
-    // sheet still opens, just without ready-made options.
-    setExclusionState({ mode: "create", results: evidence });
+    // The signal itself carries the rule, so the sheet offers — and defaults
+    // to — the "Any <rule> finding" option even before evidence rows load.
+    // Whatever evidence has arrived by now rides along for the custom branch's
+    // findings context — and, only where the rule has a lone evidence row, the
+    // exact-value option, which needs a single finding. Opening before the
+    // query resolves makes this a rule-only create, since the snapshot
+    // deliberately doesn't refill as rows land — that would rebuild the form
+    // under an operator who is already typing.
+    setExclusionState({
+      mode: "create",
+      results: evidence,
+      presetRuleId: signal.ruleId,
+    });
+  };
+
+  // Judge-backed signals get false-positive dismissal as the signal-level
+  // action instead of an exclusion rule. Same collect-then-confirm shape as
+  // the list's bulk action, scoped to this signal's rule and window.
+  const judgeSignal =
+    signal !== null && hasJudgeSource(signal.detectionSources);
+
+  // Signal and window both live in the URL, so back/forward can swap either
+  // while the drawer stays mounted, and a dismissal belongs to the pair it was
+  // started from: surfacing one after a swap would confirm the previous
+  // selection's findings under the new one's name, or leave its action
+  // spinning. Bumping the token makes an in-flight collection drop its result —
+  // and its spinner reset — rather than land on the new selection; the request
+  // itself still runs to completion. Keyed by timestamps rather than Date
+  // identity, and by signal key rather than the signal object, so neither an
+  // equal window nor a list refetch discards a live collection.
+  //
+  // Both resets run before paint: a passive effect would let the swap commit
+  // first, painting one frame of the previous selection's dialog or editor
+  // under the new signal's name.
+  const collectionToken = useRef(0);
+  const windowFrom = window.from?.getTime();
+  const windowTo = window.to?.getTime();
+  useLayoutEffect(() => {
+    collectionToken.current += 1;
+    setPendingDismiss(null);
+    setCollecting(false);
+  }, [signal?.key, windowFrom, windowTo]);
+
+  // Editor state follows the signal alone: an open editor would go on targeting
+  // the previous signal's rule (and keep the sheet's close affordance hidden),
+  // and the back-from-editor slide would replay for a signal whose editor was
+  // never opened. The window is deliberately absent — the rule and evidence the
+  // editor seeds from are unwindowed, so a date change must not discard a
+  // half-filled form.
+  useLayoutEffect(() => {
+    setExclusionState(null);
+    setReturningFromEditor(false);
+  }, [signal?.key]);
+
+  const openSignalDismiss = async () => {
+    if (!signal) return;
+    const token = collectionToken.current;
+    setCollecting(true);
+    try {
+      const results = await collectFindingsForRules(
+        client,
+        [signal.ruleId],
+        window,
+      );
+      if (collectionToken.current !== token) return;
+      setPendingDismiss(results);
+    } catch {
+      if (collectionToken.current !== token) return;
+      toast.error("Failed to load this signal's findings.");
+    } finally {
+      // Same guard: the switch already cleared the flag for the new selection,
+      // so a late-settling request must not clear it out from under a
+      // collection the operator started there.
+      if (collectionToken.current === token) setCollecting(false);
+    }
+  };
+
+  const confirmSignalDismiss = () => {
+    if (!pendingDismiss) return;
+    dismiss(pendingDismiss);
+    setPendingDismiss(null);
   };
 
   return (
@@ -211,6 +338,7 @@ export function SignalDrawer({
           if (!open) {
             setExclusionState(null);
             setReturningFromEditor(false);
+            setPendingDismiss(null);
             onClose();
           }
         }}
@@ -290,9 +418,29 @@ export function SignalDrawer({
                 </SheetHeader>
                 <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="primary" onClick={openSignalExclusion}>
-                      <Button.Text>Create exclusion rule</Button.Text>
-                    </Button>
+                    {judgeSignal ? (
+                      <>
+                        <Button
+                          variant="primary"
+                          disabled={collecting}
+                          onClick={() => void openSignalDismiss()}
+                        >
+                          {collecting && (
+                            <Button.LeftIcon>
+                              <Loader2 className="size-4 animate-spin" />
+                            </Button.LeftIcon>
+                          )}
+                          <Button.Text>Mark all as false positive</Button.Text>
+                        </Button>
+                        <Text small muted>
+                          Prompt-based findings can't be excluded.
+                        </Text>
+                      </>
+                    ) : (
+                      <Button variant="primary" onClick={openSignalExclusion}>
+                        <Button.Text>Create exclusion rule</Button.Text>
+                      </Button>
+                    )}
                   </div>
                   <div className="relative flex-1">
                     <div className="space-y-6">
@@ -310,10 +458,7 @@ export function SignalDrawer({
                           {signal.teams > 0 ? signal.teams : "-"}
                         </StatCell>
                         <StatCell label="Trend">
-                          <SignalTrend
-                            findings={signal.findings}
-                            previousFindings={signal.previousFindings}
-                          />
+                          <SignalTrend sparkline={signal.sparkline} />
                         </StatCell>
                       </div>
 
@@ -366,9 +511,13 @@ export function SignalDrawer({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Text small muted className="font-medium uppercase">
-                            Evidence · redacted
+                            {/* Judge evidence shows rationales, not redacted
+                                matches, so the label and the reveal-all
+                                toggle (which only drives MaskedMatch rows)
+                                would both mislead there. */}
+                            {judgeSignal ? "Evidence" : "Evidence · redacted"}
                           </Text>
-                          <RevealAllToggle />
+                          {!judgeSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (
                           <Text small muted>
@@ -423,6 +572,12 @@ export function SignalDrawer({
           )}
         </SheetContent>
       </Sheet>
+      <DismissFindingsDialog
+        results={pendingDismiss}
+        subject="this signal"
+        onCancel={() => setPendingDismiss(null)}
+        onConfirm={confirmSignalDismiss}
+      />
     </>
   );
 }

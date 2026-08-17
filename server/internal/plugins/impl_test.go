@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	platformmcprepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -714,11 +715,13 @@ func TestPluginsService_SetPluginAssignments(t *testing.T) {
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Assignment Test"})
 	require.NoError(t, err)
+	engineeringRole := createTestRolePrincipal(t, ctx, ti, "engineering")
+	gtmRole := createTestRolePrincipal(t, ctx, ti, "gtm")
 
 	// Set initial assignments.
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
-		PrincipalUrns: []string{"role:engineering", "role:gtm"},
+		PrincipalUrns: []string{engineeringRole, gtmRole},
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Assignments, 2)
@@ -745,14 +748,15 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dedupe Assignment Test"})
 	require.NoError(t, err)
+	engineeringRole := createTestRolePrincipal(t, ctx, ti, "engineering")
 
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID: plugin.ID,
 		PrincipalUrns: []string{
 			"email:Dev@Acme.Corp",
 			"email:dev@acme.corp",
-			"role:engineering",
-			"role:engineering",
+			engineeringRole,
+			engineeringRole,
 			"*",
 			"*",
 		},
@@ -760,7 +764,7 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 	require.NoError(t, err)
 	require.Len(t, result.Assignments, 3)
 	require.Equal(t, "email:dev@acme.corp", result.Assignments[0].PrincipalUrn)
-	require.Equal(t, "role:engineering", result.Assignments[1].PrincipalUrn)
+	require.Equal(t, engineeringRole, result.Assignments[1].PrincipalUrn)
 	require.Equal(t, "*", result.Assignments[2].PrincipalUrn)
 
 	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
@@ -794,7 +798,45 @@ func TestPluginsService_SetPluginAssignments_InvalidURNReturnsBadRequest(t *test
 
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
-		PrincipalUrns: []string{"role:engineering", "not a valid urn"},
+		PrincipalUrns: []string{"not a valid urn"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_LegacyRoleURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy Role URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:engineering"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_UnknownRoleURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unknown Role URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:organization:" + uuid.NewString()},
 	})
 	require.Error(t, err)
 
@@ -1386,6 +1428,80 @@ func TestPluginsService_GetPublishStatus_StaleAfterEdit(t *testing.T) {
 	require.False(t, *status.UpToDate)
 	// The timestamp still reflects the prior publish — editing doesn't publish.
 	require.NotNil(t, status.LastPublishedAt)
+}
+
+// publishedFreshnessFixture publishes a minimal project and rewinds its stored
+// hooks version to "0", simulating a hooks generator bump that shipped after the
+// org's last publish. Callers then read GetPublishStatus under different rollout
+// clearances.
+func publishedFreshnessFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, name+"-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty(name + " Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+}
+
+// A publish-status read must apply the same phased-rollout gate as the publish
+// path. An org not cleared for the current hooks generator version keeps its
+// published hooks by design — every publish carries them verbatim — so a
+// pending hooks bump must not read as "needs syncing": syncing cannot clear it,
+// and the chip would stick until the rollout pin advances.
+func TestPluginsService_GetPublishStatus_GatedOrgIgnoresPendingHooksBump(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	// nil feature provider + non-canary org slug → not cleared for the current
+	// hooks version (the gate fails closed).
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	publishedFreshnessFixture(t, ctx, ti, "Gated Freshness")
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate,
+		"a rollout-gated org pinned to older hooks must not read as needing sync")
+}
+
+// Once the rollout pin clears the org for the current hooks version, the same
+// pending hooks bump must read as stale, prompting a publish that applies it.
+func TestPluginsService_GetPublishStatus_EligibleOrgReadsPendingHooksBumpAsStale(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A pin above any plausible generator version clears this org for the bump.
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
+
+	publishedFreshnessFixture(t, ctx, ti, "Eligible Freshness")
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.False(t, *status.UpToDate,
+		"a cleared org with a pending hooks bump must read as needing sync")
 }
 
 // A Remote MCP-backed (mcp_server) plugin server is emitted into the generated
@@ -2262,9 +2378,6 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 	require.NotContains(t, mcpConfig.MCPServers, "Server_codex-disabled")
 }
 
-// PublishProject with SkipIfUnchanged set re-publishes the first time (no
-// stored fingerprint), skips when nothing changed, and re-publishes again once
-// the plugin set changes.
 func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testing.T) {
 	t.Parallel()
 
@@ -2272,17 +2385,74 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "default")
-	defaultSlug := "default"
-	authCtx.ProjectSlug = &defaultSlug
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "selected-project")
+	selectedProjectSlug := "selected-project"
+	authCtx.ProjectSlug = &selectedProjectSlug
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+	defaultPlugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Platform MCP distribution", mcpservers.VisibilityPublic)
+	platformRepo := platformmcprepo.New(ti.conn)
+	oauthClient, err := platformRepo.CreatePlatformMCPOAuthClient(ctx, platformmcprepo.CreatePlatformMCPOAuthClientParams{
+		ClientID:     "client-" + uuid.NewString(),
+		ClientName:   "Platform MCP publish test client",
+		RedirectUris: []string{"http://127.0.0.1:3000/callback"},
+	})
+	require.NoError(t, err)
+	connectionID := uuid.New()
+	connectionGeneration := uuid.New()
+	_, err = platformRepo.CreatePlatformMCPConnection(ctx, platformmcprepo.CreatePlatformMCPConnectionParams{
+		ID:               connectionID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		SubjectUrn:       "urn:gram:user:platform-mcp-publish-test",
+		OauthClientID:    oauthClient.ID,
+		ActiveGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+	registration, err := platformRepo.CreatePlatformMCPCatalogRegistration(ctx, platformmcprepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		SourceKind:           "catalog",
+		CatalogProvider:      "fixture",
+		CatalogReference:     "platform-mcp-publish-test",
+		Status:               "pending",
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
+	})
+	require.NoError(t, err)
+	registration, err = platformRepo.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformmcprepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		Status:         "registered",
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.id, Valid: true},
+		ID:             registration.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = platformRepo.CreatePlatformMCPDistribution(ctx, platformmcprepo.CreatePlatformMCPDistributionParams{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		RegistrationID:       registration.ID,
+		DefaultPluginID:      defaultPlugin.ID,
+		PluginServerID:       uuid.NullUUID{},
+		State:                "attached",
+		Version:              1,
+		AttachmentWasCreated: true,
+		ConnectionID:         connectionID,
+		ConnectionGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "platform enabled",
+		CommitMessage:   "platform admission transition",
 		SkipIfUnchanged: true,
-	})
+	}
+	_, err = ti.service.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
@@ -2292,28 +2462,17 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	var fingerprints map[string]string
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
 	require.Contains(t, fingerprints, "__platform_mcp__")
-	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
-	require.NoError(t, err)
-	require.NotNil(t, status.UpToDate)
-	require.True(t, *status.UpToDate, "publish status must include the admitted Platform MCP fingerprint")
 	platformFilesBefore := map[string][]byte{
 		"platform-mcp/.claude-plugin/plugin.json": mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
 		"platform-mcp/.mcp.json":                  mock.lastPushedFiles["platform-mcp/.mcp.json"],
 	}
 
-	// An indeterminate result preserves the prior Platform package and its
-	// fingerprint instead of treating an outage as a package revocation. It must
-	// inspect the repository even when the stored fingerprints would otherwise
-	// permit SkipIfUnchanged.
+	// An indeterminate result preserves the prior package and fingerprint. It
+	// must inspect the repository even when fingerprints would otherwise skip.
 	publisher := newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionIndeterminate})
 	mock.getRepoFilesCalled = false
 	mock.pushFilesCalled = false
-	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "platform indeterminate",
-		SkipIfUnchanged: true,
-	})
+	result, err := publisher.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.True(t, result.Skipped)
 	require.True(t, mock.getRepoFilesCalled)
@@ -2321,17 +2480,12 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.Equal(t, platformFilesBefore["platform-mcp/.claude-plugin/plugin.json"], mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"])
 	require.Equal(t, platformFilesBefore["platform-mcp/.mcp.json"], mock.lastPushedFiles["platform-mcp/.mcp.json"])
 
-	// An indeterminate admission must also repair a repository missing a shared
-	// marketplace or README file rather than reporting it as up to date.
+	// Indeterminate admission repairs a missing shared marketplace file rather
+	// than reporting the incomplete repository as current.
 	mock.repoFiles = maps.Clone(mock.lastPushedFiles)
 	delete(mock.repoFiles, ".claude-plugin/marketplace.json")
 	mock.pushFilesCalled = false
-	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "platform indeterminate missing shared file",
-		SkipIfUnchanged: true,
-	})
+	result, err = publisher.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
 	require.True(t, mock.pushFilesCalled)
@@ -2344,11 +2498,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterIndeterminate))
 	require.Equal(t, fingerprints["__platform_mcp__"], afterIndeterminate["__platform_mcp__"])
 
-	// If the database records a previously published package but the repository
-	// was deleted, an indeterminate admission reconstructs it rather than turning
-	// a rollout dependency outage into a permanent publish failure. Seed stale
-	// evidence so the assertion below proves reconstruction updates the fingerprint
-	// to match the bytes it writes.
+	// A deleted repository is reconstructed even while admission is unavailable.
 	const stalePlatformFingerprint = "sha256:stale-platform-fingerprint"
 	afterIndeterminate["__platform_mcp__"] = stalePlatformFingerprint
 	staleFingerprints, err := json.Marshal(afterIndeterminate)
@@ -2367,12 +2517,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	mock.repoFiles = nil
 	mock.lastPushedFiles = nil
 	mock.pushFilesCalled = false
-	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "platform indeterminate missing repo",
-		SkipIfUnchanged: true,
-	})
+	result, err = publisher.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
 	require.True(t, mock.pushFilesCalled)
@@ -2386,16 +2531,9 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NotEqual(t, stalePlatformFingerprint, afterReconstruction["__platform_mcp__"])
 	require.Equal(t, fingerprints["__platform_mcp__"], afterReconstruction["__platform_mcp__"])
 
-	// A confirmed disable removes only the Platform package. The absence of a
-	// customer MCP change makes the publisher carry customer bytes instead of
-	// issuing a fresh tenant API key.
+	// A confirmed disable removes only the Platform package.
 	publisher = newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionDisabled})
-	result, err = publisher.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "platform disabled",
-		SkipIfUnchanged: true,
-	})
+	result, err = publisher.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
 	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
@@ -2406,6 +2544,39 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	var afterDisabled map[string]string
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &afterDisabled))
 	require.NotContains(t, afterDisabled, "__platform_mcp__")
+}
+
+func TestPluginsService_PublishProject_PlatformMCPRequiresSelectedProjectAttachment(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "selected-project")
+	selectedProjectSlug := "selected-project"
+	authCtx.ProjectSlug = &selectedProjectSlug
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "platform eligible but not attached",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+
+	connection, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var fingerprints map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
+	require.NotContains(t, fingerprints, "__platform_mcp__")
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate, "publish status must exclude the un-attached Platform MCP package")
 }
 
 func TestPluginsService_PublishProject_StopsForCanceledPlatformMCPAdmission(t *testing.T) {

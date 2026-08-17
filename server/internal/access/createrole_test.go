@@ -193,7 +193,6 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_1", "Custom Builder", "org-custom-builder", "Old description"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
 
 	deleted, err := accessrepo.New(ti.conn).MarkOrganizationRoleDeleted(ctx, accessrepo.MarkOrganizationRoleDeletedParams{
 		WorkosDeletedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
@@ -204,7 +203,7 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), deleted)
 
-	err = authz.DeleteRoleGrants(ctx, accessrepo.New(ti.conn), authCtx.ActiveOrganizationID, "org-custom-builder", "role:organization:"+roleID)
+	err = authz.DeleteRoleGrants(ctx, accessrepo.New(ti.conn), authCtx.ActiveOrganizationID, "role:organization:"+roleID)
 	require.NoError(t, err)
 
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
@@ -238,9 +237,6 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.Deleted)
 	require.False(t, row.WorkosDeleted)
-
-	legacyGrants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
-	require.Empty(t, legacyGrants)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
 	require.Len(t, grants, 1)

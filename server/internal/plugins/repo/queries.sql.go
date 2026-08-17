@@ -244,6 +244,43 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 	return i, err
 }
 
+const getDefaultPluginForUpdate = `-- name: GetDefaultPluginForUpdate :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetDefaultPluginForUpdateParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Serializes mutation of the existing Default plugin with concurrent deletion.
+// Callers must use this inside the transaction that attaches or removes a
+// plugin server; a deleted plugin deliberately returns no row.
+func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultPluginForUpdateParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getDefaultPluginForUpdate, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getGitHubConnection = `-- name: GetGitHubConnection :one
 SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections

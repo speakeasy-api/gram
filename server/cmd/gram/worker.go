@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -202,6 +201,28 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:    "stripe-api-key",
+			Usage:   "The Stripe API key",
+			EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "stripe-webhook-secret",
+			Usage:   "The Stripe webhook signing secret",
+			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-tum",
+			Aliases: []string{"stripe.price_id_tum"},
+			Usage:   "The Stripe metered TUM price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name",
+			Aliases: []string{"stripe.meter_event_name"},
+			Usage:   "The Stripe TUM meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -317,6 +338,12 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "email-template-ids",
+			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
+			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
+			Required: false,
+		},
 	}
 
 	flags = append(flags, redisFlags()...)
@@ -327,6 +354,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
+	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -435,7 +463,11 @@ func newWorkerCommand() *cli.Command {
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
-			platformAdmission := platformmcp.NewAdmissionChecker(productFeatures, featureFlags, platformmcp.NewPostgresNewModelEligibility(db))
+			platformAdmission := platformmcp.NewAdmissionChecker(
+				productFeatures,
+				featureFlags,
+				platformmcp.NewPostgresNewModelEligibility(db),
+			)
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
@@ -460,8 +492,10 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			emailService := email.NewService(logger, loopsClient)
+			emailService, err := newEmailService(ctx, c, logger, guardianPolicy)
+			if err != nil {
+				return err
+			}
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
@@ -497,7 +531,12 @@ func newWorkerCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe client: %w", err)
+			}
+
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -506,7 +545,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker, encryptionClient)
 			}
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
@@ -545,6 +584,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
+			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
+			if err != nil {
+				return err
+			}
+
 			// we don't require a real workOS client for workers as they bypass RBAC
 			authzEngine := authz.NewEngine(
 				logger,
@@ -569,7 +613,7 @@ func newWorkerCommand() *cli.Command {
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 			/**
 			 * BEGIN -- MCP service setup for agent client
@@ -827,46 +871,48 @@ func newWorkerCommand() *cli.Command {
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:      guardianPolicy,
-				DB:                  db,
-				EncryptionClient:    encryptionClient,
-				FeatureProvider:     featureFlags,
-				AssetStorage:        assetStorage,
-				SlackClient:         slackClient,
-				ChatMessageWriter:   chatWriter,
-				ChatClient:          chatClient,
-				OpenRouter:          openRouter,
-				K8sClient:           k8sClient,
-				ExpectedTargetCNAME: c.String("custom-domain-cname"),
-				SiteURL:             siteURL,
-				BillingTracker:      billingTracker,
-				BillingRepository:   billingRepo,
-				RedisClient:         redisClient,
-				PosthogClient:       posthogClient,
-				EmailService:        emailService,
-				FunctionsDeployer:   functionsOrchestrator,
-				FunctionsVersion:    runnerVersion,
-				RagService:          ragService,
-				MCPRegistryClient:   mcpRegistryClient,
-				TelemetryLogger:     telemetryLogger,
-				ClickhouseConn:      chDB,
-				TelemetryRepo:       telemetryrepo.New(chDB),
-				TriggersApp:         triggerApp,
-				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
-				AssistantsCore:      assistantsCore,
-				TemporalEnv:         temporalEnv,
-				PIIScanner:          piiScanner,
-				PIScanner:           piScanner,
-				CustomRuleScanner:   customRuleScanner,
-				BuiltinPresets:      builtinPresets,
-				ShadowMCPClient:     shadowMCPClient,
-				AuditLogger:         auditLogger,
-				WorkOSClient:        backgroundWorkOSClient,
-				SvixClient:          svixClient,
-				ProductFeatures:     productFeatures,
-				PluginPublisher:     pluginPublisher,
-				Publishers:          publishers,
-				TrialEmailsService:  trialEmailsService,
+				GuardianPolicy:            guardianPolicy,
+				DB:                        db,
+				EncryptionClient:          encryptionClient,
+				FeatureProvider:           featureFlags,
+				AssetStorage:              assetStorage,
+				SlackClient:               slackClient,
+				ChatMessageWriter:         chatWriter,
+				ChatClient:                chatClient,
+				OpenRouter:                openRouter,
+				K8sClient:                 k8sClient,
+				ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+				SiteURL:                   siteURL,
+				BillingTracker:            billingTracker,
+				BillingRepository:         billingRepo,
+				RedisClient:               redisClient,
+				PosthogClient:             posthogClient,
+				EmailService:              emailService,
+				FunctionsDeployer:         functionsOrchestrator,
+				FunctionsVersion:          runnerVersion,
+				RagService:                ragService,
+				MCPRegistryClient:         mcpRegistryClient,
+				TelemetryLogger:           telemetryLogger,
+				ClickhouseConn:            chDB,
+				TelemetryRepo:             telemetryrepo.New(chDB),
+				TriggersApp:               triggerApp,
+				CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:            assistantsCore,
+				TemporalEnv:               temporalEnv,
+				PIIScanner:                piiScanner,
+				PIScanner:                 piScanner,
+				CustomRuleScanner:         customRuleScanner,
+				BuiltinPresets:            builtinPresets,
+				ShadowMCPClient:           shadowMCPClient,
+				AuditLogger:               auditLogger,
+				WorkOSClient:              backgroundWorkOSClient,
+				SvixClient:                svixClient,
+				ProductFeatures:           productFeatures,
+				PluginPublisher:           pluginPublisher,
+				Publishers:                publishers,
+				TrialEmailsService:        trialEmailsService,
+				RiskFingerprinter:         riskFingerprinter,
+				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

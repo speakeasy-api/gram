@@ -67,6 +67,10 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
+   * True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
+   */
+  litellmProxied?: boolean | undefined;
+  /**
    * Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.
    */
   matchSegments?: Array<RiskSegment> | undefined;
@@ -174,6 +178,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    litellm_proxied: z.optional(z.boolean()),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
@@ -214,6 +219,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "has_more_after": "hasMoreAfter",
       "has_more_before": "hasMoreBefore",
       "last_message_timestamp": "lastMessageTimestamp",
+      "litellm_proxied": "litellmProxied",
       "match_segments": "matchSegments",
       "max_generation": "maxGeneration",
       "num_messages": "numMessages",

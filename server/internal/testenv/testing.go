@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -16,10 +17,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+// NewCacheSuffix returns a cache suffix unique to this test invocation.
+func NewCacheSuffix(t *testing.T, base cache.Suffix) cache.Suffix {
+	t.Helper()
+
+	return cache.Suffix(string(base) + "-" + t.Name() + "-" + uuid.NewString())
+}
 
 func DefaultSiteURL(t *testing.T) *url.URL {
 	t.Helper()

@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -26,18 +27,21 @@ type CollectOpenRouterCreditsMetrics struct {
 	db         *pgxpool.Pool
 	repo       *repo.Queries
 	openRouter openrouter.Provisioner
+	enc        *encryption.Client
 }
 
 func NewCollectOpenRouterCreditsMetrics(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
+	enc *encryption.Client,
 ) *CollectOpenRouterCreditsMetrics {
 	return &CollectOpenRouterCreditsMetrics{
 		logger:     logger.With(attr.SlogComponent("collect_openrouter_credits_metrics")),
 		db:         db,
 		repo:       repo.New(db),
 		openRouter: openRouterProvisioner,
+		enc:        enc,
 	}
 }
 
@@ -74,7 +78,32 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 	g.SetLimit(openRouterCreditsPollConcurrency)
 	for i, row := range rows {
 		g.Go(func() error {
-			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, row.ApiKey)
+			// Prefer the encrypted key material; rows minted before encrypted
+			// storage fall back to the plaintext column until the platform
+			// admin encrypt action scrubs them. Resolution failures are
+			// logged and skipped so one bad row does not blank the batch.
+			apiKey := row.ApiKey.String
+			if row.ApiKeyEncrypted.Valid {
+				decrypted, decErr := c.enc.Decrypt(row.ApiKeyEncrypted.String)
+				if decErr != nil {
+					c.logger.ErrorContext(gctx, "decrypt openrouter key for usage polling",
+						attr.SlogOrganizationID(row.OrganizationID),
+						attr.SlogOrganizationSlug(row.OrganizationSlug),
+						attr.SlogError(decErr),
+					)
+					return nil
+				}
+				apiKey = decrypted
+			}
+			if apiKey == "" {
+				c.logger.ErrorContext(gctx, "openrouter key row holds no key material",
+					attr.SlogOrganizationID(row.OrganizationID),
+					attr.SlogOrganizationSlug(row.OrganizationSlug),
+				)
+				return nil
+			}
+
+			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, apiKey)
 			if err != nil {
 				// Skip on a per-org failure so one bad key does not blank the
 				// whole batch. The error is logged for diagnosis and swallowed

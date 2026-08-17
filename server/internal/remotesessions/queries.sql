@@ -1993,3 +1993,19 @@ WHERE i.issuer = ANY(@issuers::text[])
   AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
 ORDER BY i.id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: TouchRemoteSessionLastUsed :exec
+-- Records that this upstream token was handed to a proxied call. Distinct from
+-- last_refresh_attempt_at, which records keepalive work rather than traffic.
+-- Coalesced by the cutoff for the same reason as the user_sessions stamp: this
+-- runs whenever a brokered call resolves a token, so most executions must match
+-- no rows.
+-- Scoped by the (subject_urn, remote_session_client_id) binding rather than a
+-- project_id, which this table does not carry; that pair is the table's
+-- uniqueness key and the client is itself tenant-owned.
+UPDATE remote_sessions
+SET last_used_at = @now_ts::timestamptz
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);

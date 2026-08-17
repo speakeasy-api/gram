@@ -207,9 +207,9 @@ func backfillOrganizationMetadata(ctx context.Context, repo *orgrepo.Queries, or
 }
 
 func uniqueOrganizationSlug(ctx context.Context, repo orgslug.Lookup, name, fallback string) (string, error) {
-	base := orgslug.Slugify(name)
-	if base == "" {
-		base = fallback
+	base, err := orgslug.StableBase(name, fallback)
+	if err != nil {
+		return "", fmt.Errorf("derive organization slug: %w", err)
 	}
 	slug, err := orgslug.FindUnique(ctx, repo, base)
 	if err != nil {
@@ -303,7 +303,7 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 		// slug, so mirror the event handler's principal exactly — a slug-based
 		// URN matches nothing and leaves the grants behind.
 		rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+localRole.ID.String())
-		if err := authz.DeleteRoleGrants(ctx, repo, organizationID, localRole.WorkosSlug, rolePrincipal.String()); err != nil {
+		if err := authz.DeleteRoleGrants(ctx, repo, organizationID, rolePrincipal.String()); err != nil {
 			return fmt.Errorf("delete grants for organization role %q: %w", localRole.WorkosSlug, err)
 		}
 		logger.DebugContext(ctx, "soft-deleted WorkOS organization role missing from snapshot", attr.SlogAccessRoleSlug(localRole.WorkosSlug))

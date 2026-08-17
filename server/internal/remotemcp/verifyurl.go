@@ -46,8 +46,9 @@ const (
 
 // VerifyRemoteMcpURL issues an MCP initialize request against rawURL and
 // reports a verification outcome. The supplied [guardian.Policy] enforces the
-// SSRF blocklist; rawURL must already have passed [validateURL]. The caller
-// is responsible for bounding the overall deadline via ctx.
+// SSRF blocklist; rawURL must already have passed
+// [guardian.Policy.ValidateHTTPURL]. The caller is responsible for bounding
+// the overall deadline via ctx.
 func VerifyRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) (verified bool, httpStatus *int, message string) {
 	client := policy.Client()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {

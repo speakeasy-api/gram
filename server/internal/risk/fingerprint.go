@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/inv"
 )
@@ -48,6 +49,29 @@ func WithKeyCache(cache map[string][]byte) TenantedOption {
 	return func(o *tenantedOptions) {
 		o.keyCache = cache
 	}
+}
+
+// EncodeFingerprint renders a fingerprint sum in the encoding stored on
+// ClickHouse rows (unpadded base64url, matching the ingest writer).
+func EncodeFingerprint(sum []byte) string {
+	return base64.RawURLEncoding.EncodeToString(sum)
+}
+
+// Versions returns every pepper version in the keyring, sorted, for callers
+// that must match fingerprints written under any historical pepper (e.g. the
+// retroactive exclusion reconcile matching rows across rotations). A zero
+// Fingerprinter returns nil, which such callers treat as "fingerprinting
+// unavailable".
+func (p Fingerprinter) Versions() []string {
+	if len(p.keys) == 0 {
+		return nil
+	}
+	versions := make([]string, 0, len(p.keys))
+	for v := range p.keys {
+		versions = append(versions, v)
+	}
+	slices.Sort(versions)
+	return versions
 }
 
 func (p Fingerprinter) get(version string) ([]byte, error) {

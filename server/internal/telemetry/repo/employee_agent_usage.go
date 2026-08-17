@@ -11,6 +11,10 @@ type SearchEmployeeAgentUsageParams struct {
 	TimeStart     int64 // inclusive window start, unix nanoseconds
 	TimeEnd       int64 // inclusive window end, unix nanoseconds
 	Limit         int
+
+	// CanonicalIdentityOrg, when set, folds the email group key through the
+	// identity_map so one employee reads as one row. Empty disables folding.
+	CanonicalIdentityOrg string
 }
 
 // SearchEmployeeAgentUsage returns per-user usage summaries for the employee
@@ -32,10 +36,22 @@ type SearchEmployeeAgentUsageParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) SearchEmployeeAgentUsage(ctx context.Context, arg SearchEmployeeAgentUsageParams) ([]UserSummary, error) {
+	// In canonical mode the group key folds through the identity_map, so one
+	// employee's work, personal, and case-variant emails collapse into a
+	// single row keyed by their canonical (directory) email.
+	// The folded key must reference the base column by qualified name: the
+	// SELECT aliases the expression AS user_email, and ClickHouse substitutes
+	// unqualified user_email references inside GROUP BY with that alias,
+	// which breaks aggregation validation (the skill's alias-shadowing trap).
+	emailKey := "user_email"
+	if orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg); orgLit != "" {
+		emailKey = canonicalEmailExpr(orgLit, "attribute_metrics_summaries.user_email")
+	}
+
 	sb := sq.Select(
 		// Identity: email is the group key for this path.
-		"user_email AS user_id",
-		"user_email AS user_email",
+		emailKey+" AS user_id",
+		emailKey+" AS user_email",
 
 		// Activity window. time_bucket is a whole-hour DateTime, so these are
 		// hour-truncated. toInt64(DateTime) yields unix seconds; scale to nanos to
@@ -58,11 +74,15 @@ func (q *Queries) SearchEmployeeAgentUsage(ctx context.Context, arg SearchEmploy
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd).
 		// Email-keyed rows only; the empty-email bucket is handled by
 		// ListEmaillessIdentities so it isn't shown as one synthetic user.
-		Where("user_email != ''").
-		GroupBy("user_email").
-		OrderBy("last_seen_unix_nano DESC", "user_email DESC").
+		Where("user_email != ''"). //nolint:glint // fold-neutral emptiness check - the fold never maps empty to non-empty or back
+		GroupBy(emailKey).
+		// Order by the group expression, not the alias: the user_email alias
+		// shadows the base column and ClickHouse resolves ORDER BY identifiers
+		// to the column, which is not in GROUP BY in canonical mode.
+		OrderBy("last_seen_unix_nano DESC", emailKey+" DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building employee agent usage query: %w", err)
@@ -127,7 +147,7 @@ func (q *Queries) ListEmaillessIdentities(ctx context.Context, arg ListEmailless
 		GroupBy("user_id").
 		// Keep only user_ids that never co-occur with an email in the window;
 		// those that do are folded into an email key by SearchEmployeeAgentUsage.
-		Having("max(user_email != '') = 0").
+		Having("max(user_email != '') = 0"). //nolint:glint // fold-neutral emptiness check partitioning email-less identities
 		OrderBy("last_seen_unix_nano DESC", "user_id DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 

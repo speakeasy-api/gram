@@ -51,11 +51,11 @@ func isConversationEvent(eventName string) bool {
 }
 
 // defaultChatTitleForSession picks the default chat title based on the
-// session's resolved product surface. If the surface is unknown (no OTEL
-// service.name or SessionStart variant on file yet) we fall back to the
-// ambiguous "Claude Session" title rather than assuming claude-code — the
-// title generator will replace it with a real one once enough conversation
-// is on file.
+// session's resolved product surface. If the surface is unknown (nothing
+// identifying a Claude sender on file yet) we fall back to the ambiguous
+// "Claude Session" title rather than assuming claude-code — the title
+// generator will replace it with a real one once enough conversation is on
+// file.
 func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *SessionMetadata) string {
 	switch s.claudeSessionSurface(ctx, metadata) {
 	case agentVariantCowork:
@@ -102,10 +102,18 @@ func claudeServiceNameSpecificity(name string) int {
 	case agentVariantClaudeCode:
 		return 2
 	}
-	if strings.ToLower(strings.TrimSpace(name)) == "claude" {
+	if bareClaudeAdapterSlug(name) {
 		return 1
 	}
 	return 0
+}
+
+// bareClaudeAdapterSlug reports whether a reported service name is the legacy
+// "claude" slug the hooks binary sends for Claude Code. It names the sender
+// family without naming a surface, and it collides with the "claude" the
+// Anthropic compliance import writes for Claude Chat Desktop.
+func bareClaudeAdapterSlug(name string) bool {
+	return strings.EqualFold(strings.TrimSpace(name), "claude")
 }
 
 // preferClaudeServiceName merges a freshly reported service name (or adapter
@@ -154,6 +162,16 @@ func (s *Service) claudeSessionSurface(ctx context.Context, metadata *SessionMet
 	}
 	if variant != "" {
 		return variant
+	}
+	// Only the Claude Code runtimes send the bare slug — the desktop clients
+	// send "claude-code-desktop" and cowork self-identifies on the OTEL
+	// service.name — so with nothing more specific on file the sender is Claude
+	// Code. Resolving it here keeps the slug off chat rows and telemetry, where
+	// it reads back as Claude Chat Desktop. Sessions whose OTEL stream never
+	// arrives (Claude Code telemetry disabled, or traffic routed through a proxy
+	// instead) would otherwise carry the colliding slug for their whole lifetime.
+	if bareClaudeAdapterSlug(metadata.ServiceName) {
+		return agentVariantClaudeCode
 	}
 	return metadata.ServiceName
 }
@@ -425,6 +443,35 @@ func (s *Service) sessionCaptureEnabled(ctx context.Context, metadata *SessionMe
 		return false, nil
 	}
 	return true, nil
+}
+
+// proxiedTurnDuplicatesNativeStream reports whether the session's transcript is
+// already owned by a hook stream that reports its own assistant turns, which
+// makes a proxied row for the same turn a duplicate. The marker written when a
+// native prompt lands answers this without a query; the latest user prompt's
+// source is the durable fallback for sessions whose marker expired or was
+// written before this instance saw them. Unlike the prompt path this does not
+// repair the marker: the marker also gates prompt suppression, and only the
+// prompt path's own writes decide what belongs there.
+func (s *Service) proxiedTurnDuplicatesNativeStream(ctx context.Context, metadata *SessionMetadata, chatID, projectID uuid.UUID) (bool, error) {
+	if metadata.SessionID == "" {
+		return false, nil
+	}
+	var nativeSource string
+	if err := s.cache.Get(ctx, sessionNativeHooksCacheKey(projectID.String(), metadata.SessionID), &nativeSource); err == nil && nativeAssistantTurnSource(nativeSource) {
+		return true, nil
+	}
+	latestSource, err := chatRepo.New(s.db).GetLatestChatUserPromptSource(ctx, chatRepo.GetLatestChatUserPromptSourceParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("get latest chat user prompt source: %w", err)
+	}
+	return latestSource.Valid && nativeAssistantTurnSource(latestSource.String), nil
 }
 
 func (s *Service) insertUncorrelatedAgentPrompt(

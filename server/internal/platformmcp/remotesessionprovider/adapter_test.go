@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,21 @@ func TestPreflightSetupRunsConfiguratorBeforeClientLookup(t *testing.T) {
 
 	require.ErrorContains(t, err, "configure fixture client")
 	require.True(t, configured)
+}
+
+func TestReadinessResultUsesDefaultOrTestOnlyLifetime(t *testing.T) {
+	t.Parallel()
+
+	request := platformmcp.ProviderReadinessProbeRequest{
+		UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), ConnectionID: uuid.New(), Generation: uuid.New(),
+	}
+	defaultAdapter := &Adapter{}
+	defaultResult := defaultAdapter.readinessResult(platformmcp.ReadinessReady, "tools_list_ok", request, remotesessions.ResolvedAuthorization{}, "")
+	require.WithinDuration(t, time.Now().UTC().Add(readinessLifetime), defaultResult.ExpiresAt, time.Second)
+
+	fixtureAdapter := &Adapter{descriptor: Descriptor{TestOnlyReadinessLifetime: 15 * time.Minute}}
+	fixtureResult := fixtureAdapter.readinessResult(platformmcp.ReadinessReady, "tools_list_ok", request, remotesessions.ResolvedAuthorization{}, "")
+	require.WithinDuration(t, time.Now().UTC().Add(15*time.Minute), fixtureResult.ExpiresAt, time.Second)
 }
 
 func TestPreflightSetupRejectsAlreadyConsumedHandoff(t *testing.T) {

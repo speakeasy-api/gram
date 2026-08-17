@@ -20,25 +20,29 @@ specific category of applications.
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { accessBlockShadowMCPInventoryServer } from "@gram/client/funcs/accessBlockShadowMCPInventoryServer.js";
+import { accessCreateRole } from "@gram/client/funcs/accessCreateRole.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await accessBlockShadowMCPInventoryServer(gram, {
-    blockShadowMCPInventoryServerRequestBody: {
-      policyId: "446d5683-43ea-4800-8767-001f86921785",
-      projectId: "944297fa-368e-419d-9a2b-8879726d9d0b",
-      serverUrl: "https://numb-mortise.name/",
+  const res = await accessCreateRole(gram, {
+    createRoleForm: {
+      description: "swerve hm receptor how",
+      grants: [
+        {
+          scope: "environment:write",
+        },
+      ],
+      name: "<value>",
     },
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("accessBlockShadowMCPInventoryServer failed:", res.error);
+    console.log("accessCreateRole failed:", res.error);
   }
 }
 

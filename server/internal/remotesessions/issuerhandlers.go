@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -839,6 +840,44 @@ func (e *discoveryError) UserMessage() string {
 // fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
 // in a *discoveryError so the handler can attach the upstream URL and status to
 // the user-facing error.
+// DiscoveredIssuerMetadata is the server-owned subset of RFC 8414 metadata
+// required to register Gram as an OAuth client. It is deliberately an internal
+// application return type rather than an API payload: callers must not reflect
+// upstream endpoints or registration material to untrusted clients.
+type DiscoveredIssuerMetadata struct {
+	Issuer                            string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported bool
+}
+
+// DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
+// outbound policy. It is available to trusted server-side composition such as
+// Platform MCP provider attachment; browser and MCP callers must never supply
+// an issuer URL to it.
+func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
+	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	if err != nil {
+		return DiscoveredIssuerMetadata{}, err
+	}
+	return DiscoveredIssuerMetadata{
+		Issuer:                            doc.Issuer,
+		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
+		TokenEndpoint:                     doc.TokenEndpoint,
+		RegistrationEndpoint:              doc.RegistrationEndpoint,
+		ScopesSupported:                   append([]string(nil), doc.ScopesSupported...),
+		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
+		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+	}, nil
+}
+
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
 	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
@@ -853,6 +892,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	defer cancel()
 
 	client := policy.Client()
+	// Guardian owns the transport and its SSRF protections. Keep redirect policy
+	// narrow here without changing TLS verification or the transport itself.
+	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if !validIssuerDiscoveryURL(req.URL) {
+			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+		}
+		return nil
+	}
 
 	var firstErr *discoveryError
 	var fallbackDoc rfc8414Document
@@ -892,6 +939,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // returns either the parsed RFC 8414 / OIDC document or a typed error annotated
 // with the probed URL and upstream status.
 func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+	requestURL, err := url.Parse(wellKnown)
+	if err != nil || !validIssuerDiscoveryURL(requestURL) {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       0,
+			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
 	if err != nil {
 		return rfc8414Document{}, &discoveryError{
@@ -937,6 +992,13 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			cause:        fmt.Errorf("decode discovery document: %w", err),
 		}
 	}
+	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        err,
+		}
+	}
 
 	return doc, nil
 }
@@ -958,8 +1020,8 @@ func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
 	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("issuer url must include scheme and host")
+	if !validIssuerDiscoveryURL(u) {
+		return nil, fmt.Errorf("issuer url must use HTTPS outside local loopback")
 	}
 
 	origin := (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
@@ -989,6 +1051,71 @@ func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	}
 
 	return candidates, nil
+}
+
+// validIssuerDiscoveryURL permits HTTPS issuers and the explicit HTTP loopback
+// exception used by local development and deterministic tests. It is applied to
+// every initial probe and redirect before a request leaves the process.
+func validIssuerDiscoveryURL(u *url.URL) bool {
+	if u == nil || u.Host == "" || u.User != nil {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// validateIssuerMetadataEndpoints rejects endpoints that would weaken the
+// transport guarantee after a valid metadata document has been discovered.
+// Authorization and token endpoints retain the explicit local-loopback
+// exception used by discovery. JWKs and DCR endpoints are fetched server-side,
+// so they require HTTPS except for an endpoint on the exact same explicit
+// loopback origin as a local HTTP issuer.
+func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.URL) error {
+	for _, endpoint := range []struct {
+		name         string
+		raw          string
+		requireHTTPS bool
+	}{
+		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint, requireHTTPS: false},
+		{name: "token_endpoint", raw: doc.TokenEndpoint, requireHTTPS: true},
+		{name: "jwks_uri", raw: doc.JwksURI, requireHTTPS: true},
+		{name: "registration_endpoint", raw: doc.RegistrationEndpoint, requireHTTPS: true},
+	} {
+		if endpoint.raw == "" {
+			continue
+		}
+		parsed, err := url.Parse(endpoint.raw)
+		if err != nil || !validIssuerMetadataEndpointURL(parsed, requestedIssuer, endpoint.requireHTTPS) {
+			if endpoint.requireHTTPS {
+				return fmt.Errorf("issuer metadata %s must use HTTPS or the same local loopback origin", endpoint.name)
+			}
+			return fmt.Errorf("issuer metadata %s must use HTTPS outside local loopback", endpoint.name)
+		}
+	}
+	return nil
+}
+
+func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {
+	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
+		return false
+	}
+	if !requireHTTPS {
+		return validIssuerDiscoveryURL(parsed)
+	}
+	if parsed.Scheme == "https" {
+		return true
+	}
+	return parsed.Scheme == "http" && validIssuerDiscoveryURL(parsed) && validIssuerDiscoveryURL(requestedIssuer) && parsed.Host == requestedIssuer.Host
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata
