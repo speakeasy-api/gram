@@ -279,22 +279,7 @@ export function PlatformMCPOnboardingContent({
     );
   }
 
-  // The server/OpenAPI contract already includes these fields. Keep this narrow
-  // intersection only until local SDK generation is unblocked by certificate trust.
-  const state = onboarding.data as PlatformMCPOnboardingState & {
-    connectionAuthState:
-      | "not_connected"
-      | "active"
-      | "reauthorization_required";
-    reauthorizationReason:
-      | ""
-      | "idle_expired"
-      | "authorization_expired"
-      | "refresh_invalidated"
-      | "authorization_changed"
-      | "revoked"
-      | "security_reset";
-  };
+  const state = onboarding.data;
   if (!state.enabled) {
     const unavailable = (
       <PlatformMCPUnavailable

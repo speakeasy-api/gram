@@ -122,6 +122,61 @@ func TestPostgresOAuthStoreRefreshReplayAfterConnectionRevocationIsTerminal(t *t
 	require.ErrorIs(t, err, platformoauth.ErrRevoked)
 }
 
+func TestPostgresOAuthStoreGenerationRotationRevokesGenerationCommittedWhileWaiting(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_generation_rotation_lock")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP rotation test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	store := NewPostgresOAuthStore(conn)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP rotation test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN("user_" + uuid.NewString()), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+
+	connectionID := uuid.MustParse(connection.ID)
+	intermediateGeneration := uuid.New()
+	blockingTx := testenv.BeginTx(t, ctx, conn)
+	blockingQueries := platformrepo.New(blockingTx)
+	locked, err := blockingQueries.GetPlatformMCPConnectionForUpdate(ctx, platformrepo.GetPlatformMCPConnectionForUpdateParams{ID: connectionID, OrganizationID: organizationID})
+	require.NoError(t, err)
+	_, err = blockingQueries.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: connectionID, OrganizationID: organizationID, ActiveGeneration: intermediateGeneration, ReauthorizedAt: timestamp(now.Add(time.Minute)), AuthorizationExpiresAt: timestamp(now.Add(time.Minute).Add(platformoauth.AuthorizationLifetime))})
+	require.NoError(t, err)
+	intermediateRefreshHash := "refresh-" + uuid.NewString()
+	_, err = blockingQueries.CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{ID: uuid.New(), OrganizationID: organizationID, ConnectionID: connectionID, OauthClientID: locked.OauthClientID, ConnectionGeneration: intermediateGeneration, Jti: "jti-" + uuid.NewString(), RefreshTokenHash: intermediateRefreshHash, ExpiresAt: timestamp(now.Add(time.Hour)), RefreshExpiresAt: timestamp(now.Add(24 * time.Hour))})
+	require.NoError(t, err)
+
+	finalGeneration := uuid.New()
+	rotationResult := make(chan error, 1)
+	go func() {
+		_, rotateErr := store.RotateConnectionGeneration(ctx, organizationID, connection.ID, finalGeneration.String(), now.Add(2*time.Minute))
+		rotationResult <- rotateErr
+	}()
+	select {
+	case rotateErr := <-rotationResult:
+		require.FailNow(t, "generation rotation did not wait for the connection lock", "error: %v", rotateErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	require.NoError(t, blockingTx.Commit(ctx))
+	require.NoError(t, <-rotationResult)
+	intermediateSession, err := platformrepo.New(conn).GetPlatformMCPSessionForRefreshForUpdate(ctx, platformrepo.GetPlatformMCPSessionForRefreshForUpdateParams{OrganizationID: organizationID, RefreshTokenHash: intermediateRefreshHash})
+	require.NoError(t, err)
+	require.True(t, intermediateSession.RevokedAt.Valid, "the rotation must revoke the generation that was current after acquiring the lock")
+}
+
 func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
 	t.Parallel()
 

@@ -33,6 +33,14 @@ func TestConnectionAuthStateMapsPersistedReasons(t *testing.T) {
 	}
 }
 
+func TestDeriveOnboardingStageDoesNotTreatTerminalEvidenceAsReady(t *testing.T) {
+	t.Parallel()
+
+	evidence := &OnboardingConnection{Ready: true}
+	require.Equal(t, OnboardingStageAuthorized, deriveOnboardingStage(nil, nil, evidence, ConnectionAuthStateReauthorizationRequired))
+	require.Equal(t, OnboardingStageConnectionReady, deriveOnboardingStage(nil, nil, evidence, ConnectionAuthStateActive))
+}
+
 func TestConnectionAuthStateDerivesExactDeadlines(t *testing.T) {
 	t.Parallel()
 

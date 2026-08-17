@@ -10,6 +10,19 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Bounded authorization state for the authenticated user's latest Platform MCP connection.
+ */
+export const ConnectionAuthState = {
+  NotConnected: "not_connected",
+  Active: "active",
+  ReauthorizationRequired: "reauthorization_required",
+} as const;
+/**
+ * Bounded authorization state for the authenticated user's latest Platform MCP connection.
+ */
+export type ConnectionAuthState = ClosedEnum<typeof ConnectionAuthState>;
+
+/**
  * Bounded package-publication state for the selected project's Default plugin after a distribution change.
  */
 export const DistributionPublicationState = {
@@ -74,6 +87,23 @@ export const ReadinessState = {
 export type ReadinessState = ClosedEnum<typeof ReadinessState>;
 
 /**
+ * Bounded reason why interactive Platform MCP authorization is required again.
+ */
+export const ReauthorizationReason = {
+  Unknown: "",
+  IdleExpired: "idle_expired",
+  AuthorizationExpired: "authorization_expired",
+  RefreshInvalidated: "refresh_invalidated",
+  AuthorizationChanged: "authorization_changed",
+  Revoked: "revoked",
+  SecurityReset: "security_reset",
+} as const;
+/**
+ * Bounded reason why interactive Platform MCP authorization is required again.
+ */
+export type ReauthorizationReason = ClosedEnum<typeof ReauthorizationReason>;
+
+/**
  * A bounded next action when the workflow cannot progress.
  */
 export const RepairAction = {
@@ -125,6 +155,10 @@ export type PlatformMCPOnboardingState = {
    */
   clientFamily: string;
   /**
+   * Bounded authorization state for the authenticated user's latest Platform MCP connection.
+   */
+  connectionAuthState: ConnectionAuthState;
+  /**
    * Whether the authenticated user has a current authorized Platform MCP connection.
    */
   connectionAuthorized: boolean;
@@ -173,6 +207,10 @@ export type PlatformMCPOnboardingState = {
    */
   readinessVerified: boolean;
   /**
+   * Bounded reason why interactive Platform MCP authorization is required again.
+   */
+  reauthorizationReason: ReauthorizationReason;
+  /**
    * Whether the server-owned local candidate is registered for the selected project.
    */
   registrationComplete: boolean;
@@ -203,6 +241,11 @@ export type PlatformMCPOnboardingState = {
 };
 
 /** @internal */
+export const ConnectionAuthState$inboundSchema: z.ZodMiniEnum<
+  typeof ConnectionAuthState
+> = z.enum(ConnectionAuthState);
+
+/** @internal */
 export const DistributionPublicationState$inboundSchema: z.ZodMiniEnum<
   typeof DistributionPublicationState
 > = z.enum(DistributionPublicationState);
@@ -223,6 +266,11 @@ export const ReadinessState$inboundSchema: z.ZodMiniEnum<
 > = z.enum(ReadinessState);
 
 /** @internal */
+export const ReauthorizationReason$inboundSchema: z.ZodMiniEnum<
+  typeof ReauthorizationReason
+> = z.enum(ReauthorizationReason);
+
+/** @internal */
 export const RepairAction$inboundSchema: z.ZodMiniEnum<typeof RepairAction> = z
   .enum(RepairAction);
 
@@ -238,6 +286,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
     agent_configuration_copied: z.boolean(),
     catalog_explored: z.boolean(),
     client_family: z.string(),
+    connection_auth_state: ConnectionAuthState$inboundSchema,
     connection_authorized: z.boolean(),
     connection_ready: z.boolean(),
     distribution_attached: z.boolean(),
@@ -250,6 +299,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
     readiness_freshness: ReadinessFreshness$inboundSchema,
     readiness_state: ReadinessState$inboundSchema,
     readiness_verified: z.boolean(),
+    reauthorization_reason: ReauthorizationReason$inboundSchema,
     registration_complete: z.boolean(),
     repair_action: RepairAction$inboundSchema,
     selected_project_name: z.string(),
@@ -263,6 +313,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
       "agent_configuration_copied": "agentConfigurationCopied",
       "catalog_explored": "catalogExplored",
       "client_family": "clientFamily",
+      "connection_auth_state": "connectionAuthState",
       "connection_authorized": "connectionAuthorized",
       "connection_ready": "connectionReady",
       "distribution_attached": "distributionAttached",
@@ -274,6 +325,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
       "readiness_freshness": "readinessFreshness",
       "readiness_state": "readinessState",
       "readiness_verified": "readinessVerified",
+      "reauthorization_reason": "reauthorizationReason",
       "registration_complete": "registrationComplete",
       "repair_action": "repairAction",
       "selected_project_name": "selectedProjectName",

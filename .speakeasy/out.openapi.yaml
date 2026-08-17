@@ -68470,6 +68470,13 @@ components:
         client_family:
           type: string
           description: Selected manual-install client family when a workflow is active.
+        connection_auth_state:
+          type: string
+          description: Bounded authorization state for the authenticated user's latest Platform MCP connection.
+          enum:
+            - not_connected
+            - active
+            - reauthorization_required
         connection_authorized:
           type: boolean
           description: Whether the authenticated user has a current authorized Platform MCP connection.
@@ -68532,6 +68539,17 @@ components:
         readiness_verified:
           type: boolean
           description: Whether Platform MCP observed a successful ready status check for the workflow-bound MCP.
+        reauthorization_reason:
+          type: string
+          description: Bounded reason why interactive Platform MCP authorization is required again.
+          enum:
+            - ""
+            - idle_expired
+            - authorization_expired
+            - refresh_invalidated
+            - authorization_changed
+            - revoked
+            - security_reset
         registration_complete:
           type: boolean
           description: Whether the server-owned local candidate is registered for the selected project.
@@ -68579,6 +68597,8 @@ components:
         - client_family
         - agent_configuration_copied
         - connection_authorized
+        - connection_auth_state
+        - reauthorization_reason
         - connection_ready
         - catalog_explored
         - selected_project_name

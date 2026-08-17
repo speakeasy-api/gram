@@ -306,7 +306,7 @@ func (s *InMemoryStore) IssueGrant(_ context.Context, grant Grant) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.validateConnection(grant.Connection, grant.ClientID); err != nil {
+	if err := s.validateConnection(grant.Connection, grant.ClientID, time.Now()); err != nil {
 		return err
 	}
 	if !validPKCES256Challenge(grant.CodeChallenge) {
@@ -347,7 +347,7 @@ func (s *InMemoryStore) validateGrant(input ValidateGrantInput) (Grant, error) {
 	if !verifyPKCES256(input.CodeVerifier, grant.CodeChallenge) {
 		return Grant{}, ErrPKCE
 	}
-	if err := s.validateConnection(grant.Connection, grant.ClientID); err != nil {
+	if err := s.validateConnection(grant.Connection, grant.ClientID, input.Now); err != nil {
 		return Grant{}, err
 	}
 	return grant, nil
@@ -366,6 +366,9 @@ func (s *InMemoryStore) ExchangeGrant(_ context.Context, input ExchangeGrantInpu
 	}
 	if input.Session.Connection.Generation != grant.Connection.Generation {
 		return Grant{}, ErrGeneration
+	}
+	if input.Session.ExpiresAt.After(grant.Connection.AuthorizationExpiresAt) || input.Session.RefreshExpiresAt.After(grant.Connection.AuthorizationExpiresAt) {
+		return Grant{}, ErrExpired
 	}
 	if err := s.createSession(input.Session); err != nil {
 		return Grant{}, err
@@ -394,7 +397,7 @@ func (s *InMemoryStore) CreateSession(_ context.Context, session Session) error 
 }
 
 func (s *InMemoryStore) createSession(session Session) error {
-	if err := s.validateConnection(session.Connection, session.ClientID); err != nil {
+	if err := s.validateConnection(session.Connection, session.ClientID, time.Now()); err != nil {
 		return err
 	}
 	if _, exists := s.sessions[session.RefreshHash]; exists {
@@ -525,7 +528,7 @@ func (s *InMemoryStore) RotateSession(_ context.Context, input RotateSessionInpu
 	if input.Replacement.RefreshHash == input.RefreshHash {
 		return Session{}, ErrAlreadyUsed
 	}
-	if err := s.validateConnection(input.Replacement.Connection, input.ClientID); err != nil {
+	if err := s.validateConnection(input.Replacement.Connection, input.ClientID, input.Now); err != nil {
 		return Session{}, err
 	}
 	if _, exists := s.sessions[input.Replacement.RefreshHash]; exists {
@@ -562,7 +565,11 @@ func (s *InMemoryStore) RevokeSession(_ context.Context, organizationID, refresh
 	if !ok || session.Connection.OrganizationID != organizationID || session.ClientID != clientID {
 		return Session{}, ErrNotFound
 	}
-	connection := s.connections[session.Connection.ID]
+	connection, ok := s.connections[session.Connection.ID]
+	if !ok || connection.OrganizationID != organizationID {
+		return Session{}, ErrNotFound
+	}
+	session.RevokedAt = &now
 	s.markGenerationTerminal(connection, ReauthorizationReasonConnectionRevoked, now)
 	return session, nil
 }
@@ -634,7 +641,7 @@ func (s *InMemoryStore) validateClient(clientID string) error {
 	return nil
 }
 
-func (s *InMemoryStore) validateConnection(connection Connection, clientID string) error {
+func (s *InMemoryStore) validateConnection(connection Connection, clientID string, now time.Time) error {
 	stored, err := s.validateConnectionRevocation(connection, clientID)
 	if err != nil {
 		return err
@@ -644,6 +651,9 @@ func (s *InMemoryStore) validateConnection(connection Connection, clientID strin
 	}
 	if stored.Generation != connection.Generation {
 		return ErrGeneration
+	}
+	if stored.AuthorizationExpiresAt.IsZero() || !now.Before(stored.AuthorizationExpiresAt) {
+		return ErrExpired
 	}
 	return nil
 }
@@ -656,7 +666,7 @@ func (s *InMemoryStore) validateConnectionRevocation(connection Connection, clie
 	if !ok {
 		return Connection{}, ErrNotFound
 	}
-	if stored.RevokedAt != nil {
+	if stored.RevokedAt != nil || stored.ReauthorizationRequiredAt != nil {
 		return Connection{}, ErrRevoked
 	}
 	return stored, nil

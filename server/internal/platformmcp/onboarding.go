@@ -143,7 +143,7 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 	if workflow != nil {
 		connection, found := projection.connectionForEvidence()
 		if !found {
-			projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection)
+			projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 			return projection, nil
 		}
 		projection.CatalogExplored, err = q.HasPlatformMCPOnboardingCatalogExplored(ctx, platformrepo.HasPlatformMCPOnboardingCatalogExploredParams{
@@ -182,7 +182,7 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 			return OnboardingProjection{}, fmt.Errorf("check platform mcp onboarding readiness verification: %w", err)
 		}
 	}
-	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection)
+	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
 }
 
@@ -255,7 +255,7 @@ func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizatio
 	}
 
 	projection.Workflow = onboardingWorkflowFromRow(row)
-	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection)
+	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
 }
 
@@ -390,7 +390,7 @@ func (s *OnboardingService) RecordAgentConfigurationCopied(ctx context.Context, 
 	}
 
 	projection.Workflow = onboardingWorkflowFromRow(row)
-	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection)
+	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
 }
 
@@ -528,14 +528,16 @@ func connectionAuthState(row platformrepo.GetPlatformMCPSubjectConnectionAuthSta
 	return ConnectionAuthStateNotConnected, ""
 }
 
-func deriveOnboardingStage(workflow *OnboardingWorkflow, connections []OnboardingConnection, evidence *OnboardingConnection) OnboardingStage {
-	for _, connection := range connections {
-		if connection.Ready {
+func deriveOnboardingStage(workflow *OnboardingWorkflow, connections []OnboardingConnection, evidence *OnboardingConnection, connectionAuthState string) OnboardingStage {
+	if connectionAuthState == ConnectionAuthStateActive {
+		for _, connection := range connections {
+			if connection.Ready {
+				return OnboardingStageConnectionReady
+			}
+		}
+		if evidence != nil && evidence.Ready {
 			return OnboardingStageConnectionReady
 		}
-	}
-	if evidence != nil && evidence.Ready {
-		return OnboardingStageConnectionReady
 	}
 	if len(connections) > 0 || evidence != nil {
 		return OnboardingStageAuthorized
