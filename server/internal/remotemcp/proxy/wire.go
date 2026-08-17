@@ -438,7 +438,9 @@ func (r ResourcesListResult) clone() ResourcesListResult {
 // authorized as one tool and executed as another by an exact-key upstream.
 // Dropping the alias is the right answer for a response Gram is filtering, but
 // not for a request: silently changing which tool is invoked is worse than
-// refusing to invoke one. Callers surface this as a mutation failure.
+// refusing to invoke one. Callers surface this as a [*RejectError] carrying
+// [RejectCodeInvalidParams] — the payload is invalid client input, so the caller
+// gets a JSON-RPC rejection rather than a 5xx blamed on the proxy.
 func requireUnambiguousInvocation(members object, modeled ...string) error {
 	for _, name := range modeled {
 		if _, ok := members[name]; !ok {
