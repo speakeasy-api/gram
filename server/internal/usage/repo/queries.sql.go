@@ -705,6 +705,19 @@ func (q *Queries) GetBillingMetadataOrganizationByStripeCustomerID(ctx context.C
 	return organization_id, err
 }
 
+const getBillingOrganizationAccountType = `-- name: GetBillingOrganizationAccountType :one
+SELECT gram_account_type
+FROM organization_metadata
+WHERE id = $1
+`
+
+func (q *Queries) GetBillingOrganizationAccountType(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getBillingOrganizationAccountType, organizationID)
+	var gram_account_type string
+	err := row.Scan(&gram_account_type)
+	return gram_account_type, err
+}
+
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
 FROM toolsets

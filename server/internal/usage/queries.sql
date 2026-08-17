@@ -316,6 +316,11 @@ SELECT name
 FROM organization_metadata
 WHERE id = @organization_id;
 
+-- name: GetBillingOrganizationAccountType :one
+SELECT gram_account_type
+FROM organization_metadata
+WHERE id = @organization_id;
+
 -- name: ListBillingProjectIDsByOrganization :many
 -- Intentionally includes soft-deleted projects: usage recorded while a
 -- project was live is still billable, and deleting a project mid-cycle must

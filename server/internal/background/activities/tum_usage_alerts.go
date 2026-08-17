@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -38,6 +39,19 @@ func (s *SnapshotBillingCycleUsage) maybeSendUsageAlert(
 	limit := meta.TumMonthlyTokenLimit.Int64
 	alertEmail := conv.FromPGText[string](meta.AlertEmail)
 	if !meta.TumMonthlyTokenLimit.Valid || limit <= 0 || alertEmail == nil {
+		return
+	}
+
+	accountType, err := queries.GetBillingOrganizationAccountType(ctx, orgID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to read organization tier for tum usage alert",
+			attr.SlogOrganizationID(orgID), attr.SlogError(err))
+		return
+	}
+	// PAYG has no contracted TUM allowance. A legacy limit can survive an
+	// enterprise-to-PAYG conversion, but it must never revive contract-only
+	// threshold or overage emails for the self-serve tier.
+	if accountType == string(billing.TierPayg) {
 		return
 	}
 
