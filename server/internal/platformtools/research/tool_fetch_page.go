@@ -26,10 +26,13 @@ const maxFetchRedirects = 5
 // FetchPage fetches one public web page and returns its readable text. The
 // guardian-backed client is the SSRF control: the agent follows links derived
 // from search results about an untrusted target, so every request — including
-// each redirect hop — dials under egress policy.
+// each redirect hop — dials under egress policy. The menu is the exfiltration
+// control: only URLs trusted code observed are fetchable, so the model
+// selects destinations and never composes them.
 type FetchPage struct {
 	http   *guardian.HTTPClient
 	budget *callBudget
+	menu   *URLMenu
 }
 
 type fetchPageInput struct {
@@ -75,9 +78,10 @@ func ConfigureFetchClient(client *guardian.HTTPClient) *guardian.HTTPClient {
 }
 
 // NewFetchPageTool builds the page-fetch tool. Pass the client through
-// ConfigureFetchClient at wiring time so the transport bounds apply.
-func NewFetchPageTool(client *guardian.HTTPClient) *FetchPage {
-	return &FetchPage{http: client, budget: newCallBudget(maxFetchesPerChat)}
+// ConfigureFetchClient at wiring time so the transport bounds apply. The menu
+// must be the same instance the search tool feeds.
+func NewFetchPageTool(client *guardian.HTTPClient, menu *URLMenu) *FetchPage {
+	return &FetchPage{http: client, budget: newCallBudget(maxFetchesPerChat), menu: menu}
 }
 
 func (s *FetchPage) Descriptor() core.ToolDescriptor {
@@ -101,17 +105,13 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		return err
 	}
 
-	target, err := url.Parse(strings.TrimSpace(input.URL))
-	if err != nil || !target.IsAbs() || target.Host == "" {
-		return fmt.Errorf("url must be an absolute https URL")
-	}
-	// https only. This tool follows links found in search results about a
-	// party under review, and what it returns becomes evidence an admin
-	// decides on — over plaintext http, anyone on the path chooses what that
-	// evidence says. A site that only answers http is a finding of its own,
-	// not a page to quote.
-	if target.Scheme != "https" {
-		return fmt.Errorf("unsupported scheme %q: only https pages are fetchable, because a page fetched over plaintext http is not evidence anyone can rely on", target.Scheme)
+	// Canonical also enforces https-only: this tool follows links found in
+	// search results about a party under review, and what it returns becomes
+	// evidence an admin decides on — over plaintext http, anyone on the path
+	// chooses what that evidence says.
+	canonical, err := CanonicalMenuURL(input.URL)
+	if err != nil {
+		return fmt.Errorf("url must be an absolute https URL: %w", err)
 	}
 
 	// Same rule as the search tool: a call that cannot say which run it
@@ -121,11 +121,21 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		return oops.E(oops.CodeUnauthorized, nil, "a research tool call must identify its run")
 	}
 
+	// The model selects URLs, it never composes them: only URLs that arrived
+	// through trusted code — search results, links on already-fetched pages,
+	// the briefing — are fetchable. A URL outside that set cannot be
+	// requested no matter how the model writes it, which is what keeps this
+	// tool from being a channel that carries context data out.
+	target, ok := s.menu.Allowed(env.GramChatID, canonical)
+	if !ok {
+		return fmt.Errorf("that URL is not among this run's observed sources: fetch only URLs that appeared in search results, on previously fetched pages, or in the briefing")
+	}
+
 	if !s.budget.take(env.GramChatID, time.Now()) {
 		return fmt.Errorf("this run's fetch budget of %d pages is exhausted: work with what is already fetched", maxFetchesPerChat)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return fmt.Errorf("build page request: %w", err)
 	}
@@ -172,24 +182,39 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		}
 	}
 
+	var base *url.URL
+	if resp.Request != nil {
+		base = resp.Request.URL
+	}
+
 	content := string(body)
 	if strings.Contains(mediaType, "html") {
 		// Collapsing belongs to markup, where the whitespace is layout. A
 		// JSON or plain-text body is returned as the result contract says:
 		// as it was served, indentation and all, because the agent may be
 		// reading structure out of it.
-		content = collapseWhitespace(extractText(content))
+		text, links := extractContent(content, base)
+		content = collapseWhitespace(text)
+
+		// The page's own links join the menu, harvested by this code from
+		// the served markup — never from what the model later says about the
+		// page. This is what keeps iterative deepening alive under the menu
+		// rule: following a page to the pages it references is exactly
+		// selection.
+		for _, link := range links {
+			s.menu.Allow(env.GramChatID, link)
+		}
 	}
 	content, clipped := clipRunes(content, maxContentChars)
 	truncated = truncated || clipped
 
 	finalURL := ""
-	if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != target.String() {
-		finalURL = resp.Request.URL.String()
+	if base != nil && base.String() != target {
+		finalURL = base.String()
 	}
 
 	return core.EncodeResult(wr, fetchPageResult{
-		URL:         target.String(),
+		URL:         target,
 		FinalURL:    finalURL,
 		ContentType: mediaType,
 		Content:     content,
@@ -258,9 +283,14 @@ var blockElements = map[string]bool{
 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 }
 
-// extractText reduces an HTML document to its readable text using a
+// extractContent reduces an HTML document to its readable text using a
 // streaming tokenizer, so a malformed page degrades to partial text instead
-// of an error.
+// of an error. It also returns the document's anchor targets, resolved
+// against base: harvesting links here — from the served markup, in trusted
+// code — is what lets the URL menu grow by following pages rather than by
+// trusting anything the model writes. Links inside skipped subtrees are
+// harvested too; where a link sits in the markup does not change who
+// authored it.
 //
 // svg is tracked apart from the other skipped elements because it is foreign
 // content with browser breakout semantics: a block-level HTML start tag pops
@@ -271,10 +301,11 @@ var blockElements = map[string]bool{
 // stay strict on purpose — an unclosed template really does capture the rest
 // of the document in a browser, and script/style are raw text to the
 // tokenizer anyway.
-func extractText(document string) string {
+func extractContent(document string, base *url.URL) (string, []string) {
 	tokenizer := html.NewTokenizer(strings.NewReader(document))
 
 	var out strings.Builder
+	var links []string
 	skipDepth := 0
 	foreignDepth := 0
 	// svgForeign holds one counter per open svg — its length is the svg
@@ -286,9 +317,14 @@ func extractText(document string) string {
 		tokenType := tokenizer.Next()
 		switch tokenType {
 		case html.ErrorToken:
-			return out.String()
+			return out.String(), links
 		case html.StartTagToken, html.SelfClosingTagToken:
-			name, _ := tokenizer.TagName()
+			name, hasAttr := tokenizer.TagName()
+			if string(name) == "a" && hasAttr {
+				if link, ok := anchorTarget(tokenizer, base); ok {
+					links = append(links, link)
+				}
+			}
 			if string(name) == "svg" && tokenType == html.StartTagToken {
 				svgForeign = append(svgForeign, 0)
 			} else if string(name) == "foreignobject" && len(svgForeign) > 0 && tokenType == html.StartTagToken {
@@ -327,6 +363,36 @@ func extractText(document string) string {
 				out.WriteString(" ")
 			}
 		case html.CommentToken, html.DoctypeToken:
+		}
+	}
+}
+
+// anchorTarget reads the current anchor tag's href and resolves it against
+// base. Relative links resolve to the page that served them; anything not
+// absolute with a host after resolution is discarded. Scheme filtering is
+// left to the menu's canonicalization, the one place that rule lives.
+func anchorTarget(tokenizer *html.Tokenizer, base *url.URL) (string, bool) {
+	for {
+		key, value, more := tokenizer.TagAttr()
+		if string(key) == "href" {
+			href := strings.TrimSpace(string(value))
+			if href == "" {
+				return "", false
+			}
+			parsed, err := url.Parse(href)
+			if err != nil {
+				return "", false
+			}
+			if base != nil {
+				parsed = base.ResolveReference(parsed)
+			}
+			if !parsed.IsAbs() || parsed.Host == "" {
+				return "", false
+			}
+			return parsed.String(), true
+		}
+		if !more {
+			return "", false
 		}
 	}
 }

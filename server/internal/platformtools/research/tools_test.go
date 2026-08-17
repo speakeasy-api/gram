@@ -77,7 +77,7 @@ func TestWebSearch(t *testing.T) {
 			}},
 		},
 	}
-	tool := research.NewWebSearchTool(research.NewSearchClient(completions))
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
 
 	decoded, err := runSearch(t, authedContext(t), tool, `{"query": "is somevendor real"}`)
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestWebSearch_BoundsSearchesPerRun(t *testing.T) {
 			}},
 		},
 	}
-	tool := research.NewWebSearchTool(research.NewSearchClient(completions))
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
 	ctx := authedContext(t)
 
 	var lastErr error
@@ -141,7 +141,7 @@ func TestWebSearch_ClampsMaxResults(t *testing.T) {
 	t.Parallel()
 
 	completions := &fakeCompletions{}
-	tool := research.NewWebSearchTool(research.NewSearchClient(completions))
+	tool := research.NewWebSearchTool(research.NewSearchClient(completions), research.NewURLMenu())
 
 	_, err := runSearch(t, authedContext(t), tool, `{"query": "q", "max_results": 50}`)
 	require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestWebSearch_ClampsMaxResults(t *testing.T) {
 func TestWebSearch_RequiresQuery(t *testing.T) {
 	t.Parallel()
 
-	tool := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}))
+	tool := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}), research.NewURLMenu())
 
 	_, err := runSearch(t, authedContext(t), tool, `{"query": "  "}`)
 	require.Error(t, err)
@@ -160,10 +160,21 @@ func TestWebSearch_RequiresQuery(t *testing.T) {
 func TestWebSearch_RequiresAuthContext(t *testing.T) {
 	t.Parallel()
 
-	tool := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}))
+	tool := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}), research.NewURLMenu())
 
 	_, err := runSearch(t, t.Context(), tool, `{"query": "q"}`)
 	require.Error(t, err)
+}
+
+// fetchToolAllowing builds a fetch tool whose menu already contains pageURL
+// for each run id, standing in for the search results, harvested links, or
+// briefing seeds that make a URL fetchable in production.
+func fetchToolAllowing(client *http.Client, pageURL string, runIDs ...string) *research.FetchPage {
+	menu := research.NewURLMenu()
+	for _, runID := range runIDs {
+		menu.Allow(runID, pageURL)
+	}
+	return research.NewFetchPageTool(research.ConfigureFetchClient(client), menu)
 }
 
 func runFetch(t *testing.T, tool *research.FetchPage, chatID, input string) (map[string]any, error) {
@@ -191,7 +202,7 @@ func TestFetchPage_ExtractsReadableText(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.NoError(t, err)
 
@@ -307,7 +318,7 @@ func TestFetchPage_ExtractsStructuredAndMalformedHTML(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+			tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 			decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 			require.NoError(t, err)
 
@@ -332,7 +343,7 @@ func TestFetchPage_TruncatesLongPages(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.NoError(t, err)
 
@@ -361,7 +372,7 @@ func TestFetchPage_StopsReadingAtTheByteCap(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.NoError(t, err, "an oversized page truncates rather than failing: a partial page is still material")
 
@@ -390,7 +401,7 @@ func TestFetchPage_RefusesARedirectOffHTTPS(t *testing.T) {
 	}))
 	t.Cleanup(redirector.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(redirector.Client()))
+	tool := fetchToolAllowing(redirector.Client(), redirector.URL, "chat-1")
 	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, redirector.URL))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "every hop must stay on https")
@@ -408,13 +419,13 @@ func TestResearchTools_RefuseACallWithNoRun(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	fetch := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	fetch := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()), research.NewURLMenu())
 	var out bytes.Buffer
 	err := fetch.Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(fmt.Sprintf(`{"url": %q}`, server.URL)), &out)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "identify its run")
 
-	search := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}))
+	search := research.NewWebSearchTool(research.NewSearchClient(&fakeCompletions{}), research.NewURLMenu())
 	out.Reset()
 	err = search.Call(authedContext(t), toolconfig.ToolCallEnv{}, strings.NewReader(`{"query": "vendor"}`), &out)
 	require.Error(t, err)
@@ -430,7 +441,7 @@ func TestFetchPage_RefusesBinaryContent(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "image/png")
@@ -439,7 +450,7 @@ func TestFetchPage_RefusesBinaryContent(t *testing.T) {
 func TestFetchPage_RefusesNonHTTPSchemes(t *testing.T) {
 	t.Parallel()
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(&http.Client{}))
+	tool := research.NewFetchPageTool(research.ConfigureFetchClient(&http.Client{}), research.NewURLMenu())
 
 	_, err := runFetch(t, tool, "chat-1", `{"url": "ftp://host/file"}`)
 	require.Error(t, err)
@@ -467,7 +478,7 @@ func TestFetchPage_SniffsAnUndeclaredBody(t *testing.T) {
 	}))
 	t.Cleanup(binary.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(binary.Client()))
+	tool := fetchToolAllowing(binary.Client(), binary.URL, "chat-1")
 	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, binary.URL))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "declared no content type")
@@ -480,7 +491,7 @@ func TestFetchPage_SniffsAnUndeclaredBody(t *testing.T) {
 	}))
 	t.Cleanup(text.Close)
 
-	tool = research.NewFetchPageTool(research.ConfigureFetchClient(text.Client()))
+	tool = fetchToolAllowing(text.Client(), text.URL, "chat-2")
 	decoded, err := runFetch(t, tool, "chat-2", fmt.Sprintf(`{"url": %q}`, text.URL))
 	require.NoError(t, err)
 	require.Contains(t, decoded["content"], "no independent coverage")
@@ -498,7 +509,7 @@ func TestFetchPage_KeepsNonHTMLBodiesAsServed(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.NoError(t, err)
 	require.Equal(t, body, decoded["content"])
@@ -512,7 +523,7 @@ func TestFetchPage_SurfacesErrorStatus(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "404")
@@ -526,10 +537,152 @@ func TestFetchPage_BoundsRedirects(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
 	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "redirects")
+}
+
+// The menu is the exfiltration control: a URL the model composed — rather
+// than selected from what trusted code observed — must not be fetchable no
+// matter how it is written.
+func TestFetchPage_RefusesAURLOutsideTheMenu(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(server.Close)
+
+	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()), research.NewURLMenu())
+	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not among this run's observed sources")
+}
+
+// One run's menu never unlocks another run's fetches: menus are the per-run
+// record of what that run's own searches and pages presented.
+func TestFetchPage_MenuIsPerRun(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(server.Close)
+
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-1")
+
+	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, server.URL))
+	require.NoError(t, err)
+
+	_, err = runFetch(t, tool, "chat-2", fmt.Sprintf(`{"url": %q}`, server.URL))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not among this run's observed sources")
+}
+
+// A search result makes its URL fetchable — the search tool is a trusted
+// writer to the same menu the fetch tool checks.
+func TestWebSearch_ResultsUnlockFetches(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("found via search"))
+	}))
+	t.Cleanup(server.Close)
+
+	completions := &fakeCompletions{
+		annotations: []openrouter.ResponseAnnotation{
+			{Type: "url_citation", URLCitation: &openrouter.ResponseURLCitation{
+				URL: server.URL, Title: "the page", Content: "…",
+			}},
+		},
+	}
+	menu := research.NewURLMenu()
+	searchTool := research.NewWebSearchTool(research.NewSearchClient(completions), menu)
+	fetchTool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()), menu)
+
+	input := fmt.Sprintf(`{"url": %q}`, server.URL)
+	_, err := runFetch(t, fetchTool, "report-default", input)
+	require.Error(t, err, "before the search, the URL is not fetchable")
+
+	_, err = runSearch(t, authedContext(t), searchTool, `{"query": "the vendor"}`)
+	require.NoError(t, err)
+
+	decoded, err := runFetch(t, fetchTool, "report-default", input)
+	require.NoError(t, err)
+	require.Equal(t, "found via search", decoded["content"])
+}
+
+// Links on a fetched page make their targets fetchable — harvested from the
+// served markup by trusted code, which is what keeps iterative deepening
+// alive under the menu rule. Relative links resolve against the page that
+// served them.
+func TestFetchPage_HarvestedLinksUnlockTheNextHop(t *testing.T) {
+	t.Parallel()
+
+	second := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("second hop"))
+	}))
+	t.Cleanup(second.Close)
+
+	first := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/trust" {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = fmt.Fprintf(w, `<html><body><p>Trust center.</p><a href=%q>incident history</a></body></html>`, second.URL)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><a href="/trust">Trust</a></body></html>`))
+	}))
+	t.Cleanup(first.Close)
+
+	// The two test servers sign with different ephemeral certificates, so the
+	// client must trust both for the chain to be walked.
+	transport, ok := first.Client().Transport.(*http.Transport)
+	require.True(t, ok)
+	transport.TLSClientConfig.RootCAs.AddCert(second.Certificate())
+
+	menu := research.NewURLMenu()
+	menu.Allow("chat-1", first.URL)
+	tool := research.NewFetchPageTool(research.ConfigureFetchClient(first.Client()), menu)
+
+	_, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, first.URL))
+	require.NoError(t, err)
+
+	// The relative link resolved against the first page and is now
+	// fetchable; the absolute link to the second host is too.
+	decoded, err := runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, first.URL+"/trust"))
+	require.NoError(t, err)
+	require.Contains(t, decoded["content"], "Trust center.")
+
+	decoded, err = runFetch(t, tool, "chat-1", fmt.Sprintf(`{"url": %q}`, second.URL))
+	require.NoError(t, err)
+	require.Equal(t, "second hop", decoded["content"])
+}
+
+// The canonical form is the menu key: two spellings that name the same
+// request must agree, and the fragment never reaches the wire.
+func TestURLMenu_CanonicalizesFragments(t *testing.T) {
+	t.Parallel()
+
+	menu := research.NewURLMenu()
+	menu.Allow("chat-1", "https://vendor.example.com/security#reports")
+
+	canonical, ok := menu.Allowed("chat-1", "https://vendor.example.com/security")
+	require.True(t, ok)
+	require.Equal(t, "https://vendor.example.com/security", canonical)
+
+	_, ok = menu.Allowed("chat-1", "https://vendor.example.com/other")
+	require.False(t, ok)
+
+	// Non-https and junk never enter the menu.
+	menu.Allow("chat-1", "http://vendor.example.com/plain")
+	_, ok = menu.Allowed("chat-1", "http://vendor.example.com/plain")
+	require.False(t, ok)
 }
 
 // One run's fetch budget is bounded; a fresh run has its own.
@@ -542,7 +695,7 @@ func TestFetchPage_EnforcesPerRunBudget(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tool := research.NewFetchPageTool(research.ConfigureFetchClient(server.Client()))
+	tool := fetchToolAllowing(server.Client(), server.URL, "chat-budget", "chat-other")
 	input := fmt.Sprintf(`{"url": %q}`, server.URL)
 
 	for range 25 {

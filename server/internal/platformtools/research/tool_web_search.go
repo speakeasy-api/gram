@@ -23,6 +23,12 @@ type WebSearch struct {
 	// results, so nothing but this stops a seeded chain from spending
 	// without limit.
 	budget *callBudget
+
+	// menu receives every result URL, making it fetchable for this run. The
+	// search tool is one of the trusted writers to the menu: result URLs come
+	// out of the search provider's structured response, never the model's
+	// text.
+	menu *URLMenu
 }
 
 type webSearchInput struct {
@@ -35,8 +41,10 @@ type webSearchResult struct {
 }
 
 // NewWebSearchTool builds the search tool over the supplied search client.
-func NewWebSearchTool(search *SearchClient) *WebSearch {
-	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat)}
+// The menu must be the same instance the fetch tool checks, or nothing a
+// search returns becomes fetchable.
+func NewWebSearchTool(search *SearchClient, menu *URLMenu) *WebSearch {
+	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat), menu: menu}
 }
 
 func (s *WebSearch) Descriptor() core.ToolDescriptor {
@@ -97,6 +105,10 @@ func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 	results, err := s.search.Search(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), query, maxResults)
 	if err != nil {
 		return fmt.Errorf("web search failed: %w", err)
+	}
+
+	for _, result := range results {
+		s.menu.Allow(env.GramChatID, result.URL)
 	}
 
 	return core.EncodeResult(wr, webSearchResult{Results: results})
