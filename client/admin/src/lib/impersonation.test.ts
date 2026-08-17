@@ -27,6 +27,20 @@ describe("impersonationUrl", () => {
     expect(impersonationUrl("")).toBeUndefined();
   });
 
+  it("keeps the redirect on the app's own origin whatever the slug holds", () => {
+    // Nothing on the server side was found to rule this slug out. Unencoded it
+    // makes the redirect `//host`, which is protocol-relative: resolved against
+    // the app it is another origin, and the operator leaves Gram.
+    const redirect = new URL(
+      impersonationUrl("/evil.invalid")!,
+    ).searchParams.get("redirect");
+
+    expect(new URL(redirect!, "https://app.gram.test").origin).toBe(
+      "https://app.gram.test",
+    );
+    expect(redirect).toBe("/%2Fevil.invalid");
+  });
+
   it("lands on the organization itself and goes no further", () => {
     // The features row shares this builder. A destination leaking into the
     // plain link would drop the operator on a page nobody asked for.

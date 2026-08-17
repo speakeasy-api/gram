@@ -17,7 +17,15 @@ function loginUrl(slug: string, destination: string): string | undefined {
   }
 
   const url = new URL("/rpc/auth.login", appUrl);
-  url.searchParams.set("redirect", `/${slug}${destination}`);
+  // The slug and not the destination. An ordinary slug is unchanged by this;
+  // a slug beginning with a slash would make the redirect `//host`, which is
+  // protocol-relative and takes the operator off the origin. No slug validation
+  // was found on the server side to rule that out. The destination is written
+  // here and carries the slashes the dashboard routes on.
+  url.searchParams.set(
+    "redirect",
+    `/${encodeURIComponent(slug)}${destination}`,
+  );
 
   return url.toString();
 }
