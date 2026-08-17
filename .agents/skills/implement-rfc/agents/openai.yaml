@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement RFC"
+  short_description: "Turn an accepted RFC into verified code"
+  default_prompt: "Use $implement-rfc to implement this accepted RFC and verify every requirement."

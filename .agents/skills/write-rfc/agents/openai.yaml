@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write RFC"
+  short_description: "Research and draft a grounded engineering RFC"
+  default_prompt: "Use $write-rfc to research and draft an RFC for this proposal."

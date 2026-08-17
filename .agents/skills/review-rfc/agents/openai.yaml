@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review RFC"
+  short_description: "Stress-test an RFC before approval"
+  default_prompt: "Use $review-rfc to review this RFC and return prioritized findings."
