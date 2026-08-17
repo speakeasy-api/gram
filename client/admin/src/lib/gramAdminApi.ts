@@ -388,6 +388,33 @@ export function extendTrial(
   });
 }
 
+// The server's own bounds for a re-arm, mirrored the way the extension bounds
+// above are. See MinTrialRearmDays and MaxTrialRearmDays in
+// server/internal/constants/trials.go: separate names from the extension pair
+// they alias today, so reading the extension bound here would follow the wrong
+// one on the day they diverge.
+export const MIN_TRIAL_REARM_DAYS = 1;
+export const MAX_TRIAL_REARM_DAYS = 365;
+
+export type RearmTrialRequest = {
+  id: string;
+  days: number;
+};
+
+// Not an extension with a different verb. The days are the whole length of a
+// fresh run counted from now, and the write also restores the organization's
+// account type and whitelist flag and revives its model provider keys. Only a
+// demoted trial can be re-armed; anything else is refused with a conflict.
+export function rearmTrial(
+  body: RearmTrialRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type CreateOrganizationRequest = {
   name: string;
 };

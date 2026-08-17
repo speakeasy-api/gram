@@ -707,45 +707,99 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
 	}
 
-	rows, err := trialsRepo.New(s.db).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial extension transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
 		OrganizationID: payload.ID,
 		ExtendByDays:   int32(payload.Days),
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, s.logger)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unextended trial",
+			"organization has no running enterprise trial to extend")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
 	}
-	// Zero rows has two causes that mean different things to the operator, and
-	// only the second is a conflict: the organization does not exist at all, or
-	// it exists and its trial cannot be extended. Disable and enable both answer
-	// not-found for an id that matches nothing, so an operator who pastes one bad
-	// id must not be told to go and look at a trial by this endpoint alone.
-	//
-	// The lookup is on the failure path only, so the happy path still costs one
-	// write and one read.
-	if rows == 0 {
-		_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-			ID:        payload.ID,
-			AllowSlug: false,
-		})
-		switch {
-		case errors.Is(lookupErr, pgx.ErrNoRows):
-			return nil, oops.C(oops.CodeNotFound)
-		case lookupErr != nil:
-			// Falling through to the conflict here would report a trial state we
-			// never managed to read.
-			return nil, oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unextended trial").LogError(ctx, s.logger)
-		}
 
-		// The organization exists, so it is the trial that blocks the write:
-		// converted, demoted, expired, or never granted. Which one is not the
-		// operator's business, and arming a trial that was never granted is the
-		// auth flow's job rather than this endpoint's. failed_precondition would
-		// read better than conflict, but the admin service does not declare it,
-		// so it would leave as a 500.
-		return nil, oops.E(oops.CodeConflict, nil, "organization has no running enterprise trial to extend")
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.ID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
 	}
+
+	actor, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+		OrganizationID: payload.ID,
+		Actor:          actor,
+		// The customer reads this feed, so the entry carries the team label
+		// rather than the operator's email. adminActor says why.
+		ActorDisplayName:    conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		ExtendedByDays:      payload.Days,
+		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
+		TrialEndsAt:         extended.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial extension").LogError(ctx, logger)
+	}
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "extended enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+// rejectTrialChange turns a trial write that touched no row into the error the
+// operator should act on. There are two causes and only the second is a
+// conflict: the organization does not exist at all, or it exists and its trial
+// is in the wrong state. Disable and enable both answer not-found for an id that
+// matches nothing, so an operator who pastes one bad id must not be told to go
+// and look at a trial by this endpoint alone.
+//
+// The organization existing means the trial is what blocks the write: converted,
+// demoted, expired, or never granted. Which one is not the operator's business,
+// and arming a trial that was never granted is the auth flow's job rather than
+// this endpoint's. failed_precondition would read better than conflict, but the
+// admin service does not declare it, so it would leave as a 500.
+//
+// The lookup is on the failure path only, and runs on the pool because the
+// caller's transaction is already rolled back.
+func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, organizationID string, lookupContext string, conflictMessage string) error {
+	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	switch {
+	case errors.Is(lookupErr, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case lookupErr != nil:
+		// Falling through to the conflict here would report a trial state we
+		// never managed to read.
+		return oops.E(oops.CodeUnexpected, lookupErr, "%s", lookupContext).LogError(ctx, logger)
+	}
+
+	return oops.E(oops.CodeConflict, nil, "%s", conflictMessage)
 }
 
 // CreateOrganization creates an organization in WorkOS and then in Gram.
@@ -906,7 +960,12 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, s.rejectRearm(ctx, logger, payload.ID)
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unrearmed trial",
+			"organization has no demoted enterprise trial to re-arm")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
 	}
@@ -952,25 +1011,6 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
-}
-
-// rejectRearm turns a zero-row re-arm into the error the operator should act
-// on: a pasted wrong id must report a missing organization, not a trial state.
-func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	_, lookupErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        organizationID,
-		AllowSlug: false,
-	})
-	switch {
-	case errors.Is(lookupErr, pgx.ErrNoRows):
-		return oops.C(oops.CodeNotFound)
-	case lookupErr != nil:
-		// Falling through would report a trial state we never managed to read.
-		return oops.E(oops.CodeUnexpected, lookupErr, "look up organization after unrearmed trial").LogError(ctx, logger)
-	}
-
-	// Which of the three reasons applies is not the operator's business.
-	return oops.E(oops.CodeConflict, nil, "organization has no demoted enterprise trial to re-arm")
 }
 
 // reviveTrialKeys brings every platform key the organization holds back up, and

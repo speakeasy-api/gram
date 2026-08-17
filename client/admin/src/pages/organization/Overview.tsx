@@ -1,11 +1,10 @@
-import { useState, type JSX } from "react";
+import { useEffect, useRef, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -27,6 +26,7 @@ import {
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 import { cn, fmtDateShort } from "@/lib/utils";
+import { useWriteReport } from "@/pages/organizations/writeReport";
 
 function Row({
   label,
@@ -75,72 +75,88 @@ export function OverviewRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const { data } = useQuery(organizationQuery(idOrSlug));
   if (!data) return null;
-  // Keyed, so an unsaved draft cannot follow the operator to another record.
+  // Keyed, so a write in flight and the dialog asking about it belong to the
+  // record they were started on. `RecordLayout` keys this whole subtree the
+  // same way, which is what actually enforces it today; this one holds if the
+  // view is ever mounted somewhere that does not.
   return <Overview key={data.id} org={data} />;
 }
+
+// One field per write. The endpoint takes both as optional, and a type that
+// allows both would let a write carry a field the operator never touched.
+type FactChange = { account_type: string } | { whitelisted: boolean };
 
 export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
+  const { announce, showFailure } = useWriteReport();
 
-  // Only the fields the operator touched live here. The rest read straight
-  // from the server record, so a refetch cannot discard an unsaved edit and
-  // cannot leave an untouched field showing a stale value.
-  const [draft, setDraft] = useState<{
-    account_type?: string;
-    whitelisted?: boolean;
-  }>({});
-  const accountType = draft.account_type ?? org.account_type;
-  const whitelisted = draft.whitelisted ?? org.whitelisted;
+  // Where the keyboard goes when the dialog closes. `useConfirmDialog` has no
+  // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
+  const accountTypeControl = useRef<HTMLButtonElement>(null);
+  const whitelistedControl = useRef<HTMLButtonElement>(null);
+  const openedFrom = useRef<HTMLButtonElement | null>(null);
 
   const mut = useMutation({
-    mutationFn: () =>
-      updateOrganization({
-        id: org.id,
-        account_type:
-          accountType !== org.account_type ? accountType : undefined,
-        whitelisted: whitelisted !== org.whitelisted ? whitelisted : undefined,
-      }),
+    mutationFn: (change: FactChange) =>
+      updateOrganization({ id: org.id, ...change }),
     // Through `adminQueries`, like every other admin write. A copy of the cache
     // path spelled out here is how one of its caches gets left out: this one
     // cancelled nothing, so a list read already in flight put the pre-write row
     // back, and the stats kept their old totals.
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (updated) => {
-      setDraft({});
-      writeOrganizationToCache(qc, updated);
-    },
+    onSuccess: (updated) => writeOrganizationToCache(qc, updated),
     // A failed write replaces nothing it cancelled, so the totals have to be
     // asked for again. The record needs nothing: it was never repainted.
     onError: () => invalidateOrganizationStats(qc),
   });
 
-  const dirty =
-    accountType !== org.account_type || whitelisted !== org.whitelisted;
+  // The confirmed path cannot restore focus itself: it disables the control it
+  // would focus, and a browser drops focus to the body when that happens.
+  // Re-enabling does not bring it back, so the restore waits for the write to
+  // settle and runs from here, after React has taken `disabled` off again.
+  // Asked for at `mutate` rather than read off a pending render, because a write
+  // that settles fast never commits one. `variables` is a dep for the same
+  // reason: without it a fast write after another goes `success` to `success`
+  // and nothing here changes.
+  const restoreWanted = useRef(false);
+  useEffect(() => {
+    if (mut.isPending || !restoreWanted.current) return;
+    restoreWanted.current = false;
+    // A control that has left the page is not somewhere to put the keyboard.
+    if (openedFrom.current?.isConnected) openedFrom.current.focus();
+  }, [mut.status, mut.isPending, mut.variables]);
 
-  const handleCancel = () => {
-    setDraft({});
-  };
-
-  const handleSave = async () => {
-    const changes: string[] = [];
-    if (accountType !== org.account_type) {
-      changes.push(`Account type: ${org.account_type} → ${accountType}`);
-    }
-    if (whitelisted !== org.whitelisted) {
-      changes.push(
-        `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(whitelisted)}`,
-      );
-    }
-
+  const commit = async (
+    change: FactChange,
+    // Old → new, in the operator's words. The dialog asks it and the
+    // announcement reports it, so the two cannot name different changes.
+    describe: string,
+    control: React.RefObject<HTMLButtonElement | null>,
+  ): Promise<void> => {
+    openedFrom.current = control.current;
     const confirmed = await confirm({
       title: `Update ${org.name}?`,
-      description: changes.join(". ") + ".",
+      description: `${describe}.`,
       confirmLabel: "Save",
     });
-    if (confirmed) {
-      mut.mutate();
+    if (!confirmed) {
+      // Nothing disables the control on this exit, so it takes the keyboard now.
+      control.current?.focus();
+      return;
     }
+
+    // A new write does not run under the last one's failure.
+    showFailure(null);
+    restoreWanted.current = true;
+    mut.mutate(change, {
+      onSuccess: () => announce(`${org.name} updated. ${describe}.`),
+      onError: (error) => {
+        const text = `Could not update ${org.name}: ${errorMessage(error)}`;
+        announce(text);
+        showFailure(text);
+      },
+    });
   };
 
   return (
@@ -183,11 +199,20 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       <Group title="Plan">
         <Row label="Account type">
           <Select
-            value={accountType}
+            value={org.account_type}
             disabled={mut.isPending}
-            onValueChange={(v) => setDraft((d) => ({ ...d, account_type: v }))}
+            onValueChange={(v) => {
+              void commit(
+                { account_type: v },
+                `Account type: ${org.account_type} → ${v}`,
+                accountTypeControl,
+              );
+            }}
           >
-            <SelectTrigger className="h-auto w-auto px-2 py-1.5">
+            <SelectTrigger
+              ref={accountTypeControl}
+              className="h-auto w-auto px-2 py-1.5"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -214,9 +239,16 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       <Group title="Access">
         <Row label="Whitelisted">
           <Switch
-            checked={whitelisted}
+            ref={whitelistedControl}
+            checked={org.whitelisted}
             disabled={mut.isPending}
-            onCheckedChange={(v) => setDraft((d) => ({ ...d, whitelisted: v }))}
+            onCheckedChange={(v) => {
+              void commit(
+                { whitelisted: v },
+                `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
+                whitelistedControl,
+              );
+            }}
           />
         </Row>
         <Row label="Disabled at">
@@ -230,34 +262,6 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </span>
         </Row>
       </Group>
-
-      {dirty && (
-        <div className="border-border mt-4 flex items-center gap-2 border-t pt-3">
-          <Button
-            variant="default"
-            size="xs"
-            disabled={mut.isPending}
-            onClick={() => {
-              void handleSave();
-            }}
-          >
-            {mut.isPending ? "Saving..." : "Save"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={mut.isPending}
-            onClick={handleCancel}
-          >
-            Cancel
-          </Button>
-          {mut.isError && (
-            <span className="text-muted-foreground text-sm">
-              Error: {errorMessage(mut.error)}
-            </span>
-          )}
-        </div>
-      )}
 
       {confirmDialog}
     </div>

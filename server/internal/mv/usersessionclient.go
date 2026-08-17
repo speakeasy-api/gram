@@ -20,23 +20,20 @@ import (
 // activeSessionCount is supplied by the caller rather than read off the row:
 // it is a tally over user_sessions, which the client queries do not join.
 func BuildUserSessionClientView(row repo.UserSessionClient, activeSessionCount int32) *types.UserSessionClient {
-	var clientSecretExpiresAt *string
-	if row.ClientSecretExpiresAt.Valid {
-		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
-		clientSecretExpiresAt = &s
-	}
-
 	return &types.UserSessionClient{
-		ID:                    row.ID.String(),
-		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
-		ClientID:              row.ClientID,
-		ClientIDMetadataURI:   conv.FromPGText[string](row.ClientIDMetadataUri),
-		ClientName:            row.ClientName,
-		RedirectUris:          row.RedirectUris,
-		ClientIDIssuedAt:      row.ClientIDIssuedAt.Time.Format(time.RFC3339),
-		ClientSecretExpiresAt: clientSecretExpiresAt,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
-		ActiveSessionCount:    int(activeSessionCount),
+		ID:                             row.ID.String(),
+		UserSessionIssuerID:            row.UserSessionIssuerID.String(),
+		ClientID:                       row.ClientID,
+		ClientIDMetadataURI:            conv.FromPGText[string](row.ClientIDMetadataUri),
+		ClientIDMetadataFetchedAt:      conv.PtrEmpty(conv.FromPGTimestamptz(row.ClientIDMetadataFetchedAt)),
+		ClientIDMetadataCacheExpiresAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.ClientIDMetadataCacheExpiresAt)),
+		ClientIDMetadataEtag:           conv.FromPGText[string](row.ClientIDMetadataEtag),
+		ClientName:                     row.ClientName,
+		RedirectUris:                   row.RedirectUris,
+		ClientIDIssuedAt:               row.ClientIDIssuedAt.Time.Format(time.RFC3339),
+		ClientSecretExpiresAt:          conv.PtrEmpty(conv.FromPGTimestamptz(row.ClientSecretExpiresAt)),
+		CreatedAt:                      row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                      row.UpdatedAt.Time.Format(time.RFC3339),
+		ActiveSessionCount:             int(activeSessionCount),
 	}
 }
