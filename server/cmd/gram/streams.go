@@ -26,6 +26,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -40,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -66,6 +69,48 @@ func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := []cli.Flag{
+		// Temporal is optional here, and deliberately so. This process consumes
+		// messages; it does not run workflows. The one thing it needs a client
+		// for is waking the per-project coordinators after it writes a
+		// transcript row — those coordinators sleep until signalled and have no
+		// periodic sweep behind them, so a row written without a wake is a row
+		// nothing analyses.
+		//
+		// Unset means no wake, announced loudly at boot rather than discovered
+		// as missing risk findings. Leaving these unset is only safe while the
+		// async transcript path is off everywhere.
+		// No Value defaults on address/namespace, deliberately: newTemporalClient
+		// returns a nil environment only when one of them is empty, and that nil
+		// is what the "unset disables wakes" contract above is built on. A
+		// default would make unset mean "dial localhost", so an operator who
+		// left it unset would get failing wakes against a dead address instead
+		// of the announced no-op.
+		&cli.StringFlag{
+			Name:    "temporal-address",
+			Usage:   "The address of the temporal server. Unset disables coordinator wakes for persisted transcript rows.",
+			EnvVars: []string{"TEMPORAL_ADDRESS"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-namespace",
+			Usage:   "The temporal namespace to use. Unset disables coordinator wakes for persisted transcript rows.",
+			EnvVars: []string{"TEMPORAL_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-cert",
+			Usage:   "Client cert of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-key",
+			Usage:   "Client key of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
+		},
 		&cli.StringFlag{
 			Name:    "control-address",
 			Value:   ":8087",
@@ -388,6 +433,31 @@ func newStreamsCommand() *cli.Command {
 			}
 			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
 
+			// Transcript rows captured by hooks. The writable pool, not the read
+			// replica: this handler is the writer.
+			//
+			// The writer carries the same three observers the API server and the
+			// worker register, because the wake — not the row — is what makes a
+			// message get analysed. Registering them here is the one place this
+			// process reaches toward Temporal, and it is a fire-and-forget
+			// SignalWithStart, the same call the synchronous writer already
+			// makes; no workflow is awaited, driven, or owned from a handler.
+			transcriptWriter, transcriptWriterShutdown, err := newTranscriptWriter(
+				c, logger, tracerProvider, meterProvider, db,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to create transcript writer: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, transcriptWriterShutdown)
+
+			hookMessageHandler := hooks.NewHookMessageHandler(logger, hooks.NewChatPersister(
+				logger,
+				db,
+				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
+				transcriptWriter,
+			))
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -449,6 +519,8 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, svixRelayHandler)
+
+				mustReceive(rg, &chatv1.HookMessage{}, &chatv1.HookMessagePersister{}, hookMessageHandler)
 
 				mustReceive(
 					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},

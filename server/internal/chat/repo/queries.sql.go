@@ -400,6 +400,102 @@ type CreateChatMessageParams struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
+const createChatMessageIdempotent = `-- name: CreateChatMessageIdempotent :execrows
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , finish_reason
+  , tool_calls
+  , user_agent
+  , source
+  , replayed
+  , created_at
+)
+VALUES (
+    $1::uuid
+  , $2
+  , $3
+  , $4::uuid
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+)
+ON CONFLICT (id) DO NOTHING
+`
+
+type CreateChatMessageIdempotentParams struct {
+	ID             uuid.UUID
+	ChatID         uuid.UUID
+	Role           string
+	ProjectID      uuid.UUID
+	Content        string
+	Model          pgtype.Text
+	MessageID      pgtype.Text
+	ToolCallID     pgtype.Text
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	FinishReason   pgtype.Text
+	ToolCalls      []byte
+	UserAgent      pgtype.Text
+	Source         pgtype.Text
+	Replayed       bool
+	CreatedAt      pgtype.Timestamptz
+}
+
+// The insert for rows that arrive over Pub/Sub, where at-least-once delivery
+// means the same row can be presented more than once.
+//
+// Unlike CreateChatMessage this supplies id rather than letting the column
+// default generate one: the publisher mints the uuid before the message is
+// published, so every redelivery of that message carries the same id and the
+// primary key is what rejects the duplicate. That is the whole reason this
+// query exists separately — CreateChatMessage is :copyfrom, and COPY admits no
+// ON CONFLICT clause.
+//
+// Returns the affected row count, so a caller can tell a first delivery (1)
+// from a redelivery (0) without a second query.
+func (q *Queries) CreateChatMessageIdempotent(ctx context.Context, arg CreateChatMessageIdempotentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createChatMessageIdempotent,
+		arg.ID,
+		arg.ChatID,
+		arg.Role,
+		arg.ProjectID,
+		arg.Content,
+		arg.Model,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.FinishReason,
+		arg.ToolCalls,
+		arg.UserAgent,
+		arg.Source,
+		arg.Replayed,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createChatMessageReturningID = `-- name: CreateChatMessageReturningID :one
 INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id)
 VALUES ($1, $2, $3, $4, $5, $6)

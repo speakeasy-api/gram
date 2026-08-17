@@ -1281,6 +1281,8 @@ func newStartCommand() *cli.Command {
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
+				publishers.ChatMessages,
+				featureFlags,
 			)
 			hooks.Attach(mux, hooksService)
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))

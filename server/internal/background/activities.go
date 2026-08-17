@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -81,6 +82,10 @@ type Publishers struct {
 	// publisher on it (see risk_analysis.batchOnlyFindingSources).
 	RiskFindings  gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
+	// ChatMessages carries hook-captured transcript rows to the streams process
+	// that writes them. Published from the API server, not from an activity —
+	// it lives here because this is where the process's publishers are built.
+	ChatMessages gcp.Publisher[*chatv1.HookMessage]
 	// Outbox publishes whatever the publish_outbox table holds. It resolves its
 	// topic per message rather than being bound to one, because the destination
 	// is a property of the row and not of this wiring.
