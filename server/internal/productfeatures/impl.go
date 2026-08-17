@@ -109,6 +109,13 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		if err := EnableSkillsTx(ctx, dbtx, orgID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enable Skills feature").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		}
+	} else if payload.Enabled && payload.FeatureName == string(FeatureMCPApproval) {
+		// MCP approval enablement also provisions the built-in RBAC grants —
+		// without them every approval surface answers 403, since the system
+		// role seeder never revisits roles that already hold grants.
+		if err := EnableMCPApprovalTx(ctx, dbtx, orgID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enable MCP approval feature").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		}
 	} else if payload.Enabled {
 		inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,

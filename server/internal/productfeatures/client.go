@@ -147,6 +147,50 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
+func provisionMCPApprovalSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeMCPApprovalRead),
+			Selectors: nil,
+		},
+		{
+			Scope:     string(authz.ScopeMCPApprovalDecide),
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision admin MCP approval grants: %w", err)
+	}
+
+	return nil
+}
+
+// EnableMCPApprovalTx provisions the built-in MCP approval grants and enables
+// the org-level feature in the caller's transaction. Existing grants and
+// exclusions are preserved, and the provisioning runs even when the feature is
+// already enabled, so re-enabling repairs an organization whose flag predates
+// the grants. Members hold no mcp_approval scopes by default: reviewing and
+// deciding server access is an admin surface, and the request-access flow
+// members use is gated separately.
+func EnableMCPApprovalTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
+	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock organization for MCP approval enable: %w", err)
+	}
+
+	if err := provisionMCPApprovalSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
+		return err
+	}
+
+	if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureMCPApproval),
+	}); err != nil {
+		return fmt.Errorf("enable MCP approval feature flag: %w", err)
+	}
+
+	return nil
+}
+
 // SeedOrganizationDefaultsTx enables baseline entitlements for every newly
 // provisioned organization. It is intentionally separate from trial seeding so
 // an explicit org-admin disable remains durable and absent rows stay disabled.
