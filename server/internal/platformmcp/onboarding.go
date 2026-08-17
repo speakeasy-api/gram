@@ -492,6 +492,9 @@ func (s *OnboardingService) activeWorkflow(ctx context.Context, q *platformrepo.
 }
 
 func (p OnboardingProjection) connectionForEvidence() (OnboardingConnection, bool) {
+	if p.ConnectionAuthState != ConnectionAuthStateActive {
+		return OnboardingConnection{}, false
+	}
 	if len(p.Connections) > 0 {
 		return p.Connections[0], true
 	}

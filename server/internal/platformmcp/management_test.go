@@ -50,10 +50,20 @@ func TestAgentConfigurationReady(t *testing.T) {
 		{
 			name: "credits an authenticated manual configuration",
 			projection: OnboardingProjection{
-				Workflow:    &OnboardingWorkflow{},
-				Connections: []OnboardingConnection{{ID: uuid.New()}},
+				Workflow:            &OnboardingWorkflow{},
+				Connections:         []OnboardingConnection{{ID: uuid.New()}},
+				ConnectionAuthState: ConnectionAuthStateActive,
 			},
 			want: true,
+		},
+		{
+			name: "does not credit terminal connection evidence",
+			projection: OnboardingProjection{
+				Workflow:            &OnboardingWorkflow{},
+				EvidenceConnection:  &OnboardingConnection{ID: uuid.New(), Ready: true},
+				ConnectionAuthState: ConnectionAuthStateReauthorizationRequired,
+			},
+			want: false,
 		},
 		{
 			name:       "credits later lifecycle evidence",

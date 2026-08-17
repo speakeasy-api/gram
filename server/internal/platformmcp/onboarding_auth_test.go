@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -31,6 +32,24 @@ func TestConnectionAuthStateMapsPersistedReasons(t *testing.T) {
 			require.Equal(t, public, reason)
 		})
 	}
+}
+
+func TestConnectionForEvidenceRequiresActiveAuthorization(t *testing.T) {
+	t.Parallel()
+
+	evidence := &OnboardingConnection{ID: uuid.New(), Ready: true}
+	terminal := OnboardingProjection{
+		EvidenceConnection:  evidence,
+		ConnectionAuthState: ConnectionAuthStateReauthorizationRequired,
+	}
+	_, found := terminal.connectionForEvidence()
+	require.False(t, found)
+
+	active := terminal
+	active.ConnectionAuthState = ConnectionAuthStateActive
+	connection, found := active.connectionForEvidence()
+	require.True(t, found)
+	require.Equal(t, evidence.ID, connection.ID)
 }
 
 func TestDeriveOnboardingStageDoesNotTreatTerminalEvidenceAsReady(t *testing.T) {
