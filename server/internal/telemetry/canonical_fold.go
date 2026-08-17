@@ -10,6 +10,7 @@ package telemetry
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -128,11 +129,12 @@ func (s *Service) shadowCompareCanonicalFold(ctx context.Context, orgID string, 
 // shadowCompareSearchUsersFold re-runs the employee list query with folding
 // enabled and logs how the folded list diverges from the literal one already
 // served: row counts, keys that exist only folded (canonical emails replacing
-// literal variants), and the input+output token delta — folding merges rows,
-// so on an untruncated page the token sum must be preserved and the folded
-// list can only shrink. Emails are deliberately not logged; counts carry the
-// signal. Runs in the background off a detached context so it never delays or
-// fails the caller's request.
+// literal variants), whether the shared keys changed relative order, and the
+// input+output token delta — folding merges rows, so on an untruncated page
+// the token sum must be preserved and the folded list can only shrink. Emails
+// are deliberately not logged; counts carry the signal. Runs in the
+// background off a detached context so it never delays or fails the caller's
+// request.
 func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string, params repo.SearchUsersParams, literal []repo.UserSummary) {
 	select {
 	case s.shadowFoldSem <- struct{}{}:
@@ -160,19 +162,41 @@ func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string
 			literalKeys[u.UserID] = struct{}{}
 			literalTokens += u.TotalInputTokens + u.TotalOutputTokens
 		}
+		foldedKeys := make(map[string]struct{}, len(folded))
 		newKeys := 0
 		for _, u := range folded {
+			foldedKeys[u.UserID] = struct{}{}
 			foldedTokens += u.TotalInputTokens + u.TotalOutputTokens
 			if _, ok := literalKeys[u.UserID]; !ok {
 				newKeys++
 			}
 		}
 
+		// Ordering divergence is only well-defined on the keys both lists
+		// share — folded keys are canonicalized, so the key spaces differ by
+		// construction. If the shared keys appear in a different relative
+		// order, folding moved someone (a merged identity's last-seen is the
+		// max across its emails), which the ticket's list-divergence spec
+		// requires surfacing alongside membership and counts.
+		var commonLiteral, commonFolded []string
+		for _, u := range literal {
+			if _, ok := foldedKeys[u.UserID]; ok {
+				commonLiteral = append(commonLiteral, u.UserID)
+			}
+		}
+		for _, u := range folded {
+			if _, ok := literalKeys[u.UserID]; ok {
+				commonFolded = append(commonFolded, u.UserID)
+			}
+		}
+		orderChanged := !slices.Equal(commonLiteral, commonFolded)
+
 		s.logger.InfoContext(bgCtx, "identity fold shadow employee list comparison",
 			attr.SlogOrganizationID(orgID),
 			attr.SlogIdentityFoldLiteralGroups(len(literal)),
 			attr.SlogIdentityFoldCanonicalGroups(len(folded)),
 			attr.SlogIdentityFoldNewKeys(newKeys),
+			attr.SlogIdentityFoldOrderChanged(orderChanged),
 			attr.SlogIdentityFoldTokenDelta(foldedTokens-literalTokens),
 			// On a truncated page both lists are capped at limit+1 and the
 			// deltas are page-cap artifacts, not divergence — folding frees
