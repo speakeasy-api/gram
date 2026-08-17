@@ -191,13 +191,10 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").LogError(ctx, logger)
 	}
-	updatedAccountType := refreshedOrg.GramAccountType
-
 	// we must manually handle a downgrade from pro to free right now since there is no specific product subscription for free
 	if previousAccountType == "pro" && webhookPayload.Type == "subscription.revoked" {
-		updatedAccountType = "free"
 		err := s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
-			GramAccountType: updatedAccountType,
+			GramAccountType: "free",
 			ID:              refreshedOrg.ID,
 		})
 		if err != nil {
@@ -205,29 +202,29 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		}
 	}
 
-	if previousAccountType != updatedAccountType {
-		for _, keyType := range openrouter.AllKeyTypes {
-			err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, refreshedOrg.ID, keyType, polarWebhookKeyBillingLockWaitTimeout, func(_ *pgxpool.Conn) error {
-				_, refreshErr := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil)
-				if refreshErr != nil {
-					return fmt.Errorf("refresh OpenRouter %s key after account type change: %w", keyType, refreshErr)
-				}
-				return nil
-			})
-			if err != nil {
-				// Keys are provisioned lazily on first use (chat on the first
-				// completion, internal on the first judge call), so an org
-				// that changes account type before ever running a completion
-				// has no row yet — skip, don't fail, or Polar retries the
-				// webhook forever.
-				if errors.Is(err, pgx.ErrNoRows) {
-					continue
-				}
-				if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-					return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-				}
-				return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
+	// Reconcile on every accepted delivery, even when the account type already
+	// matches. The provider persists its state before this handler runs, so a
+	// retry after one key timed out sees no tier delta; tying reconciliation to
+	// that delta would permanently leave the later key stale.
+	for _, keyType := range openrouter.AllKeyTypes {
+		err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, refreshedOrg.ID, keyType, polarWebhookKeyBillingLockWaitTimeout, func(_ *pgxpool.Conn) error {
+			_, refreshErr := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil)
+			if refreshErr != nil {
+				return fmt.Errorf("refresh OpenRouter %s key after billing event: %w", keyType, refreshErr)
 			}
+			return nil
+		})
+		if err != nil {
+			// Keys are provisioned lazily on first use (other inference on the
+			// first completion, security inference on the first judge call), so
+			// an org that changes account type before using one has no row yet.
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+				return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
 		}
 	}
 

@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
-	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -343,21 +342,8 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 		// account policy before the explicit refresh.
 		limit := int(row.MonthlyCredits)
 		if limit == 0 {
-			activeTrial := false
-			if !openrouter.IsSpecialLimitOrg(row.OrganizationID) {
-				_, trialErr := trialsrepo.New(conn).GetActiveTrial(ctx, row.OrganizationID)
-				switch {
-				case trialErr == nil:
-					activeTrial = true
-				case !errors.Is(trialErr, pgx.ErrNoRows):
-					logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
-						attr.SlogError(trialErr),
-					)
-				}
-			}
-
 			var ok bool
-			limit, ok = openrouter.DefaultCreditLimit(row.OrganizationID, billing.Tier(row.GramAccountType), activeTrial)
+			limit, ok = openrouter.ResolveDefaultCreditLimit(ctx, logger, conn, row.OrganizationID, billing.Tier(row.GramAccountType))
 			if !ok {
 				return oops.E(oops.CodeUnexpected, fmt.Errorf("no OpenRouter credit policy for account type %q", row.GramAccountType), "enable openrouter key").LogError(ctx, logger)
 			}

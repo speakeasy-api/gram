@@ -237,6 +237,31 @@ func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limi
 	return AccountTypeCreditLimit(tier)
 }
 
+// ResolveDefaultCreditLimit reads the active-trial state and applies the full
+// mint-time policy shared by provisioning and legacy-key repair.
+func ResolveDefaultCreditLimit(
+	ctx context.Context,
+	logger *slog.Logger,
+	dbtx trialsRepo.DBTX,
+	orgID string,
+	tier billing.Tier,
+) (limit int, ok bool) {
+	if IsSpecialLimitOrg(orgID) {
+		return DefaultCreditLimit(orgID, tier, false)
+	}
+
+	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, orgID)
+	activeTrial := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+	}
+
+	return DefaultCreditLimit(orgID, tier, activeTrial)
+}
+
 // trialCreditLimit caps each key an organization inside a trial holds, so its
 // total trial exposure is this amount multiplied by len(AllKeyTypes). A trial
 // is armed without verified intent and the credit-balance gate hard-stops the
@@ -554,13 +579,11 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
-	if key.MonthlyCredits == 0 && !key.Disabled && limit == nil {
-		return 0, errors.New("cannot make an update to monthly credits of 0")
-	}
-	if limit == nil && keyType == KeyTypeChat && key.Disabled && !reinstate {
+	repairLegacyZero := key.MonthlyCredits == 0 && !key.Disabled && limit == nil
+	if limit == nil && key.Disabled && !reinstate {
 		// Generic refreshes must never undo a billing lockdown. An explicit
-		// activation or re-subscription passes a non-nil cap and is the only
-		// path allowed to reinstate the customer-facing chat key.
+		// activation, re-subscription, or platform-admin enable is the only path
+		// allowed to reinstate either platform key.
 		return int(key.MonthlyCredits), nil
 	}
 
@@ -568,7 +591,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate {
+	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate && !repairLegacyZero {
 		// OpenRouter is the authority for a PAYG customer's chosen inference cap
 		// on each materialized platform key. Generic tier refreshes preserve both
 		// the mirrored value and the key's
@@ -804,27 +827,11 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 // transaction that already holds an advisory lock and a pool connection, so it
 // must read through that same transaction.
 func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
-	if IsSpecialLimitOrg(org.ID) {
-		limit, _ := DefaultCreditLimit(org.ID, billing.Tier(org.GramAccountType), false)
-		return limit
-	}
-
 	// A trial runs on the real enterprise tier, so the account type on its own
 	// cannot tell a trial apart from a paying enterprise customer. A read
 	// failure falls through to the account type rather than capping a paying
 	// customer on a transient database error.
-	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, org.ID)
-	activeTrial := err == nil
-	switch {
-	case activeTrial:
-	case !errors.Is(err, pgx.ErrNoRows):
-		o.logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(org.ID),
-		)
-	}
-
-	limit, _ := DefaultCreditLimit(org.ID, billing.Tier(org.GramAccountType), activeTrial)
+	limit, _ := ResolveDefaultCreditLimit(ctx, o.logger, dbtx, org.ID, billing.Tier(org.GramAccountType))
 	return limit
 }
 

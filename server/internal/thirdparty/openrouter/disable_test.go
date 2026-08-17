@@ -350,42 +350,78 @@ func TestRefreshAPIKeyLimit_NilPreservesEachPaygInferenceCap(t *testing.T) {
 	}
 }
 
-func TestRefreshAPIKeyLimit_NilPreservesDisabledChatKeyAfterTierTransition(t *testing.T) {
+func TestRefreshAPIKeyLimit_NilPreservesDisabledKeyAfterTierTransition(t *testing.T) {
+	t.Parallel()
+
+	for _, keyType := range AllKeyTypes {
+		t.Run(string(keyType), func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierPayg),
+			}))
+
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, keyType)
+			require.NoError(t, err)
+			raisedCap := 321
+			_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, &raisedCap)
+			require.NoError(t, err)
+			require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, keyType))
+			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+				ID:              orgID,
+				GramAccountType: string(billing.TierBase),
+			}))
+			patchesBeforeRefresh := upstream.recorded()
+
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, nil)
+			require.NoError(t, err)
+			require.Equal(t, raisedCap, refreshed)
+			require.Equal(t, patchesBeforeRefresh, upstream.recorded(),
+				"a generic refresh must not reinstate a disabled platform key")
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(keyType),
+			})
+			require.NoError(t, err)
+			require.True(t, row.Disabled)
+			require.Equal(t, int64(raisedCap), row.MonthlyCredits)
+		})
+	}
+}
+
+func TestRefreshAPIKeyLimit_NilRepairsLegacyEnabledZeroKey(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	orgID := "org-" + uuid.NewString()[:8]
 	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-	require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
-		ID:              orgID,
-		GramAccountType: string(billing.TierPayg),
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+		MonthlyCredits: 0,
 	}))
 
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	expected, ok := ResolveDefaultCreditLimit(ctx, provisioner.logger, provisioner.db, orgID, billing.TierBase)
+	require.True(t, ok)
+	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, nil)
 	require.NoError(t, err)
-	raisedCap := 321
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, &raisedCap)
-	require.NoError(t, err)
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
-	require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
-		ID:              orgID,
-		GramAccountType: string(billing.TierBase),
-	}))
-	patchesBeforeRefresh := upstream.recorded()
-
-	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
-	require.NoError(t, err)
-	require.Equal(t, raisedCap, refreshed)
-	require.Equal(t, patchesBeforeRefresh, upstream.recorded(),
-		"a generic refresh must not reinstate a key disabled during subscription loss")
+	require.Equal(t, expected, refreshed)
+	require.Len(t, upstream.recorded(), 1, "generic reconciliation must repair a legacy zero key")
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
-		KeyType:        string(KeyTypeChat),
+		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.True(t, row.Disabled)
-	require.Equal(t, int64(raisedCap), row.MonthlyCredits)
+	require.EqualValues(t, expected, row.MonthlyCredits)
 }
 
 func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
