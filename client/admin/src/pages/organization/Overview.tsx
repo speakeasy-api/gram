@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,9 +37,30 @@ function Row({
 }) {
   return (
     <div className="grid grid-cols-[12rem_1fr] items-baseline gap-3 py-1">
-      <span className="text-muted-foreground text-sm">{label}</span>
+      <span data-slot="field-label" className="text-muted-foreground text-sm">
+        {label}
+      </span>
       <div>{children}</div>
     </div>
+  );
+}
+
+function Group({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-5 first:mt-0">
+      {/* h5 under the record name's h4 in RecordHeader. A group is part of the
+          record, not a sibling of it. */}
+      <h5 className="text-muted-foreground mb-1 text-xs font-medium">
+        {title}
+      </h5>
+      {children}
+    </section>
   );
 }
 
@@ -123,71 +145,91 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
 
   return (
     <div className="border-border bg-muted/10 rounded-md border p-4">
-      <Row label="ID">
-        <span className="text-sm">{org.id}</span>
-      </Row>
-      <Row label="Name">
-        <span className="text-sm">{org.name}</span>
-      </Row>
-      <Row label="Slug">
-        <span className="text-sm">{org.slug}</span>
-      </Row>
-      <Row label="Account type">
-        <Select
-          value={accountType}
-          disabled={mut.isPending}
-          onValueChange={(v) => setDraft((d) => ({ ...d, account_type: v }))}
-        >
-          <SelectTrigger className="h-auto w-auto px-2 py-1.5">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ACCOUNT_TYPE_OPTIONS.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-            {!isAccountType(org.account_type) && (
-              <SelectItem value={org.account_type}>
-                {org.account_type}
-              </SelectItem>
+      <Group title="Identity">
+        <Row label="Name">
+          <span className="text-sm">{org.name}</span>
+        </Row>
+        <Row label="Slug">
+          <CopyValue label="Slug" value={org.slug} className="text-sm" />
+        </Row>
+        <Row label="Organization id">
+          <CopyValue
+            label="Organization id"
+            value={org.id}
+            className="text-sm"
+          />
+        </Row>
+        <Row label="WorkOS id">
+          {/* No control over an absent value: a button that copies "-" is
+              worse than no button. */}
+          {org.workos_id ? (
+            <CopyValue
+              label="WorkOS id"
+              value={org.workos_id}
+              className="text-sm"
+            />
+          ) : (
+            <span className="text-muted-foreground text-sm">-</span>
+          )}
+        </Row>
+        <Row label="Created">
+          <span className="text-sm">{fmtDateShort(org.created_at)}</span>
+        </Row>
+        <Row label="Updated">
+          <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
+        </Row>
+      </Group>
+
+      <Group title="Plan">
+        <Row label="Account type">
+          <Select
+            value={accountType}
+            disabled={mut.isPending}
+            onValueChange={(v) => setDraft((d) => ({ ...d, account_type: v }))}
+          >
+            <SelectTrigger className="h-auto w-auto px-2 py-1.5">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+              {!isAccountType(org.account_type) && (
+                <SelectItem value={org.account_type}>
+                  {org.account_type}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </Row>
+        <Row label="Trial">
+          <Trial org={org} />
+        </Row>
+      </Group>
+
+      {/* Access, not a setting. `whitelisted` gates the platform, so it keeps
+          its own group away from anything that reads as a preference. */}
+      <Group title="Access">
+        <Row label="Whitelisted">
+          <Switch
+            checked={whitelisted}
+            disabled={mut.isPending}
+            onCheckedChange={(v) => setDraft((d) => ({ ...d, whitelisted: v }))}
+          />
+        </Row>
+        <Row label="Disabled at">
+          <span
+            className={cn(
+              "text-sm",
+              !org.disabled_at && "text-muted-foreground",
             )}
-          </SelectContent>
-        </Select>
-      </Row>
-      <Row label="Members">
-        <span className="text-sm">{org.member_count}</span>
-      </Row>
-      <Row label="Whitelisted">
-        <Switch
-          checked={whitelisted}
-          disabled={mut.isPending}
-          onCheckedChange={(v) => setDraft((d) => ({ ...d, whitelisted: v }))}
-        />
-      </Row>
-      <Row label="WorkOS ID">
-        <span
-          className={cn("text-sm", !org.workos_id && "text-muted-foreground")}
-        >
-          {org.workos_id ?? "-"}
-        </span>
-      </Row>
-      <Row label="Disabled at">
-        <span
-          className={cn("text-sm", !org.disabled_at && "text-muted-foreground")}
-        >
-          {fmtDateShort(org.disabled_at)}
-        </span>
-      </Row>
-      <Row label="Trial">
-        <Trial org={org} />
-      </Row>
-      <Row label="Created">
-        <span className="text-sm">{fmtDateShort(org.created_at)}</span>
-      </Row>
-      <Row label="Updated">
-        <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
-      </Row>
+          >
+            {fmtDateShort(org.disabled_at)}
+          </span>
+        </Row>
+      </Group>
 
       {dirty && (
         <div className="border-border mt-4 flex items-center gap-2 border-t pt-3">

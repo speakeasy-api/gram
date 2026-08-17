@@ -68,7 +68,30 @@ function valueBeside(label: string): HTMLElement {
   return value;
 }
 
+// The labels of one group's rows, in the order they are drawn. Read off the
+// group's heading, so a row that moves out of a group fails the group it left
+// as well as the one it joined.
+function labelsIn(group: string): string[] {
+  const section = screen
+    .getByRole("heading", { name: group })
+    .closest("section");
+  if (!section) throw new Error(`the ${group} heading is not in a group`);
+  return [...section.querySelectorAll('[data-slot="field-label"]')].map(
+    (n) => n.textContent ?? "",
+  );
+}
+
+const writeText = vi.fn<(text: string) => Promise<void>>(() =>
+  Promise.resolve(),
+);
+
 beforeEach(() => {
+  writeText.mockClear();
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+    writable: true,
+  });
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
@@ -377,6 +400,141 @@ describe("Overview", () => {
     // The edit belonged to the record that was open when it was made. Carrying
     // it over offers to save one organization's change against another.
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("draws the facts in three named groups", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Identity" });
+    // Written out rather than counted: the label an operator reads is the
+    // whole contract of a fact row, and "Whitelisted" in particular must not
+    // drift to a name that reads like a preference. See S2-FACTS-AUDIT.md.
+    expect(labelsIn("Identity")).toEqual([
+      "Name",
+      "Slug",
+      "Organization id",
+      "WorkOS id",
+      "Created",
+      "Updated",
+    ]);
+    expect(labelsIn("Plan")).toEqual(["Account type", "Trial"]);
+    expect(labelsIn("Access")).toEqual(["Whitelisted", "Disabled at"]);
+  });
+
+  it("nests the group headings under the record's own heading", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    // The record names itself at level 4, which is the level the whole admin
+    // app titles a page at. A group drawn above that level is read as a
+    // sibling of the record rather than a part of it.
+    expect(
+      await screen.findByRole("heading", { level: 4, name: ORG.name }),
+    ).toBeTruthy();
+    for (const group of ["Identity", "Plan", "Access"]) {
+      expect(screen.getByRole("heading", { name: group }).tagName).toBe("H5");
+    }
+  });
+
+  it("no longer counts the members the record nav already counts", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Identity" });
+    // By label, not by text: the record nav says "Members" too, and that one
+    // is the count this row was dropped in favour of.
+    const labels = [
+      ...document.querySelectorAll('[data-slot="field-label"]'),
+    ].map((n) => n.textContent);
+    expect(labels).not.toContain("Members");
+  });
+
+  it("keeps the save bar under the whole record, not inside a group", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    // A save bar drawn inside Access would read as saving Access alone, while
+    // it writes the account type in Plan too.
+    expect(
+      screen.getByRole("button", { name: "Save" }).closest("section"),
+    ).toBeNull();
+  });
+
+  it("saves the whitelisted switch as whitelisted", async () => {
+    mocks.updateOrganization.mockResolvedValue({ ...ORG, whitelisted: false });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    // The field by name, not merely that a write happened: the two editors
+    // write one record between them, and a switch that lands on the account
+    // type changes the plan of an organization nobody meant to touch.
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledWith({
+        id: ORG.id,
+        account_type: undefined,
+        whitelisted: false,
+      });
+    });
+  });
+
+  it("copies each identifier off its own row", async () => {
+    const identified = {
+      ...ORG,
+      workos_id: "org_workos_placeholder_identifier",
+    };
+    mocks.getOrganization.mockResolvedValue(identified);
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${identified.slug}`,
+    });
+
+    // Row by row, each against its own value. Three controls stand side by
+    // side, and one wired to a neighbour hands the operator an identifier that
+    // belongs to a different field of the same record, which reads as right.
+    const rows: [string, string][] = [
+      ["Copy Slug", identified.slug],
+      ["Copy Organization id", identified.id],
+      ["Copy WorkOS id", identified.workos_id],
+    ];
+    for (const [name, value] of rows) {
+      const control = await screen.findByRole("button", { name });
+      fireEvent.click(control);
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith(value);
+      });
+      expect(
+        await screen.findByRole("button", {
+          name: `${name.replace("Copy ", "")} copied`,
+        }),
+      ).toBeTruthy();
+    }
+    expect(writeText).toHaveBeenCalledTimes(rows.length);
+    // The three values are told apart, so a control pointed at a neighbour
+    // cannot pass by writing the same string twice.
+    expect(new Set(rows.map(([, value]) => value)).size).toBe(rows.length);
+  });
+
+  it("offers no copy control over an absent WorkOS id", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByText("WorkOS id");
+    expect(ORG.workos_id).toBeUndefined();
+    // A button that copies "-" is worse than no button.
+    expect(valueBeside("WorkOS id").textContent).toBe("-");
+    expect(screen.queryByRole("button", { name: "Copy WorkOS id" })).toBeNull();
   });
 
   it("renders a dash for a record that was never disabled", async () => {
