@@ -29,7 +29,6 @@ import (
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformplatform "github.com/speakeasy-api/gram/server/internal/platformtools/platform"
 	platformplugins "github.com/speakeasy-api/gram/server/internal/platformtools/plugins"
-	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
@@ -238,19 +237,6 @@ func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.
 	return []platformtools.ExternalTool{
 		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: ""},
 		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: ""},
-	}
-}
-
-// ResearchTools returns the MCP research agent's web tools: search through
-// OpenRouter's web-search plugin and a guardian-routed page fetch. Both are
-// gated on the mcp_approval feature, whose research agent is the only
-// intended caller. The fetch client must come from a guardian policy and is
-// bounded here via research.ConfigureFetchClient, so callers hand over a
-// dedicated client.
-func ResearchTools(completions platformresearch.CompletionProvider, fetchClient *guardian.HTTPClient) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(completions)), RequiredFeature: "mcp_approval"},
-		{Executor: platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(fetchClient)), RequiredFeature: "mcp_approval"},
 	}
 }
 

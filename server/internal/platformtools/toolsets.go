@@ -41,7 +41,6 @@ type ToolsetDependencies struct {
 	AssistantTriggerTools         []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
 	PlatformMCPReadTools          []ExternalTool
-	ResearchTools                 []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -63,11 +62,6 @@ var toolsetRegistry = []toolsetBuilder{
 		tools := make([]ExternalTool, 0, len(deps.PlatformMCPReadTools))
 		tools = append(tools, deps.PlatformMCPReadTools...)
 		return NewPlatformMCPReadToolset(tools...)
-	},
-	func(deps ToolsetDependencies) Toolset {
-		tools := make([]ExternalTool, 0, len(deps.ResearchTools))
-		tools = append(tools, deps.ResearchTools...)
-		return NewResearchToolset(tools...)
 	},
 }
 
@@ -109,12 +103,6 @@ func NewManagedAssistantToolset(tools ...ExternalTool) Toolset {
 // and direct callers; production wiring goes through BuildToolsets.
 func NewPlatformMCPReadToolset(tools ...ExternalTool) Toolset {
 	return Toolset{Slug: PlatformMCPReadToolsetSlug, Tools: tools}
-}
-
-// NewResearchToolset returns the MCP research agent's web toolset. Exposed
-// for tests and direct callers; production wiring goes through BuildToolsets.
-func NewResearchToolset(tools ...ExternalTool) Toolset {
-	return Toolset{Slug: ResearchToolsetSlug, Tools: tools}
 }
 
 // PlatformToolsetURL builds the URL where a runtime reaches the named
