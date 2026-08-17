@@ -64,6 +64,39 @@ func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl 
 	})
 }
 
+func (r *RedisCacheAdapter) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	raw, err := r.cache.Marshal(value)
+	if err != nil {
+		return false, fmt.Errorf("marshal %s: %w", key, err)
+	}
+	ok, err := r.client.SetNX(ctx, key, raw, ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("setnx %s: %w", key, err)
+	}
+	return ok, nil
+}
+
+func (r *RedisCacheAdapter) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	ok, err := r.client.SetNX(ctx, key, owner, ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("acquire lease %s: %w", key, err)
+	}
+	return ok, nil
+}
+
+func (r *RedisCacheAdapter) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+	const compareAndDelete = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0`
+	deleted, err := r.client.Eval(ctx, compareAndDelete, []string{key}, owner).Int64()
+	if err != nil {
+		return false, fmt.Errorf("release lease %s: %w", key, err)
+	}
+	return deleted == 1, nil
+}
+
 // Add uses Redis SET NX to create key only when it is absent. The value is a
 // fixed sentinel ("1") since callers only care about presence. Returns true
 // when this call created the key, false when it already existed.

@@ -83,6 +83,7 @@ func TestNewMetrics_CreatesOAuthFlowCounters(t *testing.T) {
 	require.NotNil(t, m.oauthFlowCompletedCounter)
 	require.NotNil(t, m.oauthFlowFailedCounter)
 	require.NotNil(t, m.oauthFlowDeclinedCounter)
+	require.NotNil(t, m.oauthRefreshTokenReplayServedCounter)
 }
 
 func TestMetrics_RecordOAuthFlowStarted(t *testing.T) {
@@ -122,6 +123,15 @@ func TestMetrics_RecordOAuthFlowDeclined(t *testing.T) {
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageConsent)
 }
 
+func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := newMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
+}
+
 func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
 	t.Parallel()
 
@@ -132,4 +142,5 @@ func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
 	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
 	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageConsent)
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageIDPCallback)
+	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
 }
