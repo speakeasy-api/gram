@@ -13,6 +13,7 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { CopilotInstallContent } from "../plugins/InstallInstructionsDialog";
 import { HookSourceIcon } from "./HookSourceIcon";
 
 function ClaudeInstallContent({
@@ -454,7 +455,7 @@ const providers: {
     id: "copilot",
     label: "Copilot",
     source: "copilot",
-    available: false,
+    available: true,
   },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -579,6 +580,7 @@ export function HooksSetupDialog({
               pluginName={publishStatus?.codexObservabilityPlugin}
             />
           )}
+          {selected === "copilot" && <CopilotInstallContent />}
         </div>
       </Dialog.Content>
     </Dialog>

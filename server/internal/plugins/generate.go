@@ -219,6 +219,12 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	if err := generateOpenCodeObservabilityPluginInDir(files, "plugin-opencode", cfg); err != nil {
 		return nil, fmt.Errorf("generate dogfood opencode plugin: %w", err)
 	}
+	// plugin.json is at the package root here, not in a vendor subdirectory, so
+	// it survives the manifest sweep below -- which is what `copilot
+	// --plugin-dir plugin-copilot` needs to load the package at all.
+	if err := generateCopilotObservabilityPluginInDir(files, "plugin-copilot", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood copilot plugin: %w", err)
+	}
 	for p := range files {
 		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
 			delete(files, p)
@@ -382,7 +388,7 @@ const platformMCPGeneratorVersion = "1"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "31"
+const hooksGeneratorVersion = "32"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -535,6 +541,25 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
+// CopilotObservabilityHookEvents are GitHub Copilot's native (camelCase) hook
+// event names. Copilot only invokes the hooks runtime for events listed here,
+// so an event missing from this list is silently dropped client-side. Copilot's
+// four remaining events (preCompact, errorOccurred, subagentStart,
+// userPromptTransformed) have no Gram canonical type and are deliberately
+// unregistered.
+var CopilotObservabilityHookEvents = []string{
+	"sessionStart",
+	"sessionEnd",
+	"userPromptSubmitted",
+	"preToolUse",
+	"postToolUse",
+	"postToolUseFailure",
+	"permissionRequest",
+	"agentStop",
+	"subagentStop",
+	"notification",
+}
+
 // cursorPluginRoot is the subdirectory under which all Cursor plugins are
 // grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
 // so plugin sources can be referenced by bare name relative to this root.
@@ -602,6 +627,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	}
 	if err := generateOpenCodeObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
+	}
+	if err := generateCopilotObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate copilot observability plugin: %w", err)
 	}
 	return files, nil
 }
@@ -693,6 +721,7 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	claudePlugins := make([]marketplaceEntry, 0)
 	cursorPlugins := make([]marketplaceEntry, 0)
 	codexPlugins := make([]codexMarketplaceEntry, 0)
+	copilotPlugins := make([]marketplaceEntry, 0)
 
 	if cfg.HooksAPIKey != "" {
 		claudeObservability := ClaudeObservabilitySlug(cfg)
@@ -720,6 +749,13 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Installation:   "INSTALLED_BY_DEFAULT",
 				Authentication: "ON_USE",
 			},
+		})
+		copilotObservability := CopilotObservabilitySlug(cfg)
+		copilotPlugins = append(copilotPlugins, marketplaceEntry{
+			Name:        copilotObservability,
+			DisplayName: cfg.OrgName + " Observability",
+			Source:      "./" + copilotObservability,
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 	}
 
@@ -756,6 +792,19 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Authentication: codexAuthPolicy(p, cfg),
 			},
 		})
+		// Copilot consumes feature plugins through the portable Agent Plugins 1.0
+		// package, which generateMCPFiles omits for plugins that fail the
+		// portability gate. Re-run the same classification here so the manifest
+		// never advertises a directory that was never written — Copilot resolves
+		// an entry's source eagerly and a dangling one breaks the whole catalog.
+		if classifyAgentPlugin(p).Compatible {
+			copilotPlugins = append(copilotPlugins, marketplaceEntry{
+				Name:        p.Slug,
+				DisplayName: p.Name,
+				Source:      "./" + path.Join(agentPluginRoot, p.Slug),
+				Description: p.Description,
+			})
+		}
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
@@ -792,6 +841,27 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 		return nil, fmt.Errorf("marshal codex marketplace.json: %w", err)
 	}
 	files[".agents/plugins/marketplace.json"] = codexManifest
+
+	// Copilot's manifest lives at the repo ROOT. Copilot probes, in order,
+	// marketplace.json, .plugin/marketplace.json, .github/plugin/marketplace.json
+	// and .claude-plugin/marketplace.json — so without a root file it would fall
+	// through to Claude's, whose entries point at the Claude packages. Those load
+	// (Copilot reads .claude-plugin/plugin.json too), but their hooks.json is
+	// Claude dialect, whose `"matcher": ""` silently kills telemetry on Copilot
+	// — see package-format.md#copilot-observability. The root file claims
+	// the highest-priority slot before that can happen. Entry names must equal
+	// the package's own plugin.json name — Copilot resolves
+	// installed-plugins/<marketplace>/<name>/ by it and skips a mismatch.
+	copilotManifest, err := marshalJSON(marketplaceManifest{
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: nil,
+		Plugins:  copilotPlugins,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal copilot marketplace.json: %w", err)
+	}
+	files["marketplace.json"] = copilotManifest
 
 	files["README.md"] = generateReadme(plugins, cfg)
 
@@ -1134,6 +1204,9 @@ func CodexObservabilitySlug(cfg GenerateConfig) string {
 func OpenCodeObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-opencode"
 }
+func CopilotObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-copilot"
+}
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
 // (observability) subtree occupies for a given org name — every hooks
@@ -1148,6 +1221,7 @@ func hooksSubtreePrefixes(orgName string) []string {
 		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
 		conv.ToSlug(orgName) + "-observability-codex/",
 		conv.ToSlug(orgName) + "-observability-opencode/",
+		conv.ToSlug(orgName) + "-observability-copilot/",
 	}
 }
 
@@ -1420,6 +1494,71 @@ func generateOpenCodeObservabilityPluginInDir(files map[string][]byte, subdir st
 	return nil
 }
 
+// generateCopilotObservabilityPlugin emits the per-org observability plugin
+// for GitHub Copilot. Hooks only run in Copilot CLI (and the cloud agent, which
+// this package does not target); VS Code and the Copilot app load the plugin
+// but never fire its hooks.
+func generateCopilotObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCopilotObservabilityPluginInDir(files, CopilotObservabilitySlug(cfg), cfg)
+}
+
+// generateCopilotObservabilityPluginFlat emits the same files at the root
+// (no subdir) for direct ZIP installation via `copilot --plugin-dir`.
+func generateCopilotObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCopilotObservabilityPluginInDir(files, "", cfg)
+}
+
+func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	name := subdir
+	if name == "" {
+		name = CopilotObservabilitySlug(cfg)
+	}
+	pluginJSON, err := marshalJSON(copilotPluginMeta{
+		Name:        name,
+		Version:     hooksManifestVersion(cfg),
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	// plugin.json sits at the package root (Agent Plugins 1.0), not in a vendor
+	// subdirectory like the Claude/Cursor/Codex packages.
+	files[path.Join(subdir, "plugin.json")] = pluginJSON
+
+	hookEvents := make(map[string][]copilotHookCommand, len(CopilotObservabilityHookEvents))
+	for _, event := range CopilotObservabilityHookEvents {
+		// sessionStart carries the cold-install download, so it gets the same
+		// headroom Cursor's does; Copilot's own default is 30s, not enough.
+		timeoutSeconds := 60
+		if event == "sessionStart" {
+			timeoutSeconds = 330
+		}
+		hookEvents[event] = []copilotHookCommand{{
+			Type:       "command",
+			Bash:       hooksBootstrapCommand(`$COPILOT_PLUGIN_ROOT`, "copilot", timeoutSeconds, false),
+			PowerShell: copilotHooksPowerShellCommand(timeoutSeconds),
+			TimeoutSec: timeoutSeconds,
+		}}
+	}
+	hooksJSON, err := marshalJSON(copilotHooksConfig{Version: 1, Hooks: hookEvents})
+	if err != nil {
+		return fmt.Errorf("marshal hooks.json: %w", err)
+	}
+	// hooks/hooks.json ONLY. Copilot parses both <root>/hooks.json and
+	// <root>/hooks/hooks.json, so shipping both registers every hook twice.
+	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
+
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	// Copilot's per-entry powershell field points here. Without it a Windows
+	// machine with no bash fails preToolUse, which is fail-closed — every tool
+	// call would be denied, not merely untelemetered.
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+
+	return nil
+}
+
 // opencodeObservabilityShim is the OpenCode plugin module. It carries no
 // org-specific values — deployment identity rides in the sibling
 // speakeasy.json — and resolves every path relative to its own location so
@@ -1616,6 +1755,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "opencode":
 		if err := generateOpenCodeObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
+		}
+	case "copilot":
+		if err := generateCopilotObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate copilot observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -2511,6 +2654,36 @@ type cursorHookCommand struct {
 	Matcher    string `json:"matcher,omitempty"`
 	Timeout    *int   `json:"timeout,omitempty"`
 	FailClosed *bool  `json:"failClosed,omitempty"`
+}
+
+// copilotPluginMeta is Copilot's plugin.json, which lives at the package root
+// (Agent Plugins 1.0 layout) rather than in a vendor subdirectory.
+type copilotPluginMeta struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+}
+
+type copilotHooksConfig struct {
+	Version int                             `json:"version"`
+	Hooks   map[string][]copilotHookCommand `json:"hooks"`
+}
+
+// copilotHookCommand is one Copilot hook entry. Two deliberate omissions:
+//
+//   - No matcher field. Absent means match-all; an empty one is fatal.
+//   - No failClosed field. Copilot fixes the posture per event: preToolUse is
+//     fail-closed on any non-timeout error, everything else fails open.
+//
+// see package-format.md#copilot-observability
+//
+// bash and powershell are native per-entry fields, so unlike Codex the Windows
+// command needs no base64 -EncodedCommand wrapping.
+type copilotHookCommand struct {
+	Type       string `json:"type"`
+	Bash       string `json:"bash"`
+	PowerShell string `json:"powershell,omitempty"`
+	TimeoutSec int    `json:"timeoutSec,omitempty"`
 }
 
 type codexHooksConfig struct {

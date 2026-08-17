@@ -1680,8 +1680,16 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	require.Equal(t, "UserPromptSubmit", telemetryHookEventName(withRaw("claude", "prompt.submitted", "UserPromptSubmit")))
 	require.Equal(t, "PermissionRequest", telemetryHookEventName(withRaw("codex", "tool.requested", "PermissionRequest")))
 
+	// Copilot's camelCase vocabulary resolves the same way, and a case-variant
+	// adapter slug must reach the same branch as the lowercase one.
+	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("copilot", "tool.requested", "preToolUse")))
+	require.Equal(t, "UserPromptSubmit", telemetryHookEventName(withRaw("copilot", "prompt.submitted", "userPromptSubmitted")))
+	require.Equal(t, "SubagentStop", telemetryHookEventName(withRaw("copilot", "session.updated", "subagentStop")))
+	require.Equal(t, "PermissionRequest", telemetryHookEventName(withRaw("Copilot", "tool.requested", "permissionRequest")))
+
 	// Unrecognized raw names for known adapters fall back to the canonical map.
 	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
+	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("copilot", "tool.requested", "subagentStart")))
 
 	// OpenCode's message.part.updated carries every streaming part update, not
 	// just failures; agenthooks decides whether it is a real tool failure, so the

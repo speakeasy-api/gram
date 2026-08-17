@@ -70,7 +70,7 @@ require (
 	github.com/samber/slog-multi v1.8.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
-	github.com/speakeasy-api/agenthooks v0.6.0
+	github.com/speakeasy-api/agenthooks v0.6.1-0.20260817001929-df71ee1c3884
 	github.com/speakeasy-api/mcp-setup-docs/go v0.3.0
 	github.com/speakeasy-api/openapi v1.24.0
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
