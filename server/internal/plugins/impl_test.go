@@ -2420,8 +2420,8 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		CatalogProvider:      "fixture",
 		CatalogReference:     "platform-mcp-publish-test",
 		Status:               "pending",
-		ConnectionID:         connectionID,
-		ConnectionGeneration: connectionGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
 	})
 	require.NoError(t, err)
 	registration, err = platformRepo.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformmcprepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{

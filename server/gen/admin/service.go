@@ -28,6 +28,10 @@ type Service interface {
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Sets one account type on many organizations in a single statement. An ID
+	// that matches no organization is reported back rather than failing the batch,
+	// so a stale ID costs the operator that row and not the whole call.
+	BulkUpdateAccountType(context.Context, *BulkUpdateAccountTypePayload) (res *AdminBulkUpdateAccountTypeResult, err error)
 	// Disables an organization, recording the moment of the action in disabled_at.
 	// Idempotent: disabling an already-disabled organization keeps the original
 	// timestamp.
@@ -58,6 +62,11 @@ type Service interface {
 	// trial a fresh run of the given length counted from now. Only a demoted trial
 	// can be re-armed; one that has converted or is already running is rejected.
 	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
+	// Returns platform-wide organization counts for the strip above the
+	// organizations list. Every figure counts the whole platform: none of them
+	// narrows to the caller's list filters, so the strip does not move when an
+	// operator filters.
+	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -80,7 +89,18 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"login", "callback", "logout", "getProject", "updateOrganization", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial"}
+var MethodNames = [16]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats"}
+
+// AdminBulkUpdateAccountTypeResult is the result type of the admin service
+// bulkUpdateAccountType method.
+type AdminBulkUpdateAccountTypeResult struct {
+	// IDs of the organizations whose account type was set. Order is unspecified:
+	// do not rely on it.
+	UpdatedIds []string
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string
+}
 
 // AdminListOrganizationMembersResult is the result type of the admin service
 // listOrganizationMembers method.
@@ -155,6 +175,21 @@ type AdminOrganizationMember struct {
 	UpdatedAt string
 }
 
+// AdminOrganizationStats is the result type of the admin service
+// getOrganizationStats method.
+type AdminOrganizationStats struct {
+	// Every organization on the platform, disabled ones included.
+	Total int64
+	// Organizations created in the last 7 days, whatever their current status.
+	CreatedLast7Days int64
+	// Organizations whose trial_state is ending_soon.
+	TrialsEndingSoon int64
+	// Organizations with disabled_at set.
+	Disabled int64
+	// Organizations disabled in the last 7 days.
+	DisabledLast7Days int64
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -197,6 +232,16 @@ type AdminProjectDetail struct {
 	AssistantCount int
 	CreatedAt      string
 	UpdatedAt      string
+}
+
+// BulkUpdateAccountTypePayload is the payload type of the admin service
+// bulkUpdateAccountType method.
+type BulkUpdateAccountTypePayload struct {
+	AdminSessionToken *string
+	// Organization IDs to update.
+	Ids []string
+	// New gram_account_type for every listed organization.
+	AccountType string
 }
 
 // CallbackPayload is the payload type of the admin service callback method.
@@ -263,6 +308,12 @@ type GetOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID or slug.
 	IDOrSlug string
+}
+
+// GetOrganizationStatsPayload is the payload type of the admin service
+// getOrganizationStats method.
+type GetOrganizationStatsPayload struct {
+	AdminSessionToken *string
 }
 
 // GetProjectPayload is the payload type of the admin service getProject method.
@@ -375,7 +426,7 @@ type UpdateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
-	// New gram_account_type (e.g. free, pro, enterprise).
+	// New gram_account_type.
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool

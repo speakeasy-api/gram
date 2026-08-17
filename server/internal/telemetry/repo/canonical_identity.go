@@ -160,3 +160,60 @@ func withCanonicalFoldSettings(sb squirrel.SelectBuilder, canonicalOrgLit string
 	}
 	return sb.Suffix("SETTINGS use_query_condition_cache = 0")
 }
+
+// CanonicalUserIdentity identifies one employee for the ungrouped per-user
+// queries in canonical fold mode. An email identifier resolves entirely
+// in-query — both the email fold and the owning user id come from the same
+// identity_map generation — while a user-id identifier matches user_id-keyed
+// rows directly plus rows carrying the user's directory email (resolved by
+// the caller with a single lookup). The zero value disables canonical
+// matching (callers fall back to the literal UserIdentity path).
+type CanonicalUserIdentity struct {
+	OrgID      string
+	UserID     string
+	EmailLower string
+}
+
+// Enabled reports whether the identity can drive the canonical filter: it
+// needs an org id that passes the SQL-literal allowlist plus at least one
+// identity leg. Callers building the scope must check it — a disabled
+// canonical identity applies no filter, so the service falls back to the
+// legacy expanded scope rather than serving pages unfiltered.
+func (c CanonicalUserIdentity) Enabled() bool {
+	return canonicalIdentityOrgLiteral(c.OrgID) != "" && (c.UserID != "" || c.EmailLower != "")
+}
+
+// withCanonicalUserIdentityFilter mirrors withUserIdentityFilter's id-wins
+// precedence: a row with a user_id is attributed by that id alone, and only
+// email-less rows fall back to the folded email comparison — the DNO-509
+// double-count guard, unchanged. The joinGet arm guards user_id != ” because
+// an unmapped email folds to ” and must never sweep in email-less rows.
+func withCanonicalUserIdentityFilter(sb squirrel.SelectBuilder, ident CanonicalUserIdentity) squirrel.SelectBuilder {
+	orgLit := canonicalIdentityOrgLiteral(ident.OrgID)
+
+	var match squirrel.Or
+	switch {
+	case ident.UserID != "":
+		match = append(match, squirrel.Eq{"telemetry_logs.user_id": ident.UserID})
+	case ident.EmailLower != "":
+		match = append(match, squirrel.Expr(
+			"(telemetry_logs.user_id != '' AND telemetry_logs.user_id = joinGet('identity_map', 'canonical_user_id', "+orgLit+", ?))",
+			ident.EmailLower))
+	}
+	if ident.EmailLower != "" {
+		fragments, args := canonicalEmailValueList(orgLit, []string{ident.EmailLower})
+		match = append(match, squirrel.Expr(
+			"(telemetry_logs.user_id = '' AND "+canonicalEmailExpr(orgLit, "telemetry_logs.user_email")+" = "+fragments[0]+")",
+			args...))
+	}
+	return sb.Where(match)
+}
+
+// orgLit is the validated org literal when canonical matching is enabled, or
+// "" — the disabled signal withCanonicalFoldSettings keys off.
+func (c CanonicalUserIdentity) orgLit() string {
+	if !c.Enabled() {
+		return ""
+	}
+	return canonicalIdentityOrgLiteral(c.OrgID)
+}

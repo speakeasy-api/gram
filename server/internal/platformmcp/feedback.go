@@ -72,7 +72,7 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 		return FeedbackResult{}, err
 	}
 
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return FeedbackResult{}, ErrFeedbackInvalid
 	}
@@ -270,7 +270,7 @@ func hasEmbeddedURIScheme(value string) bool {
 }
 
 func hasUnsafeFeedbackPath(value string) bool {
-	for _, word := range strings.Fields(value) {
+	for word := range strings.FieldsSeq(value) {
 		trimmed := strings.Trim(word, "([{\"'")
 		trimmed = strings.TrimRight(trimmed, ".,;:!?)]}\"")
 		if trimmed == "" {

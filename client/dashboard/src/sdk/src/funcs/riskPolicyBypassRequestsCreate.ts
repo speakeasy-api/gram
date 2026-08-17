@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  RiskPolicyBypassRequest,
-  RiskPolicyBypassRequest$inboundSchema,
-} from "../models/components/riskpolicybypassrequest.js";
+  PolicyBypassRedemption,
+  PolicyBypassRedemption$inboundSchema,
+} from "../models/components/policybypassredemption.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -51,7 +51,7 @@ export function riskPolicyBypassRequestsCreate(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    RiskPolicyBypassRequest,
+    PolicyBypassRedemption,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -79,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      RiskPolicyBypassRequest,
+      PolicyBypassRedemption,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -188,7 +188,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    RiskPolicyBypassRequest,
+    PolicyBypassRedemption,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -199,7 +199,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(201, RiskPolicyBypassRequest$inboundSchema),
+    M.json(201, PolicyBypassRedemption$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

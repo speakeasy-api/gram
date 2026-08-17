@@ -174,10 +174,17 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     isLoading: membersLoading,
     error: membersError,
   } = useMembers();
-  const routeUser = useMemo(
-    () => (userSlug ? decodeURIComponent(userSlug) : ""),
-    [userSlug],
-  );
+  // React Router has already decoded the path param once; this second decode
+  // exists for callers that double-encode. A raw '%' in a telemetry-derived
+  // email makes it throw, so a segment that no longer decodes is used as-is.
+  const routeUser = useMemo(() => {
+    if (!userSlug) return "";
+    try {
+      return decodeURIComponent(userSlug);
+    } catch {
+      return userSlug;
+    }
+  }, [userSlug]);
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const member = useMemo(
     () =>

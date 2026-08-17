@@ -108,6 +108,10 @@ type Service struct {
 	// back. Must be the same backing store the link generator uses.
 	cache     cache.Cache
 	jwtSecret string
+	// approvalIntake routes a redeemed shadow-MCP block link into the MCP
+	// approval workflow instead of a bypass request. Optional: nil keeps the
+	// legacy bypass flow.
+	approvalIntake ShadowMCPApprovalIntake
 	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
 	// when nil the feature is treated as disabled.
 	flags feature.Provider
@@ -173,6 +177,7 @@ func NewObserver(
 		audit:                        auditLogger,
 		cache:                        nil,
 		jwtSecret:                    "",
+		approvalIntake:               nil,
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
@@ -200,6 +205,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	cacheImpl cache.Cache,
 	jwtSecret string,
+	approvalIntake ShadowMCPApprovalIntake,
 	piiScanner ra.PIIScanner,
 	piScanner *promptinjection.Scanner,
 	flags feature.Provider,
@@ -231,6 +237,7 @@ func NewService(
 		audit:                        auditLogger,
 		cache:                        cacheImpl,
 		jwtSecret:                    jwtSecret,
+		approvalIntake:               approvalIntake,
 		piiScanner:                   piiScanner,
 		piScanner:                    piScanner,
 		gitleaksScanner:              gitleaks.NewScanner(),

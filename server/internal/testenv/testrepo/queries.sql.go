@@ -707,6 +707,35 @@ func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID
 	return i, err
 }
 
+const getTransactionClockFixture = `-- name: GetTransactionClockFixture :one
+SELECT
+    now()::timestamptz AS transaction_now,
+    (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
+    (now() + INTERVAL '7 days')::timestamptz AS in_seven_days
+`
+
+type GetTransactionClockFixtureRow struct {
+	TransactionNow pgtype.Timestamptz
+	SevenDaysAgo   pgtype.Timestamptz
+	InSevenDays    pgtype.Timestamptz
+}
+
+// Test-only. Returns the transaction timestamp and the two edges a 7-day
+// INTERVAL predicate compares against, so a boundary fixture can be seeded
+// exactly on an edge.
+//
+// Postgres computes the offsets rather than the test, because INTERVAL day
+// arithmetic on timestamptz runs in the session time zone and need not come to
+// 168 hours. It must be read inside the transaction that also runs the query
+// under test: now() is the transaction timestamp, so reading it on its own
+// connection puts the fixture on an edge that has already moved.
+func (q *Queries) GetTransactionClockFixture(ctx context.Context) (GetTransactionClockFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getTransactionClockFixture)
+	var i GetTransactionClockFixtureRow
+	err := row.Scan(&i.TransactionNow, &i.SevenDaysAgo, &i.InSevenDays)
+	return i, err
+}
+
 const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
 VALUES ($1, $2, $3, $4)

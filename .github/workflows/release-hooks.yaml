@@ -39,12 +39,12 @@ jobs:
     # version, a signed build, and a pin pull request on an identical binary,
     # so the closure decides.
     name: Decide whether to release
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       release: ${{ steps.decide.outputs.release }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           fetch-depth: 0
       - name: Setup Mise
@@ -52,6 +52,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
       - name: Decide
         id: decide
