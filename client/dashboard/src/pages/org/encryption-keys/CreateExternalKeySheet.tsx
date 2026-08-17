@@ -171,8 +171,8 @@ export function CreateExternalKeySheet({
               </Select>
               <Text small muted>
                 Must match what the key actually signs with. Verify reports a
-                mismatch rather than letting Gram publish something no verifier
-                accepts.
+                mismatch rather than letting Speakeasy publish something no
+                verifier accepts.
               </Text>
             </Stack>
 

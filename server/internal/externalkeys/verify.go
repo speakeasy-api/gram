@@ -107,7 +107,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 	want, err := gcpkms.ParseSignatureAlgorithm(row.ExternalKey.Algorithm)
 	if err != nil {
 		logger.ErrorContext(ctx, "external key records an algorithm gram cannot sign with", attr.SlogError(err))
-		return unverified(outcomeUnsupportedAlg, "this key records an algorithm Gram cannot sign with; delete it and create it again with RS256 or ES256"), nil
+		return unverified(outcomeUnsupportedAlg, "this key records an algorithm Speakeasy cannot sign with; delete it and create it again with RS256 or ES256"), nil
 	}
 
 	// TokenSource alone proves nothing: it is lazy by design, so a credential Gram

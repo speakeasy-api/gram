@@ -9,14 +9,19 @@ import {
 } from "@/components/ui/Select";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
 import { useListExternalCredentials } from "@gram/client/react-query/listExternalCredentials";
-import { useEffect } from "react";
-import { Link } from "react-router";
+import { Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CreateExternalCredentialSheet } from "../external-services/CreateExternalCredentialSheet";
 
-// CredentialSelect picks the external credential Gram authenticates with to
+// CredentialSelect picks the external credential Speakeasy authenticates with to
 // reach a key. Shared by the create sheet and the detail page's Settings tab so
 // both offer the same set and explain an empty one the same way.
+//
+// A credential can be created from here rather than only from External Services.
+// A key is unusable without one, so an organization's first key would otherwise
+// dead-end on a picker with nothing in it and a link to another page, losing
+// whatever had been filled in so far.
 //
 // Scoped to GCP: a gcp_kms key must be backed by a gcp_iam credential, and the
 // server refuses any other pairing, so offering the rest would only produce a
@@ -28,7 +33,7 @@ export function CredentialSelect({
   value: string;
   onChange: (value: string) => void;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const [createOpen, setCreateOpen] = useState(false);
   const { data, isLoading, isError, refetch } = useListExternalCredentials({
     provider: "gcp_iam",
   });
@@ -51,6 +56,16 @@ export function CredentialSelect({
     if (missing) onChange("");
   }, [missing, onChange]);
 
+  // Select what was just created. The list query is invalidated by the sheet, so
+  // the option is there by the time this renders again.
+  const createSheet = (
+    <CreateExternalCredentialSheet
+      open={createOpen}
+      onOpenChange={setCreateOpen}
+      onCreated={(credential) => onChange(credential.id)}
+    />
+  );
+
   if (isError) {
     return (
       <div className="flex flex-col gap-1.5">
@@ -72,15 +87,22 @@ export function CredentialSelect({
       <div className="flex flex-col gap-1.5">
         <Label>External credential</Label>
         <Text small muted>
-          No external credentials yet. A key needs one to reach your KMS —{" "}
-          <Link
-            to={orgRoutes.externalServices.href()}
-            className="underline underline-offset-2"
-          >
-            create one first
-          </Link>
-          .
+          A key needs a credential to reach your KMS. Create one now and it will
+          be selected here.
         </Text>
+        <div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Button.LeftIcon>
+              <Plus />
+            </Button.LeftIcon>
+            <Button.Text>New external credential</Button.Text>
+          </Button>
+        </div>
+        {createSheet}
       </div>
     );
   }
@@ -88,20 +110,36 @@ export function CredentialSelect({
   return (
     <div className="flex flex-col gap-1.5">
       <Label>External credential</Label>
-      <Select value={value} onValueChange={onChange} disabled={isLoading}>
-        <SelectTrigger>
-          <SelectValue
-            placeholder={isLoading ? "Loading…" : "Select a credential"}
-          />
-        </SelectTrigger>
-        <SelectContent>
-          {credentials.map((credential) => (
-            <SelectItem key={credential.id} value={credential.id}>
-              {credential.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Stack direction="horizontal" gap={2} align="center">
+        <div className="flex-1">
+          <Select value={value} onValueChange={onChange} disabled={isLoading}>
+            <SelectTrigger>
+              <SelectValue
+                placeholder={isLoading ? "Loading…" : "Select a credential"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {credentials.map((credential) => (
+                <SelectItem key={credential.id} value={credential.id}>
+                  {credential.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={isLoading}
+          onClick={() => setCreateOpen(true)}
+        >
+          <Button.LeftIcon>
+            <Plus />
+          </Button.LeftIcon>
+          <Button.Text>New</Button.Text>
+        </Button>
+      </Stack>
+      {createSheet}
     </div>
   );
 }

@@ -110,7 +110,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Access"
-        description="The external credential Gram authenticates with to reach this key. Repointing it changes how Gram gets to the key, not which key it is."
+        description="The external credential Speakeasy authenticates with to reach this key. Repointing it changes how Speakeasy gets to the key, not which key it is."
       >
         <CredentialSelect value={credentialId} onChange={setCredentialId} />
         <div className="flex flex-col gap-1.5">
@@ -121,7 +121,7 @@ export function SettingsTab({
             placeholder="name@project.iam.gserviceaccount.com"
           />
           <Text small muted>
-            The Gram identity you granted on the key. Recorded for your own
+            The Speakeasy identity you granted on the key. Recorded for your own
             reference so a rotated identity can be spotted before signing starts
             failing.
           </Text>
@@ -130,7 +130,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Identity"
-        description="The key this record names is fixed. Signing with a different key means deleting this one and creating another, because anything Gram has already published pins its identity to this record."
+        description="The key this record names is fixed. Signing with a different key means deleting this one and creating another, because anything Speakeasy has already published pins its identity to this record."
       >
         <div className="flex flex-col gap-1.5">
           <Label>Resource name</Label>

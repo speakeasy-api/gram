@@ -96,7 +96,7 @@ function EncryptionKeysOverview(): JSX.Element {
     <>
       <ResourceListPage
         title="Encryption Keys"
-        description="The keys in your own cloud KMS that Gram signs with. Gram never holds the key material: it reaches each key through an external credential you configure and asks your KMS to sign."
+        description="The keys in your own cloud KMS that Speakeasy signs with. Speakeasy never holds the key material: it reaches each key through an external credential you configure and asks your KMS to sign."
         isLoading={isLoading}
         primaryAction={
           <RequireScope scope="org:admin" level="component">
@@ -337,8 +337,8 @@ export function DeleteKeyDialog({
           <Text variant="body">
             Are you sure you want to delete{" "}
             <span className="font-bold italic">{keyName}</span>? This action
-            cannot be undone. The key itself is untouched in your KMS; Gram just
-            stops being able to sign with it.
+            cannot be undone. The key itself is untouched in your KMS; Speakeasy
+            just stops being able to sign with it.
           </Text>
           <div className="flex justify-end space-x-2">
             <Button variant="secondary" onClick={onClose}>

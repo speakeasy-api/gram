@@ -1,4 +1,9 @@
-import { InfoField, InfoSection, InfoText } from "@/components/detail-fields";
+import {
+  InfoField,
+  InfoFieldGrid,
+  InfoSection,
+  InfoText,
+} from "@/components/detail-fields";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -47,17 +52,21 @@ export function OverviewTab({
   };
 
   return (
-    <div className="flex max-w-2xl flex-col gap-8">
+    <div className="flex max-w-4xl flex-col gap-8">
       <InfoSection title="Key">
-        <InfoField label="Name">
-          <InfoText>{externalKey.name}</InfoText>
-        </InfoField>
-        <InfoField label="Provider">
-          <InfoText>{providerLabel(externalKey.provider)}</InfoText>
-        </InfoField>
-        <InfoField label="Algorithm">
-          <InfoText>{externalKey.algorithm}</InfoText>
-        </InfoField>
+        <InfoFieldGrid>
+          <InfoField label="Name">
+            <InfoText>{externalKey.name}</InfoText>
+          </InfoField>
+          <InfoField label="Provider">
+            <InfoText>{providerLabel(externalKey.provider)}</InfoText>
+          </InfoField>
+          <InfoField label="Algorithm">
+            <InfoText>{externalKey.algorithm}</InfoText>
+          </InfoField>
+        </InfoFieldGrid>
+        {/* Full width: a crypto key version path is long enough that a narrow
+            column would wrap it into several lines of mono text. */}
         <InfoField label="Resource name">
           <span className="flex items-center gap-1">
             <InfoText mono>{externalKey.resourceName}</InfoText>
@@ -73,22 +82,24 @@ export function OverviewTab({
             <InfoText mono>{externalKey.customerGrantReference}</InfoText>
           </InfoField>
         )}
-        <InfoField label="Created">
-          <InfoText>
-            <HumanizeDateTime date={externalKey.createdAt} />
-          </InfoText>
-        </InfoField>
-        <InfoField label="Updated">
-          <InfoText>
-            <HumanizeDateTime date={externalKey.updatedAt} />
-          </InfoText>
-        </InfoField>
+        <InfoFieldGrid>
+          <InfoField label="Created">
+            <InfoText>
+              <HumanizeDateTime date={externalKey.createdAt} />
+            </InfoText>
+          </InfoField>
+          <InfoField label="Updated">
+            <InfoText>
+              <HumanizeDateTime date={externalKey.updatedAt} />
+            </InfoText>
+          </InfoField>
+        </InfoFieldGrid>
       </InfoSection>
 
       <InfoSection title="Access">
         <Text small muted>
-          Gram reaches this key by impersonating the service account named by
-          the credential below. That service account needs the
+          Speakeasy reaches this key by impersonating the service account named
+          by the credential below. That service account needs the
           roles/cloudkms.signerVerifier role on the key.
         </Text>
         <BackingCredential credentialId={externalKey.externalCredentialId} />
@@ -96,7 +107,7 @@ export function OverviewTab({
 
       <InfoSection title="Verify">
         <Text small muted>
-          Check that Gram can reach this key and sign with it. Nothing is
+          Check that Speakeasy can reach this key and sign with it. Nothing is
           stored, and the check performs a real signing operation against your
           KMS each time.
         </Text>
@@ -197,13 +208,13 @@ function BackingCredential({
 function verifyHeadline(result: VerifyKmsKeyResult): string {
   switch (result.probeOutcome) {
     case "verified":
-      return "Gram signed with this key and verified the signature.";
+      return "Speakeasy signed with this key and verified the signature.";
     case "credential_deleted":
       return "The credential that reached this key has been deleted.";
     case "credential_unusable":
-      return "Gram could not authenticate as the backing credential.";
+      return "Speakeasy could not authenticate as the backing credential.";
     case "permission_denied":
-      return "Gram reached your KMS but is not allowed to use this key.";
+      return "Speakeasy reached your KMS but is not allowed to use this key.";
     case "key_not_found":
       return "No key version exists at this resource name.";
     case "key_unusable":
@@ -213,7 +224,7 @@ function verifyHeadline(result: VerifyKmsKeyResult): string {
     case "invalid_resource_name":
       return "The stored resource name is not a valid key version.";
     case "unsupported_algorithm":
-      return "This key's algorithm is not one Gram can publish.";
+      return "This key's algorithm is not one Speakeasy can publish.";
     case "signature_invalid":
       return "The key produced a signature that did not verify.";
     case "unavailable":

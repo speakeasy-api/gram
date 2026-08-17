@@ -195,19 +195,6 @@ export function OrgSidebar({
                 items={[
                   { item: orgRoutes.billing, scope: orgReadOrAdmin },
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
-                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
-                  { item: orgRoutes.logs, scope: orgReadOrAdmin },
-                  { item: orgRoutes.skills, scope: "org:admin" },
-                  ...(isPlatformMcpDashboardEnabled
-                    ? [
-                        {
-                          item: orgRoutes.platformMcp,
-                          scope: "org:admin" as const,
-                        },
-                      ]
-                    : []),
-                  { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
-                  { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
                   true
                     ? [
@@ -221,6 +208,19 @@ export function OrgSidebar({
                         },
                       ]
                     : []),
+                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
+                  { item: orgRoutes.logs, scope: orgReadOrAdmin },
+                  { item: orgRoutes.skills, scope: "org:admin" },
+                  ...(isPlatformMcpDashboardEnabled
+                    ? [
+                        {
+                          item: orgRoutes.platformMcp,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
+                  { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
+                  { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                 ]}
               />
 
