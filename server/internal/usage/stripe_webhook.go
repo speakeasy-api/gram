@@ -185,7 +185,10 @@ func (s *Service) currentStripeInvoice(ctx context.Context, event *stripeclient.
 		return nil, oops.E(oops.CodeBadRequest, nil, "Stripe invoice identifiers do not match current state").LogWarn(ctx, s.logger)
 	}
 	if state.BillingReason == "subscription_create" || state.BillingReason == "subscription_cycle" {
-		if state.SubscriptionID == "" || state.ServicePeriodStart.IsZero() || !state.ServicePeriodEnd.After(state.ServicePeriodStart) {
+		if state.SubscriptionID == "" || state.ServicePeriodStart.IsZero() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Stripe subscription invoice identifiers do not match current state").LogWarn(ctx, s.logger)
+		}
+		if state.BillingReason == "subscription_cycle" && !state.ServicePeriodEnd.After(state.ServicePeriodStart) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "Stripe subscription invoice identifiers do not match current state").LogWarn(ctx, s.logger)
 		}
 	}
@@ -271,6 +274,11 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	}
 	if !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
 		return false, errors.New("stripe invoice does not belong to active PAYG billing")
+	}
+	if invoice.BillingReason == "subscription_create" && !invoice.ServicePeriodEnd.After(invoice.ServicePeriodStart) {
+		// Stripe's immediate first subscription invoice has no prior service
+		// period. It carries no usage and must not enter pass-through billing.
+		return false, nil
 	}
 	if invoice.ServicePeriodStart.Before(identity.StripeBillingCycleAnchor.Time.UTC()) {
 		// Checkout can create a zero-dollar free stub before the first paid
