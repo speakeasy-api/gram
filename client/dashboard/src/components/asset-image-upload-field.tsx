@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   type AssetUploadTier,
@@ -26,6 +26,7 @@ export function AssetImageUploadField({
   onChange,
   tier,
   canEdit = true,
+  onUploadingChange,
 }: {
   label?: string;
   description?: string;
@@ -37,19 +38,32 @@ export function AssetImageUploadField({
   // When false the preview still renders but the upload/remove controls are
   // hidden, for surfaces that admit read-only viewers.
   canEdit?: boolean;
+  // Mirrors the in-flight upload state so the surrounding form can hold its
+  // submit until the upload settles. Submitting mid-upload would persist the
+  // pre-upload value and silently drop the picked logo.
+  onUploadingChange?: (uploading: boolean) => void;
 }): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Upload/Remove are disabled while an upload is in flight, which also
+  // prevents a stale completion from overwriting a newer choice: no newer
+  // choice can be made until the current upload settles.
+  const [uploading, setUploading] = useState(false);
   const uploadImage = useAssetImageUploadHandler(
     (res) => onChange(res.asset.id),
     tier,
   );
+
+  const setUploadingState = (next: boolean) => {
+    setUploading(next);
+    onUploadingChange?.(next);
+  };
 
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">{label}</Label>
       <Stack direction="horizontal" gap={3} align="center">
         {value ? (
-          <AssetImage assetId={value} className="size-16 shrink-0" />
+          <AssetImage assetId={value} alt="" className="size-16 shrink-0" />
         ) : (
           <div className="bg-muted text-muted-foreground flex size-16 shrink-0 items-center justify-center text-xs">
             No icon
@@ -66,27 +80,36 @@ export function AssetImageUploadField({
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (file) {
-                  uploadImage(file).catch((error: unknown) => {
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to upload icon",
-                    );
-                  });
+                  setUploadingState(true);
+                  uploadImage(file)
+                    .catch((error: unknown) => {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to upload icon",
+                      );
+                    })
+                    .finally(() => {
+                      setUploadingState(false);
+                    });
                 }
               }}
             />
             <Button
               type="button"
               variant="secondary"
+              disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
             >
-              <Button.Text>Upload icon</Button.Text>
+              <Button.Text>
+                {uploading ? "Uploading…" : "Upload icon"}
+              </Button.Text>
             </Button>
             {value && (
               <Button
                 type="button"
                 variant="tertiary"
+                disabled={uploading}
                 onClick={() => onChange("")}
               >
                 <Button.Text>Remove</Button.Text>

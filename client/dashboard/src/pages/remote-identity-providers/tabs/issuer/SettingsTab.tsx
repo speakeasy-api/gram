@@ -38,6 +38,9 @@ export function SettingsTab({
   // this field and reads "" as "clear to NULL", so starting from anything but
   // the stored value would wipe the logo on the next unrelated save.
   const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
+  // Save is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
@@ -213,6 +216,7 @@ export function SettingsTab({
           tier="organization"
           value={logoAssetId}
           onChange={setLogoAssetId}
+          onUploadingChange={setLogoUploading}
           canEdit={hasOrgAdminScope}
           description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
         />
@@ -339,7 +343,9 @@ export function SettingsTab({
         <RequireScope scope="org:admin" level="component">
           <Button
             onClick={handleSave}
-            disabled={update.isPending || refreshMetadata.isPending}
+            disabled={
+              update.isPending || refreshMetadata.isPending || logoUploading
+            }
           >
             <Button.Text>
               {update.isPending ? "Saving…" : "Save changes"}

@@ -47,6 +47,9 @@ export function PlatformSettingsTab({
   // this field and reads "" as "clear to NULL", so starting from anything but
   // the stored value would wipe the logo on the next unrelated save.
   const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
+  // Save is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
@@ -230,6 +233,7 @@ export function PlatformSettingsTab({
           tier="platform"
           value={logoAssetId}
           onChange={setLogoAssetId}
+          onUploadingChange={setLogoUploading}
           description="Shown beside this provider in every organization's dashboard and on connect consent pages. Saved with your other changes."
         />
       </SettingsSection>
@@ -347,7 +351,9 @@ export function PlatformSettingsTab({
       <div>
         <Button
           onClick={handleSave}
-          disabled={update.isPending || refreshMetadata.isPending}
+          disabled={
+            update.isPending || refreshMetadata.isPending || logoUploading
+          }
         >
           <Button.Text>
             {update.isPending ? "Saving…" : "Save changes"}

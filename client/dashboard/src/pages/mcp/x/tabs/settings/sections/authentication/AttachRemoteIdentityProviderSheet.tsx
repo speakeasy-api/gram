@@ -110,8 +110,10 @@ export function AttachRemoteIdentityProviderSheet({
   const [nameDirty, setNameDirty] = useState(false);
 
   // Optional logo, uploaded ahead of submit; empty submits as undefined so the
-  // backend stores NULL.
+  // backend stores NULL. Submit is held while an upload is in flight so a
+  // mid-upload submit cannot silently drop the picked logo.
   const [logoAssetId, setLogoAssetId] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
 
   // The Issuer URL as it stood when the operator last left the field. Held
   // separately from the live input so the duplicate preflight runs on a settled
@@ -579,7 +581,7 @@ export function AttachRemoteIdentityProviderSheet({
   ]);
 
   const handleSubmit = () => {
-    if (!submittable || submitting) return;
+    if (!submittable || submitting || logoUploading) return;
     attachMutation.mutate();
   };
 
@@ -754,6 +756,7 @@ export function AttachRemoteIdentityProviderSheet({
                   tier="project"
                   value={logoAssetId}
                   onChange={setLogoAssetId}
+                  onUploadingChange={setLogoUploading}
                   description="Shown beside this provider in the dashboard and on the connect consent page."
                 />
 
@@ -804,7 +807,7 @@ export function AttachRemoteIdentityProviderSheet({
           </Button>
           <Button
             variant="primary"
-            disabled={!submittable || submitting}
+            disabled={!submittable || submitting || logoUploading}
             onClick={handleSubmit}
           >
             <Button.Text>

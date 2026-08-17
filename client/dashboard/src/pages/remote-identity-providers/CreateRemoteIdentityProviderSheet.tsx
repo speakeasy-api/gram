@@ -77,6 +77,9 @@ export function CreateRemoteIdentityProviderSheet({
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
   const [logoAssetId, setLogoAssetId] = useState("");
+  // Create is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
@@ -176,7 +179,7 @@ export function CreateRemoteIdentityProviderSheet({
   );
 
   const handleSubmit = () => {
-    if (!submittable || submitting) return;
+    if (!submittable || submitting || logoUploading) return;
     createMutation.mutate({
       request: {
         createIssuerRequestBody: {
@@ -320,6 +323,7 @@ export function CreateRemoteIdentityProviderSheet({
               tier="organization"
               value={logoAssetId}
               onChange={setLogoAssetId}
+              onUploadingChange={setLogoUploading}
               description="Shown beside this provider in the dashboard and on the connect consent page."
             />
 
@@ -377,7 +381,7 @@ export function CreateRemoteIdentityProviderSheet({
           </Button>
           <Button
             variant="primary"
-            disabled={!submittable || submitting}
+            disabled={!submittable || submitting || logoUploading}
             onClick={handleSubmit}
           >
             <Button.Text>{submitting ? "Creating…" : "Create"}</Button.Text>

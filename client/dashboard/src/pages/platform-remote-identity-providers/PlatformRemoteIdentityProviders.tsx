@@ -238,6 +238,7 @@ function PlatformIssuerTable({
             item.issuer.logoAssetId ? (
               <AssetImage
                 assetId={item.issuer.logoAssetId}
+                alt=""
                 className="h-5 w-5 shrink-0 object-contain"
               />
             ) : (

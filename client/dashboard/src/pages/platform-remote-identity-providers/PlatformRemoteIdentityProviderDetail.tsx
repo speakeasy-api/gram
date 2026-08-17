@@ -114,6 +114,7 @@ function PlatformIssuerDetail({
           {issuer?.logoAssetId && (
             <AssetImage
               assetId={issuer.logoAssetId}
+              alt=""
               className="size-10 shrink-0 object-contain"
             />
           )}
