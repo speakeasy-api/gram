@@ -62,7 +62,6 @@ func createOpenRouterSpendTarget(t *testing.T, conn *pgxpool.Pool, orgID string,
 	_, err := openrouterrepo.New(conn).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
-		Key:            pgtype.Text{},
 		KeyEncrypted:   pgtype.Text{},
 		KeyHash:        keyHash,
 		MonthlyCredits: 0,
