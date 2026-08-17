@@ -1,3 +1,4 @@
+import { AssetImage } from "@/components/asset-image";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/Heading";
@@ -109,11 +110,19 @@ function PlatformIssuerDetail({
             />
           )}
         </div>
-        <Heading variant="h1" className="break-all normal-case">
-          {issuer
-            ? issuerDisplayName(issuer)
-            : "Platform Remote Identity Provider"}
-        </Heading>
+        <div className="flex items-center gap-3">
+          {issuer?.logoAssetId && (
+            <AssetImage
+              assetId={issuer.logoAssetId}
+              className="size-10 shrink-0 object-contain"
+            />
+          )}
+          <Heading variant="h1" className="break-all normal-case">
+            {issuer
+              ? issuerDisplayName(issuer)
+              : "Platform Remote Identity Provider"}
+          </Heading>
+        </div>
       </DetailHero>
 
       <Tabs value={activeTab} className="flex w-full flex-1 flex-col">

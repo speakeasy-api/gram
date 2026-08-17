@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
@@ -33,6 +34,10 @@ export function SettingsTab({
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
+  // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
+  // this field and reads "" as "clear to NULL", so starting from anything but
+  // the stored value would wipe the logo on the next unrelated save.
+  const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
@@ -182,6 +187,7 @@ export function SettingsTab({
         updateRemoteSessionIssuerForm: buildUpdateIssuerForm({
           id: issuer.id,
           name,
+          logoAssetId,
           slug,
           clientSetupDocumentationUrl,
           issuerUrl,
@@ -203,6 +209,13 @@ export function SettingsTab({
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
+        <AssetImageUploadField
+          tier="organization"
+          value={logoAssetId}
+          onChange={setLogoAssetId}
+          canEdit={hasOrgAdminScope}
+          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+        />
       </SettingsSection>
 
       <SettingsSection

@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -75,6 +76,7 @@ export function CreateRemoteIdentityProviderSheet({
   // operator edits them, after which the *Dirty flags lock in their value.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+  const [logoAssetId, setLogoAssetId] = useState("");
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
@@ -151,6 +153,7 @@ export function CreateRemoteIdentityProviderSheet({
     setProjectId(ORGANIZATIONAL);
     setName("");
     setNameDirty(false);
+    setLogoAssetId("");
     setSlug("");
     setSlugDirty(false);
     setClientSetupDocumentationUrl("");
@@ -180,6 +183,7 @@ export function CreateRemoteIdentityProviderSheet({
           projectId: projectId === ORGANIZATIONAL ? undefined : projectId,
           ...buildCreateIssuerForm({
             name,
+            logoAssetId,
             slug,
             clientSetupDocumentationUrl,
             issuerUrl,
@@ -311,6 +315,13 @@ export function CreateRemoteIdentityProviderSheet({
                 left blank.
               </Text>
             </Stack>
+
+            <AssetImageUploadField
+              tier="organization"
+              value={logoAssetId}
+              onChange={setLogoAssetId}
+              description="Shown beside this provider in the dashboard and on the connect consent page."
+            />
 
             <Stack gap={2}>
               <Label className="text-muted-foreground text-xs">

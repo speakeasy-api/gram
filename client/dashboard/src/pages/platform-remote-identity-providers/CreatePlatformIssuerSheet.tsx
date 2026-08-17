@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -51,6 +52,7 @@ export function CreatePlatformIssuerSheet({
   // operator edits them, after which the *Dirty flags lock in their value.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+  const [logoAssetId, setLogoAssetId] = useState("");
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
@@ -124,6 +126,7 @@ export function CreatePlatformIssuerSheet({
     if (!open) return;
     setName("");
     setNameDirty(false);
+    setLogoAssetId("");
     setSlug("");
     setSlugDirty(false);
     setClientSetupDocumentationUrl("");
@@ -151,6 +154,7 @@ export function CreatePlatformIssuerSheet({
       request: {
         createRemoteSessionIssuerForm: buildCreateIssuerForm({
           name,
+          logoAssetId,
           slug,
           clientSetupDocumentationUrl,
           issuerUrl,
@@ -262,6 +266,13 @@ export function CreatePlatformIssuerSheet({
                 back to the Issuer URL when left blank.
               </Text>
             </Stack>
+
+            <AssetImageUploadField
+              tier="platform"
+              value={logoAssetId}
+              onChange={setLogoAssetId}
+              description="Shown beside this provider in every organization's dashboard and on connect consent pages."
+            />
 
             <Stack gap={2}>
               <Label className="text-muted-foreground text-xs">

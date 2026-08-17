@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -177,6 +178,11 @@ function ModifyRemoteIdentityProviderSheetBody({
   // backend.
   const [name, setName] = useState(issuer.name ?? "");
 
+  // Editable logo, seeded from the saved record like name. The update always
+  // sends this field, and "" is the explicit "clear to NULL" sentinel, so the
+  // seed keeps an unrelated save from wiping the stored logo.
+  const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
+
   // Repointing a provider can duplicate an existing one just as creating it
   // can, so the same preflight runs here. Gated on the URL having diverged from
   // what is saved: while they match, the only record it could report is this
@@ -224,6 +230,8 @@ function ModifyRemoteIdentityProviderSheetBody({
           // Empty string clears the saved display name to NULL, same three-state
           // semantics the backend applies to the nullable endpoint fields.
           name: name.trim(),
+          // Same three-state semantics: "" clears the saved logo to NULL.
+          logoAssetId,
           authorizationEndpoint: authorizationEndpoint.trim(),
           tokenEndpoint: tokenEndpoint.trim(),
           registrationEndpoint: registrationEndpoint.trim(),
@@ -391,6 +399,13 @@ function ModifyRemoteIdentityProviderSheetBody({
             Issuer URL.
           </Text>
         </Stack>
+
+        <AssetImageUploadField
+          tier="project"
+          value={logoAssetId}
+          onChange={setLogoAssetId}
+          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+        />
 
         <EndpointsFields
           issuerUrl={issuerUrl}

@@ -1,3 +1,4 @@
+import { AssetImage } from "@/components/asset-image";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
@@ -383,10 +384,17 @@ function IssuerTable({
         <DotRow
           key={item.issuer.id}
           icon={
-            <Icon
-              name="fingerprint"
-              className="text-muted-foreground h-5 w-5"
-            />
+            item.issuer.logoAssetId ? (
+              <AssetImage
+                assetId={item.issuer.logoAssetId}
+                className="h-5 w-5 shrink-0 object-contain"
+              />
+            ) : (
+              <Icon
+                name="fingerprint"
+                className="text-muted-foreground h-5 w-5"
+              />
+            )
           }
           href={orgRoutes.remoteIdentityProviders.issuerDetail.href(
             item.issuer.id,

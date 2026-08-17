@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -42,6 +43,10 @@ export function PlatformSettingsTab({
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
+  // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
+  // this field and reads "" as "clear to NULL", so starting from anything but
+  // the stored value would wipe the logo on the next unrelated save.
+  const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
@@ -184,6 +189,7 @@ export function PlatformSettingsTab({
         updateRemoteSessionIssuerForm: buildUpdateIssuerForm({
           id: issuer.id,
           name,
+          logoAssetId,
           slug,
           clientSetupDocumentationUrl,
           issuerUrl,
@@ -220,6 +226,12 @@ export function PlatformSettingsTab({
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
+        <AssetImageUploadField
+          tier="platform"
+          value={logoAssetId}
+          onChange={setLogoAssetId}
+          description="Shown beside this provider in every organization's dashboard and on connect consent pages. Saved with your other changes."
+        />
       </SettingsSection>
 
       <SettingsSection

@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -107,6 +108,10 @@ export function AttachRemoteIdentityProviderSheet({
   // fall back to the issuer URL.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+
+  // Optional logo, uploaded ahead of submit; empty submits as undefined so the
+  // backend stores NULL.
+  const [logoAssetId, setLogoAssetId] = useState("");
 
   // The Issuer URL as it stood when the operator last left the field. Held
   // separately from the live input so the duplicate preflight runs on a settled
@@ -273,6 +278,7 @@ export function AttachRemoteIdentityProviderSheet({
             slug: slug.trim(),
             issuer: issuerUrl.trim(),
             name: name.trim() || undefined,
+            logoAssetId: logoAssetId || undefined,
             authorizationEndpoint: authorizationEndpoint.trim() || undefined,
             tokenEndpoint: tokenEndpoint.trim() || undefined,
             registrationEndpoint: registrationEndpoint.trim() || undefined,
@@ -454,6 +460,7 @@ export function AttachRemoteIdentityProviderSheet({
     setSlugDirty(false);
     setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
     setNameDirty(false);
+    setLogoAssetId("");
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
     clearDiscoverError();
@@ -742,6 +749,13 @@ export function AttachRemoteIdentityProviderSheet({
                     when left blank.
                   </Text>
                 </Stack>
+
+                <AssetImageUploadField
+                  tier="project"
+                  value={logoAssetId}
+                  onChange={setLogoAssetId}
+                  description="Shown beside this provider in the dashboard and on the connect consent page."
+                />
 
                 <EndpointsFields
                   issuerUrl={issuerUrl}
