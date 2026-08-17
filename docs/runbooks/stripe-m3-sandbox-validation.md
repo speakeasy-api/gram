@@ -200,8 +200,8 @@ Confirm the test output covers all of these checkpoints:
 - the +48-hour TUM baseline freezes once, the closed-period event timestamp is
   `cycle_end - 1 second`, and a post-freeze difference becomes one signed
   carry-forward allocation after +72 hours;
-- only in-period chat spend is allocated; internal-key and pre-period spend is
-  excluded;
+- only in-period Other inference spend is allocated; Security inference and
+  pre-period spend are excluded;
 - exact decimal sums are converted to minor units once per cumulative period;
 - positive corrections become a later invoice item and negative corrections
   become a credit note, without duplicate delivery after replay;
@@ -235,7 +235,7 @@ SQL
 
 The sum of confirmed TUM deltas must equal the frozen billed baseline for the
 closed period. Initial OpenRouter allocation cents plus signed carry cents must
-equal the exact final cumulative chat-spend cents. Every confirmed external ID
+equal the exact final cumulative Other inference-spend cents. Every confirmed external ID
 must resolve to the same customer, subscription, invoice period, currency, and
 amount in Stripe.
 
@@ -247,8 +247,8 @@ Cancel the current sandbox subscription. Wait for
 - Gram is `free` and not admitted;
 - the stored subscription ID and exact Stripe anchor are cleared, while the
   Stripe customer remains;
-- the chat key is disabled locally and upstream;
-- the internal key is unchanged.
+- the Other inference key is disabled locally and upstream;
+- the Security inference key is unchanged.
 
 Use the deterministic lifecycle test above to replay the exact signed event and
 confirm receipt, audit, metric, and upstream effects do not repeat. In the
@@ -256,8 +256,8 @@ sandbox, deliver a deletion for an old subscription after completing a new
 Checkout and confirm the replacement remains active.
 
 Complete Checkout again with the same customer. The PAYG activation event must
-cause current-state reconciliation to re-enable the same chat key with its
-PAYG limit; the internal key remains untouched.
+cause current-state reconciliation to re-enable the same Other inference key
+with its PAYG limit; the Security inference key remains untouched.
 
 The voluntary cancellation proves Gram's terminal event behavior. Separately,
 confirm the sandbox Dashboard still has the required Smart Retries end action:
