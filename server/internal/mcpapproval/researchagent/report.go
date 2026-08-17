@@ -275,16 +275,19 @@ func followableCitations(citations []Citation) []Citation {
 	return kept
 }
 
-// followableURL reports whether a URL is one an admin can open: http(s) with
-// a host. Everything stored by a research run that ends up rendered as a link
+// followableURL reports whether a URL is one an admin can open: https with a
+// host. Everything stored by a research run that ends up rendered as a link
 // goes through this, because all of it was written while reading pages the
-// run treats as hostile.
+// run treats as hostile. https only, matching the fetch tool: the run cannot
+// have read a plaintext page, so a plaintext citation is a URL the model
+// wrote without evidence behind it — and a link the admin would open over a
+// channel anyone on the path controls.
 func followableURL(raw string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return false
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+	if parsed.Scheme != "https" {
 		return false
 	}
 
