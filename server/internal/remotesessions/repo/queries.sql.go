@@ -4391,6 +4391,40 @@ func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx cont
 	return items, nil
 }
 
+const touchRemoteSessionLastUsed = `-- name: TouchRemoteSessionLastUsed :exec
+UPDATE remote_sessions
+SET last_used_at = $1::timestamptz
+WHERE subject_urn = $2
+  AND remote_session_client_id = $3
+  AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at <= $4::timestamptz)
+`
+
+type TouchRemoteSessionLastUsedParams struct {
+	NowTs                 pgtype.Timestamptz
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UsedCutoff            pgtype.Timestamptz
+}
+
+// Records that this upstream token was handed to a proxied call. Distinct from
+// last_refresh_attempt_at, which records keepalive work rather than traffic.
+// Coalesced by the cutoff for the same reason as the user_sessions stamp: this
+// runs whenever a brokered call resolves a token, so most executions must match
+// no rows.
+// Scoped by the (subject_urn, remote_session_client_id) binding rather than a
+// project_id, which this table does not carry; that pair is the table's
+// uniqueness key and the client is itself tenant-owned.
+func (q *Queries) TouchRemoteSessionLastUsed(ctx context.Context, arg TouchRemoteSessionLastUsedParams) error {
+	_, err := q.db.Exec(ctx, touchRemoteSessionLastUsed,
+		arg.NowTs,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UsedCutoff,
+	)
+	return err
+}
+
 const updateGlobalRemoteSessionClient = `-- name: UpdateGlobalRemoteSessionClient :one
 UPDATE remote_session_clients
 SET

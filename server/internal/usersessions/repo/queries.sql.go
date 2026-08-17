@@ -1665,6 +1665,41 @@ func (q *Queries) SoftDeleteUserSessionsByIssuerID(ctx context.Context, userSess
 	return items, nil
 }
 
+const touchUserSessionLastUsed = `-- name: TouchUserSessionLastUsed :exec
+UPDATE user_sessions
+SET last_used_at = $1::timestamptz
+WHERE project_id = $2
+  AND user_session_issuer_id = $3
+  AND jti = $4
+  AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at <= $5::timestamptz)
+`
+
+type TouchUserSessionLastUsedParams struct {
+	NowTs               pgtype.Timestamptz
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+	UsedCutoff          pgtype.Timestamptz
+}
+
+// Records that this session's access token was presented on an MCP request.
+// Runs on the per-request auth path, so it is deliberately coalesced: the
+// cutoff means a session writes at most one row per cutoff window however many
+// requests it makes, and every other request matches no rows and only probes
+// user_sessions_user_session_issuer_id_jti_idx. Mirrors the claim-cutoff shape
+// used by the remote_sessions keepalive sweep.
+func (q *Queries) TouchUserSessionLastUsed(ctx context.Context, arg TouchUserSessionLastUsedParams) error {
+	_, err := q.db.Exec(ctx, touchUserSessionLastUsed,
+		arg.NowTs,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.Jti,
+		arg.UsedCutoff,
+	)
+	return err
+}
+
 const updateUserSessionClientCIMDCache = `-- name: UpdateUserSessionClientCIMDCache :one
 UPDATE user_session_clients
 SET client_id_metadata_fetched_at = clock_timestamp(),
