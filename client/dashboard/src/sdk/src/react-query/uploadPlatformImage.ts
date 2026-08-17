@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminOpenRouterKeysEncryptKey } from "../funcs/adminOpenRouterKeysEncryptKey.js";
+import { adminAssetsUploadImage } from "../funcs/adminAssetsUploadImage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AdminOpenRouterKey } from "../models/components/adminopenrouterkey.js";
+import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  EncryptAdminOpenRouterKeyRequest,
-  EncryptAdminOpenRouterKeySecurity,
-} from "../models/operations/encryptadminopenrouterkey.js";
+  UploadPlatformImageRequest,
+  UploadPlatformImageSecurity,
+} from "../models/operations/uploadplatformimage.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type EncryptAdminOpenRouterKeyMutationVariables = {
-  request: EncryptAdminOpenRouterKeyRequest;
-  security?: EncryptAdminOpenRouterKeySecurity | undefined;
+export type UploadPlatformImageMutationVariables = {
+  request: UploadPlatformImageRequest;
+  security?: UploadPlatformImageSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type EncryptAdminOpenRouterKeyMutationData = AdminOpenRouterKey;
+export type UploadPlatformImageMutationData = UploadImageResult;
 
-export type EncryptAdminOpenRouterKeyMutationError =
+export type UploadPlatformImageMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type EncryptAdminOpenRouterKeyMutationError =
   | SDKValidationError;
 
 /**
- * encryptKey adminOpenRouterKeys
+ * uploadPlatformImage adminAssets
  *
  * @remarks
- * Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.
+ * Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.
  */
-export function useEncryptAdminOpenRouterKeyMutation(
+export function useUploadPlatformImageMutation(
   options?: MutationHookOptions<
-    EncryptAdminOpenRouterKeyMutationData,
-    EncryptAdminOpenRouterKeyMutationError,
-    EncryptAdminOpenRouterKeyMutationVariables
+    UploadPlatformImageMutationData,
+    UploadPlatformImageMutationError,
+    UploadPlatformImageMutationVariables
   >,
 ): UseMutationResult<
-  EncryptAdminOpenRouterKeyMutationData,
-  EncryptAdminOpenRouterKeyMutationError,
-  EncryptAdminOpenRouterKeyMutationVariables
+  UploadPlatformImageMutationData,
+  UploadPlatformImageMutationError,
+  UploadPlatformImageMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildEncryptAdminOpenRouterKeyMutation(client, options),
+    ...buildUploadPlatformImageMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyEncryptAdminOpenRouterKey(): MutationKey {
-  return ["@gram/client", "adminOpenRouterKeys", "encryptKey"];
+export function mutationKeyUploadPlatformImage(): MutationKey {
+  return ["@gram/client", "adminAssets", "uploadImage"];
 }
 
-export function buildEncryptAdminOpenRouterKeyMutation(
+export function buildUploadPlatformImageMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: EncryptAdminOpenRouterKeyMutationVariables,
-  ) => Promise<EncryptAdminOpenRouterKeyMutationData>;
+    variables: UploadPlatformImageMutationVariables,
+  ) => Promise<UploadPlatformImageMutationData>;
 } {
   return {
-    mutationKey: mutationKeyEncryptAdminOpenRouterKey(),
-    mutationFn: function encryptAdminOpenRouterKeyMutationFn({
+    mutationKey: mutationKeyUploadPlatformImage(),
+    mutationFn: function uploadPlatformImageMutationFn({
       request,
       security,
       options,
-    }): Promise<EncryptAdminOpenRouterKeyMutationData> {
+    }): Promise<UploadPlatformImageMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildEncryptAdminOpenRouterKeyMutation(
           ),
         },
       };
-      return unwrapAsync(adminOpenRouterKeysEncryptKey(
+      return unwrapAsync(adminAssetsUploadImage(
         client$,
         request,
         security,

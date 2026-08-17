@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AdminOpenRouterKey,
-  AdminOpenRouterKey$inboundSchema,
-} from "../models/components/adminopenrouterkey.js";
+  UserSessionClient,
+  UserSessionClient$inboundSchema,
+} from "../models/components/usersessionclient.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  EncryptAdminOpenRouterKeyRequest,
-  EncryptAdminOpenRouterKeyRequest$outboundSchema,
-  EncryptAdminOpenRouterKeySecurity,
-} from "../models/operations/encryptadminopenrouterkey.js";
+  RefreshUserSessionClientCIMDRequest,
+  RefreshUserSessionClientCIMDRequest$outboundSchema,
+  RefreshUserSessionClientCIMDSecurity,
+} from "../models/operations/refreshusersessionclientcimd.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * encryptKey adminOpenRouterKeys
+ * refreshUserSessionClientCIMD userSessionClients
  *
  * @remarks
- * Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.
+ * Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.
  */
-export function adminOpenRouterKeysEncryptKey(
+export function userSessionClientsRefreshCIMD(
   client: GramCore,
-  request: EncryptAdminOpenRouterKeyRequest,
-  security?: EncryptAdminOpenRouterKeySecurity | undefined,
+  request: RefreshUserSessionClientCIMDRequest,
+  security?: RefreshUserSessionClientCIMDSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AdminOpenRouterKey,
+    UserSessionClient,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function adminOpenRouterKeysEncryptKey(
 
 async function $do(
   client: GramCore,
-  request: EncryptAdminOpenRouterKeyRequest,
-  security?: EncryptAdminOpenRouterKeySecurity | undefined,
+  request: RefreshUserSessionClientCIMDRequest,
+  security?: RefreshUserSessionClientCIMDSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AdminOpenRouterKey,
+      UserSessionClient,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,22 +95,32 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(EncryptAdminOpenRouterKeyRequest$outboundSchema, value),
+    (value) =>
+      z.parse(RefreshUserSessionClientCIMDRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.EncryptOpenRouterKeyRequestBody, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc("/rpc/userSessionClients.refreshCIMD")();
+
+  const query = encodeFormQuery({
+    "id": payload.id,
   });
 
-  const path = pathToFunc("/rpc/adminOpenRouterKeys.encryptKey")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -120,9 +130,26 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
+        value: security?.option1?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option2?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
   );
@@ -130,7 +157,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "encryptAdminOpenRouterKey",
+    operationID: "refreshUserSessionClientCIMD",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -148,6 +175,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -174,7 +202,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AdminOpenRouterKey,
+    UserSessionClient,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +213,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminOpenRouterKey$inboundSchema),
+    M.json(200, UserSessionClient$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

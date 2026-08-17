@@ -2,8 +2,8 @@
 // that resolves a user_session_clients row from a presented client_id —
 // authorize, token, consent GET/POST — funnels through
 // resolveUserSessionClient, so inbound CIMD resolution and the layers around
-// it (admission control, document caching, and the per-origin rate limiting
-// AIS-215 adds) have exactly one home instead of per-handler branches.
+// it (admission control and document caching) have exactly one home instead
+// of per-handler branches.
 
 package mcp
 
@@ -95,10 +95,9 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 		}
 
 		// Admission runs before the resolver, so a denied client_id costs a
-		// map lookup — no outbound request, no fetch timeout, and (once
-		// AIS-215 lands) no rate-limiter token. It also runs before the
-		// length cap inside the resolver, which is why admission applies its
-		// own bound before a catalog miss can reach the database.
+		// map lookup — no outbound request, no fetch timeout. It also runs
+		// before the length cap inside the resolver, which is why admission
+		// applies its own bound before a catalog miss can reach the database.
 		if err := s.admitCIMDClient(ctx, logger, endpoint, clientID); err != nil {
 			return nil, err
 		}

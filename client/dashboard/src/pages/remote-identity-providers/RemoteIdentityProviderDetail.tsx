@@ -18,7 +18,8 @@ import { issuerDisplayName } from "./issuerDisplay";
 import { ClientsTab } from "./tabs/issuer/ClientsTab";
 import { OverviewTab } from "./tabs/issuer/OverviewTab";
 import { SettingsTab } from "./tabs/issuer/SettingsTab";
-import { activeDetailTab, ISSUER_TABS, type IssuerTab } from "./tabs";
+import { activeDetailTab } from "@/lib/detail-tabs";
+import { ISSUER_TABS, type IssuerTab } from "./tabs";
 
 export default function RemoteIdentityProviderDetail(): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();

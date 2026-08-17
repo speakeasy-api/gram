@@ -129,6 +129,11 @@ type SessionMetadata struct {
 	// letting the user breakdown fall back to the device when the session has
 	// no email (company-credential sessions emit no user identity).
 	Hostname string
+	// Cwd is the session's working directory as reported by the hook adapter
+	// (hook.ingest.v1 session.cwd, or the legacy Claude payload's cwd).
+	// Persisted onto chats so session portability can materialize a moved
+	// session into the right project directory.
+	Cwd string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this

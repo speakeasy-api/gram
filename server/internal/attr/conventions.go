@@ -482,6 +482,10 @@ const (
 	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
 	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
 	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityFoldNewKeysKey         = attribute.Key("gram.identity_fold.new_keys")
+	IdentityFoldOrderChangedKey    = attribute.Key("gram.identity_fold.order_changed")
+	IdentityFoldTruncatedKey       = attribute.Key("gram.identity_fold.truncated")
+	IdentityFoldTokenDeltaKey      = attribute.Key("gram.identity_fold.token_delta")
 	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
 	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
 	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
@@ -831,6 +835,26 @@ func SlogIdentityFoldCostDelta(v float64) slog.Attr {
 func IdentityFoldLiteralGroups(v int) attribute.KeyValue { return IdentityFoldLiteralGroupsKey.Int(v) }
 func SlogIdentityFoldLiteralGroups(v int) slog.Attr {
 	return slog.Int(string(IdentityFoldLiteralGroupsKey), v)
+}
+
+func IdentityFoldNewKeys(v int) attribute.KeyValue { return IdentityFoldNewKeysKey.Int(v) }
+func SlogIdentityFoldNewKeys(v int) slog.Attr {
+	return slog.Int(string(IdentityFoldNewKeysKey), v)
+}
+
+func IdentityFoldOrderChanged(v bool) attribute.KeyValue { return IdentityFoldOrderChangedKey.Bool(v) }
+func SlogIdentityFoldOrderChanged(v bool) slog.Attr {
+	return slog.Bool(string(IdentityFoldOrderChangedKey), v)
+}
+
+func IdentityFoldTruncated(v bool) attribute.KeyValue { return IdentityFoldTruncatedKey.Bool(v) }
+func SlogIdentityFoldTruncated(v bool) slog.Attr {
+	return slog.Bool(string(IdentityFoldTruncatedKey), v)
+}
+
+func IdentityFoldTokenDelta(v int64) attribute.KeyValue { return IdentityFoldTokenDeltaKey.Int64(v) }
+func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
+	return slog.Int64(string(IdentityFoldTokenDeltaKey), v)
 }
 
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }

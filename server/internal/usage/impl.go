@@ -290,14 +290,22 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, oops.E(oops.CodeUnexpected, err, "could not get public server count").LogError(ctx, s.logger)
 	}
 
+	// Polar credit meters are Speakeasy-internal; only expose them to
+	// platform admins. An org RBAC org:admin grant does not confer this.
+	var credits, includedCredits *int
+	if authCtx.IsAdmin {
+		credits = periodUsage.Credits
+		includedCredits = periodUsage.IncludedCredits
+	}
+
 	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
 	return &gen.PeriodUsage{
 		ToolCalls:                periodUsage.ToolCalls,
 		IncludedToolCalls:        periodUsage.IncludedToolCalls,
 		Servers:                  periodUsage.Servers,
 		IncludedServers:          periodUsage.IncludedServers,
-		Credits:                  periodUsage.Credits,
-		IncludedCredits:          periodUsage.IncludedCredits,
+		Credits:                  credits,
+		IncludedCredits:          includedCredits,
 		HasActiveSubscription:    periodUsage.HasActiveSubscription,
 		ActualEnabledServerCount: int(actualEnabledServerCount),
 	}, nil
