@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -231,6 +233,13 @@ func (r *ToolsListResult) UnmarshalJSON(data []byte) error {
 
 	var next ToolsListResult
 	if raw, ok := members["tools"]; ok {
+		// An explicit null decodes to an empty list without error, which a
+		// mutation would then emit as [] — normalising the upstream's malformed
+		// payload on exactly the paths that happen to filter, and relaying it
+		// untouched on the rest. Refuse the view instead, so every path relays.
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return errors.New("tools is null, not an array")
+		}
 		if err := json.Unmarshal(raw, &next.Tools); err != nil {
 			return fmt.Errorf("decode tools: %w", err)
 		}
@@ -342,6 +351,13 @@ func (r *ResourcesListResult) UnmarshalJSON(data []byte) error {
 
 	var next ResourcesListResult
 	if raw, ok := members["resources"]; ok {
+		// An explicit null decodes to an empty list without error, which a
+		// mutation would then emit as [] — normalising the upstream's malformed
+		// payload on exactly the paths that happen to filter, and relaying it
+		// untouched on the rest. Refuse the view instead, so every path relays.
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return errors.New("resources is null, not an array")
+		}
 		if err := json.Unmarshal(raw, &next.Resources); err != nil {
 			return fmt.Errorf("decode resources: %w", err)
 		}

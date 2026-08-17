@@ -302,6 +302,78 @@ func TestProxy_Post_ToolsListNullResultRelaysUntouched(t *testing.T) {
 	require.Equal(t, nullResult, rr.Body.String())
 }
 
+// TestProxy_Post_ToolsListFilterDropsCaseVariantCacheHints pins that confining a
+// filtered list actually confines it. A case-variant alias of a cache hint would
+// be read in place of the value Gram writes by any parser that folds member
+// names, leaving a per-caller result still marked publicly cacheable.
+func TestProxy_Post_ToolsListFilterDropsCaseVariantCacheHints(t *testing.T) {
+	t.Parallel()
+
+	p := filteringProxy(t,
+		`{"jsonrpc":"2.0","id":9,"result":{"tools":[{"name":"keep","inputSchema":{}}],`+
+			`"CacheScope":"public","TtlMs":60000}}`,
+		keepNamed("keep"))
+
+	rr, err := postJSON(t, p, toolsListRequestBody)
+	require.NoError(t, err)
+
+	members := resultMembers(t, rr.Body.String())
+	require.JSONEq(t, `"private"`, string(members["cacheScope"]),
+		"an aliased hint still counts as the upstream having sent one")
+	require.JSONEq(t, `0`, string(members["ttlMs"]))
+	require.NotContains(t, members, "CacheScope", "the alias must not survive alongside the confined value")
+	require.NotContains(t, members, "TtlMs")
+}
+
+// TestProxy_Post_ToolsListNullArrayRelaysUntouched covers an explicitly null tool
+// array. It decodes to an empty list without error, so a mutation would emit it
+// as [] — normalising the upstream's malformed payload on exactly the paths that
+// filter, and relaying it untouched on the rest. Every path relays instead.
+func TestProxy_Post_ToolsListNullArrayRelaysUntouched(t *testing.T) {
+	t.Parallel()
+
+	const nullArray = `{"jsonrpc":"2.0","id":9,"result":{"tools":null}}`
+	p := filteringProxy(t, nullArray, keepNamed())
+
+	rr, err := postJSON(t, p, toolsListRequestBody)
+	require.NoError(t, err)
+	//nolint:testifylint // Byte identity is the point: nothing decoded, so nothing re-encoded.
+	require.Equal(t, nullArray, rr.Body.String())
+}
+
+// TestProxy_Post_ToolsCallAmbiguousNameIsRejectedNotErrored pins the error class.
+// An ambiguous invocation is invalid client input, so the caller gets a JSON-RPC
+// rejection rather than a 5xx blamed on the proxy.
+func TestProxy_Post_ToolsCallAmbiguousNameIsRejectedNotErrored(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":4,"result":{"content":[]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mutatingToolsCallRequestInterceptor{
+			name:   "scrub-arguments",
+			argsFn: func(json.RawMessage) json.RawMessage { return json.RawMessage(`{}`) },
+			err:    nil,
+		},
+	}
+
+	rr, err := postJSON(t, p,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"denied","Name":"allowed","arguments":{}}}`)
+	require.NoError(t, err, "invalid client input must not surface as a proxy error")
+	require.Equal(t, int32(0), hits.Load(), "the ambiguous payload must never reach the upstream")
+	require.Contains(t, rr.Body.String(), "-32602", "the caller gets an invalid-params rejection")
+	require.Contains(t, rr.Body.String(), "ambiguous tools/call params")
+}
+
 // TestProxy_Post_ToolsListFilterKeepsUnmodelledAnnotationMembers pins that the
 // guarantee holds one level down. Gram reads four annotation hints; a hint it does
 // not model must survive on the annotations object that carries it, and must not
@@ -346,42 +418,6 @@ func TestProxy_Post_ToolsListNullToolRelaysUntouched(t *testing.T) {
 	require.Equal(t, nullTool, rr.Body.String())
 }
 
-// TestProxy_Post_ToolsCallRewriteRefusesAmbiguousToolName is the request-side
-// counterpart to dropping case variants on a response. Gram authorizes a
-// tools/call against the decoded name, and Go decodes `Name` into the same field
-// as `name`, so a body carrying both could be authorized as one tool and executed
-// as another by an exact-key upstream. For a request the safe answer is to refuse
-// rather than to pick one.
-func TestProxy_Post_ToolsCallRewriteRefusesAmbiguousToolName(t *testing.T) {
-	t.Parallel()
-
-	var hits atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		_, _ = io.Copy(io.Discard, r.Body)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":4,"result":{"content":[]}}`))
-	}))
-	t.Cleanup(upstream.Close)
-
-	p := newProxyForTest(t, upstream.URL)
-	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
-		&mutatingToolsCallRequestInterceptor{
-			name:   "scrub-arguments",
-			argsFn: func(json.RawMessage) json.RawMessage { return json.RawMessage(`{}`) },
-			err:    nil,
-		},
-	}
-
-	_, err := postJSON(t, p,
-		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"denied","Name":"allowed","arguments":{}}}`)
-	require.Error(t, err, "an ambiguous invocation must not be rewritten and forwarded")
-	require.Equal(t, int32(0), hits.Load(), "the ambiguous payload must never reach the upstream")
-}
-
-// TestProxy_Post_ResourcesListFilterKeepsUnmodelledMembers covers the sibling
-// view, which shares the commit pathway.
 func TestProxy_Post_ResourcesListFilterKeepsUnmodelledMembers(t *testing.T) {
 	t.Parallel()
 

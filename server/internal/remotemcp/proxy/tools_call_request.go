@@ -103,8 +103,15 @@ func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
 	// alias of it onward would let an exact-key upstream execute a different tool
 	// than the one authorized, and for a request the safe answer is to refuse
 	// rather than to pick one.
+	// A RejectError rather than a MutationError: the payload is invalid client
+	// input, so the caller gets a JSON-RPC rejection instead of a 5xx blamed on
+	// the proxy.
 	if err := requireUnambiguousInvocation(params, "name"); err != nil {
-		return &MutationError{Op: "set arguments", Cause: err}
+		return &RejectError{
+			Code:    RejectCodeInvalidParams,
+			Message: "ambiguous tools/call params: " + err.Error(),
+			Data:    nil,
+		}
 	}
 	if len(arguments) == 0 {
 		// The SDK struct spells the member `omitempty`, so clearing it removes

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // object is a JSON object held as its members, used by the wire types in wire.go
@@ -88,6 +89,23 @@ const (
 func (o object) confineToCaller() {
 	_, hasScope := o[cacheScopeMember]
 	_, hasTTL := o[ttlMsMember]
+
+	// A case-variant alias would be read in place of the value written below by
+	// any parser that folds member names, leaving the result still marked
+	// publicly cacheable. An alias also counts as the upstream having sent a
+	// hint, so its presence still triggers the confinement.
+	for name := range o {
+		switch {
+		case name == cacheScopeMember || name == ttlMsMember:
+		case strings.EqualFold(name, cacheScopeMember):
+			hasScope = true
+			delete(o, name)
+		case strings.EqualFold(name, ttlMsMember):
+			hasTTL = true
+			delete(o, name)
+		}
+	}
+
 	if !hasScope && !hasTTL {
 		return
 	}
