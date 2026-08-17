@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -189,7 +188,7 @@ func TestProxy_Post_ResourcesListResponse_SetResources_RewritesRelayedBody(t *te
 	p.ResourcesListResponseInterceptors = []proxy.ResourcesListResponseInterceptor{
 		&mutatingResourcesListResponseInterceptor{
 			name: "keep-only-a",
-			resourcesFn: func(resources []*mcp.Resource) []*mcp.Resource {
+			resourcesFn: func(resources []*proxy.Resource) []*proxy.Resource {
 				kept := resources[:0]
 				for _, r := range resources {
 					if r.URI == "file:///a" {
@@ -227,7 +226,7 @@ func TestProxy_Post_ResourcesListResponse_SetResources_EmptyArrayWhenAllFiltered
 	p.ResourcesListResponseInterceptors = []proxy.ResourcesListResponseInterceptor{
 		&mutatingResourcesListResponseInterceptor{
 			name: "drop-all",
-			resourcesFn: func(_ []*mcp.Resource) []*mcp.Resource {
+			resourcesFn: func(_ []*proxy.Resource) []*proxy.Resource {
 				return nil
 			},
 		},

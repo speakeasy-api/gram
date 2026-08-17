@@ -90,15 +90,33 @@ func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
 		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Request", r.UserRequest.JSONRPCMessages[0])}
 	}
 
-	// Stage the mutation against a temporary copy of Params so a marshal
-	// failure can't leave the typed view's Arguments desynced from the
-	// underlying wire bytes. Only commit (assign to Params.Arguments,
-	// rpcReq.Params, dirty) once marshaling has succeeded.
-	staged := *r.Params
-	staged.Arguments = arguments
-	payload, err := json.Marshal(&staged)
+	// Only the `arguments` member is rewritten; every other member the client
+	// sent travels on untouched, including the ones the vendored SDK's
+	// CallToolParamsRaw does not model. Under MCP 2026-07-28 those include a
+	// multi round-trip retry's `requestState` and `inputResponses`, which a
+	// re-marshal of the struct would strand.
+	params, err := decodeObject(rpcReq.Params)
 	if err != nil {
-		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("marshal mutated CallToolParamsRaw: %w", err)}
+		return &MutationError{Op: "set arguments", Cause: err}
+	}
+	// Gram authorized this call against the decoded `name`. Carrying a case-fold
+	// alias of it onward would let an exact-key upstream execute a different tool
+	// than the one authorized, and for a request the safe answer is to refuse
+	// rather than to pick one.
+	if err := requireUnambiguousInvocation(params, "name"); err != nil {
+		return &MutationError{Op: "set arguments", Cause: err}
+	}
+	if len(arguments) == 0 {
+		// The SDK struct spells the member `omitempty`, so clearing it removes
+		// the member rather than writing an explicit null.
+		delete(params, "arguments")
+	} else {
+		params["arguments"] = arguments
+	}
+
+	payload, err := params.encode()
+	if err != nil {
+		return &MutationError{Op: "set arguments", Cause: err}
 	}
 
 	r.Params.Arguments = arguments

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
@@ -64,16 +62,22 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 // challenge-log entry for the batch, not N), and rebuilds the tool
 // slice in input order keeping only authorized entries.
 //
-// When the response carries no tools the interceptor is a no-op. An
-// empty filtered result is a valid outcome — the caller has access to
-// nothing in this server — and is committed via [SetTools] as an empty
-// array.
+// An empty filtered result is a valid outcome — the caller has access to nothing
+// in this server — and is committed via [proxy.ToolsListResponse.SetTools] as an
+// empty array. A page that arrives with no tools is still committed rather than
+// skipped: SetTools confines a filtered result to the calling authorization
+// context, and the spec requires one cache scope across every page of a list
+// request, so skipping would leave an empty page publicly cacheable while its
+// siblings are not.
 func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx context.Context, list *proxy.ToolsListResponse) error {
 	if i.authz == nil || list == nil || list.Result == nil {
 		return nil
 	}
 	tools := list.Result.Tools
 	if len(tools) == 0 {
+		if err := list.SetTools(tools); err != nil {
+			return fmt.Errorf("commit empty tools/list page: %w", err)
+		}
 		return nil
 	}
 
@@ -100,7 +104,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}
 
-	allowed := make([]*mcp.Tool, 0, len(tools))
+	allowed := make([]*proxy.Tool, 0, len(tools))
 	for idx, t := range tools {
 		if matched[idx] {
 			allowed = append(allowed, t)

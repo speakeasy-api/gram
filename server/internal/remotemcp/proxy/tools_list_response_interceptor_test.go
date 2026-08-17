@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
@@ -46,7 +44,7 @@ func (m *mockToolsListResponseInterceptor) InterceptToolsListResponse(_ context.
 // composition.
 type mutatingToolsListResponseInterceptor struct {
 	name    string
-	toolsFn func([]*mcp.Tool) []*mcp.Tool
+	toolsFn func([]*proxy.Tool) []*proxy.Tool
 	err     error
 }
 
@@ -54,7 +52,7 @@ func (m *mutatingToolsListResponseInterceptor) Name() string { return m.name }
 
 func (m *mutatingToolsListResponseInterceptor) InterceptToolsListResponse(_ context.Context, list *proxy.ToolsListResponse) error {
 	if m.toolsFn != nil {
-		var current []*mcp.Tool
+		var current []*proxy.Tool
 		if list.Result != nil {
 			current = list.Result.Tools
 		}

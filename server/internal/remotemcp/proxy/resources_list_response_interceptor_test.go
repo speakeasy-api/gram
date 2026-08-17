@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
@@ -45,7 +43,7 @@ func (m *mockResourcesListResponseInterceptor) InterceptResourcesListResponse(_ 
 // "mutate-then-reject" composition.
 type mutatingResourcesListResponseInterceptor struct {
 	name        string
-	resourcesFn func([]*mcp.Resource) []*mcp.Resource
+	resourcesFn func([]*proxy.Resource) []*proxy.Resource
 	err         error
 }
 
@@ -53,7 +51,7 @@ func (m *mutatingResourcesListResponseInterceptor) Name() string { return m.name
 
 func (m *mutatingResourcesListResponseInterceptor) InterceptResourcesListResponse(_ context.Context, list *proxy.ResourcesListResponse) error {
 	if m.resourcesFn != nil {
-		var current []*mcp.Resource
+		var current []*proxy.Resource
 		if list.Result != nil {
 			current = list.Result.Resources
 		}

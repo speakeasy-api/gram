@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -2295,7 +2294,7 @@ func TestProxy_Post_ToolsListResponse_LaterInterceptorObservesEarlierMutation(t 
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name: "filter-to-one",
-			toolsFn: func(tools []*mcp.Tool) []*mcp.Tool {
+			toolsFn: func(tools []*proxy.Tool) []*proxy.Tool {
 				return tools[:1]
 			},
 		},
@@ -2330,8 +2329,8 @@ func TestProxy_Post_ToolsListResponse_MutationThenRejection_DiscardsMutation(t *
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name: "mutate-then-pass",
-			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool {
-				return []*mcp.Tool{{Name: "should_not_reach_client", InputSchema: map[string]any{}}}
+			toolsFn: func(_ []*proxy.Tool) []*proxy.Tool {
+				return []*proxy.Tool{{Name: "should_not_reach_client"}}
 			},
 		},
 		&mutatingToolsListResponseInterceptor{
@@ -2364,7 +2363,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_EmptyArrayWhenAllFiltered(t *test
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name:    "deny-all",
-			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool { return []*mcp.Tool{} },
+			toolsFn: func(_ []*proxy.Tool) []*proxy.Tool { return []*proxy.Tool{} },
 		},
 	}
 
@@ -2399,7 +2398,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_OnErrorResponse_SurfacesAs5xx(t *
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name:    "blind-filter",
-			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool { return nil },
+			toolsFn: func(_ []*proxy.Tool) []*proxy.Tool { return nil },
 		},
 	}
 
@@ -2409,40 +2408,6 @@ func TestProxy_Post_ToolsListResponse_SetTools_OnErrorResponse_SurfacesAs5xx(t *
 	rr := httptest.NewRecorder()
 	err := p.Post(rr, req)
 	require.Error(t, err, "MutationError must surface as a server-side error, not a rejection envelope")
-	require.Contains(t, err.Error(), "mutation", "error chain must identify the failure as a mutation anomaly")
-	require.Empty(t, rr.Body.String(), "the proxy must not commit a JSON-RPC body when surfacing a 5xx")
-}
-
-func TestProxy_Post_ToolsListResponse_SetTools_MarshalFailureSurfacesAs5xx(t *testing.T) {
-	t.Parallel()
-
-	// Force a marshal failure inside SetTools by handing it an
-	// unmarshalable InputSchema (channels cannot be JSON-encoded). The
-	// setter must reject with a *MutationError before any state on the
-	// typed view or wire bytes changes, and the proxy must surface that
-	// as a 5xx rather than a JSON-RPC rejection envelope.
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, toolsListResponseThreeTools)
-	}))
-	t.Cleanup(upstream.Close)
-
-	p := newProxyForTest(t, upstream.URL)
-	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
-		&mutatingToolsListResponseInterceptor{
-			name: "inject-unmarshalable-schema",
-			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool {
-				return []*mcp.Tool{{Name: "broken", InputSchema: make(chan int)}}
-			},
-		},
-	}
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr := httptest.NewRecorder()
-	err := p.Post(rr, req)
-	require.Error(t, err, "marshal failure must surface as a server-side error, not a rejection envelope")
 	require.Contains(t, err.Error(), "mutation", "error chain must identify the failure as a mutation anomaly")
 	require.Empty(t, rr.Body.String(), "the proxy must not commit a JSON-RPC body when surfacing a 5xx")
 }
@@ -2463,7 +2428,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_NilToolsNormalizesToEmptyArray(t 
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name:    "deny-all-via-nil",
-			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool { return nil },
+			toolsFn: func(_ []*proxy.Tool) []*proxy.Tool { return nil },
 		},
 	}
 
@@ -2489,7 +2454,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name: "keep-only-tool-b",
-			toolsFn: func(tools []*mcp.Tool) []*mcp.Tool {
+			toolsFn: func(tools []*proxy.Tool) []*proxy.Tool {
 				kept := tools[:0]
 				for _, t := range tools {
 					if t.Name == "tool_b" {
@@ -2605,7 +2570,7 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{
 			name: "keep-only-tool-a",
-			toolsFn: func(tools []*mcp.Tool) []*mcp.Tool {
+			toolsFn: func(tools []*proxy.Tool) []*proxy.Tool {
 				kept := tools[:0]
 				for _, t := range tools {
 					if t.Name == "tool_a" {

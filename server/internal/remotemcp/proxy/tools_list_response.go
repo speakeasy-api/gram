@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ToolsListResponse is a "tools/list"-specific view over the remote message
@@ -30,12 +29,12 @@ type ToolsListResponse struct {
 	// Result is the decoded tools/list result when upstream returned a
 	// JSON-RPC success response. Mutually exclusive with Error — exactly one
 	// of Result and Error is non-nil.
-	Result *mcp.ListToolsResult
+	Result *ToolsListResult
 }
 
 // toolsListResponseFromRemoteMessage returns a ToolsListResponse view over
 // msg if msg carries a JSON-RPC response whose payload decodes cleanly as
-// either a [mcp.ListToolsResult] or a [jsonrpc.Error]. Anything else
+// either a [ToolsListResult] or a [jsonrpc.Error]. Anything else
 // returns ok=false so the typed interceptor loop is skipped. Decoding
 // failures do not abort the proxy; the response is relayed to the user
 // unchanged.
@@ -43,6 +42,7 @@ type ToolsListResponse struct {
 // Used by both the buffered JSON path and the SSE-terminal path. In both
 // cases msg.Message is already a *jsonrpc.Response decoded from the wire;
 // the helper just re-decodes its payload as a tools/list shape.
+
 func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMessage) (*ToolsListResponse, bool) {
 	if request == nil || msg == nil {
 		return nil, false
@@ -68,11 +68,10 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 		return resp, true
 	}
 
-	result := &mcp.ListToolsResult{
-		Meta:       nil,
-		NextCursor: "",
-		Tools:      nil,
-	}
+	// A payload that does not decode as a tools/list result leaves ok=false, so
+	// the typed loop is skipped and the response relays to the user unchanged.
+	// That includes a `null` result, which carries no tools to filter.
+	result := &ToolsListResult{Tools: nil, NextCursor: "", extras: nil}
 	if err := json.Unmarshal(rpcResp.Result, result); err != nil {
 		return nil, false
 	}
@@ -108,7 +107,7 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 // detects [*MutationError] at the interceptor return path and surfaces
 // it as an HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than
 // as a user-facing JSON-RPC rejection.
-func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
+func (r *ToolsListResponse) SetTools(tools []*Tool) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
 	}
@@ -117,22 +116,19 @@ func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
 		return &MutationError{Op: "set tools", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
 	}
 
-	if tools == nil {
-		tools = []*mcp.Tool{}
-	}
-
-	// Stage the mutation against a temporary copy of Result so a marshal
-	// failure can't leave the typed view's Tools desynced from the
-	// underlying wire bytes. Only commit (assign to Result.Tools,
-	// rpcResp.Result, dirty) once marshaling has succeeded.
-	staged := *r.Result
+	// Staged on a clone so a failure cannot leave the wire disagreeing with the
+	// typed view: confining the cache scope writes to the carried members, which
+	// the live result would otherwise share.
+	staged := r.Result.clone()
 	staged.Tools = tools
-	payload, err := json.Marshal(&staged)
+	staged.confineToCaller()
+
+	payload, err := json.Marshal(staged)
 	if err != nil {
-		return &MutationError{Op: "set tools", Cause: fmt.Errorf("marshal mutated ListToolsResult: %w", err)}
+		return &MutationError{Op: "set tools", Cause: fmt.Errorf("encode mutated tools/list result: %w", err)}
 	}
 
-	r.Result.Tools = tools
+	*r.Result = staged
 	rpcResp.Result = payload
 	r.RemoteMessage.dirty = true
 	return nil

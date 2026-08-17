@@ -1,11 +1,11 @@
 package remotemcp_test
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -16,30 +16,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// newToolsListResponse constructs a typed view with the given tools and
-// a fresh RemoteMessage backing the SetTools setter. The RemoteMessage
-// carries a *jsonrpc.Response whose Result is set to a marshaled
-// ListToolsResult so SetTools can re-marshal cleanly.
-func newToolsListResponse(t *testing.T, tools []*mcp.Tool) *proxy.ToolsListResponse {
+// newToolsListResponse constructs a typed view whose result was decoded from wire
+// bytes, so it carries the members [proxy.ToolsListResponse.SetTools] preserves.
+func newToolsListResponse(t *testing.T, tools []*proxy.Tool) *proxy.ToolsListResponse {
 	t.Helper()
 
-	result := &mcp.ListToolsResult{
-		Meta:       nil,
-		NextCursor: "",
-		Tools:      tools,
-	}
-	rpcResp := &jsonrpc.Response{
-		ID:     jsonrpc.ID{},
-		Result: nil,
-		Error:  nil,
-	}
+	payload, err := json.Marshal(&proxy.ToolsListResult{Tools: tools, NextCursor: ""})
+	require.NoError(t, err)
+
+	result := &proxy.ToolsListResult{Tools: nil, NextCursor: ""}
+	require.NoError(t, json.Unmarshal(payload, result))
+
 	return &proxy.ToolsListResponse{
 		Error: nil,
 		RemoteMessage: &proxy.RemoteMessage{
 			UserHTTPRequest:    nil,
 			RemoteHTTPRequest:  nil,
 			RemoteHTTPResponse: nil,
-			Message:            rpcResp,
+			Message: &jsonrpc.Response{
+				ID:     jsonrpc.ID{},
+				Result: payload,
+				Error:  nil,
+			},
 		},
 		Request: nil,
 		Result:  result,
@@ -59,9 +57,9 @@ func TestToolsListMCPConnectFilterInterceptor_NilEnginePassesThrough(t *testing.
 	// A nil engine must not panic; pass the response through unchanged.
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "tool_a", InputSchema: map[string]any{}},
-		{Name: "tool_b", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "tool_a"},
+		{Name: "tool_b"},
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
 	require.Len(t, resp.Result.Tools, 2, "nil engine must leave the tools array unchanged")
@@ -82,10 +80,10 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "search_tickets", InputSchema: map[string]any{}},
-		{Name: "delete_ticket", InputSchema: map[string]any{}},
-		{Name: "update_ticket", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "search_tickets"},
+		{Name: "delete_ticket"},
+		{Name: "update_ticket"},
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 
@@ -105,9 +103,9 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *tes
 
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "tool_a", InputSchema: map[string]any{}},
-		{Name: "tool_b", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "tool_a"},
+		{Name: "tool_b"},
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 	require.Empty(t, resp.Result.Tools)
@@ -136,11 +134,11 @@ func TestToolsListMCPConnectFilterInterceptor_PreservesInputOrderInFilteredResul
 
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "tool_a", InputSchema: map[string]any{}},
-		{Name: "tool_b", InputSchema: map[string]any{}},
-		{Name: "tool_c", InputSchema: map[string]any{}},
-		{Name: "tool_d", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "tool_a"},
+		{Name: "tool_b"},
+		{Name: "tool_c"},
+		{Name: "tool_d"},
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 
@@ -203,9 +201,9 @@ func TestToolsListMCPConnectFilterInterceptor_FiltersByDisposition(t *testing.T)
 	}}
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "list_items", InputSchema: map[string]any{}},
-		{Name: "delete_item", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "list_items"},
+		{Name: "delete_item"},
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 
@@ -232,8 +230,8 @@ func TestToolsListMCPConnectFilterInterceptor_ResolverErrorFailsClosed(t *testin
 	resolver := fakeToolDispositionResolver{err: errors.New("metadata store unavailable")}
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "list_items", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "list_items"},
 	})
 	err := interceptor.InterceptToolsListResponse(ctx, resp)
 	require.Error(t, err)
@@ -263,9 +261,9 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsUnclassifiedGrantedTool(t *te
 	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"tool_b": "destructive"}}
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "tool_a", InputSchema: map[string]any{}},
-		{Name: "tool_b", InputSchema: map[string]any{}},
+	resp := newToolsListResponse(t, []*proxy.Tool{
+		{Name: "tool_a"},
+		{Name: "tool_b"},
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 

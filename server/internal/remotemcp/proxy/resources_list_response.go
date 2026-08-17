@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ResourcesListResponse is a "resources/list"-specific view over the remote
@@ -30,12 +29,12 @@ type ResourcesListResponse struct {
 	// Result is the decoded resources/list result when upstream returned a
 	// JSON-RPC success response. Mutually exclusive with Error — exactly one
 	// of Result and Error is non-nil.
-	Result *mcp.ListResourcesResult
+	Result *ResourcesListResult
 }
 
 // resourcesListResponseFromRemoteMessage returns a ResourcesListResponse view
 // over msg if msg carries a JSON-RPC response whose payload decodes cleanly
-// as either a [mcp.ListResourcesResult] or a [jsonrpc.Error]. Anything else
+// as either a [ResourcesListResult] or a [jsonrpc.Error]. Anything else
 // returns ok=false so the typed interceptor loop is skipped. Decoding
 // failures do not abort the proxy; the response is relayed to the user
 // unchanged.
@@ -68,11 +67,7 @@ func resourcesListResponseFromRemoteMessage(request *ResourcesListRequest, msg *
 		return resp, true
 	}
 
-	result := &mcp.ListResourcesResult{
-		Meta:       nil,
-		NextCursor: "",
-		Resources:  nil,
-	}
+	result := &ResourcesListResult{Resources: nil, NextCursor: "", extras: nil}
 	if err := json.Unmarshal(rpcResp.Result, result); err != nil {
 		return nil, false
 	}
@@ -108,7 +103,7 @@ func resourcesListResponseFromRemoteMessage(request *ResourcesListRequest, msg *
 // [*MutationError] at the interceptor return path and surfaces it as an
 // HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than as a
 // user-facing JSON-RPC rejection.
-func (r *ResourcesListResponse) SetResources(resources []*mcp.Resource) error {
+func (r *ResourcesListResponse) SetResources(resources []*Resource) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set resources", Cause: errors.New("response carries an error, not a result")}
 	}
@@ -117,22 +112,16 @@ func (r *ResourcesListResponse) SetResources(resources []*mcp.Resource) error {
 		return &MutationError{Op: "set resources", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
 	}
 
-	if resources == nil {
-		resources = []*mcp.Resource{}
-	}
-
-	// Stage the mutation against a temporary copy of Result so a marshal
-	// failure can't leave the typed view's Resources desynced from the
-	// underlying wire bytes. Only commit (assign to Result.Resources,
-	// rpcResp.Result, dirty) once marshaling has succeeded.
-	staged := *r.Result
+	staged := r.Result.clone()
 	staged.Resources = resources
-	payload, err := json.Marshal(&staged)
+	staged.confineToCaller()
+
+	payload, err := json.Marshal(staged)
 	if err != nil {
-		return &MutationError{Op: "set resources", Cause: fmt.Errorf("marshal mutated ListResourcesResult: %w", err)}
+		return &MutationError{Op: "set resources", Cause: fmt.Errorf("encode mutated resources/list result: %w", err)}
 	}
 
-	r.Result.Resources = resources
+	*r.Result = staged
 	rpcResp.Result = payload
 	r.RemoteMessage.dirty = true
 	return nil
