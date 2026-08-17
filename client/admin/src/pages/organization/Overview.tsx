@@ -54,9 +54,11 @@ function Group({
 }) {
   return (
     <section className="mt-5 first:mt-0">
-      <h3 className="text-muted-foreground mb-1 text-xs font-medium">
+      {/* h5 under the record name's h4 in RecordHeader. A group is part of the
+          record, not a sibling of it. */}
+      <h5 className="text-muted-foreground mb-1 text-xs font-medium">
         {title}
-      </h3>
+      </h5>
       {children}
     </section>
   );

@@ -423,6 +423,22 @@ describe("Overview", () => {
     expect(labelsIn("Access")).toEqual(["Whitelisted", "Disabled at"]);
   });
 
+  it("nests the group headings under the record's own heading", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    // The record names itself at level 4, which is the level the whole admin
+    // app titles a page at. A group drawn above that level is read as a
+    // sibling of the record rather than a part of it.
+    expect(
+      await screen.findByRole("heading", { level: 4, name: ORG.name }),
+    ).toBeTruthy();
+    for (const group of ["Identity", "Plan", "Access"]) {
+      expect(screen.getByRole("heading", { name: group }).tagName).toBe("H5");
+    }
+  });
+
   it("no longer counts the members the record nav already counts", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
