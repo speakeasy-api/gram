@@ -161,18 +161,6 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		return nil, usage, nil
 	}
 
-	// Zero citations is indistinguishable from the web plugin silently not
-	// applying (a provider without plugin support, an annotation shape
-	// change, the annotations round-trip loss) — and a search that never
-	// touched the web must not read as "nothing indexed matched": the agent
-	// is instructed to treat an empty success as absence of coverage, which
-	// becomes a confident, wrong finding. Fail the call instead; the agent
-	// sees a tool error, and a run where every search fails this way trips
-	// the all-tools-failed guard rather than storing a report.
-	if len(response.Annotations) == 0 {
-		return nil, usage, fmt.Errorf("web search returned no citations: the search plugin may not have applied; treat this as a failed search, not as absence of coverage")
-	}
-
 	results := make([]SearchResult, 0, len(response.Annotations))
 	for _, annotation := range response.Annotations {
 		citation := annotation.URLCitation
@@ -190,6 +178,19 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		if len(results) >= maxResults {
 			break
 		}
+	}
+
+	// Zero usable citations is indistinguishable from the web plugin silently
+	// not applying (a provider without plugin support, an annotation shape
+	// change, the round-trip loss) — and a search that never touched the web
+	// must not read as "nothing indexed matched": the agent is instructed to
+	// treat an empty success as absence of coverage, which becomes a
+	// confident, wrong finding. Judged after filtering, because annotations
+	// that all fail the url_citation shape are the same nothing. The agent
+	// sees a tool error, and a run where every search fails this way trips
+	// the all-tools-failed guard rather than storing a report.
+	if len(results) == 0 {
+		return nil, usage, fmt.Errorf("web search returned no citations: the search plugin may not have applied; treat this as a failed search, not as absence of coverage")
 	}
 
 	return results, usage, nil
