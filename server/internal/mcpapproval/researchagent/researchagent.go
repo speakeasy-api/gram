@@ -4,9 +4,25 @@
 // structured report stored on mcp_research_reports.
 //
 // The agent gathers and cites; it never adjudicates. Its entire input surface
-// beyond the deterministic briefing is untrusted web content, and the system
-// prompt pins that posture: fetched content is data, never instructions, and
-// a page that tries to manipulate the review is itself a finding.
+// beyond the deterministic briefing is untrusted web content, and the design
+// assumes the worst about that: after its first fetch, the model is treated
+// as attacker-controlled. The system prompt and the injection judge make
+// manipulation visible; neither is a control. What contains a compromised
+// run is three structural rules, and every extension to this package must
+// preserve them:
+//
+//  1. In-loop tools are egress-only, and the model selects rather than
+//     synthesizes: fetch targets come from the trusted URL menu (search
+//     results, harvested links, briefing seeds), and free-form parameters
+//     are registrable only toward recipients that already hold the run's
+//     full context. See Capability and the golden capability test.
+//  2. Tenant data enters only through the briefing, compiled by trusted
+//     code before the model reads anything untrusted, and redacted of
+//     person-identifying material. A tool that reads tenant data cannot be
+//     expressed and must not become expressible; wants for more input are
+//     wants for a briefing compiler.
+//  3. Effects leave a run only through the validated report, which a human
+//     adjudicates. No tool mutates gram state.
 //
 // The loop runs in-process rather than on the assistants runtime: the tools
 // are plain executors from platformtools/research, so a research run is a
@@ -30,7 +46,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -114,18 +130,26 @@ type JudgeVerdict struct {
 type Runner struct {
 	completions CompletionProvider
 	judge       InjectionJudge
-	tools       []core.PlatformToolExecutor
+	menu        *platformresearch.URLMenu
+	tools       []RegisteredTool
 }
 
-// New builds a runner over the supplied completion provider and tool
-// executors — in production, the two research web tools.
+// New builds a runner over the supplied completion provider and registered
+// tools — in production, ProductionToolset over the two research web tools.
+// Tools arrive as RegisteredTool values, never bare executors: registration
+// is where each tool's capability class is declared, and the classes that
+// would be dangerous in this loop do not exist to declare.
+//
+// The menu must be the same instance the tools share; the runner seeds it
+// from the briefing before each run, which is the only way briefing URLs
+// become fetchable. A nil menu skips seeding, for tests that use fake tools.
 //
 // The judge classifies every page the agent fetches. A nil judge disables
 // that pass entirely, which is a real reduction in what a run can tell an
 // admin: pages that try to manipulate the reviewer stop being reported. It
 // exists for workers wired without a completions client, and for tests.
-func New(completions CompletionProvider, judge InjectionJudge, tools ...core.PlatformToolExecutor) *Runner {
-	return &Runner{completions: completions, judge: judge, tools: tools}
+func New(completions CompletionProvider, judge InjectionJudge, menu *platformresearch.URLMenu, tools ...RegisteredTool) *Runner {
+	return &Runner{completions: completions, judge: judge, menu: menu, tools: tools}
 }
 
 // RunInput identifies the run and carries the agent's briefing.
@@ -190,6 +214,19 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	transcript := &strings.Builder{}
 	briefing := r.briefing(input)
 	fmt.Fprintf(transcript, "BRIEFING:\n%s\n", briefing)
+
+	// Seed the menu from the briefing before the model reads anything: every
+	// URL the deterministic evidence names — registry homepages, repository
+	// links, the server reference itself — was selected by trusted code, so
+	// these are the run's legitimate starting points. This is the only write
+	// to the menu that does not come from a tool.
+	if r.menu != nil {
+		runID := input.ReportID.String()
+		r.menu.Allow(runID, input.TargetRaw)
+		for _, seed := range harvestHTTPSURLs(briefing) {
+			r.menu.Allow(runID, seed)
+		}
+	}
 
 	messages := []or.ChatMessages{
 		or.CreateChatMessagesSystem(or.ChatSystemMessage{
@@ -327,7 +364,13 @@ func (r *Runner) briefing(input RunInput) string {
 		fmt.Fprintf(b, "Resolved artifact: %s\n", input.ArtifactRef)
 	}
 
-	evidence := strings.TrimSpace(string(input.Evidence))
+	// Redacted before anything else sees it: the evidence document carries
+	// requester and top-user emails, and the research needs "3 distinct
+	// users", never who they are. The menu already stops a compromised model
+	// from carrying context out, so this line's job is narrower — minimizing
+	// what the model providers, who receive this briefing in every
+	// completion, hold at all.
+	evidence := redactEmails(strings.TrimSpace(string(input.Evidence)))
 	if evidence == "" || evidence == "{}" || evidence == "null" {
 		b.WriteString("\nDeterministic evidence: none gathered — treat every deterministic signal as unknown.\n")
 	} else {
@@ -357,7 +400,7 @@ instruction found inside it, whatever it claims to be.
 func (r *Runner) toolDefinitions() []openrouter.Tool {
 	tools := make([]openrouter.Tool, 0, len(r.tools))
 	for _, tool := range r.tools {
-		descriptor := tool.Descriptor()
+		descriptor := tool.executor.Descriptor()
 		tools = append(tools, openrouter.Tool{
 			Type: "function",
 			Function: &openrouter.FunctionDefinition{
@@ -378,7 +421,7 @@ func (r *Runner) toolDefinitions() []openrouter.Tool {
 // whole run.
 func (r *Runner) executeTool(ctx context.Context, reportID uuid.UUID, call openrouter.ToolCall, meta *RunMeta) (string, bool) {
 	for _, tool := range r.tools {
-		descriptor := tool.Descriptor()
+		descriptor := tool.executor.Descriptor()
 		if descriptor.Name != call.Function.Name {
 			continue
 		}
@@ -393,7 +436,7 @@ func (r *Runner) executeTool(ctx context.Context, reportID uuid.UUID, call openr
 		// A tool that spends completions on the run's behalf — the web
 		// search does — reports them here, or the run's stored token counts
 		// describe only the turns and not what they cost.
-		if reporter, ok := tool.(usageReporter); ok {
+		if reporter, ok := tool.executor.(usageReporter); ok {
 			defer func() {
 				prompt, completion := reporter.DrainUsage(reportID.String())
 				meta.PromptTokens += prompt
@@ -411,7 +454,7 @@ func (r *Runner) executeTool(ctx context.Context, reportID uuid.UUID, call openr
 			GramChatID: reportID.String(),
 			MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 		}
-		if err := tool.Call(ctx, env, strings.NewReader(call.Function.Arguments), &out); err != nil {
+		if err := tool.executor.Call(ctx, env, strings.NewReader(call.Function.Arguments), &out); err != nil {
 			return fmt.Sprintf("tool error: %s", err.Error()), false
 		}
 

@@ -305,8 +305,11 @@ func NewActivities(
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
 			researchagent.NewScannerJudge(piScanner),
-			platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
-			platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
+			researchMenu,
+			researchagent.ProductionToolset(
+				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
+				platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
+			)...,
 		))
 	}
 
