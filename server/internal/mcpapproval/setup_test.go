@@ -35,8 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -66,7 +64,6 @@ type testInstance struct {
 	service        *mcpapproval.Service
 	conn           *pgxpool.Pool
 	repo           *repo.Queries
-	features       *productfeatures.Client
 	sessionManager *sessions.Manager
 	authContext    *contextvalues.AuthContext
 	organizationID string
@@ -111,7 +108,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -128,10 +124,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	)
 
 	ti := &testInstance{
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), assembler),
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), assembler),
 		conn:           conn,
 		repo:           repo.New(conn),
-		features:       features,
 		sessionManager: sessionManager,
 		authContext:    authContext,
 		organizationID: organizationID,
@@ -139,35 +134,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		probes:         probes,
 	}
 
-	enableMCPApproval(t, ctx, ti)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, organizationID))
 
 	return ctx, ti
-}
-
-// enableMCPApproval turns the product feature on for the test organization,
-// the way an admin would for a real one. Tests for the disabled state disable
-// it again explicitly.
-func enableMCPApproval(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	_, err := featurerepo.New(ti.conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
-		OrganizationID: ti.authContext.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureMCPApproval),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureMCPApproval, true)
-}
-
-func disableMCPApproval(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	_, err := featurerepo.New(ti.conn).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
-		OrganizationID: ti.authContext.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureMCPApproval),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureMCPApproval, false)
 }
 
 func createProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) uuid.UUID {

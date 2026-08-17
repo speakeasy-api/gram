@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
@@ -82,36 +81,6 @@ func TestAdmitBlockedServer_DedupesOntoExistingReview(t *testing.T) {
 	detail, err := ti.service.GetRequest(ctx, getPayload(id))
 	require.NoError(t, err)
 	require.Len(t, detail.Requesters, 2)
-}
-
-// With the feature off the intake reports exactly oops.CodeForbidden — the
-// documented signal the risk service's redemption uses to fall back to the
-// legacy bypass request, so any other code here would break the fallback.
-func TestAdmitBlockedServer_FeatureDisabledIsForbidden(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	disableMCPApproval(t, ctx, ti)
-
-	_, _, err := ti.service.AdmitBlockedServer(
-		ctx,
-		ti.organizationID,
-		ti.projectID,
-		"https://mcp.example.com/gated",
-		"blocked-user",
-		"blocked-user@example.test",
-		"",
-	)
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	// Nothing was admitted.
-	result, err := ti.repo.ListApprovalRequests(ctx, repo.ListApprovalRequestsParams{
-		ProjectID: ti.projectID,
-		Status:    pgtype.Text{},
-		PageLimit: 50,
-	})
-	require.NoError(t, err)
-	require.Empty(t, result)
 }
 
 // The intake only admits URLs the MCP backend could reach; anything else is

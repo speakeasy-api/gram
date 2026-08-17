@@ -1395,7 +1395,7 @@ func newStartCommand() *cli.Command {
 			// One probe serves both the authority and tool-declarations slots:
 			// they are two views of the same remote prober.
 			remoteProber := remoteprobe.New(logger, guardianPolicy)
-			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
+			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				mcpapprovalevidence.NewAssembler(
 					packagemeta.NewClient(guardianPolicy.PooledClient()),
 					repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(c.String("github-evidence-token"))),

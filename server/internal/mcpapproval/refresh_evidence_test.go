@@ -182,15 +182,3 @@ func TestRefreshEvidence_NonAdminIsRefused(t *testing.T) {
 	_, err := ti.service.RefreshEvidence(nonAdmin, refreshPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
-
-func TestRefreshEvidence_FeatureDisabledIsForbidden(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	disableMCPApproval(t, ctx, ti)
-
-	_, err := ti.service.RefreshEvidence(ctx, refreshPayload(requestID.String()))
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
