@@ -202,31 +202,6 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
 
-// validateUserSessionToken delegates the JWT verify + revocation check to
-// usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
-// stamps a contextvalues.AuthContext scoped to the endpoint's org/project.
-// A nil subject means "not authenticated as a user session"; the returned
-// error carries the reason (bad signature, expired/notBefore, audience
-// mismatch, jti revoked, unparseable subject URN) when a token was presented
-// and rejected, and is nil when no token was presented at all — so the caller
-// can log a real rejection without logging the no-credentials handshake probe.
-// One non-rejection error shares this return: a token that validated fine but
-// whose org lookup failed wraps errIssuerGateOrgLookup, letting the caller
-// label it as an operational failure rather than a bad credential.
-//
-// Anonymous subjects deliberately leave the AuthContext unset (non-nil
-// subject, no AuthContext). The request belongs to no known principal, so
-// stamping the endpoint's org as ActiveOrganizationID would misrepresent
-// the caller as a member of that org. Downstream code on the public
-// path reads org/project off the resolved endpoint directly, the same
-// way it does for unauthenticated public-endpoint traffic. The OAuth client
-// id is still stamped for them — an anonymous session is anonymous in its
-// principal, not in the client that registered for it.
-//
-// SessionID is populated for non-anonymous subjects so
-// authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
-// authenticated session. AccountType is retained as session metadata but does
-// not control RBAC enforcement.
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
 // request matches no rows and costs one index probe. The window is therefore
@@ -256,6 +231,31 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 	}
 }
 
+// validateUserSessionToken delegates the JWT verify + revocation check to
+// usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
+// stamps a contextvalues.AuthContext scoped to the endpoint's org/project.
+// A nil subject means "not authenticated as a user session"; the returned
+// error carries the reason (bad signature, expired/notBefore, audience
+// mismatch, jti revoked, unparseable subject URN) when a token was presented
+// and rejected, and is nil when no token was presented at all — so the caller
+// can log a real rejection without logging the no-credentials handshake probe.
+// One non-rejection error shares this return: a token that validated fine but
+// whose org lookup failed wraps errIssuerGateOrgLookup, letting the caller
+// label it as an operational failure rather than a bad credential.
+//
+// Anonymous subjects deliberately leave the AuthContext unset (non-nil
+// subject, no AuthContext). The request belongs to no known principal, so
+// stamping the endpoint's org as ActiveOrganizationID would misrepresent
+// the caller as a member of that org. Downstream code on the public
+// path reads org/project off the resolved endpoint directly, the same
+// way it does for unauthenticated public-endpoint traffic. The OAuth client
+// id is still stamped for them — an anonymous session is anonymous in its
+// principal, not in the client that registered for it.
+//
+// SessionID is populated for non-anonymous subjects so
+// authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
+// authenticated session. AccountType is retained as session metadata but does
+// not control RBAC enforcement.
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
 		return ctx, nil, nil
