@@ -169,73 +169,15 @@ type RunMeta struct {
 	JudgeFailures int `json:"judge_failures,omitempty"`
 }
 
+//go:embed report_schema.json
+var rawExtractionSchema []byte
+
 // extractionSchema is the JSON schema the extraction pass is held to. Kept as
 // a raw schema rather than reflection so the enum constraints are explicit.
 // Shaped for native strict structured outputs, which require every property
 // listed in required — optionality is expressed as nullability, and Go's
 // decoder reads null as the zero value.
-var extractionSchema = json.RawMessage(`{
-	"type": "object",
-	"additionalProperties": false,
-	"required": ["summary", "coverage", "claims"],
-	"properties": {
-		"summary": {
-			"type": "string",
-			"description": "Short neutral overview of what the research found. Never a recommendation or verdict."
-		},
-		"coverage": {
-			"type": "object",
-			"additionalProperties": false,
-			"required": ["level", "note"],
-			"properties": {
-				"level": {
-					"type": "string",
-					"enum": ["none", "thin", "moderate", "substantial"],
-					"description": "How much INDEPENDENT (non-vendor) material exists."
-				},
-				"note": {
-					"type": ["string", "null"],
-					"description": "What the level rests on."
-				}
-			}
-		},
-		"claims": {
-			"type": "array",
-			"description": "At most the 5 most relevant findings, most relevant first. Never restate deterministic briefing facts — the reader already sees those.",
-			"items": {
-				"type": "object",
-				"additionalProperties": false,
-				"required": ["tier", "text", "citations", "source_reputation"],
-				"properties": {
-					"tier": {
-						"type": "string",
-						"enum": ["independently_reported", "vendor_claim"],
-						"description": "independently_reported = a third party wrote it about the server or its vendor; vendor_claim = the server's own vendor says it about itself."
-					},
-					"text": {"type": "string"},
-					"source_reputation": {
-						"type": "string",
-						"enum": ["reputable", "mixed", "low"],
-						"description": "Your judgment of the SOURCES this claim rests on, never of whether the claim is true. reputable = official vendor documentation (for the vendor's own stated posture), independent security organizations, CVE/advisory databases, established security firms, major press. low = only anonymous forum posts, SEO content farms, freshly-registered blogs, or other material cheap to plant. mixed = a blend, or sources of uncertain standing."
-					},
-					"citations": {
-						"type": "array",
-						"description": "Where each web-sourced claim came from. Empty only for observed-tier claims.",
-						"items": {
-							"type": "object",
-							"additionalProperties": false,
-							"required": ["url", "title"],
-							"properties": {
-								"url": {"type": "string", "pattern": "^https?://"},
-								"title": {"type": ["string", "null"]}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-}`)
+var extractionSchema = json.RawMessage(rawExtractionSchema)
 
 // validate drops web-tier claims without citations — an untraceable web claim
 // is one the admin cannot defend — and rejects unknown tiers, levels, and

@@ -525,13 +525,15 @@ const getResearchReportForDecision = `-- name: GetResearchReportForDecision :one
 SELECT id
 FROM mcp_research_reports
 WHERE id = $1
-  AND mcp_approval_request_id = $2
-  AND project_id = $3
+  AND organization_id = $2
+  AND mcp_approval_request_id = $3
+  AND project_id = $4
   AND deleted IS FALSE
 `
 
 type GetResearchReportForDecisionParams struct {
 	ID                   uuid.UUID
+	OrganizationID       string
 	McpApprovalRequestID uuid.UUID
 	ProjectID            uuid.UUID
 }
@@ -540,7 +542,12 @@ type GetResearchReportForDecisionParams struct {
 // decided and to the caller's project, so a decision can never attribute
 // research about one server to another.
 func (q *Queries) GetResearchReportForDecision(ctx context.Context, arg GetResearchReportForDecisionParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getResearchReportForDecision, arg.ID, arg.McpApprovalRequestID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getResearchReportForDecision,
+		arg.ID,
+		arg.OrganizationID,
+		arg.McpApprovalRequestID,
+		arg.ProjectID,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -550,7 +557,8 @@ const getRunningResearchReport = `-- name: GetRunningResearchReport :one
 SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 FROM mcp_research_reports
 WHERE mcp_approval_request_id = $1
-  AND project_id = $2
+  AND organization_id = $2
+  AND project_id = $3
   AND status = 'running'
   AND deleted IS FALSE
 ORDER BY created_at DESC
@@ -559,11 +567,12 @@ LIMIT 1
 
 type GetRunningResearchReportParams struct {
 	McpApprovalRequestID uuid.UUID
+	OrganizationID       string
 	ProjectID            uuid.UUID
 }
 
 func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningResearchReportParams) (McpResearchReport, error) {
-	row := q.db.QueryRow(ctx, getRunningResearchReport, arg.McpApprovalRequestID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getRunningResearchReport, arg.McpApprovalRequestID, arg.OrganizationID, arg.ProjectID)
 	var i McpResearchReport
 	err := row.Scan(
 		&i.ID,
@@ -594,14 +603,16 @@ SET status = 'failed'
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE mcp_approval_request_id = $1
-  AND project_id = $2
+  AND organization_id = $2
+  AND project_id = $3
   AND status = 'running'
-  AND started_at < $3
+  AND started_at < $4
   AND deleted IS FALSE
 `
 
 type InterruptStaleResearchReportsParams struct {
 	McpApprovalRequestID uuid.UUID
+	OrganizationID       string
 	ProjectID            uuid.UUID
 	StaleBefore          pgtype.Timestamptz
 }
@@ -612,7 +623,12 @@ type InterruptStaleResearchReportsParams struct {
 // durably reopens the one-run-per-request gate; the read path independently
 // presents stale running rows as failed so polling recovers without a start.
 func (q *Queries) InterruptStaleResearchReports(ctx context.Context, arg InterruptStaleResearchReportsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, interruptStaleResearchReports, arg.McpApprovalRequestID, arg.ProjectID, arg.StaleBefore)
+	result, err := q.db.Exec(ctx, interruptStaleResearchReports,
+		arg.McpApprovalRequestID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.StaleBefore,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1029,14 +1045,16 @@ const lockApprovalRequestForResearch = `-- name: LockApprovalRequestForResearch 
 SELECT id
 FROM mcp_approval_requests
 WHERE id = $1
-  AND project_id = $2
+  AND organization_id = $2
+  AND project_id = $3
   AND deleted IS FALSE
 FOR UPDATE
 `
 
 type LockApprovalRequestForResearchParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
 // Serializes research starts for one request. Starting a run is a
@@ -1047,7 +1065,7 @@ type LockApprovalRequestForResearchParams struct {
 // unique index on (mcp_approval_request_id) WHERE status = 'running', which
 // needs its own migration.
 func (q *Queries) LockApprovalRequestForResearch(ctx context.Context, arg LockApprovalRequestForResearchParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockApprovalRequestForResearch, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, lockApprovalRequestForResearch, arg.ID, arg.OrganizationID, arg.ProjectID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

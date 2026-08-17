@@ -140,6 +140,7 @@ ORDER BY decided_at DESC;
 SELECT id
 FROM mcp_research_reports
 WHERE id = @id
+  AND organization_id = @organization_id
   AND mcp_approval_request_id = @mcp_approval_request_id
   AND project_id = @project_id
   AND deleted IS FALSE;
@@ -378,6 +379,7 @@ WHERE id = @id
 SELECT id
 FROM mcp_approval_requests
 WHERE id = @id
+  AND organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
 FOR UPDATE;
@@ -386,6 +388,7 @@ FOR UPDATE;
 SELECT *
 FROM mcp_research_reports
 WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND organization_id = @organization_id
   AND project_id = @project_id
   AND status = 'running'
   AND deleted IS FALSE
@@ -404,6 +407,7 @@ SET status = 'failed'
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND organization_id = @organization_id
   AND project_id = @project_id
   AND status = 'running'
   AND started_at < @stale_before
