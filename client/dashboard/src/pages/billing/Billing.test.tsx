@@ -102,15 +102,23 @@ describe("Billing", () => {
         endsAt: new Date(Date.now() + 12 * DAY),
       },
     });
+    const legacyTierLimits = {
+      basePrice: 0,
+      includedToolCalls: 0,
+      includedServers: 0,
+      includedCredits: 0,
+      pricePerAdditionalToolCall: 0,
+      pricePerAdditionalServer: 0,
+      featureBullets: [],
+      includedBullets: [],
+    };
     mocks.usageTiers.mockReturnValue({
       data: {
+        free: legacyTierLimits,
+        pro: legacyTierLimits,
+        enterprise: legacyTierLimits,
         payg: {
-          basePrice: 0,
-          includedToolCalls: 0,
-          includedServers: 0,
-          includedCredits: 0,
-          pricePerAdditionalToolCall: 0,
-          pricePerAdditionalServer: 0,
+          ...legacyTierLimits,
           featureBullets: ["Enterprise feature set"],
           includedBullets: [
             "Other inference billed at provider cost",
