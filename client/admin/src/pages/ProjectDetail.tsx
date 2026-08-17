@@ -38,9 +38,18 @@ function CountTile({ label, value }: { label: string; value: number }) {
 // The id arrives as a prop rather than out of `useParams`, because this page is
 // reached by two routes: the global project list and the organization record's
 // own project view. Each names the parameter differently.
-export function ProjectDetail({ idOrSlug }: { idOrSlug: string }): JSX.Element {
+// The organization is optional for the same reason: only one of those two routes
+// has one. Where it exists it scopes the read, so a project outside it is not
+// found rather than shown under the wrong record.
+export function ProjectDetail({
+  idOrSlug,
+  organizationIdOrSlug,
+}: {
+  idOrSlug: string;
+  organizationIdOrSlug?: string;
+}): JSX.Element {
   const { data, isLoading, isError, error } = useQuery({
-    ...projectQuery(idOrSlug),
+    ...projectQuery(idOrSlug, organizationIdOrSlug),
     enabled: !!idOrSlug,
   });
 

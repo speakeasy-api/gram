@@ -633,6 +633,29 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 	return items, nil
 }
 
+const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1::text
+   OR slug = $1::text
+ORDER BY (id = $1::text) DESC
+LIMIT 1
+`
+
+// A caller names an organization the way the URL does, by id or slug, and a
+// project row carries only the id. Resolving to the id first is what lets both
+// project addresses be checked against the same value.
+//
+// Both columns are bare TEXT, so one organization's slug can equal another's id
+// and two rows can match. The ORDER BY settles that collision the way
+// AdminGetOrganization already does, with the exact id match first.
+func (q *Queries) AdminResolveOrganizationID(ctx context.Context, idOrSlug string) (string, error) {
+	row := q.db.QueryRow(ctx, adminResolveOrganizationID, idOrSlug)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const adminResolveProjectIDBySlug = `-- name: AdminResolveProjectIDBySlug :one
 SELECT id
 FROM projects
@@ -653,6 +676,29 @@ LIMIT 1
 // only makes the same call answer the same way twice.
 func (q *Queries) AdminResolveProjectIDBySlug(ctx context.Context, slug string) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlug, slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminResolveProjectIDBySlugInOrganization = `-- name: AdminResolveProjectIDBySlugInOrganization :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND slug = $2
+  AND deleted IS FALSE
+`
+
+type AdminResolveProjectIDBySlugInOrganizationParams struct {
+	OrganizationID string
+	Slug           string
+}
+
+// Scoped by the organization a slug names exactly one project, because the
+// unique index on (organization_id, slug) says so. That is what the resolve
+// above cannot promise.
+func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context, arg AdminResolveProjectIDBySlugInOrganizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlugInOrganization, arg.OrganizationID, arg.Slug)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

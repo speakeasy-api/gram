@@ -47,6 +47,31 @@ WHERE slug = @slug
 ORDER BY id
 LIMIT 1;
 
+-- name: AdminResolveProjectIDBySlugInOrganization :one
+-- Scoped by the organization a slug names exactly one project, because the
+-- unique index on (organization_id, slug) says so. That is what the resolve
+-- above cannot promise.
+SELECT id
+FROM projects
+WHERE organization_id = @organization_id
+  AND slug = @slug
+  AND deleted IS FALSE;
+
+-- name: AdminResolveOrganizationID :one
+-- A caller names an organization the way the URL does, by id or slug, and a
+-- project row carries only the id. Resolving to the id first is what lets both
+-- project addresses be checked against the same value.
+--
+-- Both columns are bare TEXT, so one organization's slug can equal another's id
+-- and two rows can match. The ORDER BY settles that collision the way
+-- AdminGetOrganization already does, with the exact id match first.
+SELECT id
+FROM organization_metadata
+WHERE id = sqlc.arg('id_or_slug')::text
+   OR slug = sqlc.arg('id_or_slug')::text
+ORDER BY (id = sqlc.arg('id_or_slug')::text) DESC
+LIMIT 1;
+
 -- name: AdminListOrganizations :many
 -- Two paging modes share this query. A caller that supplies no sort key gets the
 -- cursor walk it always had: the sort ladder collapses to all-NULL and the

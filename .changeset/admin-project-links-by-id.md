@@ -13,3 +13,8 @@ child tables for every row it matches, and two of those counts have no index on
 `project_id` to use, so a common slug cost one full table scan per organization
 and the read never returned. It now resolves the slug to a single id first and
 counts once.
+
+`project.get` also takes the organization now. Inside an organization record the
+project is read scoped to it, so a slug names one project rather than an
+arbitrary one, and a project outside that organization is reported as not found
+whichever way it is addressed.
