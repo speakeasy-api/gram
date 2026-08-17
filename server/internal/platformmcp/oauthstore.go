@@ -672,7 +672,7 @@ func (s *PostgresOAuthStore) RotateConnectionGeneration(ctx context.Context, org
 	if err != nil {
 		return platformoauth.Connection{}, mapOAuthReadError(err)
 	}
-	if current.RevokedAt.Valid || current.ClientRevokedAt.Valid {
+	if current.RevokedAt.Valid || current.ClientRevokedAt.Valid || current.ReauthorizationRequiredAt.Valid {
 		return platformoauth.Connection{}, platformoauth.ErrRevoked
 	}
 	connection, err := q.RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{ConnectionID: id, OrganizationID: organizationID, ActiveGeneration: newGeneration, ReauthorizedAt: timestamp(now), AuthorizationExpiresAt: timestamp(now.Add(platformoauth.AuthorizationLifetime))})

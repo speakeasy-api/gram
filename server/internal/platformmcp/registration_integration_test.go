@@ -177,6 +177,41 @@ func TestPostgresOAuthStoreGenerationRotationRevokesGenerationCommittedWhileWait
 	require.True(t, intermediateSession.RevokedAt.Valid, "the rotation must revoke the generation that was current after acquiring the lock")
 }
 
+func TestPostgresOAuthStoreTerminalConnectionCannotBeRotatedWithoutAuthorization(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_terminal_generation_rotation")
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP terminal rotation test organization",
+		Slug:        "org-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	store := NewPostgresOAuthStore(conn)
+	client := platformoauth.Client{ID: "client-" + uuid.NewString(), Name: "Platform MCP terminal rotation test client", RedirectURIs: []string{"https://client.example.test/callback"}}
+	require.NoError(t, store.RegisterClient(ctx, client))
+	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN("user_" + uuid.NewString()), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterConnection(ctx, connection))
+	require.NoError(t, store.MarkAuthorizationLost(ctx, organizationID, connection.ID, connection.Generation, now.Add(time.Minute)))
+
+	_, err = store.RotateConnectionGeneration(ctx, organizationID, connection.ID, uuid.NewString(), now.Add(2*time.Minute))
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
+
+	row, err := platformrepo.New(conn).GetPlatformMCPConnectionForUpdate(ctx, platformrepo.GetPlatformMCPConnectionForUpdateParams{ID: uuid.MustParse(connection.ID), OrganizationID: organizationID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(connection.Generation), row.ActiveGeneration)
+	require.True(t, row.ReauthorizationRequiredAt.Valid)
+	require.Equal(t, string(platformoauth.ReauthorizationReasonAuthorizationLost), row.ReauthorizationReason.String)
+}
+
 func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
 	t.Parallel()
 

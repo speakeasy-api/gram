@@ -323,6 +323,16 @@ func TestInMemoryStore_ConnectionRevocationCannotBeRotated(t *testing.T) {
 	require.ErrorIs(t, err, platformoauth.ErrRevoked)
 }
 
+func TestInMemoryStore_TerminalConnectionCannotBeRotatedWithoutAuthorization(t *testing.T) {
+	t.Parallel()
+
+	store, grant := seededGrant(t)
+	require.NoError(t, store.MarkAuthorizationLost(t.Context(), grant.Connection.OrganizationID, grant.Connection.ID, grant.Connection.Generation, time.Now()))
+
+	_, err := store.RotateConnectionGeneration(t.Context(), grant.Connection.OrganizationID, grant.Connection.ID, "generation-next", time.Now())
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
+}
+
 func TestInMemoryStore_RejectsCredentialsAtExpiry(t *testing.T) {
 	t.Parallel()
 

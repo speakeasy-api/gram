@@ -88,7 +88,9 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 
 // IsFeatureEnabledUncached reads the durable feature state directly. Security-
 // sensitive request gates use this when revocation must take effect faster than
-// the shared feature cache TTL.
+// the shared feature cache TTL. Unlike the cached lookup, cancellation remains
+// an error so callers can distinguish an incomplete live security check from a
+// durable disabled result.
 func (c *Client) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature Feature) (bool, error) {
 	if feature == FeatureSkills {
 		return true, nil

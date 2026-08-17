@@ -602,7 +602,7 @@ func (s *InMemoryStore) RotateConnectionGeneration(_ context.Context, organizati
 	if !ok || connection.OrganizationID != organizationID {
 		return Connection{}, ErrNotFound
 	}
-	if connection.RevokedAt != nil {
+	if connection.RevokedAt != nil || connection.ReauthorizationRequiredAt != nil {
 		return Connection{}, ErrRevoked
 	}
 	s.revokeGeneration(connectionID, connection.Generation, now)
