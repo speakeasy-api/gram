@@ -221,15 +221,15 @@ func TestRecordDecision_InvalidID(t *testing.T) {
 
 // Reading the queue does not carry the right to commit the organisation to a
 // server.
-func TestRecordDecision_ReadScopeIsNotEnough(t *testing.T) {
+func TestRecordDecision_NonAdminCannotDecide(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	nonAdmin := withProject(t, ctx, ti, ti.projectID, authz.ScopeProjectWrite)
 
-	_, err := ti.service.RecordDecision(readOnly, decisionPayload(requestID.String(), "approved"))
+	_, err := ti.service.RecordDecision(nonAdmin, decisionPayload(requestID.String(), "approved"))
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }

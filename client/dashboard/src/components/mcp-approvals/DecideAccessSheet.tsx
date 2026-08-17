@@ -282,7 +282,7 @@ export function DecideAccessSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <RequireScope scope="mcp_approval:decide" level="component">
+        <RequireScope scope="org:admin" level="component">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
             <section className="border-border border px-4 py-3">
               <Text variant="small" className="font-medium break-all">
