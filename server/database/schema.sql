@@ -6733,8 +6733,13 @@ ON platform_mcp_setup_handoffs (handoff_hash);
 
 -- Issuers must invalidate an expired unredeemed handoff before issuing its
 -- replacement; a partial-index predicate cannot depend on clock time.
+-- NULLS NOT DISTINCT so the one-active-handoff invariant survives a
+-- connection-less issuer: with the default NULLS DISTINCT, two rows whose
+-- connection columns are both NULL would not collide and a surface acting
+-- under assistant identity could hold several active handoffs at once.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_active_binding_key
 ON platform_mcp_setup_handoffs (registration_id, connection_id, connection_generation, intent)
+NULLS NOT DISTINCT
 WHERE redeemed_at IS NULL AND invalidated_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_expires_at_idx
@@ -6788,8 +6793,13 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
 );
 
+-- NULLS NOT DISTINCT so readiness evidence stays one row per registration and
+-- fingerprint for a connection-less writer too. Otherwise the upsert never
+-- matches an existing NULL-connection row and each probe appends new evidence
+-- instead of refreshing the current row.
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_binding_key
-ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint);
+ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+NULLS NOT DISTINCT;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_readiness_registration_checked_at_idx
 ON platform_mcp_readiness (registration_id, checked_at DESC);
