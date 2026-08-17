@@ -411,7 +411,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 			}
 		}
 		if rotationWinner {
-			published, rotationErr := s.rotateRefreshToken(
+			releaseLease, rotationErr := s.rotateRefreshToken(
 				ctx,
 				w,
 				r,
@@ -424,10 +424,10 @@ func (s *Service) handleTokenRefreshTokenGrant(
 				ownsLock,
 				logger,
 			)
-			if ownsLock && published {
-				// A published outcome makes the lease redundant. If publication fails
-				// after the database commit, retain the lease until its TTL so retries
-				// cannot misclassify the consumed token as an unknown grant.
+			if ownsLock && releaseLease {
+				// Safe rollback paths and published outcomes release immediately.
+				// Ambiguous commits and post-commit publication failures retain the
+				// lease until its TTL so retries cannot misclassify a consumed token.
 				s.releaseRefreshTokenReplayLock(ctx, lockKey, lockOwner, logger)
 			}
 			return rotationErr
@@ -477,10 +477,10 @@ func (s *Service) rotateRefreshToken(
 	replayKey string,
 	canPublishFailure bool,
 	logger *slog.Logger,
-) (bool, error) {
+) (releaseLease bool, err error) {
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "begin refresh token rotation").LogError(ctx, logger)
+		return true, oops.E(oops.CodeUnexpected, err, "begin refresh token rotation").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -499,32 +499,29 @@ func (s *Service) rotateRefreshToken(
 			}
 			if !errors.Is(replayErr, redisCache.ErrCacheMiss) {
 				logger.WarnContext(ctx, "failed to read refresh token replay after database claim loss", attr.SlogError(replayErr))
-				return false, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
+				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
 			}
 
 			if !canPublishFailure {
 				// Without an owned coordination lease, a missing active row is
 				// indistinguishable from another winner's unpublished commit.
-				return false, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
+				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
 			}
 
-			published := false
-			if canPublishFailure {
-				published = s.storeRefreshTokenReplayFailure(
-					ctx, replayKey, clientRow.ID,
-					"refresh_token_unknown_or_already_used",
-					"refresh_token is unknown or already used", logger,
-				)
-				if !published {
-					if existing, existingErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); existingErr == nil {
-						return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
-					}
+			published := s.storeRefreshTokenReplayFailure(
+				ctx, replayKey, clientRow.ID,
+				"refresh_token_unknown_or_already_used",
+				"refresh_token is unknown or already used", logger,
+			)
+			if !published {
+				if existing, existingErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); existingErr == nil {
+					return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
 				}
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
-			return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
+			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
 		}
-		return false, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
+		return true, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
 	}
 
 	// Client mismatches and expired grants are terminal. Commit their
@@ -583,7 +580,7 @@ func (s *Service) rotateRefreshToken(
 		Subject:                oldSession.SubjectUrn,
 	}, logger)
 	if err != nil {
-		return false, err
+		return true, err
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "commit refresh token rotation").LogError(ctx, logger)

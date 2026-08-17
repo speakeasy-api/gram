@@ -137,6 +137,25 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.Less(t, time.Since(started), 3*time.Second, "cached terminal refresh failures must not wait for the replay grace period")
 }
 
+func TestHandleToken_UnpublishedRollbackReleasesLease(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithCacheWrapper(t, func(delegate cache.Cache) cache.Cache {
+		return failingConditionalCache{Cache: delegate}
+	})
+	toolset, issuer, client, _ := seedRefreshReplaySession(t, ctx, ti)
+	unknownToken := "unknown-" + uuid.NewString()
+	_, lockKey := refreshReplayKeys(issuer.ID, unknownToken)
+
+	result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, unknownToken)
+	require.NoError(t, result.err)
+	require.Equal(t, http.StatusBadRequest, result.code, result.body)
+
+	claimed, err := ti.cacheAdapter.Add(ctx, lockKey, 30*time.Second)
+	require.NoError(t, err)
+	require.True(t, claimed, "an unpublished outcome with no database change must release its lease")
+}
+
 func TestHandleToken_RefreshReplayCacheErrorIsRetryable(t *testing.T) {
 	t.Parallel()
 
@@ -346,6 +365,22 @@ type tokenResponseFixture struct {
 
 type failingAddCache struct {
 	cache.Cache
+}
+
+type failingConditionalCache struct {
+	cache.Cache
+}
+
+func (c failingConditionalCache) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	return acquireLease(ctx, c.Cache, key, owner, ttl)
+}
+
+func (c failingConditionalCache) ReleaseLease(ctx context.Context, key, owner string) (bool, error) {
+	return releaseLease(ctx, c.Cache, key, owner)
+}
+
+func (failingConditionalCache) SetIfAbsent(context.Context, string, any, time.Duration) (bool, error) {
+	return false, errors.New("refresh replay publication unavailable")
 }
 
 type contendedLeaseCache struct {
