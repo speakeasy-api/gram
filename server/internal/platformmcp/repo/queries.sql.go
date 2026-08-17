@@ -2596,6 +2596,7 @@ SELECT
     handoff.intent,
     handoff.connection_id,
     handoff.connection_generation,
+    handoff.user_id,
     registration.catalog_reference,
     project.slug AS project_slug
 FROM platform_mcp_setup_handoffs AS handoff
@@ -2608,14 +2609,23 @@ JOIN projects AS project
   ON project.id = registration.project_id
  AND project.organization_id = registration.organization_id
  AND project.deleted IS FALSE
-JOIN platform_mcp_connections AS connection
+LEFT JOIN platform_mcp_connections AS connection
   ON connection.id = handoff.connection_id
  AND connection.organization_id = handoff.organization_id
 WHERE handoff.handoff_hash = $1
   AND handoff.organization_id = $2
-  AND connection.subject_urn = $3
-  AND connection.active_generation = handoff.connection_generation
-  AND connection.revoked_at IS NULL
+  AND (
+    handoff.user_id = $3
+    OR (handoff.user_id IS NULL AND connection.subject_urn = $4)
+  )
+  AND (
+    handoff.connection_id IS NULL
+    OR (
+      connection.subject_urn = $4
+      AND connection.active_generation = handoff.connection_generation
+      AND connection.revoked_at IS NULL
+    )
+  )
   AND handoff.redeemed_at IS NULL
   AND handoff.invalidated_at IS NULL
   AND handoff.expires_at > clock_timestamp()
@@ -2624,6 +2634,7 @@ WHERE handoff.handoff_hash = $1
 type GetPlatformMCPSetupHandoffForDashboardStartParams struct {
 	HandoffHash    string
 	OrganizationID string
+	UserID         pgtype.Text
 	SubjectUrn     string
 }
 
@@ -2635,12 +2646,22 @@ type GetPlatformMCPSetupHandoffForDashboardStartRow struct {
 	Intent               string
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
 	CatalogReference     string
 	ProjectSlug          string
 }
 
+// A handoff issued by a surface with no OAuth connection is redeemed by the
+// same user from the dashboard, so identity comes from the handoff's own user
+// attribution. A handoff that does carry a connection still has that
+// connection's liveness checked.
 func (q *Queries) GetPlatformMCPSetupHandoffForDashboardStart(ctx context.Context, arg GetPlatformMCPSetupHandoffForDashboardStartParams) (GetPlatformMCPSetupHandoffForDashboardStartRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPSetupHandoffForDashboardStart, arg.HandoffHash, arg.OrganizationID, arg.SubjectUrn)
+	row := q.db.QueryRow(ctx, getPlatformMCPSetupHandoffForDashboardStart,
+		arg.HandoffHash,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.SubjectUrn,
+	)
 	var i GetPlatformMCPSetupHandoffForDashboardStartRow
 	err := row.Scan(
 		&i.ID,
@@ -2650,6 +2671,7 @@ func (q *Queries) GetPlatformMCPSetupHandoffForDashboardStart(ctx context.Contex
 		&i.Intent,
 		&i.ConnectionID,
 		&i.ConnectionGeneration,
+		&i.UserID,
 		&i.CatalogReference,
 		&i.ProjectSlug,
 	)

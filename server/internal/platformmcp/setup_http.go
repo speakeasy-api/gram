@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -53,6 +54,7 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 	row, err := platformrepo.New(s.store.db).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(handoff),
 		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
 		SubjectUrn:     userSubjectURN(userID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
