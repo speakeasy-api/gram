@@ -27,11 +27,14 @@ const (
 	CapabilityEgressSelect Capability = "egress_select"
 
 	// CapabilityEgressSynthesize marks a tool whose parameters are free-form
-	// model text. Registration must name the recipient and that recipient
-	// must already hold the run's full context (today: the completion
-	// provider, which receives the whole prompt on every turn) — synthesized
-	// parameters to such a recipient cross no trust boundary the run has not
-	// already crossed.
+	// model text. Registration must name the recipient, and the recipient
+	// must sit inside the run's existing vendor trust path with no
+	// attacker-observable channel: either it already holds the run's full
+	// context (the completion provider receives the whole prompt on every
+	// turn), or — like the web-search engine behind the completion plugin —
+	// it receives only the synthesized text under the same vendor trust,
+	// where an attacker cannot read the stream. What the class must never
+	// admit is a recipient an attacker can observe.
 	CapabilityEgressSynthesize Capability = "egress_synthesize"
 )
 
@@ -65,9 +68,21 @@ func (t RegisteredTool) Recipient() string {
 	return t.recipient
 }
 
+// menuLocked is what a select-class tool must prove at registration: it
+// enforces a URL menu, not merely claims to.
+type menuLocked interface {
+	Menu() *platformresearch.URLMenu
+}
+
 // EgressSelectTool registers a tool whose parameters are selections from the
-// trusted URL menu.
+// trusted URL menu. The executor must disclose the menu it enforces; a tool
+// that cannot is refused by panic at wiring time, so the select label can
+// never be an unchecked assertion on an unconstrained executor.
 func EgressSelectTool(tool core.PlatformToolExecutor) RegisteredTool {
+	locked, ok := tool.(menuLocked)
+	if !ok || locked.Menu() == nil {
+		panic(fmt.Sprintf("registering select-class tool %q requires a menu-locked executor", tool.Descriptor().Name))
+	}
 	return RegisteredTool{executor: tool, capability: CapabilityEgressSelect, recipient: ""}
 }
 
@@ -88,7 +103,7 @@ func EgressSynthesizeTool(tool core.PlatformToolExecutor, recipient string) Regi
 // a security-boundary change and the test failing is the point.
 func ProductionToolset(search *platformresearch.WebSearch, fetch *platformresearch.FetchPage) []RegisteredTool {
 	return []RegisteredTool{
-		EgressSynthesizeTool(search, "OpenRouter and its search provider, which already receive the run's full context in every completion request"),
+		EgressSynthesizeTool(search, "OpenRouter, which already receives the run's full context in every completion request, and the search engine behind its web-search plugin — same vendor trust path, query stream unobservable by an attacker"),
 		EgressSelectTool(fetch),
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -120,6 +121,16 @@ func (p *pageTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, _ io.Reader
 	}
 	return nil
 }
+
+// Menu satisfies the select-class registration check; the fakes stand in for
+// the menu-locked fetch tool, so each discloses a live menu.
+func (e *echoTool) Menu() *research.URLMenu { return research.NewURLMenu() }
+
+func (p *pageTool) Menu() *research.URLMenu { return research.NewURLMenu() }
+
+func (s *searchTool) Menu() *research.URLMenu { return research.NewURLMenu() }
+
+func (f *failingTool) Menu() *research.URLMenu { return research.NewURLMenu() }
 
 // stubJudge answers for every page it is shown.
 type stubJudge struct {

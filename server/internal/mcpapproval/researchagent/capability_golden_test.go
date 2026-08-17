@@ -1,13 +1,17 @@
 package researchagent_test
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/research"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 // This is the research agent's capability golden file. It pins exactly what
@@ -45,7 +49,7 @@ func TestProductionToolset_CapabilityGolden(t *testing.T) {
 		{
 			Name:       "platform_web_search",
 			Capability: researchagent.CapabilityEgressSynthesize,
-			Recipient:  "OpenRouter and its search provider, which already receive the run's full context in every completion request",
+			Recipient:  "OpenRouter, which already receives the run's full context in every completion request, and the search engine behind its web-search plugin — same vendor trust path, query stream unobservable by an attacker",
 		},
 		{
 			Name:       "platform_fetch_page",
@@ -53,6 +57,17 @@ func TestProductionToolset_CapabilityGolden(t *testing.T) {
 			Recipient:  "",
 		},
 	}, got)
+}
+
+// A select-class registration must prove its executor enforces a menu — the
+// label alone constrains nothing, so an executor that cannot disclose one is
+// refused at wiring time.
+func TestEgressSelectTool_RequiresAMenuLockedExecutor(t *testing.T) {
+	t.Parallel()
+
+	require.Panics(t, func() {
+		researchagent.EgressSelectTool(&menulessTool{})
+	})
 }
 
 // A synthesize-class registration that cannot name its recipient is refused
@@ -65,4 +80,26 @@ func TestEgressSynthesizeTool_RequiresARecipient(t *testing.T) {
 	require.Panics(t, func() {
 		researchagent.EgressSynthesizeTool(search, "")
 	})
+}
+
+// menulessTool is an executor with no menu to disclose.
+type menulessTool struct{}
+
+func (m *menulessTool) Descriptor() core.ToolDescriptor {
+	return core.ToolDescriptor{
+		SourceSlug:  "research",
+		HandlerName: "menuless",
+		Name:        "menuless_tool",
+		Description: "test tool",
+		InputSchema: []byte(`{"type": "object"}`),
+		Variables:   nil,
+		Annotations: core.ReadOnlyAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (m *menulessTool) Call(_ context.Context, _ toolconfig.ToolCallEnv, _ io.Reader, _ io.Writer) error {
+	return nil
 }
