@@ -71918,6 +71918,7 @@ components:
             - customer_managed_encryption_keys
             - remote_session_auto_refresh
             - remote_session_auto_refresh_enforced
+            - mcp_approval
           maxLength: 60
       required:
         - feature_name
