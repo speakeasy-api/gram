@@ -113,20 +113,29 @@ RETURNING *;
 -- name: GetProjectAsset :one
 SELECT * FROM assets WHERE project_id = @project_id::uuid AND id = @id;
 
+-- Dedupe lookups skip soft-deleted rows so uploads of previously deleted
+-- bytes fall through to the Create* upserts, which resurrect the row by
+-- clearing deleted_at. Returning a deleted row here would short-circuit
+-- before that resurrection and hand back an asset the serve path refuses.
 -- name: GetProjectAssetBySHA256 :one
-SELECT * FROM assets WHERE project_id = @project_id::uuid AND sha256 = @sha256;
+SELECT * FROM assets
+WHERE project_id = @project_id::uuid
+  AND sha256 = @sha256
+  AND deleted IS FALSE;
 
 -- name: GetOrganizationAssetBySHA256 :one
 SELECT * FROM assets
 WHERE organization_id = @organization_id::text
   AND project_id IS NULL
-  AND sha256 = @sha256;
+  AND sha256 = @sha256
+  AND deleted IS FALSE;
 
 -- name: GetPlatformAssetBySHA256 :one
 SELECT * FROM assets
 WHERE project_id IS NULL
   AND organization_id IS NULL
-  AND sha256 = @sha256;
+  AND sha256 = @sha256
+  AND deleted IS FALSE;
 
 -- name: GetImageAssetURL :one
 SELECT url, content_type, content_length, updated_at FROM assets WHERE id = @id AND kind = 'image';

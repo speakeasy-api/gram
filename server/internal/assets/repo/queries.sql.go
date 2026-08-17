@@ -393,6 +393,7 @@ SELECT id, project_id, organization_id, name, url, kind, content_type, content_l
 WHERE organization_id = $1::text
   AND project_id IS NULL
   AND sha256 = $2
+  AND deleted IS FALSE
 `
 
 type GetOrganizationAssetBySHA256Params struct {
@@ -426,6 +427,7 @@ SELECT id, project_id, organization_id, name, url, kind, content_type, content_l
 WHERE project_id IS NULL
   AND organization_id IS NULL
   AND sha256 = $1
+  AND deleted IS FALSE
 `
 
 func (q *Queries) GetPlatformAssetBySHA256(ctx context.Context, sha256 string) (Asset, error) {
@@ -480,7 +482,10 @@ func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams
 }
 
 const getProjectAssetBySHA256 = `-- name: GetProjectAssetBySHA256 :one
-SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1::uuid AND sha256 = $2
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets
+WHERE project_id = $1::uuid
+  AND sha256 = $2
+  AND deleted IS FALSE
 `
 
 type GetProjectAssetBySHA256Params struct {
@@ -488,6 +493,10 @@ type GetProjectAssetBySHA256Params struct {
 	Sha256    string
 }
 
+// Dedupe lookups skip soft-deleted rows so uploads of previously deleted
+// bytes fall through to the Create* upserts, which resurrect the row by
+// clearing deleted_at. Returning a deleted row here would short-circuit
+// before that resurrection and hand back an asset the serve path refuses.
 func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAssetBySHA256Params) (Asset, error) {
 	row := q.db.QueryRow(ctx, getProjectAssetBySHA256, arg.ProjectID, arg.Sha256)
 	var i Asset

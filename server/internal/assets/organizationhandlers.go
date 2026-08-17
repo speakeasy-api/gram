@@ -81,7 +81,7 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 
 	inContentType, _, err := mime.ParseMediaType(payload.ContentType)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse content type: %w", err), "error parsing content type")
+		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
