@@ -30,7 +30,10 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 		Name:        "search_mcp_catalog",
 		Title:       "Search MCP Catalog",
 		Description: "Search reviewed catalog MCP candidates available for Platform onboarding. The results do not install or distribute an MCP.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
+	}, ToolMeta{
+		// External-only: records connection-scoped catalogue evidence, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
@@ -98,7 +101,7 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 		Title:       "Inspect MCP Candidate",
 		Description: "Inspect one reviewed catalog MCP candidate by its provider key and canonical catalog reference.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CatalogDetails, error) {
+	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CatalogDetails, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, CatalogDetails{}, err

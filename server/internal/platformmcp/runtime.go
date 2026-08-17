@@ -45,10 +45,14 @@ const (
 
 // Principal is the identity a Platform MCP call acts under.
 //
-// ConnectionID and Generation are empty for a surface with no OAuth
-// connection. UserID and OrganizationID are always present: authorization,
-// idempotency, and audit are keyed on the real user, not on the connection,
-// so a call without a connection is attributable exactly as well as one with.
+// ConnectionID and Generation are empty together for a surface with no OAuth
+// connection, and present together otherwise — the same invariant the
+// connection columns carry in the database.
+//
+// OrganizationID is always present. UserID is present for every surface that
+// writes, because authorization, idempotency, and audit are keyed on the real
+// user rather than on the connection; that is what makes a connection-less
+// call attributable exactly as well as one with a connection.
 type Principal struct {
 	UserID         string
 	OrganizationID string
@@ -58,9 +62,14 @@ type Principal struct {
 	Surface        ActingSurface
 }
 
-// HasConnection reports whether this principal carries an OAuth connection.
+// HasConnection reports whether this principal claims an OAuth connection.
+//
+// Either half counts as a claim. A principal presenting one half has an
+// incomplete identity rather than no connection, and must fail strict parsing
+// instead of silently taking the connection-less path — which would record a
+// user-attributed write for a connection the caller could not prove.
 func (p Principal) HasConnection() bool {
-	return p.ConnectionID != "" && p.Generation != ""
+	return p.ConnectionID != "" || p.Generation != ""
 }
 
 // surface defaults an unset surface to the external endpoint, which is the

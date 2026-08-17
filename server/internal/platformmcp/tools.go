@@ -17,6 +17,13 @@ const unavailableCode = "feature_unavailable"
 // both surfaces.
 var bothAudiences = []Audience{AudienceExternal, AudienceAssistant}
 
+// externalOnly withholds a tool from the assistant. Used where a handler still
+// reaches connection-scoped state, which an assistant — acting under assistant
+// identity, with no OAuth connection — cannot provide. Admitting such a tool
+// would advertise a capability that always fails; each site says which state
+// is in the way, so the list shrinks as those paths are made connectionless.
+var externalOnly = []Audience{AudienceExternal}
+
 type Reader interface {
 	ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error)
 	ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error)
@@ -129,7 +136,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Platform MCP Feedback",
 			Description: "Send bounded Platform MCP feedback. Feedback is not enabled in the current rollout.",
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
@@ -157,7 +164,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 
@@ -174,7 +181,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
 		Description: "Create a secure setup handoff. Provider setup is not available in the current preview.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
+	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
 func registerUnavailableTools(reg *Registrar) {
@@ -210,7 +217,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
 

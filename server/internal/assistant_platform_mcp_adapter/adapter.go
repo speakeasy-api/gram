@@ -152,10 +152,16 @@ func (t Tool) applyTargetPolicy(policy TargetPolicy, arguments []byte) ([]byte, 
 		return arguments, nil
 	}
 
+	// A model can send `null` or a non-object, which decodes to a nil map;
+	// assigning the policy into that would panic and take the request down
+	// rather than failing the one call.
 	decoded := map[string]any{}
 	if len(arguments) > 0 {
 		if err := json.Unmarshal(arguments, &decoded); err != nil {
 			return nil, fmt.Errorf("decode platform tool arguments %q: %w", t.descriptor.Name, err)
+		}
+		if decoded == nil {
+			decoded = map[string]any{}
 		}
 	}
 	for _, field := range projectFields(t.descriptor.InputSchema) {

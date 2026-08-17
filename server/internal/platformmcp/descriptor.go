@@ -123,6 +123,8 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
 	mcp.AddTool(r.server, tool, handler)
 
+	resolved := resolveInputSchema[In](tool.Name)
+
 	r.descriptors = append(r.descriptors, Descriptor{
 		Name:        tool.Name,
 		Title:       tool.Title,
@@ -131,6 +133,13 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		Meta:        meta,
 		InputSchema: inferInputSchema[In](tool.Name),
 		invoke: func(ctx context.Context, arguments json.RawMessage) (any, error) {
+			// The MCP transport validates arguments against the tool's schema
+			// before a handler sees them. A direct call has no transport, so
+			// it validates here — otherwise the two audiences would enforce
+			// different contracts for the same tool.
+			if err := validateAgainstSchema(resolved, arguments); err != nil {
+				return nil, fmt.Errorf("validate %s arguments: %w", tool.Name, err)
+			}
 			var input In
 			if len(arguments) > 0 {
 				if err := json.Unmarshal(arguments, &input); err != nil {
@@ -172,6 +181,40 @@ func refusalFromResult(result *mcp.CallToolResult) (*ToolRefusalError, bool) {
 		}
 	}
 	return &ToolRefusalError{Payload: `{"code":"` + unavailableCode + `"}`}, true
+}
+
+// resolveInputSchema compiles the tool's schema once, so a direct call can
+// validate arguments the way the MCP transport does.
+func resolveInputSchema[In any](name string) *jsonschema.Resolved {
+	schema, err := jsonschema.For[In](nil)
+	if err != nil {
+		panic(fmt.Sprintf("platformmcp: infer input schema for %q: %v", name, err))
+	}
+	resolved, err := schema.Resolve(nil)
+	if err != nil {
+		panic(fmt.Sprintf("platformmcp: resolve input schema for %q: %v", name, err))
+	}
+	return resolved
+}
+
+// validateAgainstSchema applies the tool's declared contract to a direct call.
+func validateAgainstSchema(resolved *jsonschema.Resolved, arguments json.RawMessage) error {
+	if resolved == nil {
+		return nil
+	}
+	var decoded any
+	if len(arguments) == 0 {
+		decoded = map[string]any{}
+	} else if err := json.Unmarshal(arguments, &decoded); err != nil {
+		return fmt.Errorf("decode arguments: %w", err)
+	}
+	if decoded == nil {
+		decoded = map[string]any{}
+	}
+	if err := resolved.Validate(decoded); err != nil {
+		return fmt.Errorf("arguments do not match the tool schema: %w", err)
+	}
+	return nil
 }
 
 // inferInputSchema derives the JSON Schema a non-MCP surface advertises. The

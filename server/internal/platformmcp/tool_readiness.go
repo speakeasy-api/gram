@@ -43,7 +43,10 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Title:       "Get MCP Readiness",
 		Description: "Return normalized authenticated readiness for one reviewed MCP registration when its registration ID is known. For guided onboarding, use get_platform_mcp_onboarding_status, which resolves the workflow-bound registration. A forced probe is limited to three per minute for that registration.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
+	}, ToolMeta{
+		// External-only: readiness probes are connection-scoped, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPReadinessToolOutput{}, err
@@ -63,7 +66,10 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Title:       "Get MCP Repair Plan",
 		Description: "Return safe, bounded next actions for one reviewed MCP registration when its registration ID is known. For guided onboarding, use get_platform_mcp_onboarding_status to resolve the workflow-bound registration.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
+	}, ToolMeta{
+		// External-only: repair plans read connection-scoped readiness, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPRepairPlanToolOutput{}, err
