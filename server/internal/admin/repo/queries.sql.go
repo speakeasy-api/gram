@@ -363,66 +363,6 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
-const adminGetProjectDetailBySlug = `-- name: AdminGetProjectDetailBySlug :one
-SELECT
-    p.id,
-    p.name,
-    p.slug,
-    p.organization_id,
-    p.logo_asset_id,
-    p.functions_runner_version,
-    p.created_at,
-    p.updated_at,
-    (SELECT count(*) FROM toolsets t WHERE t.project_id = p.id AND t.deleted IS FALSE)::bigint AS toolset_count,
-    (SELECT count(*) FROM deployments d WHERE d.project_id = p.id)::bigint AS deployment_count,
-    (SELECT count(*) FROM http_tool_definitions h WHERE h.project_id = p.id AND h.deleted IS FALSE)::bigint AS http_tool_count,
-    (SELECT count(*) FROM environments e WHERE e.project_id = p.id AND e.deleted IS FALSE)::bigint AS environment_count,
-    (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.deleted IS FALSE)::bigint AS api_key_count,
-    (SELECT count(*) FROM assistants a WHERE a.project_id = p.id AND a.deleted IS FALSE)::bigint AS assistant_count
-FROM projects p
-WHERE p.slug = $1
-  AND p.deleted IS FALSE
-`
-
-type AdminGetProjectDetailBySlugRow struct {
-	ID                     uuid.UUID
-	Name                   string
-	Slug                   string
-	OrganizationID         string
-	LogoAssetID            uuid.NullUUID
-	FunctionsRunnerVersion pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	ToolsetCount           int64
-	DeploymentCount        int64
-	HttpToolCount          int64
-	EnvironmentCount       int64
-	ApiKeyCount            int64
-	AssistantCount         int64
-}
-
-func (q *Queries) AdminGetProjectDetailBySlug(ctx context.Context, slug string) (AdminGetProjectDetailBySlugRow, error) {
-	row := q.db.QueryRow(ctx, adminGetProjectDetailBySlug, slug)
-	var i AdminGetProjectDetailBySlugRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.OrganizationID,
-		&i.LogoAssetID,
-		&i.FunctionsRunnerVersion,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ToolsetCount,
-		&i.DeploymentCount,
-		&i.HttpToolCount,
-		&i.EnvironmentCount,
-		&i.ApiKeyCount,
-		&i.AssistantCount,
-	)
-	return i, err
-}
-
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
 SELECT
     u.id,
@@ -691,6 +631,31 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminResolveProjectIDBySlug = `-- name: AdminResolveProjectIDBySlug :one
+SELECT id
+FROM projects
+WHERE slug = $1
+  AND deleted IS FALSE
+ORDER BY id
+LIMIT 1
+`
+
+// The detail query above counts six child tables for every row it matches, and
+// two of those counts have no index on project_id to use. A project slug is
+// unique only within an organization, so a slug the whole platform uses matches
+// one project per organization, and that cost multiplies by the match count.
+// Resolving the slug to a single id first is what holds it to one project's
+// worth of counting.
+//
+// Which project a duplicated slug names is arbitrary either way. The ORDER BY
+// only makes the same call answer the same way twice.
+func (q *Queries) AdminResolveProjectIDBySlug(ctx context.Context, slug string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlug, slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
