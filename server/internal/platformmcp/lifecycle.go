@@ -446,6 +446,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		RegistrationID:                   binding.RegistrationID,
 		ConnectionID:                     connectionID,
 		ConnectionGeneration:             generation,
+		UserID:                           conv.ToPGText(principal.UserID),
+		ActingSurface:                    conv.ToPGText(string(principal.surface())),
 		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),

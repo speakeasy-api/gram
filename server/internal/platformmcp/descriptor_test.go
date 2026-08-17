@@ -84,3 +84,27 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
 }
+
+// A tool's audience must not depend on how this deployment happens to be
+// configured. The unavailable stub and the live registration are the same
+// tool, so if they declare different audiences the tool appears on a surface
+// in one rollout state and vanishes in another.
+func TestStubAndLiveToolsDeclareTheSameAudience(t *testing.T) {
+	t.Parallel()
+
+	// Nil dependencies register the stubs; a configured catalogue registers
+	// the live tools. Names present in both must agree.
+	_, stubbed := newServer(nil, nil, nil, "", nil, nil, nil, nil, CatalogDescriptor{})
+
+	stubAudience := map[string][]Audience{}
+	for _, descriptor := range stubbed.Descriptors() {
+		stubAudience[descriptor.Name] = descriptor.Meta.Audiences
+	}
+
+	for _, name := range []string{"search_mcp_catalog", "inspect_mcp_candidate"} {
+		audiences, ok := stubAudience[name]
+		require.True(t, ok, "tool %q is registered even when its dependency is absent", name)
+		require.Contains(t, audiences, AudienceAssistant,
+			"stub %q must serve the same audiences as its live counterpart, or the tool disappears from the assistant when the rollout is off", name)
+	}
+}

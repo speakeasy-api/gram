@@ -4455,6 +4455,8 @@ INSERT INTO platform_mcp_readiness (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_authorization_fingerprint,
     state,
     evidence_code,
@@ -4471,7 +4473,9 @@ SELECT
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11,
+    $12
 WHERE EXISTS (
     SELECT 1
      FROM platform_mcp_catalog_registrations AS registration
@@ -4486,6 +4490,8 @@ WHERE EXISTS (
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
 DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    acting_surface = EXCLUDED.acting_surface,
     state = EXCLUDED.state,
     evidence_code = EXCLUDED.evidence_code,
     checked_at = EXCLUDED.checked_at,
@@ -4501,6 +4507,8 @@ type UpsertPlatformMCPReadinessParams struct {
 	RegistrationID                   uuid.UUID
 	ConnectionID                     uuid.NullUUID
 	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -4515,6 +4523,8 @@ func (q *Queries) UpsertPlatformMCPReadiness(ctx context.Context, arg UpsertPlat
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 		arg.ProviderAuthorizationFingerprint,
 		arg.State,
 		arg.EvidenceCode,

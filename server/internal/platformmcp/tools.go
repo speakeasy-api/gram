@@ -160,7 +160,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 		audiences   []Audience
 	}{
 		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout.", bothAudiences},
-		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout.", externalOnly},
+		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout.", bothAudiences},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

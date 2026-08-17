@@ -938,6 +938,8 @@ INSERT INTO platform_mcp_readiness (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_authorization_fingerprint,
     state,
     evidence_code,
@@ -950,6 +952,8 @@ SELECT
     @registration_id,
     @connection_id,
     @connection_generation,
+    @user_id,
+    @acting_surface,
     @provider_authorization_fingerprint,
     @state,
     @evidence_code,
@@ -969,6 +973,8 @@ WHERE EXISTS (
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
 DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    acting_surface = EXCLUDED.acting_surface,
     state = EXCLUDED.state,
     evidence_code = EXCLUDED.evidence_code,
     checked_at = EXCLUDED.checked_at,
