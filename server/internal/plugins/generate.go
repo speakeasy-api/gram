@@ -91,7 +91,7 @@ type GenerateConfig struct {
 	// it scopes the default marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
-	// oldest, by id ASC). The default project keeps the bare org-derived
+	// oldest by created_at, then id). The default project keeps the bare org-derived
 	// marketplace name; non-default projects get a project-scoped one. Must be
 	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
 	IsDefaultProject bool

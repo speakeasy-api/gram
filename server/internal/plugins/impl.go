@@ -3376,7 +3376,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 }
 
 // resolveDefaultProject reports whether projectID is the org's default project
-// (its oldest, by id ASC). Callers deciding package presence must retain the
+// (its oldest by created_at, then id). Callers deciding package presence must retain the
 // error so a transient lookup failure cannot be mistaken for package removal.
 func (s *Service) resolveDefaultProject(ctx context.Context, projectID uuid.UUID) (bool, error) {
 	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
