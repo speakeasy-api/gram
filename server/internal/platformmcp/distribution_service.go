@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -437,6 +438,7 @@ func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo
 		RegistrationID:       registrationID,
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {

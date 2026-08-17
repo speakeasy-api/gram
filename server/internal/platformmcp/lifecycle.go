@@ -379,7 +379,7 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return Readiness{}, false, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, false, err
 	}
@@ -388,8 +388,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         presentConnection(connectionID),
-		ConnectionGeneration: presentConnection(generation),
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -397,8 +397,9 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         presentConnection(connectionID),
-		ConnectionGeneration: presentConnection(generation),
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -417,7 +418,7 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -443,8 +444,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
-		ConnectionID:                     presentConnection(connectionID),
-		ConnectionGeneration:             presentConnection(generation),
+		ConnectionID:                     connectionID,
+		ConnectionGeneration:             generation,
 		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
@@ -456,8 +457,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:                   principal.OrganizationID,
 			ProjectID:                        binding.ProjectID,
 			RegistrationID:                   binding.RegistrationID,
-			ConnectionID:                     presentConnection(connectionID),
-			ConnectionGeneration:             presentConnection(generation),
+			ConnectionID:                     connectionID,
+			ConnectionGeneration:             generation,
 			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		})
 		if loadErr == nil {
@@ -479,8 +480,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            binding.ProjectID,
 			RegistrationID:       binding.RegistrationID,
-			ConnectionID:         presentConnection(connectionID),
-			ConnectionGeneration: presentConnection(generation),
+			ConnectionID:         connectionID,
+			ConnectionGeneration: generation,
 			SubjectUrn:           userSubjectURN(principal.UserID),
 		})
 		switch {

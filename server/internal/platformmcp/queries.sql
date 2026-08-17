@@ -892,6 +892,11 @@ FROM platform_mcp_readiness AS readiness
   AND readiness.provider_authorization_fingerprint = @provider_authorization_fingerprint;
 
 -- name: GetLatestPlatformMCPReadinessForLifecycle :one
+-- Readiness belongs to the user who probed it. A caller acting through an
+-- OAuth connection additionally has that connection's liveness checked; a
+-- surface with no connection — the project assistant acts under assistant
+-- identity — matches its own null-connection evidence instead, and is
+-- authorized upstream on every call.
 SELECT readiness.*
 FROM platform_mcp_readiness AS readiness
 JOIN platform_mcp_catalog_registrations AS registration
@@ -903,17 +908,26 @@ JOIN platform_mcp_catalog_registrations AS registration
    ON project.id = readiness.project_id
   AND project.organization_id = readiness.organization_id
   AND project.deleted IS FALSE
- JOIN platform_mcp_connections AS connection
+ LEFT JOIN platform_mcp_connections AS connection
    ON connection.id = readiness.connection_id
  AND connection.organization_id = readiness.organization_id
 WHERE readiness.organization_id = @organization_id
   AND readiness.project_id = @project_id
   AND readiness.registration_id = @registration_id
-  AND readiness.connection_id = @connection_id
-  AND readiness.connection_generation = @connection_generation
-  AND connection.subject_urn = @subject_urn
-  AND connection.active_generation = readiness.connection_generation
-  AND connection.revoked_at IS NULL
+  AND readiness.connection_id IS NOT DISTINCT FROM sqlc.narg(connection_id)
+  AND readiness.connection_generation IS NOT DISTINCT FROM sqlc.narg(connection_generation)
+  AND (
+    readiness.user_id = @user_id
+    OR (readiness.user_id IS NULL AND connection.subject_urn = @subject_urn)
+  )
+  AND (
+    readiness.connection_id IS NULL
+    OR (
+      connection.subject_urn = @subject_urn
+      AND connection.active_generation = readiness.connection_generation
+      AND connection.revoked_at IS NULL
+    )
+  )
 ORDER BY readiness.checked_at DESC, readiness.id DESC
 LIMIT 1;
 
