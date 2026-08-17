@@ -166,6 +166,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 			openrouter.CreateMessageUser(conversationContext),
 		},
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               nil,
 		Model:                     "",
 		Stream:                    false,

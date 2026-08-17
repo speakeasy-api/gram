@@ -432,6 +432,23 @@ WHERE mcp_approval_request_id = @mcp_approval_request_id
 ORDER BY created_at DESC
 LIMIT 1;
 
+-- name: InterruptStaleResearchReports :execrows
+-- A running report older than the workflow's absolute deadline can only be a
+-- stranded row (crashed worker, exhausted or skipped compensation, terminated
+-- workflow) -- no live run outlives the Temporal run timeout. Resolving it
+-- durably reopens the one-run-per-request gate; the read path independently
+-- presents stale running rows as failed so polling recovers without a start.
+UPDATE mcp_research_reports
+SET status = 'failed'
+  , error = 'the research run was interrupted and did not resolve'
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND started_at < @stale_before
+  AND deleted IS FALSE;
+
 -- name: CompleteResearchReport :one
 -- Only a run still in flight can complete, mirroring the failure update
 -- below: a late result whose activity was already given up on must not turn

@@ -201,6 +201,7 @@ func (c *Client) AgentChat(
 			ProjectID:                 projectID.String(),
 			Messages:                  messages,
 			Tools:                     toolDefs,
+			ToolChoice:                nil,
 			Temperature:               opts.Temperature,
 			Model:                     opts.Model,
 			Stream:                    false,
