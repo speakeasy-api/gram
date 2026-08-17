@@ -61,8 +61,16 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 	if err != nil {
 		return ProviderSetupResult{}, fmt.Errorf("load platform mcp setup handoff for dashboard start: %w", err)
 	}
-	principal.ConnectionID = row.ConnectionID.UUID.String()
-	principal.Generation = row.ConnectionGeneration.UUID.String()
+	// The handoff row's connection is nullable. Unwrapping a null would yield
+	// the zero-UUID string — non-empty, so HasConnection would report a
+	// connection this caller never had, and the budget would meter it as a
+	// connected caller.
+	if row.ConnectionID.Valid {
+		principal.ConnectionID = row.ConnectionID.UUID.String()
+	}
+	if row.ConnectionGeneration.Valid {
+		principal.Generation = row.ConnectionGeneration.UUID.String()
+	}
 	if err := s.setupBudget.Allow(ctx, principal); err != nil {
 		return ProviderSetupResult{}, err
 	}
