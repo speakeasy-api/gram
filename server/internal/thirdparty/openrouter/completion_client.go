@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -68,6 +69,10 @@ type HTTPMetadata struct {
 }
 
 // CompletionRequest encapsulates all parameters needed for a completion call.
+// ToolChoiceNone is the tool_choice that forbids tool calls while keeping
+// the tools key defined.
+var ToolChoiceNone = json.RawMessage(`"none"`)
+
 type CompletionRequest struct {
 	// Required fields
 	OrgID    string
@@ -79,6 +84,15 @@ type CompletionRequest struct {
 	Temperature *float64
 	Model       string
 	Stream      bool
+
+	// ToolChoice, when set, is forwarded verbatim as OpenAI tool_choice —
+	// raw because the spec admits strings and function-naming objects, and
+	// the chat proxy forwards whatever the client sent. Internal callers use
+	// ToolChoiceNone to forbid further tool calls while keeping Tools
+	// defined — the shape Anthropic-family models require once the history
+	// contains tool turns. Nil means provider default ("auto" when tools
+	// are present).
+	ToolChoice json.RawMessage
 
 	// Context for tracking and capture
 	UsageSource    billing.ModelUsageSource

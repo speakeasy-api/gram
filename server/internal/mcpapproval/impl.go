@@ -811,6 +811,16 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // states.
 const researchStatusRunning = "running"
 
+// ResearchRunStaleAfter is the age past which a running report can only be a
+// stranded row: the Temporal workflow's 40-minute run timeout bounds every
+// live run (see background.McpResearchWorkflow), and its compensation budget
+// adds under five minutes — so a running report older than this had its
+// compensation skipped or exhausted (worker crash, terminated workflow, DB
+// outage). Both recovery paths key off it: the read path presents such a row
+// as failed so the page's polling resolves and the Run button re-enables, and
+// StartResearch resolves it durably before admitting a new run.
+const ResearchRunStaleAfter = 45 * time.Minute
+
 func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchPayload) (*gen.ResearchReport, error) {
 	projectID, orgID, err := s.project(ctx)
 	if err != nil {
@@ -863,6 +873,17 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock approval request for research").LogError(ctx, s.logger)
+	}
+
+	// Resolve any stranded run first: a running report older than the workflow
+	// deadline will never complete, and without this it would hold the
+	// one-run-per-request gate closed forever.
+	if _, err := txQueries.InterruptStaleResearchReports(ctx, repo.InterruptStaleResearchReportsParams{
+		McpApprovalRequestID: requestID,
+		ProjectID:            projectID,
+		StaleBefore:          pgtype.Timestamptz{Time: time.Now().Add(-ResearchRunStaleAfter), Valid: true, InfinityModifier: pgtype.Finite},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve stale research reports").LogError(ctx, s.logger)
 	}
 
 	running, err := txQueries.GetRunningResearchReport(ctx, repo.GetRunningResearchReportParams{
