@@ -178,6 +178,56 @@ describe("RecordLayout", () => {
     expect(banner.className.split(" ")).toContain("text-destructive");
   });
 
+  it("does not draw one record's failure over the next one", async () => {
+    const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
+    const other = anOrganization({
+      id: "org_2",
+      name: "Second Org",
+      slug: "second-org",
+    });
+    mocks.getOrganization.mockImplementation((idOrSlug: string) =>
+      Promise.resolve(idOrSlug === other.slug ? other : disabled),
+    );
+    mocks.enableOrganization.mockRejectedValue(
+      new GramAdminError(500, { message: "enable failed" }, "500"),
+    );
+
+    // Both records already in the cache, which is the state the list navigates
+    // from. Without the seed the second arrives pending, the layout paints its
+    // loading state, and the unmount that follows clears the banner for a
+    // reason that has nothing to do with the record it belonged to.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(organizationQuery(disabled.slug).queryKey, disabled);
+    qc.setQueryData(organizationQuery(other.slug).queryKey, other);
+
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${disabled.slug}`,
+      queryClient: qc,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: `Re-enable ${disabled.name}` }),
+    );
+    await screen.findByText(/Could not re-enable/, { ignore: "[aria-live]" });
+
+    await router.navigate({
+      to: "/organizations/$idOrSlug",
+      params: { idOrSlug: other.slug },
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: other.name }),
+    ).toBeTruthy();
+    // The route does not remount when its parameter changes. A banner that
+    // survives it tells the operator an organization they have only just opened
+    // failed something nobody did to it.
+    expect(
+      screen.queryByText(/Could not re-enable/, { ignore: "[aria-live]" }),
+    ).toBeNull();
+  });
+
   it("speaks a failure again when the same one comes back", async () => {
     const disabled = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
     mocks.getOrganization.mockResolvedValue(disabled);

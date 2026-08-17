@@ -4,7 +4,7 @@ import { Outlet, useParams } from "@tanstack/react-router";
 
 import { useAnnouncer } from "@/hooks/use-announcer";
 import { organizationQuery } from "@/lib/adminQueries";
-import { errorMessage } from "@/lib/gramAdminApi";
+import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
 import {
   WriteReportProvider,
   type WriteReporter,
@@ -20,17 +20,6 @@ export function RecordLayout(): JSX.Element {
     enabled: !!idOrSlug,
   });
 
-  const [failure, setFailure] = useState<string | null>(null);
-  const { announce, announced } = useAnnouncer();
-
-  // The record's actions report through context, whose default is a silent
-  // no-op: without a reporter every write on this page succeeds and announces
-  // nothing.
-  const reporter = useMemo<WriteReporter>(
-    () => ({ announce, showFailure: setFailure }),
-    [announce],
-  );
-
   // `data`, not the status: React Query keeps the last good record when a
   // refetch over it fails, and `AppSidebar` branches on the same `data`, so
   // neither column takes away a record the other is still drawing. A record
@@ -45,11 +34,29 @@ export function RecordLayout(): JSX.Element {
     );
   }
 
+  // Keyed, so a reported failure and any late callback belong to the record the
+  // write was made on. Changing the route parameter does not remount this
+  // route, the way `OverviewRoute` keys its draft.
+  return <Record key={data.id} org={data} />;
+}
+
+function Record({ org }: { org: AdminOrganization }): JSX.Element {
+  const [failure, setFailure] = useState<string | null>(null);
+  const { announce, announced } = useAnnouncer();
+
+  // The record's actions report through context, whose default is a silent
+  // no-op: without a reporter every write on this page succeeds and announces
+  // nothing.
+  const reporter = useMemo<WriteReporter>(
+    () => ({ announce, showFailure: setFailure }),
+    [announce],
+  );
+
   return (
     <WriteReportProvider value={reporter}>
       <div className="flex min-h-0 flex-1 flex-col gap-6">
-        <RecordHeader org={data} />
-        <TrialCallout org={data} />
+        <RecordHeader org={org} />
+        <TrialCallout org={org} />
         {failure && <p className="text-destructive text-sm">{failure}</p>}
         {/* Polite, and load-bearing. Radix marks the rest of the document
             aria-hidden while a dialog is open and exempts live regions by name,
