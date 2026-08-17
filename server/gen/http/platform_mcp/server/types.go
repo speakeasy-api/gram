@@ -12,6 +12,22 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// StartOnboardingRequestBody is the type of the "platformMcp" service
+// "startOnboarding" endpoint HTTP request body.
+type StartOnboardingRequestBody struct {
+	// Bounded dashboard surface that opened setup.
+	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
+}
+
+// RecordDashboardCtaEventRequestBody is the type of the "platformMcp" service
+// "recordDashboardCtaEvent" endpoint HTTP request body.
+type RecordDashboardCtaEventRequestBody struct {
+	// CTA action.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// CTA surface.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+}
+
 // RecordInstallIntentRequestBody is the type of the "platformMcp" service
 // "recordInstallIntent" endpoint HTTP request body.
 type RecordInstallIntentRequestBody struct {
@@ -59,6 +75,9 @@ type GetOnboardingResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -128,6 +147,9 @@ type StartOnboardingResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -197,6 +219,9 @@ type RecordInstallIntentResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -266,6 +291,9 @@ type RecordAgentConfigurationCopiedResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -345,6 +373,9 @@ type RecheckOnboardingReadinessResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -414,6 +445,9 @@ type DistributeOnboardingCandidateResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -483,6 +517,9 @@ type RemoveOnboardingDistributionResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -552,6 +589,9 @@ type RepairOnboardingPublicationResponseBody struct {
 	// Whether the authenticated user has an active onboarding workflow in this
 	// organization.
 	WorkflowActive bool `form:"workflow_active" json:"workflow_active" xml:"workflow_active"`
+	// Whether the organization already has a durable Platform MCP value outcome or
+	// an attached distribution.
+	OrganizationSetupComplete bool `form:"organization_setup_complete" json:"organization_setup_complete" xml:"organization_setup_complete"`
 	// Selected manual-install client family when a workflow is active.
 	ClientFamily string `form:"client_family" json:"client_family" xml:"client_family"`
 	// Whether the user copied Platform MCP configuration or completed an
@@ -964,6 +1004,196 @@ type StartOnboardingUnexpectedResponseBody struct {
 // service "startOnboarding" endpoint HTTP response body for the
 // "gateway_error" error.
 type StartOnboardingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventUnauthorizedResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "unauthorized" error.
+type RecordDashboardCtaEventUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventForbiddenResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "forbidden" error.
+type RecordDashboardCtaEventForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventBadRequestResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "bad_request" error.
+type RecordDashboardCtaEventBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventNotFoundResponseBody is the type of the "platformMcp"
+// service "recordDashboardCtaEvent" endpoint HTTP response body for the
+// "not_found" error.
+type RecordDashboardCtaEventNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventConflictResponseBody is the type of the "platformMcp"
+// service "recordDashboardCtaEvent" endpoint HTTP response body for the
+// "conflict" error.
+type RecordDashboardCtaEventConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventUnsupportedMediaResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RecordDashboardCtaEventUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventInvalidResponseBody is the type of the "platformMcp"
+// service "recordDashboardCtaEvent" endpoint HTTP response body for the
+// "invalid" error.
+type RecordDashboardCtaEventInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventInvariantViolationResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RecordDashboardCtaEventInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventUnexpectedResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "unexpected" error.
+type RecordDashboardCtaEventUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordDashboardCtaEventGatewayErrorResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "gateway_error" error.
+type RecordDashboardCtaEventGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2507,6 +2737,7 @@ func NewGetOnboardingResponseBody(res *platformmcp.PlatformMCPOnboardingState) *
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2539,6 +2770,7 @@ func NewStartOnboardingResponseBody(res *platformmcp.PlatformMCPOnboardingState)
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2571,6 +2803,7 @@ func NewRecordInstallIntentResponseBody(res *platformmcp.PlatformMCPOnboardingSt
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2604,6 +2837,7 @@ func NewRecordAgentConfigurationCopiedResponseBody(res *platformmcp.PlatformMCPO
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2647,6 +2881,7 @@ func NewRecheckOnboardingReadinessResponseBody(res *platformmcp.PlatformMCPOnboa
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2680,6 +2915,7 @@ func NewDistributeOnboardingCandidateResponseBody(res *platformmcp.PlatformMCPOn
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2713,6 +2949,7 @@ func NewRemoveOnboardingDistributionResponseBody(res *platformmcp.PlatformMCPOnb
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -2746,6 +2983,7 @@ func NewRepairOnboardingPublicationResponseBody(res *platformmcp.PlatformMCPOnbo
 		Stage:                        res.Stage,
 		McpURL:                       res.McpURL,
 		WorkflowActive:               res.WorkflowActive,
+		OrganizationSetupComplete:    res.OrganizationSetupComplete,
 		ClientFamily:                 res.ClientFamily,
 		AgentConfigurationCopied:     res.AgentConfigurationCopied,
 		ConnectionAuthorized:         res.ConnectionAuthorized,
@@ -3044,6 +3282,156 @@ func NewStartOnboardingUnexpectedResponseBody(res *goa.ServiceError) *StartOnboa
 // service.
 func NewStartOnboardingGatewayErrorResponseBody(res *goa.ServiceError) *StartOnboardingGatewayErrorResponseBody {
 	body := &StartOnboardingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventUnauthorizedResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventUnauthorizedResponseBody {
+	body := &RecordDashboardCtaEventUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventForbiddenResponseBody builds the HTTP response
+// body from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventForbiddenResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventForbiddenResponseBody {
+	body := &RecordDashboardCtaEventForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventBadRequestResponseBody builds the HTTP response
+// body from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventBadRequestResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventBadRequestResponseBody {
+	body := &RecordDashboardCtaEventBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventNotFoundResponseBody builds the HTTP response body
+// from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventNotFoundResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventNotFoundResponseBody {
+	body := &RecordDashboardCtaEventNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventConflictResponseBody builds the HTTP response body
+// from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventConflictResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventConflictResponseBody {
+	body := &RecordDashboardCtaEventConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "recordDashboardCtaEvent" endpoint of
+// the "platformMcp" service.
+func NewRecordDashboardCtaEventUnsupportedMediaResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventUnsupportedMediaResponseBody {
+	body := &RecordDashboardCtaEventUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventInvalidResponseBody builds the HTTP response body
+// from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventInvalidResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventInvalidResponseBody {
+	body := &RecordDashboardCtaEventInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "recordDashboardCtaEvent" endpoint of
+// the "platformMcp" service.
+func NewRecordDashboardCtaEventInvariantViolationResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventInvariantViolationResponseBody {
+	body := &RecordDashboardCtaEventInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventUnexpectedResponseBody builds the HTTP response
+// body from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventUnexpectedResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventUnexpectedResponseBody {
+	body := &RecordDashboardCtaEventUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordDashboardCtaEventGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventGatewayErrorResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventGatewayErrorResponseBody {
+	body := &RecordDashboardCtaEventGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4261,8 +4649,22 @@ func NewGetOnboardingPayload(sessionToken *string) *platformmcp.GetOnboardingPay
 
 // NewStartOnboardingPayload builds a platformMcp service startOnboarding
 // endpoint payload.
-func NewStartOnboardingPayload(sessionToken *string) *platformmcp.StartOnboardingPayload {
-	v := &platformmcp.StartOnboardingPayload{}
+func NewStartOnboardingPayload(body *StartOnboardingRequestBody, sessionToken *string) *platformmcp.StartOnboardingPayload {
+	v := &platformmcp.StartOnboardingPayload{
+		SourceSurface: body.SourceSurface,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRecordDashboardCtaEventPayload builds a platformMcp service
+// recordDashboardCtaEvent endpoint payload.
+func NewRecordDashboardCtaEventPayload(body *RecordDashboardCtaEventRequestBody, sessionToken *string) *platformmcp.RecordDashboardCtaEventPayload {
+	v := &platformmcp.RecordDashboardCtaEventPayload{
+		Action:  *body.Action,
+		Surface: *body.Surface,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -4349,6 +4751,39 @@ func NewDismissOnboardingPayload(sessionToken *string) *platformmcp.DismissOnboa
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateStartOnboardingRequestBody runs the validations defined on
+// StartOnboardingRequestBody
+func ValidateStartOnboardingRequestBody(body *StartOnboardingRequestBody) (err error) {
+	if body.SourceSurface != nil {
+		if !(*body.SourceSurface == "platform_mcp_settings" || *body.SourceSurface == "organization_setup" || *body.SourceSurface == "platform_plugins" || *body.SourceSurface == "sidebar_footer" || *body.SourceSurface == "sources_empty" || *body.SourceSurface == "project_overview_zero_data" || *body.SourceSurface == "organization_home") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_surface", *body.SourceSurface, []any{"platform_mcp_settings", "organization_setup", "platform_plugins", "sidebar_footer", "sources_empty", "project_overview_zero_data", "organization_home"}))
+		}
+	}
+	return
+}
+
+// ValidateRecordDashboardCtaEventRequestBody runs the validations defined on
+// RecordDashboardCtaEventRequestBody
+func ValidateRecordDashboardCtaEventRequestBody(body *RecordDashboardCtaEventRequestBody) (err error) {
+	if body.Action == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "impression" || *body.Action == "selected" || *body.Action == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"impression", "selected", "dismissed"}))
+		}
+	}
+	if body.Surface != nil {
+		if !(*body.Surface == "sidebar_footer" || *body.Surface == "sources_empty" || *body.Surface == "project_overview_zero_data" || *body.Surface == "organization_home") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.surface", *body.Surface, []any{"sidebar_footer", "sources_empty", "project_overview_zero_data", "organization_home"}))
+		}
+	}
+	return
 }
 
 // ValidateRecordInstallIntentRequestBody runs the validations defined on

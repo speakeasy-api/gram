@@ -12,10 +12,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import {
-  PlatformMCPOnboardingState,
-  PlatformMCPOnboardingState$inboundSchema,
-} from "../models/components/platformmcponboardingstate.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +27,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  StartPlatformMCPOnboardingRequest,
-  StartPlatformMCPOnboardingRequest$outboundSchema,
-  StartPlatformMCPOnboardingSecurity,
-} from "../models/operations/startplatformmcponboarding.js";
+  RecordPlatformMCPDashboardCtaEventRequest,
+  RecordPlatformMCPDashboardCtaEventRequest$outboundSchema,
+  RecordPlatformMCPDashboardCtaEventSecurity,
+} from "../models/operations/recordplatformmcpdashboardctaevent.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * startOnboarding platformMcp
+ * recordDashboardCtaEvent platformMcp
  *
  * @remarks
- * Create or resume the current user's durable Platform MCP onboarding workflow.
+ * Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.
  */
-export function platformMcpStartOnboarding(
+export function platformMcpRecordDashboardCtaEvent(
   client: GramCore,
-  request: StartPlatformMCPOnboardingRequest,
-  security?: StartPlatformMCPOnboardingSecurity | undefined,
+  request: RecordPlatformMCPDashboardCtaEventRequest,
+  security?: RecordPlatformMCPDashboardCtaEventSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    PlatformMCPOnboardingState,
+    void,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +69,13 @@ export function platformMcpStartOnboarding(
 
 async function $do(
   client: GramCore,
-  request: StartPlatformMCPOnboardingRequest,
-  security?: StartPlatformMCPOnboardingSecurity | undefined,
+  request: RecordPlatformMCPDashboardCtaEventRequest,
+  security?: RecordPlatformMCPDashboardCtaEventSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      PlatformMCPOnboardingState,
+      void,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,18 +91,19 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(StartPlatformMCPOnboardingRequest$outboundSchema, value),
+    (value) =>
+      z.parse(RecordPlatformMCPDashboardCtaEventRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.StartOnboardingRequestBody, {
+  const body = encodeJSON("body", payload.RecordDashboardCtaEventRequestBody, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/platformMcp.startOnboarding")();
+  const path = pathToFunc("/rpc/platformMcp.recordDashboardCtaEvent")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +127,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "startPlatformMCPOnboarding",
+    operationID: "recordPlatformMCPDashboardCtaEvent",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +171,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    PlatformMCPOnboardingState,
+    void,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +182,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, PlatformMCPOnboardingState$inboundSchema),
+    M.nil(204, z.void()),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

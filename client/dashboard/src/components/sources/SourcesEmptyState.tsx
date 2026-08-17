@@ -1,16 +1,3 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import { Text } from "@/components/ui/Text";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRoutes } from "@/routes";
-import { Button } from "@/components/ui/Button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/Dropdown";
 import {
   ChevronDown,
   Code,
@@ -20,6 +7,21 @@ import {
   Plus,
   Server,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+
+import { Button } from "@/components/ui/Button";
+import { Page } from "@/components/page-layout";
+import { PlatformMcpPromotion } from "@/components/platform-mcp-cta";
+import { RequireScope } from "@/components/require-scope";
+import { Text } from "@/components/ui/Text";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
+import { useRoutes } from "@/routes";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 type SourcesEmptyStateProps = {
   isTunneledMcpEnabled: boolean;
@@ -201,6 +203,10 @@ export function SourcesEmptyState({
               </DropdownMenu>
             )}
           </RequireScope>
+          <PlatformMcpPromotion
+            surface="sources_empty"
+            className="mt-8 w-full max-w-2xl bg-card p-4 text-left"
+          />
         </div>
       </Page.Section.Body>
     </Page.Section>

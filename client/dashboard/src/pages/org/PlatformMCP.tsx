@@ -26,7 +26,7 @@ import type { ClientFamily } from "@gram/client/models/components/recordinstalli
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
-import { Navigate } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import {
   PlatformMCPInstallWalkthrough,
@@ -48,6 +48,10 @@ import { useRecordPlatformMCPAgentConfigurationCopiedMutation } from "@gram/clie
 import { useRecordPlatformMCPInstallIntentMutation } from "@gram/client/react-query/recordPlatformMCPInstallIntent.js";
 import { useStartPlatformMCPOnboardingMutation } from "@gram/client/react-query/startPlatformMCPOnboarding.js";
 import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus.js";
+import {
+  SourceSurface,
+  type SourceSurface as SourceSurfaceValue,
+} from "@gram/client/models/components/startonboardingrequestbody.js";
 
 const clients: Array<{
   id: ClientFamily;
@@ -85,9 +89,19 @@ function starterPrompt(currentProjectSlug?: string): string {
   return "Help me add a reviewed MCP server to a project. Show the available catalogue options and eligible projects, then ask me to choose one of each. Inspect the chosen server and collect only its declared non-secret configuration, including declared URL values where applicable. Register it privately, send me to the secure dashboard setup when needed, verify it is ready, and add it to that project's existing Default plugin. Do not ask me to paste API keys, tokens, passwords, OAuth codes, client secrets, or secret headers into chat. Do not ask me for the MCP server endpoint itself; use the reviewed catalogue entry selected for this project.";
 }
 
+function platformMcpEntrySource(
+  value: string | null,
+): SourceSurfaceValue | undefined {
+  return Object.values(SourceSurface).find((surface) => surface === value);
+}
+
 export default function PlatformMCP(): JSX.Element | null {
   const { enabled: platformMcpDashboardEnabled, isLoading } =
     usePlatformMcpDashboardVisibility();
+  const [searchParams] = useSearchParams();
+  const sourceSurface = platformMcpEntrySource(searchParams.get("entrySource"));
+  const currentProjectSlug = searchParams.get("projectSlug") ?? undefined;
+  const openFromCta = searchParams.get("setup") === "1" && !!sourceSurface;
 
   // Wait for rollout flags before routing so an eligible organization never
   // flashes away from a direct dashboard link.
@@ -105,7 +119,11 @@ export default function PlatformMCP(): JSX.Element | null {
       </Page.Header>
       <Page.Body>
         <RequireScope scope="org:admin" level="page">
-          <PlatformMCPOnboardingContent />
+          <PlatformMCPOnboardingContent
+            currentProjectSlug={currentProjectSlug}
+            initialSourceSurface={sourceSurface}
+            autoOpen={openFromCta}
+          />
         </RequireScope>
       </Page.Body>
     </Page>
@@ -119,6 +137,8 @@ export function PlatformMCPOnboardingContent({
   sheetOnly = false,
   setupOpen = false,
   onSetupOpenChange,
+  initialSourceSurface,
+  autoOpen = false,
 }: {
   currentProjectSlug?: string;
   embeddedInProjectSetup?: boolean;
@@ -126,6 +146,8 @@ export function PlatformMCPOnboardingContent({
   sheetOnly?: boolean;
   setupOpen?: boolean;
   onSetupOpenChange?: (open: boolean) => void;
+  initialSourceSurface?: SourceSurfaceValue;
+  autoOpen?: boolean;
 } = {}): JSX.Element {
   const queryClient = useQueryClient();
   const { fetch: authedFetch } = useFetcher();
@@ -140,6 +162,10 @@ export function PlatformMCPOnboardingContent({
   const [selectedInstallMethod, setSelectedInstallMethod] =
     useState<PlatformMCPInstallMethod>("marketplace");
   const [setupSheetOpen, setSetupSheetOpen] = useState(false);
+  const [sourceSurface] = useState<SourceSurfaceValue>(
+    initialSourceSurface ?? SourceSurface.PlatformMcpSettings,
+  );
+  const [searchParams, setSearchParams] = useSearchParams();
   const onboarding = usePlatformMCPOnboarding(
     { gramSession: "" },
     { sessionHeaderGramSession: "" },
@@ -178,6 +204,19 @@ export function PlatformMCPOnboardingContent({
     setSetupSheetOpen(false);
     onSetupOpenChange?.(true);
   };
+
+  useEffect(() => {
+    if (!autoOpen || sheetOnly) return;
+    setAgentPickerOpen(true);
+    setInstallMethodPickerOpen(false);
+    setSetupSheetOpen(false);
+    onSetupOpenChange?.(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("setup");
+    next.delete("entrySource");
+    next.delete("projectSlug");
+    setSearchParams(next, { replace: true });
+  }, [autoOpen, onSetupOpenChange, searchParams, setSearchParams, sheetOnly]);
 
   const invalidate = async () => {
     await invalidatePlatformMCPOnboarding(queryClient, [{ gramSession: "" }], {
@@ -351,7 +390,12 @@ export function PlatformMCPOnboardingContent({
       );
     const startWorkflow = () =>
       start.mutate(
-        { security: { sessionHeaderGramSession: "" } },
+        {
+          security: { sessionHeaderGramSession: "" },
+          request: {
+            startOnboardingRequestBody: { sourceSurface },
+          },
+        },
         { onSuccess: recordIntent },
       );
 

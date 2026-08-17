@@ -140,7 +140,7 @@ func UsageCommands() []string {
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
-		"platform-mcp (get-onboarding|start-onboarding|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
+		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -1664,7 +1664,12 @@ func ParseEndpoint(
 		platformMcpGetOnboardingSessionTokenFlag = platformMcpGetOnboardingFlags.String("session-token", "", "")
 
 		platformMcpStartOnboardingFlags            = flag.NewFlagSet("start-onboarding", flag.ExitOnError)
+		platformMcpStartOnboardingBodyFlag         = platformMcpStartOnboardingFlags.String("body", "REQUIRED", "")
 		platformMcpStartOnboardingSessionTokenFlag = platformMcpStartOnboardingFlags.String("session-token", "", "")
+
+		platformMcpRecordDashboardCtaEventFlags            = flag.NewFlagSet("record-dashboard-cta-event", flag.ExitOnError)
+		platformMcpRecordDashboardCtaEventBodyFlag         = platformMcpRecordDashboardCtaEventFlags.String("body", "REQUIRED", "")
+		platformMcpRecordDashboardCtaEventSessionTokenFlag = platformMcpRecordDashboardCtaEventFlags.String("session-token", "", "")
 
 		platformMcpRecordInstallIntentFlags            = flag.NewFlagSet("record-install-intent", flag.ExitOnError)
 		platformMcpRecordInstallIntentBodyFlag         = platformMcpRecordInstallIntentFlags.String("body", "REQUIRED", "")
@@ -3811,6 +3816,7 @@ func ParseEndpoint(
 	platformMcpFlags.Usage = platformMcpUsage
 	platformMcpGetOnboardingFlags.Usage = platformMcpGetOnboardingUsage
 	platformMcpStartOnboardingFlags.Usage = platformMcpStartOnboardingUsage
+	platformMcpRecordDashboardCtaEventFlags.Usage = platformMcpRecordDashboardCtaEventUsage
 	platformMcpRecordInstallIntentFlags.Usage = platformMcpRecordInstallIntentUsage
 	platformMcpRecordAgentConfigurationCopiedFlags.Usage = platformMcpRecordAgentConfigurationCopiedUsage
 	platformMcpStartOnboardingSetupFlags.Usage = platformMcpStartOnboardingSetupUsage
@@ -5343,6 +5349,9 @@ func ParseEndpoint(
 
 			case "start-onboarding":
 				epf = platformMcpStartOnboardingFlags
+
+			case "record-dashboard-cta-event":
+				epf = platformMcpRecordDashboardCtaEventFlags
 
 			case "record-install-intent":
 				epf = platformMcpRecordInstallIntentFlags
@@ -7406,7 +7415,10 @@ func ParseEndpoint(
 				data, err = platformmcpc.BuildGetOnboardingPayload(*platformMcpGetOnboardingSessionTokenFlag)
 			case "start-onboarding":
 				endpoint = c.StartOnboarding()
-				data, err = platformmcpc.BuildStartOnboardingPayload(*platformMcpStartOnboardingSessionTokenFlag)
+				data, err = platformmcpc.BuildStartOnboardingPayload(*platformMcpStartOnboardingBodyFlag, *platformMcpStartOnboardingSessionTokenFlag)
+			case "record-dashboard-cta-event":
+				endpoint = c.RecordDashboardCtaEvent()
+				data, err = platformmcpc.BuildRecordDashboardCtaEventPayload(*platformMcpRecordDashboardCtaEventBodyFlag, *platformMcpRecordDashboardCtaEventSessionTokenFlag)
 			case "record-install-intent":
 				endpoint = c.RecordInstallIntent()
 				data, err = platformmcpc.BuildRecordInstallIntentPayload(*platformMcpRecordInstallIntentBodyFlag, *platformMcpRecordInstallIntentSessionTokenFlag)
@@ -15124,6 +15136,7 @@ func platformMcpUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-onboarding: Get the current user's safe Platform MCP onboarding projection for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    start-onboarding: Create or resume the current user's durable Platform MCP onboarding workflow.`)
+	fmt.Fprintln(os.Stderr, `    record-dashboard-cta-event: Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.`)
 	fmt.Fprintln(os.Stderr, `    record-install-intent: Record a selected manual-install client family for the current user's Platform MCP workflow.`)
 	fmt.Fprintln(os.Stderr, `    record-agent-configuration-copied: Record that the user copied the displayed Platform MCP configuration or completed an equivalent supported agent-setup action.`)
 	fmt.Fprintln(os.Stderr, `    start-onboarding-setup: Return the secure setup continuation for the workflow-bound registration. Browser Catalogue registrations return their existing same-origin dashboard Inspect page; the local fixture returns a one-time handoff for its synthetic provider setup endpoint.`)
@@ -15157,6 +15170,7 @@ func platformMcpGetOnboardingUsage() {
 func platformMcpStartOnboardingUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp start-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -15165,11 +15179,32 @@ func platformMcpStartOnboardingUsage() {
 	fmt.Fprintln(os.Stderr, `Create or resume the current user's durable Platform MCP onboarding workflow.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp start-onboarding --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp start-onboarding --body '{\n      \"source_surface\": \"organization_setup\"\n   }' --session-token \"abc123\"")
+}
+
+func platformMcpRecordDashboardCtaEventUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-mcp record-dashboard-cta-event", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-mcp record-dashboard-cta-event --body '{\n      \"action\": \"selected\",\n      \"surface\": \"sources_empty\"\n   }' --session-token \"abc123\"")
 }
 
 func platformMcpRecordInstallIntentUsage() {

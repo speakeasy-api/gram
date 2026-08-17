@@ -17,7 +17,6 @@ import (
 
 const (
 	onboardingWorkflowLifetime = 24 * time.Hour
-	onboardingSourceDashboard  = "dashboard"
 
 	ConnectionAuthStateNotConnected            = "not_connected"
 	ConnectionAuthStateActive                  = "active"
@@ -34,6 +33,18 @@ const (
 )
 
 var ErrOnboardingInvalid = errors.New("invalid platform mcp onboarding input")
+
+type OnboardingSourceSurface string
+
+const (
+	OnboardingSourcePlatformMCPSettings OnboardingSourceSurface = "platform_mcp_settings"
+	OnboardingSourceOrganizationSetup   OnboardingSourceSurface = "organization_setup"
+	OnboardingSourcePlatformPlugins     OnboardingSourceSurface = "platform_plugins"
+	OnboardingSourceSidebarFooter       OnboardingSourceSurface = "sidebar_footer"
+	OnboardingSourceSourcesEmpty        OnboardingSourceSurface = "sources_empty"
+	OnboardingSourceProjectOverview     OnboardingSourceSurface = "project_overview_zero_data"
+	OnboardingSourceOrganizationHome    OnboardingSourceSurface = "organization_home"
+)
 
 type OnboardingClientFamily string
 
@@ -75,6 +86,7 @@ type OnboardingProjection struct {
 	RegistrationSucceeded     bool
 	DistributionToolSucceeded bool
 	ReadinessVerified         bool
+	OrganizationSetupComplete bool
 	Stage                     OnboardingStage
 }
 
@@ -125,6 +137,10 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 		} else if !errors.Is(authErr, pgx.ErrNoRows) {
 			return OnboardingProjection{}, fmt.Errorf("get platform mcp connection auth state: %w", authErr)
 		}
+	}
+	projection.OrganizationSetupComplete, err = q.HasPlatformMCPOrganizationSetupComplete(ctx, organizationID)
+	if err != nil {
+		return OnboardingProjection{}, fmt.Errorf("check platform mcp organization setup completion: %w", err)
 	}
 	if workflow != nil && workflow.SelectedProjectID != uuid.Nil && workflow.SelectedRegistrationID != uuid.Nil {
 		project, err := q.GetPlatformMCPOnboardingSelectedProject(ctx, platformrepo.GetPlatformMCPOnboardingSelectedProjectParams{
@@ -186,7 +202,7 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 	return projection, nil
 }
 
-func (s *OnboardingService) Start(ctx context.Context, organizationID, userID string) (OnboardingProjection, error) {
+func (s *OnboardingService) Start(ctx context.Context, organizationID, userID string, source ...OnboardingSourceSurface) (OnboardingProjection, error) {
 	if s == nil || s.db == nil || organizationID == "" || userID == "" {
 		return OnboardingProjection{}, ErrOnboardingInvalid
 	}
@@ -209,10 +225,14 @@ func (s *OnboardingService) Start(ctx context.Context, organizationID, userID st
 		return OnboardingProjection{}, err
 	}
 	if workflow == nil {
+		surface := OnboardingSourcePlatformMCPSettings
+		if len(source) == 1 && validOnboardingSource(source[0]) {
+			surface = source[0]
+		}
 		if _, err := q.CreatePlatformMCPOnboardingWorkflow(ctx, platformrepo.CreatePlatformMCPOnboardingWorkflowParams{
 			OrganizationID:       organizationID,
 			InitiatingSubjectUrn: userSubjectURN(userID),
-			SourceSurface:        onboardingSourceDashboard,
+			SourceSurface:        string(surface),
 			ClientFamily:         string(OnboardingClientClaudeCode),
 			ExpiresAt:            timestamp(s.now().UTC().Add(onboardingWorkflowLifetime)),
 		}); err != nil {
@@ -240,7 +260,6 @@ func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizatio
 	}
 
 	row, err := platformrepo.New(s.db).RecordPlatformMCPOnboardingInstallIntent(ctx, platformrepo.RecordPlatformMCPOnboardingInstallIntentParams{
-		SourceSurface:        onboardingSourceDashboard,
 		ClientFamily:         string(client),
 		ExpiresAt:            timestamp(s.now().UTC().Add(onboardingWorkflowLifetime)),
 		ID:                   projection.Workflow.ID,
@@ -254,6 +273,16 @@ func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizatio
 		return OnboardingProjection{}, fmt.Errorf("record platform mcp onboarding install intent: %w", err)
 	}
 
+	if _, err := platformrepo.New(s.db).RecordPlatformMCPOnboardingInstallStarted(ctx, platformrepo.RecordPlatformMCPOnboardingInstallStartedParams{
+		OrganizationID:       organizationID,
+		InitiatingSubjectUrn: userSubjectURN(userID),
+		AttemptID:            uuid.NullUUID{UUID: row.ID, Valid: true},
+	}); err != nil {
+		return OnboardingProjection{}, fmt.Errorf("record platform mcp onboarding install started: %w", err)
+	}
+	// The durable install-started marker is deliberately once per active
+	// workflow. Re-selecting an agent may update the workflow's client family,
+	// but must not turn an already-recorded marker into a failed setup action.
 	projection.Workflow = onboardingWorkflowFromRow(row)
 	projection.Stage = deriveOnboardingStage(projection.Workflow, projection.Connections, projection.EvidenceConnection, projection.ConnectionAuthState)
 	return projection, nil
@@ -576,6 +605,21 @@ func onboardingConnectionsFromRows(rows []platformrepo.ListPlatformMCPSubjectCon
 		})
 	}
 	return connections
+}
+
+func validOnboardingSource(surface OnboardingSourceSurface) bool {
+	switch surface {
+	case OnboardingSourcePlatformMCPSettings,
+		OnboardingSourceOrganizationSetup,
+		OnboardingSourcePlatformPlugins,
+		OnboardingSourceSidebarFooter,
+		OnboardingSourceSourcesEmpty,
+		OnboardingSourceProjectOverview,
+		OnboardingSourceOrganizationHome:
+		return true
+	default:
+		return false
+	}
 }
 
 func validOnboardingClient(client OnboardingClientFamily) bool {

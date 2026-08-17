@@ -1451,6 +1451,24 @@ WHERE workflow.organization_id = @organization_id
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
 
+-- name: HasPlatformMCPOrganizationSetupComplete :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    WHERE milestone.organization_id = @organization_id
+      AND milestone.milestone = 'first_value_achieved'
+    UNION ALL
+    SELECT 1
+    FROM platform_mcp_distributions AS distribution
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = distribution.registration_id
+     AND registration.organization_id = distribution.organization_id
+     AND registration.project_id = distribution.project_id
+     AND registration.deleted IS FALSE
+    WHERE distribution.organization_id = @organization_id
+      AND distribution.state = 'attached'
+) AS setup_complete;
+
 -- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
 SELECT EXISTS (
     SELECT 1
@@ -1517,8 +1535,7 @@ RETURNING *;
 
 -- name: RecordPlatformMCPOnboardingInstallIntent :one
 UPDATE platform_mcp_onboarding_workflows
-SET source_surface = @source_surface,
-    client_family = @client_family,
+SET client_family = @client_family,
     expires_at = @expires_at,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -1527,6 +1544,39 @@ WHERE id = @id
   AND status = 'active'
   AND expires_at > clock_timestamp()
 RETURNING *;
+
+-- name: RecordPlatformMCPOnboardingInstallStarted :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+)
+SELECT
+    @organization_id,
+    'install_started',
+    @attempt_id
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_workflows AS workflow
+    WHERE workflow.id = @attempt_id
+      AND workflow.organization_id = @organization_id
+      AND workflow.initiating_subject_urn = @initiating_subject_urn
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+)
+ON CONFLICT DO NOTHING;
+
+-- name: RecordPlatformMCPDashboardCtaEvent :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+) VALUES (
+    @organization_id,
+    @milestone,
+    @attempt_id
+)
+ON CONFLICT DO NOTHING;
 
 -- name: RecordPlatformMCPOnboardingAgentConfigurationCopied :one
 UPDATE platform_mcp_onboarding_workflows

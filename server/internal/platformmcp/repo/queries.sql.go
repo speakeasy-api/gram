@@ -3112,6 +3112,32 @@ func (q *Queries) HasPlatformMCPOnboardingRegistrationSucceeded(ctx context.Cont
 	return exists, err
 }
 
+const hasPlatformMCPOrganizationSetupComplete = `-- name: HasPlatformMCPOrganizationSetupComplete :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_milestones AS milestone
+    WHERE milestone.organization_id = $1
+      AND milestone.milestone = 'first_value_achieved'
+    UNION ALL
+    SELECT 1
+    FROM platform_mcp_distributions AS distribution
+    JOIN platform_mcp_catalog_registrations AS registration
+      ON registration.id = distribution.registration_id
+     AND registration.organization_id = distribution.organization_id
+     AND registration.project_id = distribution.project_id
+     AND registration.deleted IS FALSE
+    WHERE distribution.organization_id = $1
+      AND distribution.state = 'attached'
+) AS setup_complete
+`
+
+func (q *Queries) HasPlatformMCPOrganizationSetupComplete(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPlatformMCPOrganizationSetupComplete, organizationID)
+	var setup_complete bool
+	err := row.Scan(&setup_complete)
+	return setup_complete, err
+}
+
 const hasPlatformMCPSelectedUseEvidence = `-- name: HasPlatformMCPSelectedUseEvidence :one
 SELECT EXISTS (
     SELECT 1
@@ -3913,6 +3939,33 @@ func (q *Queries) RecordPlatformMCPConnectionReady(ctx context.Context, arg Reco
 	return err
 }
 
+const recordPlatformMCPDashboardCtaEvent = `-- name: RecordPlatformMCPDashboardCtaEvent :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+ON CONFLICT DO NOTHING
+`
+
+type RecordPlatformMCPDashboardCtaEventParams struct {
+	OrganizationID string
+	Milestone      string
+	AttemptID      uuid.NullUUID
+}
+
+func (q *Queries) RecordPlatformMCPDashboardCtaEvent(ctx context.Context, arg RecordPlatformMCPDashboardCtaEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPlatformMCPDashboardCtaEvent, arg.OrganizationID, arg.Milestone, arg.AttemptID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordPlatformMCPFirstValueAchieved = `-- name: RecordPlatformMCPFirstValueAchieved :exec
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
@@ -4016,20 +4069,18 @@ func (q *Queries) RecordPlatformMCPOnboardingAgentConfigurationCopied(ctx contex
 
 const recordPlatformMCPOnboardingInstallIntent = `-- name: RecordPlatformMCPOnboardingInstallIntent :one
 UPDATE platform_mcp_onboarding_workflows
-SET source_surface = $1,
-    client_family = $2,
-    expires_at = $3,
+SET client_family = $1,
+    expires_at = $2,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
-  AND initiating_subject_urn = $6
+WHERE id = $3
+  AND organization_id = $4
+  AND initiating_subject_urn = $5
   AND status = 'active'
   AND expires_at > clock_timestamp()
 RETURNING id, organization_id, initiating_subject_urn, source_surface, client_family, agent_configuration_copied_at, connection_id, connection_generation, selected_project_id, selected_registration_id, status, correlation_id, expires_at, closed_at, created_at, updated_at
 `
 
 type RecordPlatformMCPOnboardingInstallIntentParams struct {
-	SourceSurface        string
 	ClientFamily         string
 	ExpiresAt            pgtype.Timestamptz
 	ID                   uuid.UUID
@@ -4039,7 +4090,6 @@ type RecordPlatformMCPOnboardingInstallIntentParams struct {
 
 func (q *Queries) RecordPlatformMCPOnboardingInstallIntent(ctx context.Context, arg RecordPlatformMCPOnboardingInstallIntentParams) (PlatformMcpOnboardingWorkflow, error) {
 	row := q.db.QueryRow(ctx, recordPlatformMCPOnboardingInstallIntent,
-		arg.SourceSurface,
 		arg.ClientFamily,
 		arg.ExpiresAt,
 		arg.ID,
@@ -4066,6 +4116,42 @@ func (q *Queries) RecordPlatformMCPOnboardingInstallIntent(ctx context.Context, 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const recordPlatformMCPOnboardingInstallStarted = `-- name: RecordPlatformMCPOnboardingInstallStarted :execrows
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    attempt_id
+)
+SELECT
+    $1,
+    'install_started',
+    $2
+WHERE EXISTS (
+    SELECT 1
+    FROM platform_mcp_onboarding_workflows AS workflow
+    WHERE workflow.id = $2
+      AND workflow.organization_id = $1
+      AND workflow.initiating_subject_urn = $3
+      AND workflow.status = 'active'
+      AND workflow.expires_at > clock_timestamp()
+)
+ON CONFLICT DO NOTHING
+`
+
+type RecordPlatformMCPOnboardingInstallStartedParams struct {
+	OrganizationID       string
+	AttemptID            uuid.NullUUID
+	InitiatingSubjectUrn string
+}
+
+func (q *Queries) RecordPlatformMCPOnboardingInstallStarted(ctx context.Context, arg RecordPlatformMCPOnboardingInstallStartedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPlatformMCPOnboardingInstallStarted, arg.OrganizationID, arg.AttemptID, arg.InitiatingSubjectUrn)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordPlatformMCPOnboardingLifecycleMilestone = `-- name: RecordPlatformMCPOnboardingLifecycleMilestone :execrows

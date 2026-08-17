@@ -30016,6 +30016,89 @@ paths:
             x-speakeasy-name-override: recordAgentConfigurationCopied
             x-speakeasy-react-hook:
                 name: RecordPlatformMCPAgentConfigurationCopied
+    /rpc/platformMcp.recordDashboardCtaEvent:
+        post:
+            description: Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.
+            operationId: recordPlatformMCPDashboardCtaEvent
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecordDashboardCtaEventRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: recordDashboardCtaEvent platformMcp
+            tags:
+                - platformMcp
+            x-speakeasy-name-override: recordDashboardCtaEvent
+            x-speakeasy-react-hook:
+                name: RecordPlatformMCPDashboardCtaEvent
     /rpc/platformMcp.recordInstallIntent:
         post:
             description: Record a selected manual-install client family for the current user's Platform MCP workflow.
@@ -30289,6 +30372,12 @@ paths:
                   schema:
                     description: Session header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/StartOnboardingRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -69302,6 +69391,9 @@ components:
                 mcp_url:
                     type: string
                     description: Canonical Platform MCP endpoint URL supplied by the server.
+                organization_setup_complete:
+                    type: boolean
+                    description: Whether the organization already has a durable Platform MCP value outcome or an attached distribution.
                 readiness_freshness:
                     type: string
                     description: Whether selected-registration readiness is currently fresh.
@@ -69383,6 +69475,7 @@ components:
                 - stage
                 - mcp_url
                 - workflow_active
+                - organization_setup_complete
                 - client_family
                 - agent_configuration_copied
                 - connection_authorized
@@ -70669,6 +70762,27 @@ components:
             required:
                 - id
                 - days
+        RecordDashboardCtaEventRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: CTA action.
+                    enum:
+                        - impression
+                        - selected
+                        - dismissed
+                surface:
+                    type: string
+                    description: CTA surface.
+                    enum:
+                        - sidebar_footer
+                        - sources_empty
+                        - project_overview_zero_data
+                        - organization_home
+            required:
+                - action
+                - surface
         RecordDecisionRequestBody:
             type: object
             properties:
@@ -75821,6 +75935,20 @@ components:
                 - rules_total
                 - spend_over_budget_usd
                 - rules
+        StartOnboardingRequestBody:
+            type: object
+            properties:
+                source_surface:
+                    type: string
+                    description: Bounded dashboard surface that opened setup.
+                    enum:
+                        - platform_mcp_settings
+                        - organization_setup
+                        - platform_plugins
+                        - sidebar_footer
+                        - sources_empty
+                        - project_overview_zero_data
+                        - organization_home
         SubmitFeedbackRequestBody:
             type: object
             properties:
