@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -91,7 +92,7 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	if s == nil || s.db == nil {
 		return IssuedSetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return IssuedSetupHandoff{}, err
 	}
@@ -182,7 +183,7 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 	if s == nil || s.db == nil {
 		return SetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return SetupHandoff{}, err
 	}
@@ -247,7 +248,7 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if s == nil || s.db == nil {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return ProviderSetupResult{}, err
 	}
@@ -318,7 +319,7 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -378,7 +379,7 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return Readiness{}, false, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, false, err
 	}
@@ -416,7 +417,7 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -512,7 +513,7 @@ func (s *RegistrationStore) recordSetupFailure(ctx context.Context, principal Pr
 }
 
 func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principal Principal, registration platformrepo.PlatformMcpCatalogRegistration, handoffID uuid.UUID, milestone string) error {
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return err
 	}
@@ -542,6 +543,10 @@ func isSetupMilestone(value string) bool {
 	}
 }
 
+// lifecycleRegistration resolves a registration the caller is entitled to act
+// on. Ownership matches the real user; a caller holding an OAuth connection
+// additionally has its generation checked live, which a connectionless surface
+// has no equivalent of and is instead authorized on every call upstream.
 func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, principal Principal, projectID, registrationID uuid.UUID) (platformrepo.PlatformMcpCatalogRegistration, error) {
 	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
@@ -553,6 +558,7 @@ func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, princip
 		ProjectID:            projectID,
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if err != nil {

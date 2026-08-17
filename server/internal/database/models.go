@@ -364,6 +364,7 @@ type Chat struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 	UserAccountID      uuid.NullUUID
 	LitellmProxied     bool
+	Cwd                pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -1569,8 +1570,10 @@ type PlatformMcpCatalogRegistration struct {
 	McpServerOwned         bool
 	McpEndpointID          uuid.NullUUID
 	McpEndpointOwned       bool
-	ConnectionID           uuid.UUID
-	ConnectionGeneration   uuid.UUID
+	ConnectionID           uuid.NullUUID
+	ConnectionGeneration   uuid.NullUUID
+	UserID                 pgtype.Text
+	ActingSurface          pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -1685,8 +1688,10 @@ type PlatformMcpOperationReceipt struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.NullUUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	Operation            string
 	IdempotencyKey       string
 	InputHash            string
@@ -1981,6 +1986,7 @@ type RemoteSession struct {
 	Resource               pgtype.Text
 	AutoRefresh            bool
 	LastRefreshAttemptAt   pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -2787,6 +2793,7 @@ type UserSession struct {
 	RefreshExpiresAt    pgtype.Timestamptz
 	ExpiresAt           pgtype.Timestamptz
 	ToolSelection       []byte
+	LastUsedAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	platformmcprepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -2385,16 +2386,74 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	// No Platform connection, catalog registration, onboarding workflow, or
-	// distribution exists. Admission alone must make the package available so it
-	// can be used to establish the first connection.
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "selected-project")
+	selectedProjectSlug := "selected-project"
+	authCtx.ProjectSlug = &selectedProjectSlug
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	defaultPlugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Platform MCP distribution", mcpservers.VisibilityPublic)
+	platformRepo := platformmcprepo.New(ti.conn)
+	oauthClient, err := platformRepo.CreatePlatformMCPOAuthClient(ctx, platformmcprepo.CreatePlatformMCPOAuthClientParams{
+		ClientID:     "client-" + uuid.NewString(),
+		ClientName:   "Platform MCP publish test client",
+		RedirectUris: []string{"http://127.0.0.1:3000/callback"},
+	})
+	require.NoError(t, err)
+	connectionID := uuid.New()
+	connectionGeneration := uuid.New()
+	_, err = platformRepo.CreatePlatformMCPConnection(ctx, platformmcprepo.CreatePlatformMCPConnectionParams{
+		ID:               connectionID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		SubjectUrn:       "urn:gram:user:platform-mcp-publish-test",
+		OauthClientID:    oauthClient.ID,
+		ActiveGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+	registration, err := platformRepo.CreatePlatformMCPCatalogRegistration(ctx, platformmcprepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		SourceKind:           "catalog",
+		CatalogProvider:      "fixture",
+		CatalogReference:     "platform-mcp-publish-test",
+		Status:               "pending",
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
+	})
+	require.NoError(t, err)
+	registration, err = platformRepo.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformmcprepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		Status:         "registered",
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.id, Valid: true},
+		ID:             registration.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = platformRepo.CreatePlatformMCPDistribution(ctx, platformmcprepo.CreatePlatformMCPDistributionParams{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		RegistrationID:       registration.ID,
+		DefaultPluginID:      defaultPlugin.ID,
+		PluginServerID:       uuid.NullUUID{},
+		State:                "attached",
+		Version:              1,
+		AttachmentWasCreated: true,
+		ConnectionID:         connectionID,
+		ConnectionGeneration: connectionGeneration,
+	})
+	require.NoError(t, err)
+
 	input := plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: authCtx.UserID,
 		CommitMessage:   "platform admission transition",
 		SkipIfUnchanged: true,
 	}
-	_, err := ti.service.PublishProject(ctx, input)
+	_, err = ti.service.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")

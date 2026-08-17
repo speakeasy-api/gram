@@ -33,8 +33,10 @@ import (
 const identityMapReplaceLockKey = "identity-map:replace-lock"
 
 // identityMapReplaceLockTTL outlives one activity attempt (2m StartToClose)
-// plus the ClickHouse connection's 60s server-side statement lifetime, so by
-// the time the lock lapses no statement from the holder can still land. The
+// plus the longest a lapsed holder's statement can still land afterwards:
+// SELECT pipelines are bounded by the connection's 60s max_execution_time,
+// while the TRUNCATE/EXCHANGE DDL is bounded by lock_acquire_timeout (120s
+// server default) — revisit this TTL if that server setting is raised. The
 // activity's 8m ScheduleToCloseTimeout leaves room for a retry after a lapsed
 // lock; a fully exhausted budget just defers to the next tick.
 const identityMapReplaceLockTTL = 5 * time.Minute

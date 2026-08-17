@@ -1,10 +1,10 @@
 package mcpapproval_test
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
@@ -84,14 +84,14 @@ func TestAdmitBlockedServer_DedupesOntoExistingReview(t *testing.T) {
 	require.Len(t, detail.Requesters, 2)
 }
 
-// With the feature off the intake reports exactly oops.CodeForbidden — the
+// With the gate off the intake reports exactly oops.CodeForbidden — the
 // documented signal the risk service's redemption uses to fall back to the
 // legacy bypass request, so any other code here would break the fallback.
-func TestAdmitBlockedServer_FeatureDisabledIsForbidden(t *testing.T) {
+func TestAdmitBlockedServer_GateOffIsForbidden(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	disableMCPApproval(t, ctx, ti)
+	disableMCPApproval(ti)
 
 	_, _, err := ti.service.AdmitBlockedServer(
 		ctx,

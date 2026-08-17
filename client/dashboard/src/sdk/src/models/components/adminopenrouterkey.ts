@@ -5,22 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-
-/**
- * Storage state of the key material.
- */
-export const EncryptionStatus = {
-  Plaintext: "plaintext",
-  EncryptedWithPlaintext: "encrypted_with_plaintext",
-  Encrypted: "encrypted",
-} as const;
-/**
- * Storage state of the key material.
- */
-export type EncryptionStatus = ClosedEnum<typeof EncryptionStatus>;
 
 /**
  * One organization's platform OpenRouter key of a given type, without its key material.
@@ -34,10 +20,6 @@ export type AdminOpenRouterKey = {
    * Whether the key is locked down (refused locally and disabled upstream).
    */
   disabled: boolean;
-  /**
-   * Storage state of the key material.
-   */
-  encryptionStatus: EncryptionStatus;
   /**
    * The organization's Gram account type (e.g. free, pro, enterprise).
    */
@@ -69,11 +51,6 @@ export type AdminOpenRouterKey = {
 };
 
 /** @internal */
-export const EncryptionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof EncryptionStatus
-> = z.enum(EncryptionStatus);
-
-/** @internal */
 export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
   AdminOpenRouterKey,
   unknown
@@ -84,7 +61,6 @@ export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     disabled: z.boolean(),
-    encryption_status: EncryptionStatus$inboundSchema,
     gram_account_type: z.string(),
     key_type: z.string(),
     monthly_credits: z.int(),
@@ -99,7 +75,6 @@ export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
-      "encryption_status": "encryptionStatus",
       "gram_account_type": "gramAccountType",
       "key_type": "keyType",
       "monthly_credits": "monthlyCredits",

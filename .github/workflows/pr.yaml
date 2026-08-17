@@ -981,7 +981,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -989,7 +989,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse

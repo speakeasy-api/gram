@@ -34,13 +34,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -116,7 +117,7 @@ type Service struct {
 	db       *pgxpool.Pool
 	auth     *auth.Auth
 	authz    *authz.Engine
-	features *productfeatures.Client
+	flags    feature.Provider
 	audit    *audit.Logger
 	evidence *evidence.Assembler
 
@@ -133,7 +134,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, features *productfeatures.Client, auditLogger *audit.Logger, assembler *evidence.Assembler) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, flags feature.Provider, auditLogger *audit.Logger, assembler *evidence.Assembler) *Service {
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
@@ -142,7 +143,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:         db,
 		auth:       auth.New(logger, db, sessions, authzEngine),
 		authz:      authzEngine,
-		features:   features,
+		flags:      flags,
 		audit:      auditLogger,
 		evidence:   assembler,
 		gapRetryMu: sync.Mutex{},
@@ -164,31 +165,29 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// project resolves the caller's project and enforces scope.
+// project resolves the caller's project and enforces org:admin.
 //
 // Every read and write in this service goes through here, so no handler can
-// reach the database without a project id that the server derived and a scope
-// the caller actually holds.
-func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, string, error) {
+// reach the database without a project id the server derived and an admin
+// caller. Reviewing and deciding MCP access is an org-admin surface — the
+// same gate as the Observe pages and the policies that do the blocking. An
+// admin who can edit the blocking policy holds decision authority already,
+// so no dedicated scope family stands between them and this surface.
+func (s *Service) project(ctx context.Context) (uuid.UUID, string, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
+		Scope:        authz.ScopeOrgAdmin,
 		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
+		ResourceID:   authCtx.ActiveOrganizationID,
 		Dimensions:   nil,
 	}); err != nil {
 		return uuid.Nil, "", fmt.Errorf("authorize mcp approval access: %w", err)
 	}
 
-	// The product-feature gate is independent of the RBAC check: a grant says
-	// who may use the surface, the feature says whether the organization has
-	// it at all, and holding the first must not bypass the second. RBAC runs
-	// first so an unauthorized caller costs no feature-store work and a
-	// feature lookup failure never masks a denial.
 	if err := s.requireFeature(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return uuid.Nil, "", err
 	}
@@ -196,12 +195,26 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
 }
 
-// requireFeature enforces the organization-level product gate every entry
-// point shares, whether or not that entry point also demands a scope.
+// requireFeature enforces the rollout gate every entry point shares. The
+// PostHog flag is targeted by organization group (org slug), the same
+// evaluation the dashboard performs, and it fails closed: an unresolvable
+// slug or a flag-service error keeps the surface dark rather than open.
 func (s *Service) requireFeature(ctx context.Context, organizationID string) error {
-	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureMCPApproval)
+	var groups map[string]string
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+		// Group targeting degrades to distinct-id-only evaluation; a flag
+		// released purely by org group reads as off for this org until the
+		// metadata lookup recovers.
+		s.logger.WarnContext(ctx, "resolve organization slug for mcp approval flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagMCPApproval, organizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "mcp approval flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
 	}
 	if !enabled {
 		return oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
@@ -210,13 +223,12 @@ func (s *Service) requireFeature(ctx context.Context, organizationID string) err
 	return nil
 }
 
-// member resolves the caller's project and enforces the feature gate without
-// demanding a scope. Raising a request deliberately carries no RBAC grant:
-// the people asking typically cannot reach the dashboard, and a scope for it
-// would either be ungranted for everyone who needs it or granted so
-// universally it means nothing — the same posture as the block and bypass
-// surfaces. Authentication and project membership still apply, and the
-// product-feature gate holds either way.
+// member resolves the caller's project without demanding a scope. Raising a
+// request deliberately carries no RBAC grant: the people asking typically
+// cannot reach the dashboard, and a scope for it would either be ungranted
+// for everyone who needs it or granted so universally it means nothing — the
+// same posture as the block and bypass surfaces. Authentication and project
+// membership still apply, and the rollout gate holds either way.
 func (s *Service) member(ctx context.Context) (uuid.UUID, *contextvalues.AuthContext, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil || authCtx.UserID == "" {
@@ -364,16 +376,12 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 // block path and the API share one admission, and approval stays the only
 // flow a shadow-MCP ask can land in.
 //
-// The caller has already bound the redemption to the requester; the feature
+// The caller has already bound the redemption to the requester; the rollout
 // gate still applies, and its forbidden error is the documented signal to
 // fall back to the legacy bypass request.
 func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (string, string, error) {
-	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureMCPApproval)
-	if err != nil {
-		return "", "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
-	}
-	if !enabled {
-		return "", "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	if err := s.requireFeature(ctx, organizationID); err != nil {
+		return "", "", err
 	}
 
 	key, display, err := admittableServerURL(serverURL)
@@ -406,7 +414,7 @@ func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string,
 // actually requests the server. Reading evidence must never require deciding
 // first, so the server page calls this for any URL it shows.
 func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureServerReviewPayload) (*gen.ApprovalRequestSummary, error) {
-	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, organizationID, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +632,7 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 }
 
 func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*gen.ApprovalRequestSummary, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -727,7 +735,7 @@ func bypassServerURL(bypass repo.GetBypassRequestForPromotionRow) string {
 }
 
 func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPayload) (*gen.ListApprovalRequestsResult, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +763,7 @@ func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPay
 }
 
 func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload) (*gen.ApprovalRequestDetail, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +791,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // carries strictly less than what it would replace, so the write is skipped
 // and the failure surfaced.
 func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -928,7 +936,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 }
 
 func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisionPayload) (*gen.ApprovalDecision, error) {
-	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	projectID, organizationID, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}

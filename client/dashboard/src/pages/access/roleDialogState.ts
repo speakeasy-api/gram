@@ -163,7 +163,7 @@ export function computeRuleLabel(
     return `${projectSels.length} projects`;
   }
 
-  // Project-selectable resource types (skill, mcp_approval, project) store a
+  // Project-selectable resource types (skill, project) store a
   // project id in resourceId, so the remaining selectors name projects rather
   // than servers.
   if (isProjectSelectableResourceType(resourceType)) {
@@ -238,8 +238,8 @@ export function computeRuleTooltip(
     return `${verb} access to skills in ${selectors.length} projects`;
   }
 
-  // Other project-selectable resource types (mcp_approval, project) also
-  // store project ids in resourceId, so the rule covers projects, not servers.
+  // The other project-selectable resource type (project) also stores project
+  // ids in resourceId, so the rule covers projects, not servers.
   if (isProjectSelectableResourceType(resourceType)) {
     if (selectors.length === 1) {
       const name = projects.find(

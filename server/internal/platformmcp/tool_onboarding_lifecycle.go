@@ -67,8 +67,11 @@ type DistributeOnboardingMCPToolOutput struct {
 	Message          string `json:"message"`
 }
 
-func registerOnboardingLifecycleTools(server *mcp.Server, onboarding *OnboardingService, registrations *RegistrationService, distributions *DistributionService) {
-	mcp.AddTool(server, &mcp.Tool{Name: "register_platform_mcp_for_project", Title: "Register Catalogue MCP for Project", Description: "Register a reviewed MCP Catalogue server for an explicit project. Use the exact candidate returned by search_mcp_catalog and inspect_mcp_candidate. Supply declared non-secret values only; required secrets stay in secure dashboard setup. Registration is private and does not distribute or publish the MCP."}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterOnboardingMCPToolInput) (*mcp.CallToolResult, RegisterOnboardingMCPToolOutput, error) {
+func registerOnboardingLifecycleTools(reg *Registrar, onboarding *OnboardingService, registrations *RegistrationService, distributions *DistributionService) {
+	addTool(reg, &mcp.Tool{Name: "register_platform_mcp_for_project", Title: "Register Catalogue MCP for Project", Description: "Register a reviewed MCP Catalogue server for an explicit project. Use the exact candidate returned by search_mcp_catalog and inspect_mcp_candidate. Supply declared non-secret values only; required secrets stay in secure dashboard setup. Registration is private and does not distribute or publish the MCP."}, ToolMeta{
+		// External-only: onboarding milestones are connection-scoped, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterOnboardingMCPToolInput) (*mcp.CallToolResult, RegisterOnboardingMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, RegisterOnboardingMCPToolOutput{}, err
@@ -115,7 +118,10 @@ func registerOnboardingLifecycleTools(server *mcp.Server, onboarding *Onboarding
 		return nil, RegisterOnboardingMCPToolOutput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID.String(), NextAction: nextAction, Message: message, DashboardSetupURL: dashboardSetupURL, SecretFieldsPending: append([]CatalogConfigurationField(nil), result.SecretFieldsPending...)}, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "get_platform_mcp_onboarding_status", Title: "Get Platform MCP Onboarding Status", Description: "Check the workflow-bound MCP Catalogue server setup status for an explicit project. This returns bounded readiness facts, the registration ID, and an actionable next step. When there is no readiness evidence yet, it performs one rate-limited authenticated probe. Set force after the user completes dashboard setup or provider authorization to recheck fresh readiness."}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetOnboardingMCPStatusToolInput) (*mcp.CallToolResult, GetOnboardingMCPStatusToolOutput, error) {
+	addTool(reg, &mcp.Tool{Name: "get_platform_mcp_onboarding_status", Title: "Get Platform MCP Onboarding Status", Description: "Check the workflow-bound MCP Catalogue server setup status for an explicit project. This returns bounded readiness facts, the registration ID, and an actionable next step. When there is no readiness evidence yet, it performs one rate-limited authenticated probe. Set force after the user completes dashboard setup or provider authorization to recheck fresh readiness."}, ToolMeta{
+		// External-only: onboarding milestones are connection-scoped, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetOnboardingMCPStatusToolInput) (*mcp.CallToolResult, GetOnboardingMCPStatusToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetOnboardingMCPStatusToolOutput{}, err
@@ -172,7 +178,10 @@ func registerOnboardingLifecycleTools(server *mcp.Server, onboarding *Onboarding
 		return nil, GetOnboardingMCPStatusToolOutput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID, Registered: true, Readiness: string(normalized.State), Freshness: readinessFreshness(readiness, found), EvidenceCode: normalized.EvidenceCode, NextAction: nextAction, Message: message}, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "attach_platform_mcp_identity_provider", Title: "Attach Platform MCP Identity Provider", Description: "Attach the workflow-bound MCP's one discovered remote identity provider for an explicit project. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted reviewed MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize; do not ask whether they completed an unspecified action or refer to a link above."}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachOnboardingMCPIdentityProviderToolInput) (*mcp.CallToolResult, AttachOnboardingMCPIdentityProviderToolOutput, error) {
+	addTool(reg, &mcp.Tool{Name: "attach_platform_mcp_identity_provider", Title: "Attach Platform MCP Identity Provider", Description: "Attach the workflow-bound MCP's one discovered remote identity provider for an explicit project. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted reviewed MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize; do not ask whether they completed an unspecified action or refer to a link above."}, ToolMeta{
+		// External-only: provider setup is connection-scoped, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachOnboardingMCPIdentityProviderToolInput) (*mcp.CallToolResult, AttachOnboardingMCPIdentityProviderToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, AttachOnboardingMCPIdentityProviderToolOutput{}, err
@@ -209,7 +218,10 @@ func registerOnboardingLifecycleTools(server *mcp.Server, onboarding *Onboarding
 		return nil, onboardingIdentityProviderAttachmentOutput(input.ProjectSlug, registrationID, attachment, authorizationURL), nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "add_platform_mcp_to_default_plugin", Title: "Add Platform MCP to Default Plugin", Description: "Add the workflow-bound, ready MCP Catalogue server to the explicit project's existing Default plugin. The project must already be selected, registered, and freshly ready through the dashboard setup flow. This never creates a plugin."}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeOnboardingMCPToolInput) (*mcp.CallToolResult, DistributeOnboardingMCPToolOutput, error) {
+	addTool(reg, &mcp.Tool{Name: "add_platform_mcp_to_default_plugin", Title: "Add Platform MCP to Default Plugin", Description: "Add the workflow-bound, ready MCP Catalogue server to the explicit project's existing Default plugin. The project must already be selected, registered, and freshly ready through the dashboard setup flow. This never creates a plugin."}, ToolMeta{
+		// External-only: distribution rows require a connection, which a
+		// connection-less surface cannot satisfy.
+		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeOnboardingMCPToolInput) (*mcp.CallToolResult, DistributeOnboardingMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, DistributeOnboardingMCPToolOutput{}, err

@@ -5986,9 +5986,10 @@ func NewLogoutPayload(sessionID *string) *admin.LogoutPayload {
 }
 
 // NewGetProjectPayload builds a admin service getProject endpoint payload.
-func NewGetProjectPayload(idOrSlug string, adminSessionToken *string) *admin.GetProjectPayload {
+func NewGetProjectPayload(idOrSlug string, organizationIDOrSlug *string, adminSessionToken *string) *admin.GetProjectPayload {
 	v := &admin.GetProjectPayload{}
 	v.IDOrSlug = idOrSlug
+	v.OrganizationIDOrSlug = organizationIDOrSlug
 	v.AdminSessionToken = adminSessionToken
 
 	return v
