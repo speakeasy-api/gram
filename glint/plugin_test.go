@@ -28,6 +28,8 @@ func disabledAllRulesPlugin() *plugin {
 				NoClientErrorLogError:      noClientErrorLogErrorSettings{Disabled: true},
 				NoBareSqlstate:             noBareSqlstateSettings{Disabled: true},
 				RpcEndpointFormat:          rpcEndpointFormatSettings{Disabled: true},
+				NoRawUserEmailFilter:       noRawUserEmailFilterSettings{Disabled: true},
+				ResearchImportBoundary:     researchImportBoundarySettings{Disabled: true, Packages: nil},
 			},
 		},
 	}
@@ -48,5 +50,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 16)
+	require.Len(t, analyzers, 17)
 }

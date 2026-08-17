@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 
-import type { DataTableFeatures } from "@/components/data-table";
+import { selectColumn, type DataTableFeatures } from "@/components/data-table";
 import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
@@ -21,6 +21,13 @@ const PINNED_RIGHT = "sticky right-0 z-1 w-px";
 // table does not rebuild its column model on every render. The header of each
 // column doubles as its label in the Columns control.
 export const ORG_COLUMNS = column.columns([
+  // Leftmost, so the checkbox is the first thing on the row and the first tab
+  // stop in it. The bulk actions above the table are the only thing that reads
+  // the selection, and this is the only way to make one.
+  selectColumn<AdminOrganization>({
+    allLabel: "Select every organization on this page",
+    rowLabel: (org) => `Select ${org.name}`,
+  }),
   column.accessor("name", {
     header: "Name",
     // The link, not the row, carries the keyboard path and the accessible

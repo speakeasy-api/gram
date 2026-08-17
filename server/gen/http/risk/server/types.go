@@ -869,10 +869,11 @@ type GetRiskSignalsResponseBody struct {
 	// Organization risk score computed the same way over the equal-length window
 	// immediately before from.
 	PreviousOrgRiskScore float64 `form:"previous_org_risk_score" json:"previous_org_risk_score" xml:"previous_org_risk_score"`
-	// Deduplicated findings in the 24 hours ending at to.
-	Findings24h int64 `form:"findings_24h" json:"findings_24h" xml:"findings_24h"`
-	// Deduplicated findings in the 24 hours before that.
-	PreviousFindings24h int64 `form:"previous_findings_24h" json:"previous_findings_24h" xml:"previous_findings_24h"`
+	// Deduplicated live findings in the window.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings int64 `form:"previous_findings" json:"previous_findings" xml:"previous_findings"`
 	// Signals with at least one live finding in the window.
 	OpenSignals int64 `form:"open_signals" json:"open_signals" xml:"open_signals"`
 	// Signals rated critical in the window.
@@ -11305,8 +11306,8 @@ func NewGetRiskSignalsResponseBody(res *risk.RiskSignalsResult) *GetRiskSignalsR
 		To:                   res.To,
 		OrgRiskScore:         res.OrgRiskScore,
 		PreviousOrgRiskScore: res.PreviousOrgRiskScore,
-		Findings24h:          res.Findings24h,
-		PreviousFindings24h:  res.PreviousFindings24h,
+		Findings:             res.Findings,
+		PreviousFindings:     res.PreviousFindings,
 		OpenSignals:          res.OpenSignals,
 		CriticalSignals:      res.CriticalSignals,
 		UsersExposed:         res.UsersExposed,

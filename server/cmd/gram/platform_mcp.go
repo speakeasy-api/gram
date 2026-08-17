@@ -70,20 +70,28 @@ var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128
 // the general server startup flow. Dashboard and MCP authentication remain at
 // their respective transports; shared management reads are composed inside the
 // Platform MCP runtime.
-func configurePlatformMCP(ctx context.Context, config platformMCPConfig) error {
+// AssistantSurface is what a project's managed assistant needs to reach the
+// Platform MCP catalogue: the tools admitted to its audience, and the
+// authorizer every one of its calls is rechecked against.
+type AssistantSurface struct {
+	Tools      []platformmcp.Descriptor
+	Authorizer platformmcp.Authorizer
+}
+
+func configurePlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	if config.LocalFixture != nil {
 		return configureLocalFixturePlatformMCP(ctx, config)
 	}
 	return configureBrowserPlatformMCP(ctx, config)
 }
 
-func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPConfig) error {
+func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	fixtureConfig := config.LocalFixture.Fixture
 	if config.Registry == nil || fixtureConfig == nil {
-		return errors.New("local Platform MCP fixture configuration is incomplete")
+		return AssistantSurface{}, errors.New("local Platform MCP fixture configuration is incomplete")
 	}
 	if err := config.Registry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
-		return fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
+		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}
 
 	gate := platformmcp.NewOrganizationGate(
@@ -105,11 +113,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Encryption:    config.Encryption,
 	})
 	if err != nil {
-		return fmt.Errorf("create local Platform MCP OAuth service: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
 	}
 	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, oauth.Issuer(), oauth.Audience())
 	if err != nil {
-		return fmt.Errorf("create local Platform MCP authenticator: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP authenticator: %w", err)
 	}
 
 	fixtureOAuth := localfixture.NewOAuthHTTP(fixtureConfig)
@@ -118,7 +126,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	catalog := platformmcp.NewRegistryCatalog(fixtureRegistry, []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()})
 	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	if err != nil {
-		return fmt.Errorf("create local Platform MCP registration store: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP registration store: %w", err)
 	}
 	registrationGate := platformmcp.NewCatalogRegistrationGate(gate)
 	fixtureAdapter := remotesessionprovider.New(
@@ -150,7 +158,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 	}
 	if !budgets.Valid() {
-		return errors.New("local Platform MCP operation budgets are incomplete")
+		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(
@@ -200,7 +208,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
-	return nil
+	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.DistributionService {
@@ -239,7 +247,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, db *pgxpool.P
 	return browserDescriptors, nil
 }
 
-func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) error {
+func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	gate := platformmcp.NewOrganizationGate(
 		config.ProductFeatures,
 		config.FeatureFlags,
@@ -259,11 +267,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Encryption:    config.Encryption,
 	})
 	if err != nil {
-		return fmt.Errorf("create platform mcp oauth service: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
 	}
 	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, oauth.Issuer(), oauth.Audience())
 	if err != nil {
-		return fmt.Errorf("create platform mcp authenticator: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create platform mcp authenticator: %w", err)
 	}
 
 	catalog := platformmcp.NewDynamicRegistryCatalog(config.Registry, func(ctx context.Context) ([]platformmcp.CatalogDescriptor, error) {
@@ -271,7 +279,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	})
 	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	if err != nil {
-		return fmt.Errorf("create Platform MCP registration store: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create Platform MCP registration store: %w", err)
 	}
 	registrationGate := platformmcp.NewCatalogRegistrationGate(gate)
 	adapters := platformmcp.NewProviderAdapters(nil)
@@ -290,7 +298,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 	}
 	if !budgets.Valid() {
-		return errors.New("platform MCP operation budgets are incomplete")
+		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(
@@ -351,5 +359,5 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
-	return nil
+	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }

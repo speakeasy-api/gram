@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
@@ -36,8 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -64,10 +63,10 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	flags          *feature.InMemory
 	service        *mcpapproval.Service
 	conn           *pgxpool.Pool
 	repo           *repo.Queries
-	features       *productfeatures.Client
 	sessionManager *sessions.Manager
 	authContext    *contextvalues.AuthContext
 	organizationID string
@@ -140,7 +139,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -160,11 +158,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	// Temporal; a test flips failStart to exercise the enqueue-failed path.
 	starter := &fakeResearchStarter{mu: sync.Mutex{}, runs: nil, failStart: false}
 
+	flags := &feature.InMemory{}
+
 	ti := &testInstance{
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), assembler, starter.start),
+		flags:          flags,
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, audit.NewLogger(), assembler, starter.start),
 		conn:           conn,
 		repo:           repo.New(conn),
-		features:       features,
 		sessionManager: sessionManager,
 		authContext:    authContext,
 		organizationID: organizationID,
@@ -173,35 +173,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		research:       starter,
 	}
 
-	enableMCPApproval(t, ctx, ti)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPApprovalDecide, projectID.String()))
+	enableMCPApproval(ti)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, organizationID))
 
 	return ctx, ti
-}
-
-// enableMCPApproval turns the product feature on for the test organization,
-// the way an admin would for a real one. Tests for the disabled state disable
-// it again explicitly.
-func enableMCPApproval(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	_, err := featurerepo.New(ti.conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
-		OrganizationID: ti.authContext.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureMCPApproval),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureMCPApproval, true)
-}
-
-func disableMCPApproval(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	_, err := featurerepo.New(ti.conn).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
-		OrganizationID: ti.authContext.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureMCPApproval),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureMCPApproval, false)
 }
 
 func createProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) uuid.UUID {
@@ -229,7 +204,13 @@ func withProject(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 
 	exact := make([]authz.Grant, len(grants))
 	for i, scope := range grants {
-		exact[i] = authz.NewGrant(scope, projectID.String())
+		// org:admin selects the organization; everything else in these tests
+		// is project-scoped.
+		selector := projectID.String()
+		if scope == authz.ScopeOrgAdmin {
+			selector = ti.organizationID
+		}
+		exact[i] = authz.NewGrant(scope, selector)
 	}
 
 	return authztest.WithExactGrants(t, scoped, exact...)
@@ -474,4 +455,14 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 	require.NoError(t, err)
 
 	return row.ID
+}
+
+// enableMCPApproval opens the rollout gate for the test organization; tests
+// for the gated-off state close it again explicitly.
+func enableMCPApproval(ti *testInstance) {
+	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, true)
+}
+
+func disableMCPApproval(ti *testInstance) {
+	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, false)
 }

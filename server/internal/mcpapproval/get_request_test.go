@@ -80,7 +80,7 @@ func TestGetRequest_ChildQueriesAreProjectBounded(t *testing.T) {
 
 	// A decision in the other project too, so the empty result below proves
 	// the predicate filters rather than the data being absent.
-	otherCtx := withProject(t, ctx, ti, otherProject, authz.ScopeMCPApprovalDecide)
+	otherCtx := withProject(t, ctx, ti, otherProject, authz.ScopeOrgAdmin)
 	_, err := ti.service.RecordDecision(otherCtx, decisionPayload(theirs.String(), "denied"))
 	require.NoError(t, err)
 
@@ -167,17 +167,16 @@ func TestGetRequest_RequiresScope(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestGetRequest_ReadScopeSuffices(t *testing.T) {
+func TestGetRequest_NonAdminIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	nonAdmin := withProject(t, ctx, ti, ti.projectID, authz.ScopeProjectWrite)
 
-	detail, err := ti.service.GetRequest(readOnly, getPayload(requestID.String()))
-	require.NoError(t, err)
-	require.Equal(t, requestID.String(), detail.Request.ID)
+	_, err := ti.service.GetRequest(nonAdmin, getPayload(requestID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 // Research reports ride along on the detail, newest first, so the admin sees

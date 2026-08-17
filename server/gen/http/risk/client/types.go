@@ -867,10 +867,11 @@ type GetRiskSignalsResponseBody struct {
 	// Organization risk score computed the same way over the equal-length window
 	// immediately before from.
 	PreviousOrgRiskScore *float64 `form:"previous_org_risk_score,omitempty" json:"previous_org_risk_score,omitempty" xml:"previous_org_risk_score,omitempty"`
-	// Deduplicated findings in the 24 hours ending at to.
-	Findings24h *int64 `form:"findings_24h,omitempty" json:"findings_24h,omitempty" xml:"findings_24h,omitempty"`
-	// Deduplicated findings in the 24 hours before that.
-	PreviousFindings24h *int64 `form:"previous_findings_24h,omitempty" json:"previous_findings_24h,omitempty" xml:"previous_findings_24h,omitempty"`
+	// Deduplicated live findings in the window.
+	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings *int64 `form:"previous_findings,omitempty" json:"previous_findings,omitempty" xml:"previous_findings,omitempty"`
 	// Signals with at least one live finding in the window.
 	OpenSignals *int64 `form:"open_signals,omitempty" json:"open_signals,omitempty" xml:"open_signals,omitempty"`
 	// Signals rated critical in the window.
@@ -14480,8 +14481,8 @@ func NewGetRiskSignalsRiskSignalsResultOK(body *GetRiskSignalsResponseBody) *ris
 		To:                   *body.To,
 		OrgRiskScore:         *body.OrgRiskScore,
 		PreviousOrgRiskScore: *body.PreviousOrgRiskScore,
-		Findings24h:          *body.Findings24h,
-		PreviousFindings24h:  *body.PreviousFindings24h,
+		Findings:             *body.Findings,
+		PreviousFindings:     *body.PreviousFindings,
 		OpenSignals:          *body.OpenSignals,
 		CriticalSignals:      *body.CriticalSignals,
 		UsersExposed:         *body.UsersExposed,
@@ -19935,11 +19936,11 @@ func ValidateGetRiskSignalsResponseBody(body *GetRiskSignalsResponseBody) (err e
 	if body.PreviousOrgRiskScore == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("previous_org_risk_score", "body"))
 	}
-	if body.Findings24h == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("findings_24h", "body"))
+	if body.Findings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))
 	}
-	if body.PreviousFindings24h == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("previous_findings_24h", "body"))
+	if body.PreviousFindings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_findings", "body"))
 	}
 	if body.OpenSignals == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("open_signals", "body"))

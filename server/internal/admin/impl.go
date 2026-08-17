@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -62,6 +63,8 @@ type Service struct {
 	openRouter TrialKeyReviver
 
 	audit *audit.Logger
+
+	trial trialemails.Notifier
 }
 
 // TrialKeyReviver is the one method of openrouter.Provisioner a re-arm needs.
@@ -92,8 +95,13 @@ func NewService(
 	allowedOrigins []string,
 	workosClient orgprovision.WorkOSOrganizationCreator,
 	openRouter TrialKeyReviver,
+	trialNotifier trialemails.Notifier,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
+
+	if trialNotifier == nil {
+		trialNotifier = trialemails.NoopNotifier{}
+	}
 
 	sessionStore := NewSessionStore(
 		cache.NewTypedObjectCache[Session](
@@ -120,6 +128,7 @@ func NewService(
 			cache.NewRedisCacheAdapter(redisClient),
 			cache.SuffixNone,
 		),
+		trial: trialNotifier,
 	}
 }
 
@@ -603,6 +612,14 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		Whitelisted: conv.PtrToPGBool(payload.Whitelisted),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization").LogError(ctx, s.logger)
+	}
+
+	// Setting account type is how a trial becomes a signed contract. Stop
+	// pending trial reminders; trialActive stays true otherwise.
+	if payload.AccountType != nil {
+		if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
+			s.logger.ErrorContext(ctx, "failed to notify trial inactive", attr.SlogError(err), attr.SlogOrganizationID(payload.ID))
+		}
 	}
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after update")

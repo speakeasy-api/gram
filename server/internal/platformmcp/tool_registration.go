@@ -28,12 +28,12 @@ type RegisterCatalogMCPToolOutput struct {
 	SecretFieldsPending []CatalogConfigurationField `json:"secret_fields_pending,omitempty"`
 }
 
-func registerCatalogRegistrationTool(server *mcp.Server, registrations *RegistrationService) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerCatalogRegistrationTool(reg *Registrar, registrations *RegistrationService) {
+	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
 		Description: "Register one reviewed catalog MCP in an explicit Gram project. Registration creates private project configuration only; it does not distribute the MCP or publish a plugin package.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, RegisterCatalogMCPToolOutput{}, err
