@@ -24,7 +24,7 @@ func principalFromContext(ctx context.Context) (platformmcp.Principal, error) {
 	}
 	return platformmcp.Principal{
 		Surface:        platformmcp.SurfaceProjectAssistant,
-		UserID:         "",
+		UserID:         authCtx.UserID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ConnectionID:   "",
 		Generation:     "",
