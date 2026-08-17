@@ -683,6 +683,116 @@ func TestHooksDrill_CanonicalFold_ExclusionAndTraceList(t *testing.T) {
 	require.Len(t, traces.Traces, 2)
 }
 
+func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "uwork-" + suffix + "@example.com"
+	personalEmail := "upersonal-" + suffix + "@example.com"
+	strangerEmail := "ustranger-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	// One employee across three attribution shapes: id+work email, a
+	// case-variant personal-email row, and an id-only tool call (folds in via
+	// the known-emails join). Plus an unmapped stranger.
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9, 9, 0.1)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter:   &gen.SearchUsersFilter{From: from, To: to},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Users, 2)
+
+	byKey := map[string]*gen.UserSummary{}
+	for _, u := range res.Users {
+		byKey[u.UserID] = u
+	}
+	employee := byKey[workEmail]
+	require.NotNil(t, employee, "employee summary keyed by canonical email")
+	// Sum preservation across all three attribution shapes; the display email
+	// matches the canonical key rather than a literal variant.
+	require.Equal(t, workEmail, employee.UserEmail)
+	require.Equal(t, int64(300), employee.TotalInputTokens)
+	require.Equal(t, int64(150), employee.TotalOutputTokens)
+	require.Equal(t, int64(1), employee.TotalToolCalls)
+	require.Contains(t, byKey, strangerEmail)
+	require.NotContains(t, byKey, personalEmail)
+	require.NotContains(t, byKey, strings.ToUpper(personalEmail))
+
+	// Drilling by a linked personal email finds the one canonical summary:
+	// both sides of the key filter fold through the same map.
+	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter:   &gen.SearchUsersFilter{From: from, To: to, UserIds: []string{personalEmail}},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Users, 1)
+	require.Equal(t, workEmail, filtered.Users[0].UserID)
+	require.Equal(t, int64(300), filtered.Users[0].TotalInputTokens)
+}
+
+func TestSearchUsers_CanonicalFold_ShadowServesLiteralList(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFoldShadow, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+	suffix := uuid.NewString()[:8]
+	workEmail := "vwork-" + suffix + "@example.com"
+	personalEmail := "vpersonal-" + suffix + "@example.com"
+	userID := "gram-user-" + uuid.NewString()
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// Shadow mode serves the literal list — the employee still splits across
+	// their two email keys — while the folded comparison runs detached.
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: now.Add(-time.Hour).Format(time.RFC3339),
+			To:   now.Add(time.Hour).Format(time.RFC3339),
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Users, 2)
+	keys := []string{res.Users[0].UserID, res.Users[1].UserID}
+	require.Contains(t, keys, workEmail)
+	require.Contains(t, keys, strings.ToUpper(personalEmail))
+}
+
 func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	t.Parallel()
 

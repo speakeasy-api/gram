@@ -125,6 +125,59 @@ func (s *Service) shadowCompareCanonicalFold(ctx context.Context, orgID string, 
 	}()
 }
 
+// shadowCompareSearchUsersFold re-runs the employee list query with folding
+// enabled and logs how the folded list diverges from the literal one already
+// served: row counts, keys that exist only folded (canonical emails replacing
+// literal variants), and the input+output token delta — folding merges rows,
+// so on an untruncated page the token sum must be preserved and the folded
+// list can only shrink. Emails are deliberately not logged; counts carry the
+// signal. Runs in the background off a detached context so it never delays or
+// fails the caller's request.
+func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string, params repo.SearchUsersParams, literal []repo.UserSummary) {
+	select {
+	case s.shadowFoldSem <- struct{}{}:
+	default:
+		s.logger.InfoContext(ctx, "identity fold shadow comparison skipped: concurrency cap reached", attr.SlogOrganizationID(orgID))
+		return
+	}
+
+	bgCtx := context.WithoutCancel(ctx)
+	go func() {
+		defer func() { <-s.shadowFoldSem }()
+		bgCtx, cancel := context.WithTimeout(bgCtx, shadowCompareTimeout)
+		defer cancel()
+
+		params.CanonicalIdentityOrg = orgID
+		folded, err := s.chRepo.SearchUsers(bgCtx, params)
+		if err != nil {
+			s.logger.WarnContext(bgCtx, "identity fold shadow employee list query failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+			return
+		}
+
+		literalKeys := make(map[string]struct{}, len(literal))
+		var literalTokens, foldedTokens int64
+		for _, u := range literal {
+			literalKeys[u.UserID] = struct{}{}
+			literalTokens += u.TotalInputTokens + u.TotalOutputTokens
+		}
+		newKeys := 0
+		for _, u := range folded {
+			foldedTokens += u.TotalInputTokens + u.TotalOutputTokens
+			if _, ok := literalKeys[u.UserID]; !ok {
+				newKeys++
+			}
+		}
+
+		s.logger.InfoContext(bgCtx, "identity fold shadow employee list comparison",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogIdentityFoldLiteralGroups(len(literal)),
+			attr.SlogIdentityFoldCanonicalGroups(len(folded)),
+			attr.SlogIdentityFoldNewKeys(newKeys),
+			attr.SlogIdentityFoldTokenDelta(foldedTokens-literalTokens),
+		)
+	}()
+}
+
 // canonicalOrgFor resolves the fold flag to the org id the repo params carry:
 // the org id when folding is enabled, "" when the org serves literal
 // identities. The single choke point for fold gating on org-scoped reads.
