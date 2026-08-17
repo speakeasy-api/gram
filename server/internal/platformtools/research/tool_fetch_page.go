@@ -101,11 +101,27 @@ type redirectAuthorizer func(target *url.URL) bool
 type redirectAuthorizerKey struct{}
 
 // sameRedirectSite reports whether a redirect stays on the site the previous
-// hop was on: the same hostname, or its apex↔www twin — the one cross-host
-// shape ordinary sites redirect through as a matter of course.
+// hop was on: the same host and effective port, or the apex↔www twin — the
+// one cross-host shape ordinary sites redirect through as a matter of
+// course. A port change is a different service on the same machine and gets
+// no carve-out.
 func sameRedirectSite(prev, next *url.URL) bool {
+	if effectivePort(prev) != effectivePort(next) {
+		return false
+	}
 	a, b := prev.Hostname(), next.Hostname()
 	return a == b || "www."+a == b || a == "www."+b
+}
+
+// effectivePort resolves the port a URL dials, defaulting the scheme's.
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	if u.Scheme == "http" {
+		return "80"
+	}
+	return "443"
 }
 
 // NewFetchPageTool builds the page-fetch tool. Pass the client through
