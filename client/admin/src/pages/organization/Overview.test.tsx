@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { organizationQuery } from "@/lib/adminQueries";
+import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
+  listOrganizations: vi.fn(),
   updateOrganization: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getSession: mocks.getSession,
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
+    listOrganizations: mocks.listOrganizations,
     updateOrganization: mocks.updateOrganization,
   };
 });
@@ -72,6 +74,7 @@ beforeEach(() => {
   // view. Unmocked it reaches the real fetch and the suite waits on a socket.
   mocks.listOrganizationProjects.mockReset();
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
+  mocks.listOrganizations.mockReset();
   mocks.updateOrganization.mockReset();
 });
 
@@ -200,6 +203,71 @@ describe("Overview", () => {
     // An operator who watched the save land and then reads the old value back
     // has no way to tell a stale page from a write that did not happen.
     expect(screen.getByRole("combobox").textContent).toBe("enterprise");
+    expect(ORG.account_type).not.toBe("enterprise");
+  });
+
+  it("keeps a saved change through a list read that was already in flight", async () => {
+    const saved = { ...ORG, account_type: "enterprise" };
+    mocks.updateOrganization.mockResolvedValue(saved);
+
+    // Held open, so its answer can be made to land after the write instead of
+    // before it. It carries the row as it was, which is what makes it a lie.
+    let answerListRead = () => {};
+    mocks.listOrganizations.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answerListRead = () => resolve({ organizations: [ORG] });
+        }),
+    );
+
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+    qc.setQueryData(organizationsListQuery().queryKey, {
+      organizations: [ORG],
+    });
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+
+    // The ordinary window, not an exotic one: the list query sets no staleTime,
+    // so returning to the tab starts this read and the operator's next press
+    // lands while it is still open.
+    //
+    // `fetchQuery`, not `refetchQueries`, which defaults to active queries only
+    // and would start nothing at all from this route.
+    void qc.fetchQuery(organizationsListQuery()).catch(() => {});
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalled();
+    });
+
+    const select = await screen.findByRole("combobox");
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "enterprise" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    });
+
+    // Now, after the write. React Query commits whatever a request answers
+    // whenever it lands, so an uncancelled read undoes the write here.
+    answerListRead();
+    await waitFor(() => {
+      expect(
+        qc.getQueryState(organizationsListQuery().queryKey)?.fetchStatus,
+      ).toBe("idle");
+    });
+
+    const row = qc.getQueryData(organizationsListQuery().queryKey)
+      ?.organizations[0];
+    expect(row?.account_type).toBe("enterprise");
     expect(ORG.account_type).not.toBe("enterprise");
   });
 

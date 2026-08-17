@@ -14,7 +14,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
-import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import {
+  cancelOrganizationFetches,
+  organizationQuery,
+  writeOrganizationToCache,
+} from "@/lib/adminQueries";
 import {
   errorMessage,
   updateOrganization,
@@ -74,13 +78,14 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           accountType !== org.account_type ? accountType : undefined,
         whitelisted: whitelisted !== org.whitelisted ? whitelisted : undefined,
       }),
+    // Through `adminQueries`, like every other admin write. A copy of the cache
+    // path spelled out here is how one of its caches gets left out: this one
+    // cancelled nothing, so a list read already in flight put the pre-write row
+    // back, and the stats kept their old totals.
+    onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (updated) => {
       setDraft({});
-      qc.setQueryData(organizationQuery(org.id).queryKey, updated);
-      qc.setQueryData(organizationQuery(org.slug).queryKey, updated);
-      void qc.invalidateQueries({
-        queryKey: organizationsListQuery().queryKey,
-      });
+      writeOrganizationToCache(qc, updated);
     },
   });
 
