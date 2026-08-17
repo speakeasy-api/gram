@@ -679,9 +679,13 @@ func TestURLMenu_CanonicalizesFragments(t *testing.T) {
 	_, ok = menu.Allowed("chat-1", "https://vendor.example.com/other")
 	require.False(t, ok)
 
-	// Non-https and junk never enter the menu.
+	// Non-https and junk never enter the menu, and a port is not a host.
 	menu.Allow("chat-1", "http://vendor.example.com/plain")
 	_, ok = menu.Allowed("chat-1", "http://vendor.example.com/plain")
+	require.False(t, ok)
+
+	menu.Allow("chat-1", "https://:443/path")
+	_, ok = menu.Allowed("chat-1", "https://:443/path")
 	require.False(t, ok)
 }
 
