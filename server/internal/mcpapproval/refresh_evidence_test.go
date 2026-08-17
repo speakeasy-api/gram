@@ -168,9 +168,8 @@ func TestRefreshEvidence_RequiresScope(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-// Refreshing is part of reviewing, not deciding: the read scope must be
-// enough, matching intake where any authenticated member triggers the same
-// gather.
+// Refreshing is part of reviewing, an org-admin surface: project write
+// access is not enough.
 func TestRefreshEvidence_NonAdminIsRefused(t *testing.T) {
 	t.Parallel()
 
