@@ -72,7 +72,9 @@ function useObservabilityPluginDownload(
           .get("Content-Disposition")
           ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revoke on the next task: some browsers kick the blob download off
+      // asynchronously and a same-task revoke aborts it.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (err) {
       toast.error("Failed to download observability plugin");
       console.error("observability plugin download failed", err);
