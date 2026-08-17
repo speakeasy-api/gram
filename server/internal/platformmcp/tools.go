@@ -12,6 +12,11 @@ import (
 
 const unavailableCode = "feature_unavailable"
 
+// bothAudiences admits a tool to the external endpoint and to a project's
+// managed assistant. Narrow this per tool when a capability is not fit for
+// both surfaces.
+var bothAudiences = []Audience{AudienceExternal, AudienceAssistant}
+
 type Reader interface {
 	ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error)
 	ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error)
@@ -74,7 +79,11 @@ type operationBudgetResult struct {
 	Message string `json:"message"`
 }
 
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) *mcp.Server {
+// newServer composes the Platform MCP tools for one deployment. It returns the
+// registrar alongside the server so another admitted audience — the project
+// assistant — can be composed from the same registration pass rather than from
+// a second list that would drift.
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "speakeasy-aicp-platform-mcp",
 		Title:   "Speakeasy AICP Platform MCP",
@@ -84,55 +93,57 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		PageSize:     32,
 	})
 
-	registerReadTools(server, reader)
-	registerSetupResources(server, setupResources)
+	reg := newRegistrar(server)
+
+	registerReadTools(reg, reader)
+	registerSetupResources(reg, setupResources)
 	if catalog == nil || registrations == nil || !registrations.budgets.Catalog.valid() {
-		registerUnavailableCatalogTools(server)
+		registerUnavailableCatalogTools(reg)
 	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
-		registerUnavailableCatalogTools(server)
+		registerUnavailableCatalogTools(reg)
 	} else {
-		registerCatalogTools(server, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+		registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
-		registerUnavailableCatalogRegistrationTool(server)
+		registerUnavailableCatalogRegistrationTool(reg)
 	} else {
-		registerCatalogRegistrationTool(server, registrations)
+		registerCatalogRegistrationTool(reg, registrations)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
-		registerUnavailableSetupHandoffTool(server)
+		registerUnavailableSetupHandoffTool(reg)
 	} else {
-		registerSetupHandoffTool(server, registrations)
+		registerSetupHandoffTool(reg, registrations)
 	}
 	if registrations == nil || registrations.readiness == nil || !registrations.budgets.Repair.valid() {
-		registerUnavailableReadinessTools(server)
+		registerUnavailableReadinessTools(reg)
 	} else {
-		registerReadinessTools(server, registrations.readiness)
+		registerReadinessTools(reg, registrations.readiness)
 	}
 	if onboarding == nil || distributions == nil || catalog == nil || registrations == nil || registrations.store == nil {
-		registerUnavailableTools(server)
+		registerUnavailableTools(reg)
 	} else {
-		registerOnboardingLifecycleTools(server, onboarding, registrations, distributions)
+		registerOnboardingLifecycleTools(reg, onboarding, registrations, distributions)
 	}
 	if feedback == nil {
-		mcp.AddTool(server, &mcp.Tool{
+		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Platform MCP Feedback",
 			Description: "Send bounded Platform MCP feedback. Feedback is not enabled in the current rollout.",
-		}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
-		registerFeedbackTool(server, feedback)
+		registerFeedbackTool(reg, feedback)
 	}
-	return server
+	return server, reg
 }
 
-func registerReadTools(server *mcp.Server, reader Reader) {
-	registerGetPlatformContextTool(server)
-	registerListProjectsTool(server, reader)
-	registerListProjectMCPsTool(server, reader)
-	registerGetMCPTool(server, reader)
+func registerReadTools(reg *Registrar, reader Reader) {
+	registerGetPlatformContextTool(reg)
+	registerListProjectsTool(reg, reader)
+	registerListProjectMCPsTool(reg, reader)
+	registerGetMCPTool(reg, reader)
 }
 
-func registerUnavailableCatalogTools(server *mcp.Server) {
+func registerUnavailableCatalogTools(reg *Registrar) {
 	for _, tool := range []struct {
 		name        string
 		title       string
@@ -141,32 +152,32 @@ func registerUnavailableCatalogTools(server *mcp.Server) {
 		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout."},
 		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout."},
 	} {
-		mcp.AddTool(server, &mcp.Tool{
+		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, unavailableTool("catalog"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 
-func registerUnavailableCatalogRegistrationTool(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
 		Description: "Register an approved catalog MCP in a project. Registration is not available in the current preview.",
-	}, unavailableTool("catalog_registration"))
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
 }
 
-func registerUnavailableSetupHandoffTool(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerUnavailableSetupHandoffTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
 		Description: "Create a secure setup handoff. Provider setup is not available in the current preview.",
-	}, unavailableTool("setup_handoff"))
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
-func registerUnavailableTools(server *mcp.Server) {
+func registerUnavailableTools(reg *Registrar) {
 	for _, tool := range []struct {
 		name        string
 		title       string
@@ -177,15 +188,15 @@ func registerUnavailableTools(server *mcp.Server) {
 		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not available in the current preview.", "plugin_distribution"},
 		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
 	} {
-		mcp.AddTool(server, &mcp.Tool{
+		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-		}, unavailableTool(tool.feature))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
 
-func registerUnavailableReadinessTools(server *mcp.Server) {
+func registerUnavailableReadinessTools(reg *Registrar) {
 	for _, tool := range []struct {
 		name        string
 		title       string
@@ -194,12 +205,12 @@ func registerUnavailableReadinessTools(server *mcp.Server) {
 		{"get_mcp_readiness", "Get MCP Readiness", "Check configured MCP readiness. Readiness checks are not available in the current preview."},
 		{"get_mcp_repair_plan", "Get MCP Repair Plan", "Get a safe MCP repair plan. Repair planning is not available in the current preview."},
 	} {
-		mcp.AddTool(server, &mcp.Tool{
+		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
 

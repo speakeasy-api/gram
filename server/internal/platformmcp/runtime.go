@@ -92,6 +92,9 @@ type ReadinessRecorder interface {
 }
 
 type Runtime struct {
+	// registrar holds every tool this deployment composed, so an admitted
+	// audience can be served from the same pass that built the endpoint.
+	registrar            *Registrar
 	authenticator        Authenticator
 	gate                 Gate
 	authorizer           Authorizer
@@ -113,13 +116,15 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, candidate CatalogDescriptor) *Runtime {
+	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, candidate)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
 		authorizer:           authorizer,
 		protectedResourceURL: protectedResourceURL,
 		readiness:            readiness,
-		server:               newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, candidate),
+		server:               server,
+		registrar:            registrar,
 	}
 	if readiness != nil {
 		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
@@ -210,6 +215,13 @@ func (r *Runtime) authenticate(req *http.Request) (Principal, error) {
 
 type principalContextKey struct{}
 
+// ContextWithPrincipal binds an acting identity to a context so tool handlers
+// read it with PrincipalFromContext. Exported for the assistant adapter, which
+// calls handlers directly rather than through the MCP transport.
+func ContextWithPrincipal(ctx context.Context, principal Principal) context.Context {
+	return contextWithPrincipal(ctx, principal)
+}
+
 func contextWithPrincipal(ctx context.Context, principal Principal) context.Context {
 	return context.WithValue(ctx, principalContextKey{}, principal)
 }
@@ -217,4 +229,14 @@ func contextWithPrincipal(ctx context.Context, principal Principal) context.Cont
 func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	principal, ok := ctx.Value(principalContextKey{}).(Principal)
 	return principal, ok
+}
+
+// AssistantTools returns the descriptors admitted to a project's managed
+// assistant. The assistant adapter composes these directly; nothing else in
+// the catalogue reaches it.
+func (r *Runtime) AssistantTools() []Descriptor {
+	if r == nil {
+		return nil
+	}
+	return r.registrar.For(AudienceAssistant)
 }

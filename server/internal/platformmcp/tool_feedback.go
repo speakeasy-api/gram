@@ -50,12 +50,12 @@ func feedbackToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
-func registerFeedbackTool(server *mcp.Server, feedback *FeedbackService) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerFeedbackTool(reg *Registrar, feedback *FeedbackService) {
+	addTool(reg, &mcp.Tool{
 		Name:        "send_platform_mcp_feedback",
 		Title:       "Send Platform MCP Feedback",
 		Description: "Store one bounded Platform MCP feedback report for local review. Ask for consent outside this tool before submitting feedback. Never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SendPlatformMCPFeedbackToolOutput{}, err
