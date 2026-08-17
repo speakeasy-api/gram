@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS trials (
   CONSTRAINT trials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+-- Matches ListExpiredTrials: a row leaves the index as soon as it converts or
+-- demotes, so the hourly sweep stays proportional to live trials.
+CREATE INDEX IF NOT EXISTS trials_ends_at_idx
+ON trials (ends_at)
+WHERE converted_at IS NULL AND demoted_at IS NULL;
+
 -- Billing contract metadata for an organization. Currently holds the
 -- "tokens under management" (TUM) contract terms for enterprise accounts.
 CREATE TABLE IF NOT EXISTS billing_metadata (
