@@ -93,6 +93,10 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 	return &stripeclient.CheckoutSession{URL: checkoutURL}, nil
 }
 
+func (c *checkoutStripeClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (c *checkoutStripeClient) CreateMeterEvent(context.Context, stripeclient.CreateMeterEventInput) error {
 	return errors.New("not implemented")
 }

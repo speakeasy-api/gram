@@ -12,6 +12,70 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireStripeSubscriptionActivationLock = `-- name: AcquireStripeSubscriptionActivationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+`
+
+// Serializes distinct Stripe events that refer to the same subscription.
+func (q *Queries) AcquireStripeSubscriptionActivationLock(ctx context.Context, stripeSubscriptionID string) error {
+	_, err := q.db.Exec(ctx, acquireStripeSubscriptionActivationLock, stripeSubscriptionID)
+	return err
+}
+
+const activatePaygBillingMetadata = `-- name: ActivatePaygBillingMetadata :one
+UPDATE billing_metadata
+SET stripe_subscription_id = $1,
+    billing_cycle_anchor_day = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND stripe_customer_id = $4
+  AND (stripe_subscription_id IS NULL OR stripe_subscription_id = $1)
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+`
+
+type ActivatePaygBillingMetadataParams struct {
+	StripeSubscriptionID  pgtype.Text
+	BillingCycleAnchorDay int32
+	OrganizationID        string
+	StripeCustomerID      pgtype.Text
+}
+
+func (q *Queries) ActivatePaygBillingMetadata(ctx context.Context, arg ActivatePaygBillingMetadataParams) (BillingMetadatum, error) {
+	row := q.db.QueryRow(ctx, activatePaygBillingMetadata,
+		arg.StripeSubscriptionID,
+		arg.BillingCycleAnchorDay,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+	)
+	var i BillingMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.TumMonthlyTokenLimit,
+		&i.AlertEmail,
+		&i.BillingCycleAnchorDay,
+		&i.TunneledMcpServerLimit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const activatePaygOrganization = `-- name: ActivatePaygOrganization :exec
+UPDATE organization_metadata
+SET gram_account_type = 'payg',
+    whitelisted = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) ActivatePaygOrganization(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, activatePaygOrganization, organizationID)
+	return err
+}
+
 const countStripeWebhookReceiptsFixture = `-- name: CountStripeWebhookReceiptsFixture :one
 SELECT count(*)
 FROM stripe_webhook_receipts
@@ -124,6 +188,50 @@ func (q *Queries) GetOrganizationName(ctx context.Context, organizationID string
 	return name, err
 }
 
+const getPaygActivationState = `-- name: GetPaygActivationState :one
+SELECT
+    billing_metadata.id AS billing_metadata_id
+  , billing_metadata.stripe_customer_id
+  , billing_metadata.stripe_subscription_id
+  , billing_metadata.billing_cycle_anchor_day
+  , organization_metadata.name AS organization_name
+  , organization_metadata.slug AS organization_slug
+  , organization_metadata.gram_account_type
+  , organization_metadata.whitelisted
+FROM billing_metadata
+JOIN organization_metadata
+  ON organization_metadata.id = billing_metadata.organization_id
+WHERE billing_metadata.organization_id = $1
+FOR UPDATE OF billing_metadata, organization_metadata
+`
+
+type GetPaygActivationStateRow struct {
+	BillingMetadataID     uuid.UUID
+	StripeCustomerID      pgtype.Text
+	StripeSubscriptionID  pgtype.Text
+	BillingCycleAnchorDay int32
+	OrganizationName      string
+	OrganizationSlug      string
+	GramAccountType       string
+	Whitelisted           bool
+}
+
+func (q *Queries) GetPaygActivationState(ctx context.Context, organizationID string) (GetPaygActivationStateRow, error) {
+	row := q.db.QueryRow(ctx, getPaygActivationState, organizationID)
+	var i GetPaygActivationStateRow
+	err := row.Scan(
+		&i.BillingMetadataID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.BillingCycleAnchorDay,
+		&i.OrganizationName,
+		&i.OrganizationSlug,
+		&i.GramAccountType,
+		&i.Whitelisted,
+	)
+	return i, err
+}
+
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
 SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, finalized_at, created_at, updated_at
 FROM billing_cycle_usage
@@ -216,6 +324,50 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 	return items, nil
 }
 
+const listStripeSubscriptionOwners = `-- name: ListStripeSubscriptionOwners :many
+SELECT organization_id
+FROM billing_metadata
+WHERE stripe_subscription_id = $1
+ORDER BY organization_id
+`
+
+func (q *Queries) ListStripeSubscriptionOwners(ctx context.Context, stripeSubscriptionID pgtype.Text) ([]string, error) {
+	rows, err := q.db.Query(ctx, listStripeSubscriptionOwners, stripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setStripeSubscriptionFixture = `-- name: SetStripeSubscriptionFixture :exec
+UPDATE billing_metadata
+SET stripe_subscription_id = $1
+WHERE organization_id = $2
+`
+
+type SetStripeSubscriptionFixtureParams struct {
+	StripeSubscriptionID pgtype.Text
+	OrganizationID       string
+}
+
+// Test-only fixture for ownership-conflict webhook tests.
+func (q *Queries) SetStripeSubscriptionFixture(ctx context.Context, arg SetStripeSubscriptionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setStripeSubscriptionFixture, arg.StripeSubscriptionID, arg.OrganizationID)
+	return err
+}
+
 const storeStripeCustomer = `-- name: StoreStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES ($1, $2)
@@ -249,6 +401,21 @@ func (q *Queries) StoreStripeCustomer(ctx context.Context, arg StoreStripeCustom
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const stripeWebhookReceiptExists = `-- name: StripeWebhookReceiptExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM stripe_webhook_receipts
+    WHERE stripe_event_id = $1
+) AS received
+`
+
+func (q *Queries) StripeWebhookReceiptExists(ctx context.Context, stripeEventID string) (bool, error) {
+	row := q.db.QueryRow(ctx, stripeWebhookReceiptExists, stripeEventID)
+	var received bool
+	err := row.Scan(&received)
+	return received, err
 }
 
 const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one

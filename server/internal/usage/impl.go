@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -39,55 +40,63 @@ import (
 )
 
 type Service struct {
-	tracer        trace.Tracer
-	logger        *slog.Logger
-	auth          *auth.Auth
-	authz         *authz.Engine
-	serverURL     *url.URL
-	siteURL       *url.URL
-	db            *pgxpool.Pool
-	repo          *repo.Queries
-	billingRepo   billing.Repository
-	orgRepo       *orgRepo.Queries
-	telemetryRepo *telemetryrepo.Queries
-	auditLogger   *audit.Logger
-	posthogClient *posthog.Posthog
-	openRouter    openrouter.Provisioner
-	stripeClient  stripeclient.Client
-	stripeHandler stripeWebhookHandler
-	featureFlags  feature.Provider
-	trial         trialemails.Notifier
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	auth            *auth.Auth
+	authz           *authz.Engine
+	serverURL       *url.URL
+	siteURL         *url.URL
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	billingRepo     billing.Repository
+	orgRepo         *orgRepo.Queries
+	telemetryRepo   *telemetryrepo.Queries
+	auditLogger     *audit.Logger
+	posthogClient   *posthog.Posthog
+	openRouter      openrouter.Provisioner
+	stripeClient    stripeclient.Client
+	stripeHandler   stripeWebhookHandler
+	featureFlags    feature.Provider
+	productFeatures productFeatureCacheUpdater
+	trial           trialemails.Notifier
+}
+
+type productFeatureCacheUpdater interface {
+	UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool)
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
-	return &Service{
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
-		logger:        logger,
-		auth:          auth.New(logger, db, sessions, authzEngine),
-		authz:         authzEngine,
-		serverURL:     serverURL,
-		siteURL:       siteURL,
-		db:            db,
-		repo:          repo.New(db),
-		billingRepo:   billingRepo,
-		orgRepo:       orgRepo.New(db),
-		telemetryRepo: telemetryRepo,
-		auditLogger:   auditLogger,
-		posthogClient: posthogClient,
-		openRouter:    openRouter,
-		stripeClient:  stripeClient,
-		stripeHandler: serviceStripeWebhookHandler,
-		featureFlags:  featureFlags,
-		trial:         trialNotifier,
+	service := &Service{
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		logger:          logger,
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		serverURL:       serverURL,
+		siteURL:         siteURL,
+		db:              db,
+		repo:            repo.New(db),
+		billingRepo:     billingRepo,
+		orgRepo:         orgRepo.New(db),
+		telemetryRepo:   telemetryRepo,
+		auditLogger:     auditLogger,
+		posthogClient:   posthogClient,
+		openRouter:      openRouter,
+		stripeClient:    stripeClient,
+		stripeHandler:   nil,
+		featureFlags:    featureFlags,
+		productFeatures: productFeatures,
+		trial:           trialNotifier,
 	}
+	service.stripeHandler = service.serviceStripeWebhookHandler
+	return service
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
