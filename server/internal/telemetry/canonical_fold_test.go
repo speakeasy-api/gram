@@ -554,7 +554,6 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, res)
-		c := t
 
 		// One employee = one bucket under the canonical email; totals are
 		// preserved (folding re-buckets, never drops or double-counts).
@@ -564,30 +563,30 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 			byUser[u.UserEmail] += u.EventCount
 			total += u.EventCount
 		}
-		assert.Equal(c, int64(5), total)
-		assert.Equal(c, int64(3), byUser[workEmail])
-		assert.Equal(c, int64(1), byUser[strangerEmail])
-		assert.Equal(c, int64(1), byUser["Unknown"])
-		assert.NotContains(c, byUser, personalEmail)
-		assert.NotContains(c, byUser, strings.ToUpper(personalEmail))
+		assert.Equal(t, int64(5), total)
+		assert.Equal(t, int64(3), byUser[workEmail])
+		assert.Equal(t, int64(1), byUser[strangerEmail])
+		assert.Equal(t, int64(1), byUser["Unknown"])
+		assert.NotContains(t, byUser, personalEmail)
+		assert.NotContains(t, byUser, strings.ToUpper(personalEmail))
 
 		// The skill breakdown folds the same way: the shared skill counts one
 		// unique user, not two — the strongest signal the (skill, email)
 		// grouping folded.
 		for _, sk := range res.Skills {
 			if sk.SkillName == "deploy-helper" {
-				assert.Equal(c, int64(2), sk.UseCount)
-				assert.Equal(c, int64(1), sk.UniqueUsers)
+				assert.Equal(t, int64(2), sk.UseCount)
+				assert.Equal(t, int64(1), sk.UniqueUsers)
 			}
 		}
 
 		// Breakdown and timeseries carry no unfolded personal buckets.
 		for _, b := range res.Breakdown {
-			assert.NotEqual(c, personalEmail, b.UserEmail)
-			assert.NotEqual(c, strings.ToUpper(personalEmail), b.UserEmail)
+			assert.NotEqual(t, personalEmail, b.UserEmail)
+			assert.NotEqual(t, strings.ToUpper(personalEmail), b.UserEmail)
 		}
 		for _, p := range res.TimeSeries {
-			assert.NotEqual(c, personalEmail, p.UserEmail)
+			assert.NotEqual(t, personalEmail, p.UserEmail)
 		}
 	}
 

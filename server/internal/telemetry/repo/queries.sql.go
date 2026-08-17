@@ -326,11 +326,11 @@ func applyHookFiltersToBuilder(sb squirrel.SelectBuilder, filters []AttributeFil
 }
 
 // applyHookFiltersToBuilderCanonical applies the same filters with the email
-// dimension folded: eq/in filters on user_email match canonically (both sides
-// through the identity map) so a drill from a folded breakdown finds all of an
-// employee's rows. Other ops keep literal semantics — exists/not_exists are
-// fold-neutral emptiness checks, and contains/not_eq on a canonical value have
-// no meaningful fold.
+// dimension folded. The operator contract lives in canonicalEmailOpPredicate:
+// eq/in match canonically (both sides through the identity map) so a drill
+// from a folded breakdown finds all of an employee's rows, and not_eq
+// excludes the whole folded identity; contains/exists/not_exists keep
+// literal semantics.
 // emailCol is the caller's table-qualified user_email column — the hooks
 // queries span trace_summaries and telemetry_logs, and qualification also
 // guards against SELECT-alias substitution in GROUP BY.
@@ -5675,6 +5675,11 @@ func (q *Queries) GetHooksSessionCount(ctx context.Context, arg GetHooksSessionC
 		Where("event_source = 'hook'").
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
+	// Known trade-off: telemetry_logs carries a bloom_filter index on the
+	// materialized user_email, and a literal email drill was prunable by it;
+	// the folded predicate wraps the column in joinGet and is not. Acceptable
+	// because the sibling hooks queries in the same errgroup already scan the
+	// identical time window — this is a relative cost, not a new scan.
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "telemetry_logs.user_email")
 
 	sb = withCanonicalFoldSettings(sb, orgLit)
