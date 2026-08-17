@@ -158,7 +158,8 @@ WHERE id = @organization_id;
 -- Test-only fixture that lets seeders populate every column on
 -- organization_metadata. Prefer this over CreateOrganizationMetadata when a
 -- test needs to exercise filters that depend on account type, workos linkage,
--- disabled state, whitelist flag, or trial window.
+-- disabled state, whitelist flag, trial window, or age. Omit created_at to keep
+-- the column default.
 INSERT INTO organization_metadata (
     id,
     name,
@@ -168,7 +169,8 @@ INSERT INTO organization_metadata (
     whitelisted,
     free_trial_started_at,
     free_trial_ends_at,
-    disabled_at
+    disabled_at,
+    created_at
 ) VALUES (
     @id,
     @name,
@@ -178,13 +180,56 @@ INSERT INTO organization_metadata (
     @whitelisted,
     @free_trial_started_at,
     @free_trial_ends_at,
-    sqlc.narg('disabled_at')::timestamptz
+    sqlc.narg('disabled_at')::timestamptz,
+    COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
 );
+
+-- name: SetWorkosLastEventIDFixture :exec
+-- Test-only fixture for seeding the WorkOS webhook cursor on an organization
+-- that already exists. Deliberately kept out of
+-- CreateOrganizationMetadataFixture: several branches add columns to that
+-- INSERT at once, and a column added mid-list renumbers every positional
+-- placeholder after it in the generated code, which a hand-resolved merge can
+-- get wrong while still compiling.
+UPDATE organization_metadata
+SET workos_last_event_id = @workos_last_event_id
+WHERE id = @id;
+
+-- name: GetOrganizationMetadataStateFixture :one
+-- Test-only fixture for asserting what a write to organization_metadata did
+-- and did not touch. disabled_at comes back at full precision: the admin API
+-- renders it as a second-resolution RFC3339 string, which hides a timestamp
+-- that moved by microseconds. workos_last_event_id is the WorkOS webhook
+-- cursor, which only the webhook path may write. created_at and updated_at are
+-- the reference points for "did this write stamp the moment of the action":
+-- comparing a stamp against them keeps the comparison inside the database
+-- clock, which the test host's clock can drift from.
+-- gram_account_type and whitelisted are the two columns trial demotion drops,
+-- so a write that only extends a trial has to leave both exactly where it found
+-- them.
+SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
+FROM organization_metadata
+WHERE id = @id;
+
+-- name: CountOrganizationsForWorkosIDFixture :one
+-- Test-only fixture for proving that two writers converged on one row instead
+-- of creating two. Every read the API offers returns at most one organization,
+-- so a duplicate row is invisible through it and only a count can see it.
+SELECT count(*)
+FROM organization_metadata
+WHERE workos_id = @workos_id::text;
 
 -- name: CreateOrganizationUserRelationshipFixture :exec
 -- Test-only fixture for seeding membership counts.
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
+
+-- name: ForceSoftDeleteOrganizationUserRelationshipsFixture :exec
+-- Test-only fixture for seeding a removed member. The deleted column is
+-- generated from deleted_at, so a soft delete has to set the timestamp.
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id;
 
 -- name: ForceSoftDeleteUserSessionIssuer :exec
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
@@ -373,3 +418,41 @@ WHERE s.project_id = @project_id
     NOT @found_only::boolean
     OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
   );
+
+-- name: ForceSoftDeleteUser :exec
+-- Test-only fixture: soft-deletes a directory user to exercise deleted-row
+-- filtering in identity resolution.
+UPDATE users
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: ForceSoftDeleteOrganizationUserRelationship :exec
+-- Test-only fixture: soft-deletes an org membership to exercise deleted-row
+-- filtering in identity resolution.
+UPDATE organization_user_relationships
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
+-- name: ForceSoftDeleteUserAccountsByEmail :exec
+-- Test-only fixture: soft-deletes an org's linked accounts by email to
+-- exercise deleted-row filtering in identity resolution.
+UPDATE user_accounts
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND lower(email) = @email_lower::text;
+
+-- name: GetTransactionClockFixture :one
+-- Test-only. Returns the transaction timestamp and the two edges a 7-day
+-- INTERVAL predicate compares against, so a boundary fixture can be seeded
+-- exactly on an edge.
+--
+-- Postgres computes the offsets rather than the test, because INTERVAL day
+-- arithmetic on timestamptz runs in the session time zone and need not come to
+-- 168 hours. It must be read inside the transaction that also runs the query
+-- under test: now() is the transaction timestamp, so reading it on its own
+-- connection puts the fixture on an edge that has already moved.
+SELECT
+    now()::timestamptz AS transaction_now,
+    (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
+    (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;

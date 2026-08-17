@@ -17,7 +17,10 @@ export function AdminLayout(): JSX.Element {
   const [defaultOpen] = useState(sidebarOpen);
 
   return (
+    // The constraint belongs here rather than in sidebar.tsx: that file is
+    // vendored shadcn and stays pristine so the registry can be re-pulled.
     <SidebarProvider
+      className="h-svh"
       defaultOpen={defaultOpen}
       style={
         {
@@ -30,10 +33,11 @@ export function AdminLayout(): JSX.Element {
 
       <SidebarInset>
         <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="px-4 lg:px-6">
+        {/* One link without min-h-0 makes every child below content-sized. */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="@container/main flex min-h-0 flex-1 flex-col gap-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <div className="flex min-h-0 flex-1 flex-col overflow-auto px-4 lg:px-6">
                 <Outlet />
               </div>
             </div>

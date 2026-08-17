@@ -698,6 +698,47 @@ func TestListChats_Filter_DateRange(t *testing.T) {
 	require.Equal(t, oldChat.String(), result.Chats[0].ID)
 }
 
+// TestListChats_Filter_DateRange_ActiveChatNewerThanTo verifies the range test
+// is interval overlap: a chat created inside the window stays listed even when
+// its newest message is more recent than the requested `to` bound. The
+// dashboard freezes `to` when a range is picked, so a still-running session
+// would otherwise vanish from the list as soon as another message lands.
+func TestListChats_Filter_DateRange_ActiveChatNewerThanTo(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-active")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	activeChat := seedChatAtTime(t, ctx, ti, "ext-active", now.Add(-2*time.Hour))
+	_, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    activeChat,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// `to` is older than the chat's newest message but newer than its creation.
+	from := now.Add(-24 * time.Hour).Format(time.RFC3339)
+	to := now.Add(-10 * time.Minute).Format(time.RFC3339)
+	payload := defaultPayload()
+	payload.From = &from
+	payload.To = &to
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, activeChat.String(), result.Chats[0].ID)
+
+	// A page past the end takes the CountChats fallback; it must apply the
+	// same overlap semantics and still count the active chat.
+	payload.Offset = 50
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Empty(t, result.Chats)
+}
+
 func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -951,6 +992,40 @@ func TestListChats_LiteLLMOriginatingClient(t *testing.T) {
 	require.Equal(t, "claude-code", conv.PtrValOr(byID[chatID.String()].OriginatingClient, ""))
 	require.Equal(t, "litellm", conv.PtrValOr(byID[unknownChatID.String()].Source, ""))
 	require.Empty(t, conv.PtrValOr(byID[unknownChatID.String()].OriginatingClient, ""))
+}
+
+// TestListChats_LiteLLMProxiedNativeSession covers sessions whose transcript is
+// owned by a native hook stream while the traffic was routed through LiteLLM:
+// their proxied rows are suppressed, so only the chat-level marker can carry
+// the LiteLLM association into the filter and the listing payload.
+func TestListChats_LiteLLMProxiedNativeSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	proxied := seedChatWithSource(t, ctx, ti, "ext-proxied", "claude-code")
+	_ = seedChatWithSource(t, ctx, ti, "ext-proxied", "claude-code")
+	require.NoError(t, repo.New(ti.conn).MarkChatLiteLLMProxied(ctx, repo.MarkChatLiteLLMProxiedParams{
+		ID:        proxied,
+		ProjectID: ti.projectID,
+	}))
+
+	source := "litellm"
+	payload := defaultPayload()
+	payload.Source = &source
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, proxied.String(), result.Chats[0].ID)
+	require.Equal(t, "claude-code", conv.PtrValOr(result.Chats[0].Source, ""))
+	require.True(t, conv.PtrValOr(result.Chats[0].LitellmProxied, false))
+	require.Empty(t, conv.PtrValOr(result.Chats[0].OriginatingClient, ""))
+
+	// The filter option must be offered even though no message row carries the
+	// litellm source.
+	sources, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.Contains(t, sources.Sources, "litellm")
 }
 
 // TestListChats_Filter_Source_EmptyReturnsAll guards against the regression

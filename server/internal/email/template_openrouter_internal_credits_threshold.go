@@ -20,8 +20,8 @@ type OpenRouterInternalCreditsThreshold struct {
 	Exhausted bool
 }
 
-func (t OpenRouterInternalCreditsThreshold) TransactionalID() TransactionalID {
-	return transactionalIDOpenRouterInternalCreditsThreshold
+func (t OpenRouterInternalCreditsThreshold) Key() TemplateKey {
+	return TemplateKeyOpenRouterInternalCredits
 }
 
 func (t OpenRouterInternalCreditsThreshold) AddToAudience() bool { return false }

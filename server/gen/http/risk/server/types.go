@@ -865,10 +865,11 @@ type GetRiskSignalsResponseBody struct {
 	// Organization risk score computed the same way over the equal-length window
 	// immediately before from.
 	PreviousOrgRiskScore float64 `form:"previous_org_risk_score" json:"previous_org_risk_score" xml:"previous_org_risk_score"`
-	// Deduplicated findings in the 24 hours ending at to.
-	Findings24h int64 `form:"findings_24h" json:"findings_24h" xml:"findings_24h"`
-	// Deduplicated findings in the 24 hours before that.
-	PreviousFindings24h int64 `form:"previous_findings_24h" json:"previous_findings_24h" xml:"previous_findings_24h"`
+	// Deduplicated live findings in the window.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings int64 `form:"previous_findings" json:"previous_findings" xml:"previous_findings"`
 	// Signals with at least one live finding in the window.
 	OpenSignals int64 `form:"open_signals" json:"open_signals" xml:"open_signals"`
 	// Signals rated critical in the window.
@@ -906,36 +907,12 @@ type GetRiskPolicyStatusResponseBody struct {
 // CreateRiskPolicyBypassRequestResponseBody is the type of the "risk" service
 // "createRiskPolicyBypassRequest" endpoint HTTP response body.
 type CreateRiskPolicyBypassRequestResponseBody struct {
-	// The bypass request ID.
+	// The kind of request the token redeemed into.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The id of the created or refreshed request.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The risk policy ID.
-	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
-	// Optional target namespace for the request, such as server_url.
-	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// Optional display label for the target.
-	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	// Canonical key for the target.
-	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
-	// Selector dimensions for the request target.
-	TargetDimensions map[string]string `form:"target_dimensions" json:"target_dimensions" xml:"target_dimensions"`
-	// Requester user ID.
-	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
-	// Requester email when known.
-	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
-	// Requester note.
-	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
-	// Current request status.
+	// The request's current status.
 	Status string `form:"status" json:"status" xml:"status"`
-	// User ID that approved, denied, or revoked the request.
-	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
-	// Principal URNs granted when approved.
-	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
-	// Decision timestamp.
-	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
-	// Creation timestamp.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// Last update timestamp.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AcknowledgeRiskPolicyChallengeResponseBody is the type of the "risk" service
@@ -11325,8 +11302,8 @@ func NewGetRiskSignalsResponseBody(res *risk.RiskSignalsResult) *GetRiskSignalsR
 		To:                   res.To,
 		OrgRiskScore:         res.OrgRiskScore,
 		PreviousOrgRiskScore: res.PreviousOrgRiskScore,
-		Findings24h:          res.Findings24h,
-		PreviousFindings24h:  res.PreviousFindings24h,
+		Findings:             res.Findings,
+		PreviousFindings:     res.PreviousFindings,
 		OpenSignals:          res.OpenSignals,
 		CriticalSignals:      res.CriticalSignals,
 		UsersExposed:         res.UsersExposed,
@@ -11377,37 +11354,11 @@ func NewGetRiskPolicyStatusResponseBody(res *types.RiskPolicyStatus) *GetRiskPol
 // NewCreateRiskPolicyBypassRequestResponseBody builds the HTTP response body
 // from the result of the "createRiskPolicyBypassRequest" endpoint of the
 // "risk" service.
-func NewCreateRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequest) *CreateRiskPolicyBypassRequestResponseBody {
+func NewCreateRiskPolicyBypassRequestResponseBody(res *risk.PolicyBypassRedemption) *CreateRiskPolicyBypassRequestResponseBody {
 	body := &CreateRiskPolicyBypassRequestResponseBody{
-		ID:              res.ID,
-		PolicyID:        res.PolicyID,
-		TargetKind:      res.TargetKind,
-		TargetLabel:     res.TargetLabel,
-		TargetKey:       res.TargetKey,
-		RequesterUserID: res.RequesterUserID,
-		RequesterEmail:  res.RequesterEmail,
-		Note:            res.Note,
-		Status:          res.Status,
-		DecidedBy:       res.DecidedBy,
-		DecidedAt:       res.DecidedAt,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
-	}
-	if res.TargetDimensions != nil {
-		body.TargetDimensions = make(map[string]string, len(res.TargetDimensions))
-		for key, val := range res.TargetDimensions {
-			tk := key
-			tv := val
-			body.TargetDimensions[tk] = tv
-		}
-	}
-	if res.GrantedPrincipalUrns != nil {
-		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))
-		for i, val := range res.GrantedPrincipalUrns {
-			body.GrantedPrincipalUrns[i] = val
-		}
-	} else {
-		body.GrantedPrincipalUrns = []string{}
+		Kind:   res.Kind,
+		ID:     res.ID,
+		Status: res.Status,
 	}
 	return body
 }

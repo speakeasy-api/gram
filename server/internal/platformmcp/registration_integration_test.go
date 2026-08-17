@@ -49,6 +49,22 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_fresh_organization")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.NoError(t, err)
+
+	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
+	require.NoError(t, err)
+	require.True(t, eligible)
+}
+
 func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {
 	t.Parallel()
 
@@ -65,7 +81,7 @@ func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {
 	require.NoError(t, err)
 	registeredReceipt, err = store.ConvergeRegistration(ctx, principal, project, registeredRequest, registeredReceipt)
 	require.NoError(t, err)
-	registeredReceipt, err = store.CompleteRegistration(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
+	registeredReceipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
 	require.NoError(t, err)
 
 	reusedRequest := registeredRequest
@@ -87,6 +103,7 @@ func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {
 
 	storedDeniedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 		ProjectID:      project.ID,
 		Operation:      operationRegisterCatalogMCP,
@@ -141,7 +158,7 @@ func TestRegistrationStoreSerializesCapRejectionsForDistinctCandidates(t *testin
 	require.NoError(t, err)
 	registeredReceipt, err = store.ConvergeRegistration(ctx, principal, project, registeredRequest, registeredReceipt)
 	require.NoError(t, err)
-	_, err = store.CompleteRegistration(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
+	_, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
 	require.NoError(t, err)
 
 	requests := []CatalogRegistrationRequest{
@@ -217,7 +234,7 @@ func TestRegistrationStoreDoesNotCountPendingRegistrationsTowardActiveCap(t *tes
 			remote  string
 		}) {
 			start.Wait()
-			_, err := store.CompleteRegistration(ctx, principal, project, complete.request, complete.receipt, complete.remote)
+			_, err := store.CompleteRegistrationWithRemoteURL(ctx, principal, project, complete.request, complete.receipt, complete.remote)
 			completeErrors <- err
 		}(complete)
 	}
@@ -269,7 +286,15 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 
 	const remoteURL = "https://reviewed.example.test/mcp"
-	completed, err := store.CompleteRegistration(ctx, principal, project, request, receipt, remoteURL)
+	completed, err := store.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{
+		remoteURL:   remoteURL,
+		displayName: "Reviewed MCP",
+		headers: []resolvedCatalogHeader{{
+			name:     "X-API-Key",
+			required: true,
+			secret:   true,
+		}},
+	})
 	require.NoError(t, err)
 	require.Equal(t, receiptStatusSucceeded, completed.Status)
 	require.True(t, completed.RegistrationID.Valid)
@@ -295,7 +320,20 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	remote, err := remotemcprepo.New(conn).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: registration.RemoteMcpServerID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "streamable-http", remote.TransportType)
+	require.Equal(t, "Reviewed MCP source", remote.Name.String)
 	require.Equal(t, remoteURL, remote.Url)
+	headers, err := remotemcprepo.New(conn).ListServerHeaders(ctx, remotemcprepo.ListServerHeadersParams{RemoteMcpServerID: remote.ID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Len(t, headers, 1)
+	require.Equal(t, "X-API-Key", headers[0].Name)
+	require.True(t, headers[0].IsSecret)
+	require.True(t, headers[0].Value.Valid)
+	require.Empty(t, headers[0].Value.String)
+	require.False(t, headers[0].ValueFromRequestHeader.Valid)
+	declaredSecret := []CatalogConfigurationField{{Key: "header:x-api-key", Kind: "header", Name: "X-API-Key", Required: true, Secret: true}}
+	pending, err := store.ResolveRegistrationPendingSecretFields(ctx, principal, project, registration.ID, declaredSecret)
+	require.NoError(t, err)
+	require.Equal(t, declaredSecret, pending)
 
 	issuer, err := usersessionsrepo.New(conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: registration.UserSessionIssuerID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
@@ -304,6 +342,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: registration.McpServerID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility)
+	require.Equal(t, "Reviewed MCP", server.Name.String)
 	require.Equal(t, registration.RemoteMcpServerID.UUID, server.RemoteMcpServerID.UUID)
 	require.Equal(t, registration.UserSessionIssuerID.UUID, server.UserSessionIssuerID.UUID)
 
@@ -314,6 +353,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 
 	storedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 		ProjectID:      project.ID,
 		Operation:      operationRegisterCatalogMCP,
@@ -612,7 +652,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 	replayedReceipt, err = store.ConvergeRegistration(ctx, principal, project, replayedRequest, replayedReceipt)
 	require.NoError(t, err)
-	_, err = store.CompleteRegistration(ctx, principal, project, replayedRequest, replayedReceipt, remoteURL)
+	_, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, replayedRequest, replayedReceipt, remoteURL)
 	require.NoError(t, err)
 	auditCountAfterReplay, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionPlatformMcpRegistrationCreate)
 	require.NoError(t, err)
@@ -766,4 +806,59 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
+}
+
+// The project assistant holds no OAuth connection. Its writes must still land,
+// attributed to the real user and its acting surface, and must still replay
+// idempotently — the property that breaks first if a read path joins through
+// the connection it does not have.
+func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_no_connection")
+	require.NoError(t, err)
+
+	connected, project := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "gram-project-assistant",
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+
+	request := registrationRequest(project, "assistant-registered", "assistant-key")
+	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err, "an assistant write must not require an OAuth connection")
+	require.False(t, receipt.ConnectionID.Valid, "no connection applies, which is not the same as a zero uuid")
+
+	receipt, err = store.ConvergeRegistration(ctx, assistant, project, request, receipt)
+	require.NoError(t, err)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, assistant, project, request, receipt, "https://reviewed.example.test/assistant")
+	require.NoError(t, err)
+	require.True(t, receipt.RegistrationID.Valid)
+
+	stored, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: assistant.OrganizationID,
+		UserID:         conv.ToPGText(assistant.UserID),
+		SubjectUrn:     userSubjectURN(assistant.UserID),
+		ProjectID:      project.ID,
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: request.IdempotencyKey,
+	})
+	require.NoError(t, err, "a connection-less receipt must still be readable, or its idempotency key is poisoned")
+	require.False(t, stored.ConnectionID.Valid)
+	require.Equal(t, assistant.UserID, stored.UserID.String)
+	require.Equal(t, string(SurfaceProjectAssistant), stored.ActingSurface.String)
+
+	replay, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err, "replaying the same key must return the original receipt, not a unique violation")
+	require.True(t, replay.Replayed)
+	require.Equal(t, receipt.ID, replay.ID)
 }

@@ -13,8 +13,8 @@ type AccessRequest struct {
 	ManageAccessLink string
 }
 
-func (AccessRequest) TransactionalID() TransactionalID {
-	return transactionalIDAccessRequest
+func (AccessRequest) Key() TemplateKey {
+	return TemplateKeyAccessRequest
 }
 
 func (t AccessRequest) Variables() map[string]string {

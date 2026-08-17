@@ -22,8 +22,8 @@ type TumUsageThreshold struct {
 	CycleEnd string
 }
 
-func (t TumUsageThreshold) TransactionalID() TransactionalID {
-	return transactionalIDTumUsageThreshold
+func (t TumUsageThreshold) Key() TemplateKey {
+	return TemplateKeyTumUsageThreshold
 }
 
 func (t TumUsageThreshold) AddToAudience() bool { return false }

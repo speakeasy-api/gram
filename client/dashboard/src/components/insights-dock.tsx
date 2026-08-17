@@ -295,9 +295,11 @@ const CHAT_LANDING_COMPOSER_CSS = `
      host element — custom properties inherit through the shadow boundary, so
      the landing can crossfade through examples without re-rendering the chat
      tree (a changing \`composer.placeholder\` in the Elements config would).
-     The native placeholder is hidden because it cannot be transitioned. */
-  :host-context(.gram-chat-landing) .aui-composer-input::placeholder {
-    color: transparent;
+     The composer's own placeholder is hidden because it cannot be
+     transitioned — it is a ::before on the contenteditable input, since a div
+     has no ::placeholder. */
+  :host-context(.gram-chat-landing) .aui-composer-input[data-empty="true"]::before {
+    content: none;
   }
   :host-context(.gram-chat-landing) .aui-composer-root[data-empty="true"]::before {
     content: var(--gram-composer-placeholder, "Ask anything");
@@ -648,7 +650,12 @@ function InsightsDock({
               open && "grid-rows-[0fr]",
             )}
           >
-            <div className="overflow-hidden">
+            {/* The clip is what makes the grid-rows collapse animate, but it
+                also crops the composer's own menus (slash commands, tool
+                mentions), which open upwards out of the composer box. Elements
+                marks its shadow host while one is open, so the clip lifts for
+                exactly as long as there is a menu to show. */}
+            <div className="overflow-hidden has-[[data-composer-menu-open]]:overflow-visible">
               {/* Granola-style expanded composer: the outer card gains inset
                 padding, the chip row sits at the top, and the input row gets
                 its own bordered rounded container. Collapsed, the padding and
@@ -1027,26 +1034,17 @@ export function InsightsProvider({
     [user.id, user.email],
   );
 
-  // Mount the shared runtime only where it's actually used: a chat route (the
-  // page owns the chat) or the open dock — and only where the dock is shown.
-  // Pages with their own chat runtime (Playground, Elements, assistant
-  // onboarding) hide the dock, so `!hideTrigger` keeps the shared provider out
-  // of their tree and the two RemoteThreadListRuntimes never nest. Maximize
-  // stays seamless because the expand handler navigates WITHOUT collapsing, so
-  // `onChatRoute` takes over before `isExpanded` flips (no unmount gap).
-  // Everything runtime-dependent — the dock panel's chat view, the provider
-  // mount, and (via context) the chat pages — gates on this single flag.
-  // Mounted wherever a composer can appear — every surface now renders the
-  // same AUI composer, and that needs the runtime present, not just when the
-  // chat panel happens to be open. MCP discovery is a react-query on a
-  // module-level client, so the extra mounts reuse one cached result.
-  // Mounted as soon as the assistant resolves, not only where chat is visible:
-  // every entry point (dock pill, /chat landing, project home widget, full
-  // page) now renders the same AUI composer, and that needs the runtime in the
-  // tree. Pages that hide the dock still embed the landing widget, so gating on
-  // dock visibility left those surfaces on the legacy input. MCP discovery is a
-  // react-query on a module-level client, so the extra mounts share one result.
-  const runtimeMounted = assistantReady;
+  // The shared composer needs its runtime as soon as the assistant resolves,
+  // including on Home where the floating dock is hidden in favor of the
+  // landing widget. Routes that mount their own GramElementsProvider are the
+  // exception: wrapping them would nest RemoteThreadListRuntimes before their
+  // useHideInsightsDock layout effect can register with this parent.
+  const pageOwnsRuntime =
+    routes.playground.active ||
+    routes.elements.active ||
+    routes.assistants.newAssistant.active ||
+    routes.assistants.detail.active;
+  const runtimeMounted = assistantReady && !pageOwnsRuntime;
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.

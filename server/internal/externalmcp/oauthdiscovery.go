@@ -34,6 +34,15 @@ type OAuthDiscoveryResult struct {
 	TokenEndpoint         string
 	RegistrationEndpoint  string
 	ScopesSupported       []string
+
+	// ProbeIncomplete reports that at least one discovery request failed
+	// without the server cleanly saying the document is not there (only a
+	// 404 or 410 says that): unreachable host, TLS failure, auth or
+	// rate-limit refusal, 5xx, or invalid published metadata. A Version of
+	// "none" with ProbeIncomplete set means discovery could not run to
+	// completion — callers that treat "none" as "publishes no OAuth
+	// metadata" must keep that case distinct.
+	ProbeIncomplete bool
 }
 
 // ExternalMCPOAuthConfig contains OAuth configuration extracted from an external MCP tool
@@ -86,6 +95,11 @@ func ResolveOAuthConfig(toolset *types.Toolset) *ExternalMCPOAuthConfig {
 	return nil
 }
 
+// errWellKnownAbsent marks a well-known fetch the server answered with a
+// 404/410: the metadata is deliberately not served there, as opposed to a
+// transport failure or refusal that leaves publication unknown.
+var errWellKnownAbsent = errors.New("well-known metadata not published")
+
 // authServerMetadata represents the OAuth 2.0 Authorization Server Metadata (RFC 8414).
 type authServerMetadata struct {
 	Issuer                string   `json:"issuer"`
@@ -112,6 +126,11 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 	var resourceMeta *protectedResourceMetadata
 	var authServerMeta *authServerMetadata
 
+	// A failed probe that is not a clean 404/410 leaves publication unknown;
+	// carried out on ProbeIncomplete so a dead or refusing host never reads
+	// as "publishes no OAuth metadata".
+	probeFailed := false
+
 	// Strategy 1: Check for auth_server_metadata in header (direct AS metadata URL)
 	if asURL, ok := params["auth_server_metadata"]; ok && asURL != "" {
 		meta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, "")
@@ -124,6 +143,9 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 	// Strategy 2: Check for resource_metadata in header (Protected Resource metadata)
 	if rmURL, ok := params["resource_metadata"]; ok && rmURL != "" {
 		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, rmURL)
+		if err != nil && !errors.Is(err, errWellKnownAbsent) {
+			probeFailed = true
+		}
 		if err == nil && meta != nil {
 			resourceMeta = meta
 			// Follow the chain to get AS metadata
@@ -142,6 +164,9 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		// Try OAuth Protected Resource metadata first
 		prURL := buildWellKnownResourceURL(remoteURL)
 		meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+		if err != nil && !errors.Is(err, errWellKnownAbsent) {
+			probeFailed = true
+		}
 		if err == nil && meta != nil {
 			resourceMeta = meta
 			// Follow the chain
@@ -157,7 +182,10 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		// Try OAuth Authorization Server metadata directly
 		if authServerMeta == nil {
 			asURL := buildWellKnownURL(remoteURL)
-			asMeta, _ := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, issuerFromWellKnownBase(remoteURL))
+			asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, issuerFromWellKnownBase(remoteURL))
+			if err != nil && !errors.Is(err, errWellKnownAbsent) {
+				probeFailed = true
+			}
 			if asMeta != nil {
 				authServerMeta = asMeta
 			}
@@ -173,6 +201,9 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 
 			prURL := buildWellKnownResourceURL(rootURL)
 			meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+			if err != nil && !errors.Is(err, errWellKnownAbsent) {
+				probeFailed = true
+			}
 			if err == nil && meta != nil {
 				resourceMeta = meta
 				if len(meta.AuthorizationServers) > 0 {
@@ -186,7 +217,10 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 
 			if authServerMeta == nil {
 				asURL := buildWellKnownURL(rootURL)
-				asMeta, _ := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, rootURL)
+				asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, rootURL)
+				if err != nil && !errors.Is(err, errWellKnownAbsent) {
+					probeFailed = true
+				}
 				if asMeta != nil {
 					authServerMeta = asMeta
 				}
@@ -202,6 +236,7 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		TokenEndpoint:         "",
 		RegistrationEndpoint:  "",
 		ScopesSupported:       nil,
+		ProbeIncomplete:       probeFailed,
 	}
 
 	if authServerMeta != nil {
@@ -322,12 +357,27 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 	}
 	defer o11y.LogDefer(ctx, logger, func() error { return resp.Body.Close() })
 
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+		// The server deliberately answering that this well-known document is
+		// not served — not-published, not a failed probe. Deliberately only
+		// 404/410: a 401/403/429 is an auth or rate-limit refusal that leaves
+		// publication unknown.
+		return nil, fmt.Errorf("HTTP %d: %w", resp.StatusCode, errWellKnownAbsent)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
+	// Bounded read against a user-supplied host: an endless or oversized body
+	// must fail as a size error, not hold memory or masquerade as a decode
+	// failure on truncated JSON.
+	body, err := readBoundedBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	var result T
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
 

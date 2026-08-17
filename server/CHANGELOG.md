@@ -1,5 +1,409 @@
 # server
 
+## 1.12.0
+
+### Minor Changes
+
+- ed97a31: The MCP evidence dossier gains three deterministic sources. The assembler now
+  consults the code host about a package's declared source repository (stars,
+  forks, contributors, commit recency, archived status), asks OSV.dev which
+  published vulnerability advisories name the package, and reads the domain
+  registry's registration record for a remote server's registrable domain.
+  Package registries also surface their declared repository and homepage URLs.
+  Each source follows the dossier's existing contract — found, not-found, and
+  could-not-look stay distinct, with failures recorded as gaps — and the
+  approval page renders the new facts in the evidence panel, including a
+  dedicated advisories group where checked-and-clean is shown as a finding
+  rather than an absence.
+- bbaf839: Adds the MCP approval management API. Admins can list servers awaiting a decision, open one to see the evidence gathered for it alongside any previous decisions, and record an approval or denial with a rationale and an explicit set of principals it covers. Gated by two new permissions so reviewing the queue and committing the organisation to a server can be granted separately. Also generates the TypeScript SDK bindings and React Query hooks for the new endpoints.
+- 798360b: A shadow-MCP block link now redeems into the MCP approval workflow: the blocked employee's ask attaches as a requester on the server's single review — deduplicated by canonical URL, evidence gathered — instead of minting a per-user bypass request. The redemption endpoint reports what the token turned into, keeps the legacy bypass request only for identity-only servers and organizations without the approval feature, and the standalone Approval Requests review page retires — the Shadow MCP servers table is the one review surface. The command palette surfaces pending access requests in its place.
+- 798360b: MCP approval decisions now enforce: an approval replaces the server's risk-policy bypass audience with the decision's blast radius (defaulting to everyone, stored explicitly), and a denial revokes it — in the same transaction that records the decision, through the same grant machinery the shadow-MCP allow/block controls use, so the policy evaluator is unchanged. Under allow-by-default policies the directions invert (deny writes the block rule, approve clears it), and an approval narrower than everyone is rejected when no block-by-default policy can express it rather than silently widening. Granted principal URNs are validated at intake now that they become enforcement state.
+- e6a470f: Assembles the evidence document at approval-request intake. Every admission now gathers the deterministic signals — resolved identity, package-registry metadata, and the org's own traffic exposure — into the versioned document the approval surface renders and decisions freeze. Found, not-published, and could-not-look are distinct outcomes, per-source failures are recorded as gaps inside the document rather than read as clean, and a flaky registry can delay evidence but never lose an admission. The optional research agent stays deliberately outside this document: web-sourced findings keep their own trust tier and lifecycle, and the deterministic document doubles as the agent's briefing when an admin later asks for a run.
+- bbaf839: Adds org-exposure signals to the MCP approval evidence set: whether the requesting project is already talking to a server, since when, how often, and how many distinct people have called it. This is the only observed signal in the approval workflow — everything else a server or registry declares about itself — and it is what tells a reviewer what denying a request would actually cost.
+- e6a470f: Adds approval-request intake to the MCP approval API. Members can ask for a server to be reviewed by URL or launch command — no permission grant needed, matching the block and bypass surfaces — and admins can promote a risk-policy bypass request into the review queue, carrying the blocked employee's identity and justification with it. Repeat asks for the same server attach to the existing review rather than opening a second one, identity resolution runs at intake so evidence has something to hang off by the time an admin looks, and a re-request reopens a denied review with its decision history intact.
+- 0c7f9fc: Evidence gathering for MCP approval requests now probes remote servers directly: their published OAuth metadata through the standard well-known endpoints (auth mode, scopes, dynamic client registration), and their tool declarations through an unauthenticated tools/list assessed for declared and schema-implied capability. Both are the server's own words about itself, gathered without credentials — a server that refuses to answer records a gap, never a clean empty section.
+
+  When the server refuses an unauthenticated tools/list, the gather now falls back to its MCP registry catalog entry, which carries the registry's copy of the tool declarations — labeled as registry-sourced, one step further from the server. A catalog match also fills a new provenance section (official flag, lifecycle status, publish/update recency, visitor estimates), and a new `mcpApproval.refreshEvidence` endpoint re-runs every source on demand, replacing the request's current evidence while leaving frozen decision snapshots untouched.
+
+- e6a470f: Server evidence decouples from asking: mcpApproval.ensureServerReview resolves the evidence dossier for any server URL, opening one in a new unreviewed status when none exists. Dossiers stay out of the decision queue and upgrade in place when someone actually requests the server, so evidence can be inspected before — or without — any review being decided.
+- 798360b: Retire the legacy Shadow MCP inventory enforcement endpoints — upsert/delete policy bypass and block/unblock server — now that every allow and deny travels through a recorded MCP approval decision. resolveShadowMCPInventoryRequest stays while pre-approval bypass requests drain.
+- bbaf839: Shadow MCP inventory servers now carry their MCP approval request state. Approval request summaries expose the inventory server slug for server_url targets, and inventory list/detail responses include the approval request (id, status, requester count) tracking each server, joining the two surfaces on the same canonical URL identity.
+- 798360b: The Shadow MCP page becomes one servers table: the inventory list now unions in review-only targets (requested-but-unobserved URLs and stdio commands, marked by a new target_kind field) on the first page, and the separate Access Requests tab is gone. Every row carries its review state with pending decisions sorted first and filterable; URL rows open the server page, stdio rows open the review sheet.
+
+### Patch Changes
+
+- 4304347: Platform admins can now set the account type on many organizations in one call.
+  The new admin endpoint takes a list of organization ids and one account type,
+  writes them in a single statement, and reports back the ids it wrote and the ids
+  from the request that matched no organization. A stale id therefore costs that
+  one row rather than the whole batch. One call carries at most 1000 ids.
+
+  Both admin write paths now accept only `free`, `pro` and `enterprise`, matched
+  exactly. The single-organization update endpoint used to take any string, so a
+  typo or a difference of capitalisation was written straight to the record. A
+  value outside the list is now refused before anything is written, and the refusal
+  names it. Existing records holding some other account type are left alone.
+
+  The admin dashboard's bulk selection and confirmation step follow.
+
+- c8b377a: Platform admins can now create an organization without leaving the admin app.
+  Until now the only way to open one was the WorkOS dashboard, followed by a wait
+  for the event sync to notice it, so setting up a customer meant working in two
+  tools and having no way to tell which step had actually landed. A new admin
+  endpoint creates the organization in WorkOS and in Gram in one call and reports
+  it back, ready for the existing list, detail and update endpoints.
+
+  The organization it creates is deliberately plain: no members, not whitelisted,
+  no trial, and on the free tier. Each of those is a separate decision with its
+  own endpoint, and creating an organization is not a way to make any of them.
+
+  The new organization is safe to create even while WorkOS is delivering the event
+  for it. Both writers derive the Gram organization id from the WorkOS one, so the
+  admin write and the event sync land on the same row whichever gets there first,
+  and an organization the sync already created keeps the slug it was given rather
+  than being renamed.
+
+  A deployment with no WorkOS configuration refuses the request and says so, rather
+  than minting an organization nobody could log into. If WorkOS refuses the create,
+  Gram stores nothing and the request fails as an upstream error, with the detail in
+  the server logs rather than in the response. If a later step fails, everything
+  Gram wrote is rolled back, but the WorkOS organization is already real and the
+  event sync creates a Gram row for it shortly afterwards.
+
+  Names are validated exactly as self-serve signup validates them, because both
+  paths now run the same validator: an organization created by an operator cannot
+  be named something a customer could not have named it.
+
+  The local development identity provider gained the two organization routes this
+  flow needs, so the whole thing can be exercised without a WorkOS account.
+
+  The admin dashboard button follows.
+
+- 1c02a8a: Platform admins can now disable an organization and undo it. Until now the only
+  thing that could disable an organization was the WorkOS `organization.deleted`
+  webhook, and nothing anywhere could re-enable one, so an operator had no way to
+  cut off access or to reverse a disable that turned out to be wrong. Two admin
+  endpoints cover both directions and report the organization back in its new
+  state, which the existing list and detail endpoints already surface.
+
+  Disabling is keyed on the Gram organization id rather than the WorkOS one, so an
+  organization that was never linked to WorkOS can be disabled like any other.
+  Disabling an organization that is already disabled keeps the original timestamp
+  instead of moving it, so the record of when access was cut stays true. Neither
+  direction touches the whitelist flag, which is the separate not-yet-approved
+  gate, nor the WorkOS webhook cursor, which only the webhook path may write.
+
+  All three organization writes now read the organization back by id alone, which
+  also corrects the existing update endpoint. An organization id and another
+  organization's slug can be the same string, and the read that produced the
+  response resolved either, so a write could return a different organization than
+  the one it changed. Addressing one of these writes by slug now returns a
+  not-found instead of a success describing an organization that was never
+  touched. Reading an organization by slug still works, and when the same string
+  is one organization's id and another's slug the exact id match now wins instead
+  of the database picking either row.
+
+  The admin dashboard row action and confirmation dialog follow.
+
+- dee31a5: Platform admins can now give a customer more time on a running enterprise trial.
+  Until now the trial end date was written once, when the trial was granted, and
+  nothing anywhere could move it, so an operator who wanted to buy a customer
+  another two weeks had no way to do it.
+
+  The extension is added to the trial's current end date rather than to today, so
+  "another two weeks" means two weeks on top of whatever the customer has left,
+  and extending a trial that still has three weeks to run cannot accidentally
+  shorten it. Extensions accumulate, and a single one is capped at a year.
+
+  Only a running trial can be extended. A trial that has already converted to a
+  contract, one that has been demoted, and one whose date has passed but that the
+  expiry sweeper has not reached yet are all rejected with an error that leaves the
+  date where it was, rather than quietly re-arming a trial that has already ended.
+  An organization id that matches nothing is reported as not found, the same answer
+  the disable and enable actions already give, so one mistyped id does not send an
+  operator off to inspect a trial that was never the problem.
+  Extending a trial changes the end date and nothing else: the organization's
+  account type, its whitelist flag and the record of when the trial began all stay
+  as they were.
+
+  The admin dashboard row action follows.
+
+- 8b6278d: The admin API can now report how big the platform is in one call. `GET /admin/organizations.stats` returns the number of organizations in total, the number created in the last 7 days, the number whose enterprise trial is ending soon, the number disabled, and the number disabled in the last 7 days. The total and both 7-day figures include disabled organizations, so the total reports the real platform size rather than the organizations list's default active-only view. None of the five figures narrows to the caller's list filters, so they stay put while an operator filters the list. The ending-soon figure is counted from the same trial state definition the organizations list filters on, so the figure agrees with the rows an operator lands on after clicking it.
+- 2d5e6bb: Platform admins can now put a demoted enterprise trial back on. Until now the
+  expiry sweeper's demotion was one-way: it dropped the organization to the free
+  tier, put it back behind the book-a-demo gate and switched off its model
+  provider keys. Only the keys could be undone, one at a time, through the
+  existing admin action for enabling a key; the tier and the gate had no undo at
+  all. An operator who wanted to give a customer a second run had no way to do it,
+  and extending the trial was not the same thing, because an extension moves an
+  end date and leaves the free tier exactly where the demotion left it.
+
+  Re-arming restores all of it at once: the account type the trial grants, the
+  whitelist flag, every model provider key the demotion switched off, and a fresh
+  run of the length the operator asks for, capped at a year and counted from now. The end date is
+  counted from now rather than added to the old one on purpose, because a demoted
+  trial's end date is already in the past and adding to it could land in the past
+  again, which would leave the sweeper free to demote the organization a second
+  time within the hour.
+
+  One caveat on the keys: this is the deployed behaviour. A local development
+  stack has no OpenRouter account behind it, and its stand-in client accepts the
+  refresh without doing anything, so a re-arm there reports success and restores
+  the tier while both key rows stay switched off. Enabling a key locally has the
+  same gap.
+
+  The keys come back up before any of the database changes are committed. That
+  ordering is the opposite of the demotion's, and it is deliberate: if the model
+  provider refuses, the organization stays demoted and on the free tier, and the
+  operator can retry. Any key that came back up before the refusal stays up, which
+  is what makes the retry cheap. The alternative would advertise a running trial
+  to a customer whose keys were still switched off.
+
+  Only a demoted trial can be re-armed. A trial that is already running is
+  rejected, so re-arm cannot be used as an extend that ignores the extension
+  rules. An organization id that matches nothing is reported as not found, the
+  same answer the disable, enable and extend actions already give, so a mistyped
+  id does not send an operator off to inspect a trial that was never the problem.
+
+  The activity log reads the new entry as "restarted enterprise trial", credited
+  to the Speakeasy team rather than to the operator who ran it, which is the same
+  label the log already gives a Speakeasy action inside a customer's
+  organization. The admin dashboard row action follows.
+
+- 112a408: Keep actively-running agent sessions listed under a date-range filter. The
+  chat list previously required a session's newest message to fall inside the
+  requested range, so a session that logged a message after the client's frozen
+  `to` bound vanished from the Agent Sessions page until the range was
+  re-selected. The range test is now interval overlap: last activity after the
+  range opens and created before it closes.
+- 0f21e6a: Stop a chronically failing AI integration sync from ringing failure monitors forever, and make its failure diagnostics actionable without exposing provider payloads to organization members. Poll failures now back off exponentially — each consecutive final failure doubles the delay before the next run, bounded by a 6h ceiling and anchored on recording time so long runs don't erase the early rounds — and a success, a config save, or re-enabling the schedule resets the streak and makes it due again immediately. Pollers retain normal diagnostic error chains for Temporal and worker logs, while the activity boundary separately derives the safe error persisted to `last_poll_error`. Codex JSON decode failures include the offending log record internally, but customer-visible status includes only the log id and decoder error.
+- 7da1436: The activity log can now record and render a restarted enterprise trial. The
+  entry reads "restarted enterprise trial" and is credited to the Speakeasy team
+  rather than to the individual operator, which is the label the log already gives
+  a Speakeasy action taken inside a customer's organization.
+
+  Nothing produces the entry yet. The admin action that restarts a trial follows
+  separately, and this change is the log's half of it: the action name, the writer
+  that records it, and the phrase the dashboard shows for it.
+
+  The collective "Speakeasy Team" label now has one definition instead of two.
+  The activity log applies it on read, by matching an actor against the members of
+  the Speakeasy organization. A writer that already knows it is acting as staff
+  has to apply the same label when it records the entry, because the read-time
+  mask can only recognise an actor that has a Gram user id, and an operator
+  authenticated through the admin app does not have one. Both paths now read the
+  label from the same constant, so one action cannot appear under two different
+  names depending on which path wrote it.
+
+- 2fc4c57: Cost analytics email filters and group-bys can fold one employee's directory,
+  personal, and case-variant emails into one canonical identity via the
+  ClickHouse identity map, gated by a PostHog rollout flag with a shadow-compare
+  mode that validates the fold on live traffic before serving it. Off by
+  default; literal matching is unchanged.
+- c62e192: Extend canonical identity folding to the employee detail pages, the
+  enrollment list, and the billing email breakdown: behind the same rollout
+  flag, per-user metrics scope through the identity map (email identifiers
+  resolve entirely in-query), the enrollment list shows one row per employee,
+  and billing email slices fold to canonical identities. Literal behavior is
+  unchanged with the flag off.
+- 6324cdb: Add the ClickHouse identity_map fold tables (live + staging twin). Inert in
+  this release: the sync worker and analytics readers land separately. The map
+  folds each unambiguous directory or linked-account email to its owning user so
+  analytics queries can resolve one employee to one identity via joinGet.
+- a3a5186: Trigger an immediate identity map sync when an account link gains attribution
+  during ingest or a WorkOS directory membership changes, instead of waiting out
+  the sync schedule. Triggers are throttled per process and go through the
+  schedule's overlap-skip policy, so chatty ingest coalesces and concurrent
+  requests are safe; a lost trigger degrades to the next scheduled tick.
+- 38da532: Add the identity map sync worker: a scheduled Temporal workflow rebuilds the
+  ClickHouse identity_map fold table from the Postgres directory every 15
+  minutes, mapping each unambiguous directory or linked-account email to its
+  owning user. Full refresh into a staging table with an atomic swap, so
+  deletions propagate and readers never observe a partial map. Nothing reads the
+  map yet; analytics folding lands separately.
+- aad88f0: Stop leftover trial reminder emails after a customer converts or a trial
+  expires. `trialActive` is now cleared in Loops on Polar conversion, an admin
+  account-type change, and demotion, so the 7-day and 1-day sequences no longer
+  keep sending to paying or expired orgs.
+
+## 1.11.0
+
+### Minor Changes
+
+- d7dca3d: Add exact range-bounded activity totals and independent pagination to assistant sessions.
+
+### Patch Changes
+
+- 1b00702: Scope device agent fleet configuration to organization admins. Viewing it
+  (`agent.getConfiguration`) now requires `org:admin`, matching the existing
+  requirement on `agent.updateConfiguration`, and the dashboard hides the Device
+  Agent Configuration tab from non-admins. The Setup tab stays available to
+  organization readers.
+- eaa0649: Serve the hooks@0.3.22 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 97c1c32: Apply the phased hooks rollout gate to the publish freshness read. A hooks
+  generator version bump used to flip every rollout-gated org's publish status to
+  "needs syncing" permanently: publishing carries a gated org's hooks subtree
+  verbatim (by design), so the stored hooks version could never reach the current
+  constant that GetPublishStatus compared against. The status read now runs the
+  same eligibility check as the publish path and skips the hooks version/config
+  comparison for orgs the rollout hasn't cleared — their published hooks are
+  their target, so only MCP content changes count against freshness. Cleared
+  orgs still read a pending hooks bump (or a deferred hook-config change) as
+  stale, prompting the publish that applies it.
+
+## 1.10.0
+
+### Minor Changes
+
+- ae7f01b: The assistant detail panel is now fully configurable and observable. Overview settings (name, model, concurrency, warm TTL) are editable in place. The Sessions tab shows aggregate stats (sessions, messages, cost, tokens) over a selectable time range defaulting to the last 30 days, with per-session cost in the list. Triggers expand in place to show their recent traffic via the new `triggers.listEvents` endpoint, with each dispatched event linking to the conversation it was routed to.
+- c66958e: Agent sessions routed through LiteLLM keep their LiteLLM association even when the agent's own hook stream captures the transcript: they match the LiteLLM platform filter and display as "<Client> via LiteLLM" in the session list and detail views.
+- ca0f1c1: Encrypt platform OpenRouter API keys at rest. New keys are written with an
+  AES-256-GCM encrypted copy alongside the plaintext column (dual-write during
+  the expand phase), every read path prefers the encrypted copy and lazily
+  records ciphertext for legacy plaintext rows, and the credits monitoring
+  activity decrypts inside the activity boundary. A new platform-admin
+  `adminOpenRouterKeys` service and dashboard page list every organization's
+  keys with their credit limit, live usage, and encryption state, with actions
+  to encrypt (verify the ciphertext, then clear the plaintext), enable, and
+  disable a key. Enable and disable actions are audit logged against the owning
+  organization; the encrypt action is internal storage hygiene and is not
+  surfaced in customer-visible audit logs.
+
+### Patch Changes
+
+- 4dd8211: Expand user email filters in cost analytics and session lists to include the
+  employee's directory email and linked AI account emails. User drill-down pages
+  now report the same cost, token, tool-call, and session totals across work and
+  personal account identities.
+- a2bc9ed: Stop LiteLLM-proxied agent sessions from persisting each assistant turn twice,
+  and label Claude Code sessions as Claude Code. The proxy reports the completion
+  the moment the model returns it and the agent's own hook stream reports the same
+  text when the turn ends; prompts already collapsed onto one row through the
+  session's native marker, but assistant turns share no identity across the two
+  observers, so both rows survived. A proxied assistant turn is now dropped for
+  sessions a Claude hook stream already captured (cost and telemetry for the
+  proxied call are unaffected), so those sessions are attributed to the agent that
+  ran them rather than to the proxy. Separately, the bare `claude` adapter slug the
+  hooks binary sends now resolves to the `claude-code` surface even when a session
+  has no OpenTelemetry stream, instead of colliding with the `claude` the Anthropic
+  compliance import writes for Claude Chat Desktop and being displayed as that
+  surface.
+- cfc020f: Harden OpenAPI-from-URL (and in-process image-from-URL) fetches against SSRF. User-supplied URLs are rejected unless they are https with a host that passes the guardian blocklist (loopback, RFC 1918, link-local/metadata, and other reserved ranges), and redirects are capped and re-checked so a hostile target cannot chain into private address space or downgrade to plaintext HTTP.
+
+## 1.9.0
+
+### Minor Changes
+
+- 0e614ac: chat.list accepts a `user_id` filter so callers with project-wide chat visibility can narrow results to a specific Gram user. The Project Assistant dock uses it, together with the dashboard source-kind filter, so "Continue chat" only offers sessions the viewer started from the dashboard.
+- 2b6ebb0: Cache OAuth client ID metadata documents instead of refetching them on every
+  authorization request, honoring upstream `Cache-Control` and `Expires` headers
+  within a 5 minute to 24 hour bound and revalidating with `If-None-Match`. A
+  fetch or validation failure leaves the cached document untouched and fails the
+  request rather than serving a stale one.
+- 6f8d740: Add `userSessionIssuersCimdClients.verifyURL`, which probes a client ID metadata document URL and reports whether it is reachable and spec-compliant without saving anything. Every probe outcome is a successful response distinguishing a malformed URL, an unreachable endpoint, a non-JSON body, and a document that violates the spec, so an operator can fix a URL before adding it rather than discovering the problem when a client fails to authorize. Adding a URL does not fetch the document itself, so configuration never depends on a vendor's host being up; verification is an explicit step taken when it is wanted. The endpoint is rate limited per project, since it is the one place a caller can make Gram fetch a URL of their choosing. The OAuth authorization path is unchanged and still reports these outcomes as a single opaque error, so it cannot be used to probe external hosts.
+- 43107ac: Add compact tool-call rows with separately loaded, persisted two-sentence summaries and risk-first detail expansion.
+- 5ffabf3: Freeze external key identity: `externalKeys.updateAwsKms` and `externalKeys.updateGcpKms` no longer accept `key_arn` / `resource_name` or `algorithm` and cover only `name`, `external_credential_id` and `customer_grant_reference`, so changing what a key is now means deleting it and creating a new one (a breaking change to those two methods). Deleting a key is refused with a conflict while a JSON Web Key Set or published key still references it, and `createGcpKms` now requires a fully-qualified crypto key version path.
+- 3b8d9fc: Catalog entries from external MCP registries now carry the registry's linked source repository and published packages, which the registry client previously dropped. Both are registry declarations — nothing ties a linked repository or package to what a remote endpoint actually runs — and the API descriptions say so. These feed the MCP approval evidence surface and the upcoming artifact pin-and-fetch work.
+- 6f44265: Assistants no longer send every MCP tool schema to the model on every call. MCP tools are discovered on demand through a search tool, MCP servers connect on first use instead of during assistant startup, and dropped MCP connections reseat automatically instead of requiring a reconnect tool call. This keeps provider prompt caching effective for assistants with large toolsets and removes MCP handshakes from assistant cold-start latency.
+- 8f3fb58: Show the supported client that originated an Agent Session routed through LiteLLM while preserving LiteLLM filtering.
+- 6f44265: Assistant runtimes can now run locally: the new `local` runtime provider (the
+  local-development default) starts one Docker container per assistant on demand,
+  reuses it across turns, and automatically replaces idle containers when the
+  runtime image is rebuilt — no Fly.io credentials or registry pushes needed for
+  local image development.
+- fffe50d: Emit the MCP protocol version to OpenTelemetry on all five inbound MCP paths. Traces now carry `gram.mcp.requested_protocol_version` and `gram.mcp.negotiated_protocol_version`, and a new unsampled `mcp.initialize` counter breaks handshakes down by revision, so client version adoption can be measured and a version-specific failure can be diagnosed.
+- 7c02667: Organization names accept punctuation and every script. The old rule allowed
+  only letters, digits, spaces, hyphens and underscores, which turned away
+  "Acme, Inc.", "Bob's Bakery", "Café Zoë", and — more importantly — every
+  company whose name is not written in the Latin alphabet, since a name in
+  Japanese, Chinese, Korean, Cyrillic, Arabic or Hebrew could not clear the rule
+  at all. Names are now capped at 100 characters (counted in characters, so a
+  non-Latin name gets the same room a Latin one does), must carry at least two
+  letters or numbers, and may use anything that renders: control characters, bidi
+  overrides and other invisible formatting are still rejected, and whitespace is
+  normalized. The URL slug is unaffected in shape — it is still derived
+  separately, with a generated fallback for names that contain fewer than two
+  URL-safe characters.
+- c2c59c8: Let organization admins set an organization-wide automatic remote session refresh policy (Disabled, User controlled, or Required) from the MCP Connections page, and surface the effective policy to end users on the OAuth consent screen. Required keeps every eligible connection refreshed and shows the consent control locked; Disabled stops background refresh and states it read-only so users know idle connections will lapse.
+- 530feba: Attach files to the Project Assistant. The composer accepts files from the paperclip or by dropping them anywhere on the chat, and the assistant can read them: images and text-like files (including OpenAPI specs) travel with the turn, and anything it cannot read inline comes with a short-lived download link.
+- 8ae2c53: Revoke Remote Session credentials upstream via RFC 7009. Remote session issuers gain a `revocation_endpoint`, discovered from the issuer's RFC 8414 metadata document during issuer refresh. When a Remote Session is revoked, Gram now posts the stored token to the issuer's revocation endpoint so the upstream authorization server drops it, instead of leaving a live access/refresh pair that keeps working elsewhere until it expires on its own clock.
+
+  This covers every path that ends a session: revoking one session, revoking all of a client's sessions, deleting a client, which cascades a soft-delete to its sessions, and the consent screen's per-provider "Disconnect" — the one an end user drives rather than an admin. Batches run under bounded concurrency and a single budget for the whole batch, since every session on a client shares one upstream host.
+
+  The upstream call is best-effort by construction: it runs after the local revoke has committed, is bounded by a short timeout, and routes through the guardian egress policy. Failures are logged and metered, never surfaced to the caller — the local revoke is the security control the caller asked for and it has already succeeded. Issuers that advertise no revocation endpoint are recorded as a distinct `skipped` metric outcome rather than folded into success or failure, since that is the expected case for a large share of upstreams. A batch that exhausts its budget before reaching every session records the remainder as `dropped` rather than passing them off as done.
+
+- 82f8bbc: Propagate retroactive risk-exclusion changes into ClickHouse: creating, updating, disabling, or deleting an exclusion now rewrites the affected findings' effective state in the ClickHouse store as well as Postgres.
+- a2b272c: Warn when an identity provider duplicates an issuer URL that already exists, at all three tiers and on both create and edit. The warning is advisory and never blocks the write, since duplicating an issuer has legitimate use cases.
+- e8d3459: Score Watchdog signals from the matched risk policy's configured score, and simplify the signal drawer to a single Create-exclusion action.
+
+### Patch Changes
+
+- 37c036b: Stop the admin organizations list from returning a next-page cursor on the last full page. When the number of matching organizations was an exact multiple of the page size, the final page still carried a cursor, so the next page came back empty. The endpoint now reads one row past the page to decide whether a next page exists.
+- 341be47: Attribute Cursor usage events to sessions by decoding conversationId into the standard GenAI conversation attribute.
+- 8f8f280: Stop Codex hooks failing with exit code 127. The hook command Codex caches for
+  a session pointed at one versioned plugin cache directory, so a background
+  plugin refresh that swapped that directory out left the session invoking a
+  bootstrap script that no longer existed — the shell reported "command not
+  found" and Codex surfaced it as `SessionStart`/`UserPromptSubmit` failures. The
+  bootstrap now persists itself and its deployment config together in Codex's
+  version-independent plugin data directory. Once ready, hook commands execute
+  that stable bundle and use the installed payload only to refresh it; the newest
+  cache sibling remains a first-run migration fallback. Unix and Windows both
+  honour the configured install-failure policy with an explanatory diagnostic
+  instead of an opaque missing-command failure.
+
+  Also fixes the trusted-hash computation for Codex hooks: it was serialising the
+  command with Go's HTML escaping, so any command containing `>`, `<`, or `&`
+  hashed differently than Codex computes it and the hook was silently dropped as
+  untrusted.
+
+- 8589630: Fix employee usage pages under-reporting tokens and cost. Ingest attributes a
+  person's telemetry two different ways — hook events resolve the sender's email
+  to a Gram user id and carry both, while the rows that actually carry tokens and
+  cost (Claude/Codex OTEL and the Anthropic, Codex and Cursor usage imports) carry
+  only the provider account's email. The employee-scoped queries matched a single
+  collapsed identifier, so they saw one shape and silently dropped the other: an
+  employee page could show sessions and tool calls next to zero tokens and zero
+  cost.
+
+  The per-user metrics summary, observability overview, time series, tool
+  breakdown and data-flow graph now scope to the employee's whole identity set —
+  their Gram user id, their directory email, and the emails of their linked AI
+  accounts — resolved from the user directory rather than from telemetry row
+  identity, so a stray row cannot hand one person another's usage. Personal
+  accounts benefit most, since they usually sign in with an email that differs
+  from the directory one and previously joined to nothing. The per-user metrics
+  summary also selects cost and cache tokens, which its response has always
+  carried but the query never populated.
+
+- 4556bf0: Serve challenge-log buckets from the pre-aggregated ClickHouse summary and
+  paginate resolved and unresolved results in ClickHouse.
+- 0dd2a37: Serve the hooks@0.3.21 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- abcde04: Logging out now returns `Clear-Site-Data: "cookies", "storage"`, so the browser drops the session cookie across the origin's registrable domain and empties localStorage, sessionStorage, IndexedDB and Cache Storage. Previously teardown relied entirely on an expiring `Set-Cookie` plus a best-effort localStorage sweep, both of which leave data behind when a cookie attribute drifts or a page navigates away mid-logout. The theme preference and project favorites still survive a logout: the dashboard reads them before the request goes out and writes them back once the response lands.
+- f65e1ea: Internal groundwork for the MCP approval workflow: summarise what an MCP tool declares it can do, from its MCP annotations and the shape of its input schema. No user-facing behaviour yet.
+- 8b09caf: Internal groundwork for the MCP approval workflow: resolve an observed MCP server reference — a remote URL or a stdio launch command — into a stable artifact identity, and record whether that reference names an exact version. No user-facing behaviour yet.
+- 3650129: Record an actor display name on audit entries written from organization-less sessions. `sessions.Authenticate` now populates the actor email for sessions with no active organization, and enterprise-trial arming threads the actor email through provisioning so the self-signup callback — which has no auth context — still attributes the `organization:enterprise_trial_armed` entry instead of storing a bare actor id.
+- d553497: Route authorization challenge logging through Pub/Sub before persisting events
+  to ClickHouse. This decouples authorization request paths from ClickHouse
+  availability and makes message redelivery idempotent by challenge ID.
+- b05b32b: Slack tool calls that a caller has to fix are no longer reported as server
+  errors. The Slack Web API answers HTTP 200 with `ok: false` for essentially
+  every argument, permission, and state problem, so a thread timestamp that names
+  no thread, a channel the bot was never invited to, a token missing a scope, or
+  blocks that fail validation all arrived as untyped failures and were logged at
+  error level by the MCP tool layer. A single misconfigured client emitting a few
+  hundred of those an hour was enough to hold the component's error-log anomaly
+  monitor at its threshold for a whole alert window, masking any genuine
+  regression behind it.
+
+  Slack refusals now carry the envelope error code, and the MCP tool boundary
+  answers a caller-attributed failure with a 400 logged at warn — still recorded
+  with the upstream code and the tool name, and no longer marking the request span
+  as errored — while Slack's own failures (`internal_error`, `ratelimited`,
+  5xx responses) keep error severity. `platform_slack_add_reaction` also treats
+  `already_reacted` as the successful no-op it is, since the reaction the caller
+  asked for is already on the message.
+
 ## 1.8.0
 
 ### Minor Changes

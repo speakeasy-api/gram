@@ -83,7 +83,7 @@ type Service interface {
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
-	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *PolicyBypassRedemption, err error)
 	// Acknowledge a risk policy warn/challenge from a warning-link token. Records
 	// the acknowledgement so the user's retried action proceeds; self-service (no
 	// admin approval).
@@ -858,6 +858,17 @@ type MarkRiskResultsFalsePositivePayload struct {
 	Reason *string
 }
 
+// PolicyBypassRedemption is the result type of the risk service
+// createRiskPolicyBypassRequest method.
+type PolicyBypassRedemption struct {
+	// The kind of request the token redeemed into.
+	Kind string
+	// The id of the created or refreshed request.
+	ID string
+	// The request's current status.
+	Status string
+}
+
 // PromptGuardrailEvalResult is the result type of the risk service
 // evaluatePromptGuardrail method.
 type PromptGuardrailEvalResult struct {
@@ -1038,7 +1049,7 @@ type RiskOverviewUser struct {
 }
 
 // RiskPolicyBypassRequest is the result type of the risk service
-// createRiskPolicyBypassRequest method.
+// approveRiskPolicyBypassRequest method.
 type RiskPolicyBypassRequest struct {
 	// The bypass request ID.
 	ID string
@@ -1166,10 +1177,11 @@ type RiskSignalsResult struct {
 	// Organization risk score computed the same way over the equal-length window
 	// immediately before from.
 	PreviousOrgRiskScore float64
-	// Deduplicated findings in the 24 hours ending at to.
-	Findings24h int64
-	// Deduplicated findings in the 24 hours before that.
-	PreviousFindings24h int64
+	// Deduplicated live findings in the window.
+	Findings int64
+	// Deduplicated live findings in the equal-length window immediately before
+	// from.
+	PreviousFindings int64
 	// Signals with at least one live finding in the window.
 	OpenSignals int64
 	// Signals rated critical in the window.

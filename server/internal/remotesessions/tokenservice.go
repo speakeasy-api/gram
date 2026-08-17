@@ -37,6 +37,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -109,6 +110,12 @@ type ResolvedAuthorization struct {
 	RemoteSessionIssuerID  uuid.UUID
 }
 
+// remoteSessionLastUsedCutoff coalesces the last_used_at stamp so a busy
+// binding writes at most one row per window. Matches the window used for
+// user_sessions, so both legs of a brokered connection report liveness at the
+// same resolution and a chain view can compare them directly.
+const remoteSessionLastUsedCutoff = 5 * time.Minute
+
 // ResolveAccessToken returns the upstream access token stored for the
 // (client, subject) pair, refreshing via the upstream /token endpoint
 // when the stored access_expires_at is in the past and a
@@ -172,6 +179,23 @@ func (m *ChallengeManager) ResolveAccessToken(
 		)
 		return "", nil
 	}
+
+	// Stamped only on the success path: a resolved token is one that is about
+	// to be spent on a proxied call, which is precisely what "used" means here.
+	// Best-effort — bookkeeping must not fail a call that has a valid token.
+	now := time.Now()
+	if err := remotesessions_repo.New(m.db).TouchRemoteSessionLastUsed(ctx, remotesessions_repo.TouchRemoteSessionLastUsedParams{
+		NowTs:                 pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+		UsedCutoff:            pgtype.Timestamptz{Time: now.Add(-remoteSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
+	}); err != nil {
+		m.logger.WarnContext(ctx, "failed to stamp remote session last_used_at",
+			attr.SlogRemoteSessionClientID(clientID.String()),
+			attr.SlogError(err),
+		)
+	}
+
 	return tok, nil
 }
 

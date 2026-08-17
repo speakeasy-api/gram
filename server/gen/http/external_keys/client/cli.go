@@ -262,6 +262,31 @@ func BuildGetGcpKmsKeyPayload(externalKeysGetGcpKmsKeyID string, externalKeysGet
 	return v, nil
 }
 
+// BuildVerifyGcpKmsKeyPayload builds the payload for the externalKeys
+// verifyGcpKmsKey endpoint from CLI flags.
+func BuildVerifyGcpKmsKeyPayload(externalKeysVerifyGcpKmsKeyID string, externalKeysVerifyGcpKmsKeySessionToken string) (*externalkeys.VerifyGcpKmsKeyPayload, error) {
+	var err error
+	var id string
+	{
+		id = externalKeysVerifyGcpKmsKeyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if externalKeysVerifyGcpKmsKeySessionToken != "" {
+			sessionToken = &externalKeysVerifyGcpKmsKeySessionToken
+		}
+	}
+	v := &externalkeys.VerifyGcpKmsKeyPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildDeleteAwsKmsKeyPayload builds the payload for the externalKeys
 // deleteAwsKmsKey endpoint from CLI flags.
 func BuildDeleteAwsKmsKeyPayload(externalKeysDeleteAwsKmsKeyID string, externalKeysDeleteAwsKmsKeySessionToken string) (*externalkeys.DeleteAwsKmsKeyPayload, error) {

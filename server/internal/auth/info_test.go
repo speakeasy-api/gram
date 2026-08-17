@@ -89,6 +89,7 @@ func TestService_Info(t *testing.T) {
 
 		require.NoError(t, trialsRepo.New(instance.conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
 			OrganizationID: organizationID,
+			Tier:           "enterprise",
 			CreatedAt:      conv.ToPGTimestamptz(createdAt),
 			EndsAt:         conv.ToPGTimestamptz(endsAt),
 			ConvertedAt:    conv.PtrToPGTimestamptz(convertedAt),

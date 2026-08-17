@@ -78,6 +78,9 @@ var _ = Service("auth", func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
 			Param("org_name")
+			// A top-level browser navigation reaches this endpoint and carries
+			// no custom headers, so `email` has to be a query param. The
+			// request logging middleware redacts it from logged URLs.
 			Param("email")
 
 			Response(StatusTemporaryRedirect, func() {

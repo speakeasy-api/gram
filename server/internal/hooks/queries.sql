@@ -279,6 +279,16 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 
+-- name: ListUserAccountsByEmails :many
+-- Resolves account emails back to their directory owner. This supports telemetry
+-- rows whose only identity is a linked personal/provider account email.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND lower(email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
 -- name: GetProviderOrgBillingMode :one
 -- Resolves the org-level admin-declared billing mode for a provider org from the
 -- org's AI integration config (the org-level tier of the billing-mode cascade).

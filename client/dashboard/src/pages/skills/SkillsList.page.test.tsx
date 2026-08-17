@@ -266,7 +266,13 @@ vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children, scope }: { children: ReactNode; scope: string }) =>
+  RequireScope: ({
+    children,
+    scope,
+  }: {
+    children: ReactNode;
+    scope: string;
+  }) =>
     scope === "org:admin" && !testState.adminAllowed ? null : <>{children}</>,
 }));
 vi.mock("@/components/ui/Tooltip", () => ({

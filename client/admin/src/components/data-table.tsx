@@ -1,7 +1,20 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
+import {
+  columnVisibilityFeature,
+  createColumnHelper,
+  FlexRender,
+  metaHelper,
+  rowSelectionFeature,
+  tableFeatures,
+  type DisplayColumnDef,
+  type ReactTable,
+  type Row,
+  type RowData,
+} from "@tanstack/react-table";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -12,33 +25,121 @@ import {
 } from "@/components/ui/table";
 
 /**
- * Column-driven wrapper around the table primitives.
+ * Presentational wrapper around the table primitives, driven by a TanStack
+ * table instance.
  *
- * Two ways to use it:
+ * Compose it: `DataTable.Header`, `DataTable.Body`, `DataTable.Row`. A page
+ * keeps its own per-row classes and handlers that way.
  *
- *   - pass `data` + `rowKey` and let it render the header, the rows and the
- *     empty state;
- *   - pass children and compose `DataTable.Header` / `DataTable.Body` /
- *     `DataTable.Row` yourself when a page needs per-row classes or handlers.
- *
- * The `ui/table` primitives are stock shadcn, so the column sizing and the
- * padding scale live here rather than in the primitive.
+ * The `ui/table` primitives are stock shadcn, so the padding scale lives here
+ * rather than in the primitive.
  */
-
-export type TableCellPadding = "condensed" | "normal" | "spacious";
 
 /**
- * `'auto'` sizes a column to its content. Everything else takes the width
- * as given.
+ * Per-column classes, because the header and the body cell are rendered here
+ * rather than by the page, and the name a column lists itself under when its
+ * header is not a string.
  */
-export type ColumnWidth = "auto" | `${number}px` | `${number}%`;
-
-export type Column<T extends object> = {
-  key: keyof T | string;
-  header: React.ReactNode;
-  render?: (row: T) => React.ReactNode;
-  width?: ColumnWidth;
+export type DataTableColumnMeta = {
+  headClassName?: string;
+  cellClassName?: string;
+  label?: string;
 };
+
+/**
+ * The feature registry every admin table shares.
+ *
+ * Column visibility gates `row.getVisibleCells`, `column.getIsVisible` and
+ * `column.getCanHide`, which this wrapper and its header both call. A table
+ * with no Columns control still registers it for that reason.
+ *
+ * Row selection is registered here and drawn nowhere: it adds no column and no
+ * state until a table asks for one by putting `selectColumn` in its columns.
+ */
+export const dataTableFeatures = tableFeatures({
+  columnVisibilityFeature,
+  rowSelectionFeature,
+  columnMeta: metaHelper<DataTableColumnMeta>(),
+});
+
+export type DataTableFeatures = typeof dataTableFeatures;
+
+export type DataTableInstance<T extends RowData> = ReactTable<
+  DataTableFeatures,
+  T
+>;
+
+const SELECT_COLUMN_ID = "select";
+
+// Mirrors the pin a page puts on a trailing actions column. `w-px` shrinks the
+// column to the checkbox, so the pin does not read as a gutter, and the header
+// row is already `z-10`, so this stays under it.
+const PINNED_LEFT = "sticky left-0 z-1 w-px";
+
+/**
+ * The opt-in select column: a checkbox per row and one in the header that ticks
+ * and unticks the rows the table is currently holding.
+ *
+ * Opt in by putting it first in a page's columns. A page that leaves it out
+ * gets no checkbox anywhere, which is why this is a column rather than
+ * something the wrapper draws on its own.
+ *
+ * Both labels are the caller's, because a checkbox has no text of its own and
+ * "Select row" repeated down a table tells a screen reader nothing about which
+ * record it is on.
+ */
+export function selectColumn<T extends RowData>({
+  allLabel,
+  rowLabel,
+}: {
+  allLabel: string;
+  rowLabel: (row: T) => string;
+}): DisplayColumnDef<DataTableFeatures, T, unknown> {
+  const column = createColumnHelper<DataTableFeatures, T>();
+  return column.display({
+    id: SELECT_COLUMN_ID,
+    meta: {
+      label: "Select",
+      // Pinned, because an admin list is wider than the window: measured at
+      // 1440 down to 768, the checkbox scrolls off the left edge while a pinned
+      // actions column keeps its place. A table whose purpose is picking rows
+      // cannot let the control that picks them leave the screen.
+      headClassName: cn(PINNED_LEFT, "bg-muted"),
+      // Inherited, so the pinned cell repaints with the row rather than reading
+      // as a flat stripe over a highlighted row's own colour.
+      cellClassName: cn(PINNED_LEFT, "bg-inherit"),
+    },
+    // Hiding it would strand a selection the operator could no longer see or
+    // undo, the same reason the row controls opt out.
+    enableHiding: false,
+    header: ({ table }) => (
+      <Checkbox
+        aria-label={allLabel}
+        // Mixed rather than unchecked while only some rows are ticked. It is
+        // the state ARIA has for this, and the next press clears rather than
+        // extends, which an unchecked box would misstate.
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(checked) => {
+          table.toggleAllPageRowsSelected(checked === true);
+        }}
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        aria-label={rowLabel(row.original)}
+        checked={row.getIsSelected()}
+        onCheckedChange={(checked) => {
+          row.toggleSelected(checked === true);
+        }}
+      />
+    ),
+  });
+}
+
+export type TableCellPadding = "condensed" | "normal" | "spacious";
 
 // Applied to the table root so the scale reaches every th and td, including
 // the ones a page composes by hand.
@@ -48,75 +149,15 @@ const cellPaddingClasses: Record<TableCellPadding, string> = {
   spacious: "[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3",
 };
 
-function columnStyle<T extends object>(
-  column: Column<T>,
-): React.CSSProperties | undefined {
-  if (!column.width) return undefined;
-  // A width of 1% collapses the column onto its content under `table-layout:
-  // auto`, which is what `'auto'` meant on the old grid table.
-  return { width: column.width === "auto" ? "1%" : column.width };
-}
-
-type SharedProps<T extends object> = {
-  columns: Column<T>[];
+function DataTableRoot({
+  cellPadding = "normal",
+  className,
+  children,
+}: {
   cellPadding?: TableCellPadding;
   className?: string;
-};
-
-type WrapperProps<T extends object> = SharedProps<T> & {
   children: React.ReactNode;
-};
-
-type DataProps<T extends object> = SharedProps<T> & {
-  data: T[];
-  rowKey: (row: T) => string | number;
-  onRowClick?: (row: T) => void;
-  noResultsMessage?: React.ReactNode;
-};
-
-function isWrapperProps<T extends object>(
-  props: WrapperProps<T> | DataProps<T>,
-): props is WrapperProps<T> {
-  return "children" in props && props.children !== undefined;
-}
-
-function cellContent<T extends object>(row: T, column: Column<T>) {
-  if (column.render) {
-    return column.render(row);
-  }
-
-  return column.key in row ? String(row[column.key as keyof T]) : "";
-}
-
-function DataTableRoot<T extends object>(
-  props: WrapperProps<T> | DataProps<T>,
-) {
-  const { columns, cellPadding = "normal", className } = props;
-
-  const content = isWrapperProps(props) ? (
-    props.children
-  ) : (
-    <>
-      <DataTableHeader columns={columns} />
-      <TableBody>
-        {props.data.length === 0 ? (
-          <DataTableNoResultsMessage>
-            {props.noResultsMessage}
-          </DataTableNoResultsMessage>
-        ) : (
-          props.data.map((row) => (
-            <DataTableRow
-              key={props.rowKey(row)}
-              row={row}
-              columns={columns}
-              onClick={props.onRowClick}
-            />
-          ))
-        )}
-      </TableBody>
-    </>
-  );
-
+}) {
   return (
     // The stock table container sets `overflow-x: auto`, which also turns it
     // into a vertical scroll box. The sticky header would then pin to that box
@@ -124,67 +165,106 @@ function DataTableRoot<T extends object>(
     // the page keeps both the scrolling and the pinned header.
     <div className="[&>[data-slot=table-container]]:overflow-visible">
       <Table className={cn(cellPaddingClasses[cellPadding], className)}>
-        {content}
+        {children}
       </Table>
     </div>
   );
 }
 
-function DataTableHeader<T extends object>({
-  columns,
+function DataTableHeader<T extends RowData>({
+  table,
   className,
 }: {
-  columns: Column<T>[];
+  table: DataTableInstance<T>;
   className?: string;
 }) {
   return (
     <TableHeader className={cn("bg-muted sticky top-0 z-10", className)}>
-      <TableRow>
-        {columns.map((column) => (
-          <TableHead key={String(column.key)} style={columnStyle(column)}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
+      {table.getHeaderGroups().map((group) => (
+        <TableRow key={group.id}>
+          {group.headers.map((header) => (
+            // A placeholder header and a colSpan above 1 both appear only when
+            // columns are grouped. Handling one and not the other would leave a
+            // group heading sitting over a single column.
+            <TableHead
+              key={header.id}
+              colSpan={header.colSpan}
+              className={header.column.columnDef.meta?.headClassName}
+            >
+              {header.isPlaceholder ? null : <FlexRender header={header} />}
+            </TableHead>
+          ))}
+        </TableRow>
+      ))}
     </TableHeader>
   );
 }
 
-function DataTableRow<T extends object>({
+function DataTableRow<T extends RowData>({
   row,
-  columns,
   onClick,
+  onAltClick,
   className,
+  ref,
 }: {
-  row: T;
-  columns: Column<T>[];
-  onClick?: (row: T) => void;
+  row: Row<DataTableFeatures, T>;
+  onClick?: (row: T, event: React.MouseEvent<HTMLTableRowElement>) => void;
+  onAltClick?: (row: T, event: React.MouseEvent<HTMLTableRowElement>) => void;
   className?: string;
+  ref?: React.Ref<HTMLTableRowElement>;
 }) {
   // The row itself stays a plain row: it takes no focus and it holds no
   // `button` role, because either one breaks the table structure the
   // assistive technology walks. A clickable row instead carries a real link
   // in one of its cells, and that link owns the keyboard path and the
   // accessible name. This handler only widens the mouse target.
-  const handleClick = onClick
-    ? (event: React.MouseEvent<HTMLTableRowElement>) => {
-        // The link in the cell already navigates, and it also lets the
-        // operator open the record in a new tab.
-        if ((event.target as HTMLElement).closest("a,button,input,label")) {
-          return;
+  const handleClick =
+    onClick || onAltClick
+      ? (event: React.MouseEvent<HTMLTableRowElement>) => {
+          // The link in the cell already navigates, and it also lets the
+          // operator open the record in a new tab.
+          const control = (event.target as HTMLElement).closest(
+            "a,button,input,label",
+          );
+
+          const onRowOrLink = control === null || control.matches("a");
+
+          // Alt turns a link's default into "save link", never a navigation,
+          // so a row that claims the gesture cancels that download whatever
+          // else is held down. Peeking is the stricter case: Alt on its own,
+          // because Alt with a second modifier is a gesture nobody aimed here.
+          if (onAltClick && event.altKey) {
+            if (onRowOrLink) {
+              event.preventDefault();
+              if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                onAltClick(row.original, event);
+              }
+            }
+            return;
+          }
+
+          // Open-in-tab and open-in-window belong to the link in the name
+          // cell. Answering them anywhere else in the row would navigate this
+          // tab out from under the one the operator is opening.
+          if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+          if (!onClick || control) return;
+          onClick(row.original, event);
         }
-        onClick(row);
-      }
-    : undefined;
+      : undefined;
 
   return (
     <TableRow
+      ref={ref}
       className={cn(onClick && "cursor-pointer", className)}
       onClick={handleClick}
     >
-      {columns.map((column) => (
-        <TableCell key={String(column.key)}>
-          {cellContent(row, column)}
+      {row.getVisibleCells().map((cell) => (
+        <TableCell
+          key={cell.id}
+          className={cell.column.columnDef.meta?.cellClassName}
+        >
+          <FlexRender cell={cell} />
         </TableCell>
       ))}
     </TableRow>

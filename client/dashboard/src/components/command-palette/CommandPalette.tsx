@@ -15,7 +15,11 @@ import { IconName } from "@/components/ui/Icon/names";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
-import { useRecentlyVisited, useRecentsUserId } from "./recentlyVisited";
+import {
+  getRecentLabelOverride,
+  useRecentlyVisited,
+  useRecentsUserId,
+} from "./recentlyVisited";
 import { ResourceResults } from "./ResourceResults";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
@@ -178,19 +182,24 @@ export function CommandPalette(): JSX.Element {
             a closer text match (AGE-2808). */}
         {!hasQuery && recents.length > 0 && (
           <CommandGroup heading="Recently Visited">
-            {recents.map((recent) => (
-              <CommandItem
-                key={recent.href}
-                value={`recent ${recent.label} ${recent.href}`}
-                onSelect={() => handleRecentSelect(recent.href)}
-                className="flex items-center gap-2"
-              >
-                {recent.icon && (
-                  <Icon name={recent.icon as IconName} className="size-4" />
-                )}
-                <span className="truncate">{recent.label}</span>
-              </CommandItem>
-            ))}
+            {recents.map((recent) => {
+              // Prefer a live name override over a stored URL-derived fallback
+              // so id-keyed pages show the resource name once it has loaded.
+              const label = getRecentLabelOverride(recent.href) ?? recent.label;
+              return (
+                <CommandItem
+                  key={recent.href}
+                  value={`recent ${label} ${recent.href}`}
+                  onSelect={() => handleRecentSelect(recent.href)}
+                  className="flex items-center gap-2"
+                >
+                  {recent.icon && (
+                    <Icon name={recent.icon as IconName} className="size-4" />
+                  )}
+                  <span className="truncate">{label}</span>
+                </CommandItem>
+              );
+            })}
           </CommandGroup>
         )}
 

@@ -37,6 +37,7 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 	}
 
 	principal := Principal{
+		Surface:        SurfaceDashboard,
 		UserID:         userID,
 		OrganizationID: organizationID,
 		ConnectionID:   "",

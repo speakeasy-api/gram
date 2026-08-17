@@ -77,6 +77,8 @@ func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, reques
 			if err != nil {
 				return err
 			}
+		} else if err := c.restoreClient(client.ClientID); err != nil {
+			return err
 		}
 		return c.attachClient(ctx, request, client.ID, issuer.ID)
 	case !errors.Is(err, pgx.ErrNoRows):
@@ -92,6 +94,16 @@ func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, reques
 
 func (c *ClientConfigurator) matchesDescriptor(descriptor remotesessionprovider.Descriptor) bool {
 	return descriptor.ProviderKey == ProviderKey && descriptor.RemoteSessionIssuerID == c.config.RemoteSessionIssuerID() && descriptor.StreamableHTTPURL == c.config.RemoteURL() && descriptor.Resource == c.config.RemoteURL()
+}
+
+func (c *ClientConfigurator) restoreClient(clientID string) error {
+	if c.oauth == nil {
+		return fmt.Errorf("%w: local fixture OAuth service is unavailable", platformmcp.ErrProviderAdapterUnavailable)
+	}
+	if err := c.oauth.RestoreRegisteredClient(clientID); err != nil {
+		return fmt.Errorf("restore local fixture client: %w", err)
+	}
+	return nil
 }
 
 func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsrepo.RemoteSessionIssuer, error) {

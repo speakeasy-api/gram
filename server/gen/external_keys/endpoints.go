@@ -25,6 +25,7 @@ type Endpoints struct {
 	ListGcpKmsKeys   goa.Endpoint
 	GetAwsKmsKey     goa.Endpoint
 	GetGcpKmsKey     goa.Endpoint
+	VerifyGcpKmsKey  goa.Endpoint
 	DeleteAwsKmsKey  goa.Endpoint
 	DeleteGcpKmsKey  goa.Endpoint
 }
@@ -43,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListGcpKmsKeys:   NewListGcpKmsKeysEndpoint(s, a.APIKeyAuth),
 		GetAwsKmsKey:     NewGetAwsKmsKeyEndpoint(s, a.APIKeyAuth),
 		GetGcpKmsKey:     NewGetGcpKmsKeyEndpoint(s, a.APIKeyAuth),
+		VerifyGcpKmsKey:  NewVerifyGcpKmsKeyEndpoint(s, a.APIKeyAuth),
 		DeleteAwsKmsKey:  NewDeleteAwsKmsKeyEndpoint(s, a.APIKeyAuth),
 		DeleteGcpKmsKey:  NewDeleteGcpKmsKeyEndpoint(s, a.APIKeyAuth),
 	}
@@ -59,6 +61,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListGcpKmsKeys = m(e.ListGcpKmsKeys)
 	e.GetAwsKmsKey = m(e.GetAwsKmsKey)
 	e.GetGcpKmsKey = m(e.GetGcpKmsKey)
+	e.VerifyGcpKmsKey = m(e.VerifyGcpKmsKey)
 	e.DeleteAwsKmsKey = m(e.DeleteAwsKmsKey)
 	e.DeleteGcpKmsKey = m(e.DeleteGcpKmsKey)
 }
@@ -267,6 +270,29 @@ func NewGetGcpKmsKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.GetGcpKmsKey(ctx, p)
+	}
+}
+
+// NewVerifyGcpKmsKeyEndpoint returns an endpoint function that calls the
+// method "verifyGcpKmsKey" of service "externalKeys".
+func NewVerifyGcpKmsKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyGcpKmsKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyGcpKmsKey(ctx, p)
 	}
 }
 

@@ -76,12 +76,30 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
 }
 
+// redactedQueryParams names the query parameters whose values are stripped
+// before a URL reaches application logs or the observability context.
+// Credentials and personal data are both redacted, for different reasons: a
+// logged credential stays replayable by anyone who can read the log, while
+// logged personal data is an exposure that log access control does not undo.
+//
+// Matching is exact and case-sensitive, the same matching Goa applies when
+// binding a query parameter to a payload attribute.
+var redactedQueryParams = map[string]bool{
+	// Live capability token on public share and signed-asset URLs.
+	"token": true,
+
+	// Email address on auth.login and agent.getPlugins.
+	"email": true,
+
+	// Chat search terms, which are user-typed free text.
+	"search": true,
+}
+
 // logSafeURL renders a request URL for logs and observability context with
-// secret-bearing parts redacted. Several public capability-URL endpoints
-// carry a live credential in a "token" query parameter (e.g. skills.getShared,
-// assets.serveChatAttachmentSigned, chatSessions.revoke), and the public SPA
-// page /shared/skills/<token> carries one as a path segment; logging either
-// verbatim would leak reusable secrets into application logs.
+// credentials and personal data redacted. Query parameters named in
+// redactedQueryParams are replaced with a placeholder. The public SPA page
+// /shared/skills/<token> carries a live credential as a path segment rather
+// than a parameter, so it is redacted separately.
 func logSafeURL(u *url.URL) string {
 	safe := *u
 	changed := false
@@ -97,9 +115,8 @@ func logSafeURL(u *url.URL) string {
 		changed = true
 	}
 
-	if q := safe.Query(); q.Has("token") {
-		q.Set("token", "REDACTED")
-		safe.RawQuery = q.Encode()
+	if q, redacted := redactRawQuery(safe.RawQuery); redacted {
+		safe.RawQuery = q
 		changed = true
 	}
 
@@ -107,6 +124,110 @@ func logSafeURL(u *url.URL) string {
 		return u.String()
 	}
 	return safe.String()
+}
+
+// redactRawQuery replaces the value of every parameter named in
+// redactedQueryParams and reports whether it changed anything, leaving the
+// rest of the query byte for byte as it arrived.
+//
+// It works on the raw string rather than url.Values on purpose. ParseQuery
+// silently discards any pair holding a semicolon or an invalid percent escape,
+// which would hide the very parameter that needs redacting and let the caller
+// fall back to logging the untouched original. Round-tripping through
+// Values.Encode also reorders keys, rewrites the escaping of untouched values,
+// and drops the malformed pairs outright, so a logged URL stops matching the
+// request it describes.
+//
+// Only "&" separates parameters here, matching the parser. ";" is handled
+// inside a parameter instead, by redactRegion.
+func redactRawQuery(raw string) (string, bool) {
+	// Skipping the rewrite keeps the ordinary request from allocating, but the
+	// skip is only safe once nothing can decode into a denylisted name. A
+	// percent escape is the one thing that can (?em%61il= is ?email=), so a
+	// query carrying any escape goes through the full scan, which compares
+	// decoded keys. Without one, a name absent from the raw text cannot appear
+	// after decoding either, and the substring test decides. That test can
+	// still hit a false positive (?xemail=1), costing only a scan that finds
+	// nothing to change.
+	if !strings.ContainsRune(raw, '%') {
+		possible := false
+		for name := range redactedQueryParams {
+			if strings.Contains(raw, name) {
+				possible = true
+				break
+			}
+		}
+
+		if !possible {
+			return raw, false
+		}
+	}
+
+	var b strings.Builder
+	b.Grow(len(raw))
+	changed := false
+
+	for start := 0; start <= len(raw); {
+		end := strings.IndexByte(raw[start:], '&')
+		if end < 0 {
+			end = len(raw)
+		} else {
+			end += start
+		}
+
+		region, redacted := redactRegion(raw[start:end])
+		b.WriteString(region)
+		changed = changed || redacted
+
+		if end < len(raw) {
+			b.WriteByte('&')
+		}
+		start = end + 1
+	}
+
+	if !changed {
+		return raw, false
+	}
+
+	return b.String(), true
+}
+
+// redactRegion redacts one "&"-delimited slice of a query, reporting whether
+// it changed anything.
+//
+// Go stopped accepting ";" as a parameter separator, so a semicolon now sits
+// inside whatever value contains it and ParseQuery discards that pair whole.
+// Both facts have to hold at once here: a denylisted name appearing after a
+// semicolon still has to be caught, because the parser would have hidden the
+// pair entirely, and a denylisted value that merely contains semicolons has to
+// be replaced past them rather than truncated at the first one. So the scan
+// looks at every ";"-separated segment, and the first denylisted name it finds
+// consumes the rest of the region.
+func redactRegion(region string) (string, bool) {
+	for start := 0; start <= len(region); {
+		end := strings.IndexByte(region[start:], ';')
+		if end < 0 {
+			end = len(region)
+		} else {
+			end += start
+		}
+
+		key, _, hasValue := strings.Cut(region[start:end], "=")
+		name, err := url.QueryUnescape(key)
+		if err != nil {
+			// An unescapable key cannot match a denylist entry by its decoded
+			// name, so compare the raw spelling rather than skipping the pair.
+			name = key
+		}
+
+		if hasValue && redactedQueryParams[name] {
+			return region[:start] + key + "=REDACTED", true
+		}
+
+		start = end + 1
+	}
+
+	return region, false
 }
 
 func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
