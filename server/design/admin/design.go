@@ -254,6 +254,7 @@ var _ = Service("admin", func() {
 			Required("id_or_slug")
 
 			Attribute("id_or_slug", String, "Project ID or slug.")
+			Attribute("organization_id_or_slug", String, "Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.")
 		})
 
 		Result(AdminProjectDetail)
@@ -262,6 +263,7 @@ var _ = Service("admin", func() {
 			GET("/admin/project.get")
 
 			Param("id_or_slug")
+			Param("organization_id_or_slug")
 			Response(StatusOK)
 		})
 

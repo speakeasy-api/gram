@@ -649,13 +649,19 @@ func DecodeGetProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*admin.GetProjectPayload, error) {
 		var payload *admin.GetProjectPayload
 		var (
-			idOrSlug          string
-			adminSessionToken *string
-			err               error
+			idOrSlug             string
+			organizationIDOrSlug *string
+			adminSessionToken    *string
+			err                  error
 		)
-		idOrSlug = r.URL.Query().Get("id_or_slug")
+		qp := r.URL.Query()
+		idOrSlug = qp.Get("id_or_slug")
 		if idOrSlug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id_or_slug", "query string"))
+		}
+		organizationIDOrSlugRaw := qp.Get("organization_id_or_slug")
+		if organizationIDOrSlugRaw != "" {
+			organizationIDOrSlug = &organizationIDOrSlugRaw
 		}
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
@@ -664,7 +670,7 @@ func DecodeGetProjectRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetProjectPayload(idOrSlug, adminSessionToken)
+		payload = NewGetProjectPayload(idOrSlug, organizationIDOrSlug, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -11,35 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillOpenRouterKeyEncryption = `-- name: BackfillOpenRouterKeyEncryption :exec
-UPDATE openrouter_api_keys
-SET key_encrypted = $1
-WHERE organization_id = $2
-  AND key_type = $3
-  AND key_encrypted IS NULL
-  AND deleted IS FALSE
-`
-
-type BackfillOpenRouterKeyEncryptionParams struct {
-	KeyEncrypted   pgtype.Text
-	OrganizationID string
-	KeyType        string
-}
-
-// Lazy read-repair for rows minted before encrypted storage existed: records
-// the ciphertext without touching the plaintext column. The key_encrypted IS
-// NULL guard makes concurrent repairs harmless and refuses to clobber a
-// ciphertext written by the platform-admin encrypt action.
-func (q *Queries) BackfillOpenRouterKeyEncryption(ctx context.Context, arg BackfillOpenRouterKeyEncryptionParams) error {
-	_, err := q.db.Exec(ctx, backfillOpenRouterKeyEncryption, arg.KeyEncrypted, arg.OrganizationID, arg.KeyType)
-	return err
-}
-
 const createOpenRouterAPIKey = `-- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
-  , key
   , key_encrypted
   , key_hash
   , monthly_credits
@@ -49,7 +24,6 @@ INSERT INTO openrouter_api_keys (
   , $3
   , $4
   , $5
-  , $6
 )
 RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
 `
@@ -57,7 +31,6 @@ RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credi
 type CreateOpenRouterAPIKeyParams struct {
 	OrganizationID string
 	KeyType        string
-	Key            pgtype.Text
 	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
@@ -67,7 +40,6 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 	row := q.db.QueryRow(ctx, createOpenRouterAPIKey,
 		arg.OrganizationID,
 		arg.KeyType,
-		arg.Key,
 		arg.KeyEncrypted,
 		arg.KeyHash,
 		arg.MonthlyCredits,
@@ -159,45 +131,6 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 	return err
 }
 
-const setOpenRouterKeyEncrypted = `-- name: SetOpenRouterKeyEncrypted :one
-UPDATE openrouter_api_keys
-SET key_encrypted = $1, key = NULL
-WHERE organization_id = $2
-  AND key_type = $3
-  AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
-`
-
-type SetOpenRouterKeyEncryptedParams struct {
-	KeyEncrypted   pgtype.Text
-	OrganizationID string
-	KeyType        string
-}
-
-// The platform-admin encrypt action: records the ciphertext and clears the
-// plaintext column in one statement so a half-applied scrub cannot exist.
-// Callers must hold the provisioning advisory lock and verify the ciphertext
-// decrypts back to the plaintext before running this — the upstream API only
-// returns key material at creation, so a bad scrub is unrecoverable.
-func (q *Queries) SetOpenRouterKeyEncrypted(ctx context.Context, arg SetOpenRouterKeyEncryptedParams) (OpenrouterApiKey, error) {
-	row := q.db.QueryRow(ctx, setOpenRouterKeyEncrypted, arg.KeyEncrypted, arg.OrganizationID, arg.KeyType)
-	var i OpenrouterApiKey
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.KeyType,
-		&i.Key,
-		&i.KeyEncrypted,
-		&i.KeyHash,
-		&i.MonthlyCredits,
-		&i.Disabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
@@ -259,7 +192,7 @@ type UpdateOpenRouterKeyMonthlyCreditsParams struct {
 // metrics-collection reconciliation path when the upstream OpenRouter limit
 // diverges from the locally cached value (e.g. after a manual change on the
 // OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
-// key-provisioning write path and also mutates key/key_hash.
+// key-provisioning write path and also mutates key_hash.
 func (q *Queries) UpdateOpenRouterKeyMonthlyCredits(ctx context.Context, arg UpdateOpenRouterKeyMonthlyCreditsParams) error {
 	_, err := q.db.Exec(ctx, updateOpenRouterKeyMonthlyCredits, arg.MonthlyCredits, arg.OrganizationID, arg.KeyType)
 	return err

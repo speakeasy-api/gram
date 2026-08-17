@@ -6,6 +6,7 @@ import {
   enableOrganization,
   errorMessage,
   extendTrial,
+  getProject,
   listOrganizations,
   logout,
   MAX_TRIAL_EXTENSION_DAYS,
@@ -84,6 +85,47 @@ describe("listOrganizations", () => {
     await listOrganizations({ account_types: [], trial_states: [] });
 
     expect(fetch.mock.calls.at(-1)?.[0]).toBe("/admin/organizations.list");
+  });
+});
+
+// Every page that reads a project mocks this function, so the query string it
+// builds is asserted here or nowhere. The organization is what makes a slug
+// unambiguous, and a parameter that silently never leaves the browser looks
+// exactly like one that works.
+describe("getProject", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it("sends the organization alongside the project", async () => {
+    const fetch = stubFetch();
+
+    await getProject("default", "one");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/project.get?id_or_slug=default&organization_id_or_slug=one",
+    );
+  });
+
+  it("omits the organization where there is none to send", async () => {
+    const fetch = stubFetch();
+
+    await getProject("default");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/project.get?id_or_slug=default",
+    );
   });
 });
 

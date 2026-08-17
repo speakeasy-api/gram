@@ -85,6 +85,8 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 		repo:          repo.New(db),
 		telemetryRepo: telemetryrepo.New(chConn),
 		auditLogger:   audit.NewLogger(),
+		stripeClient:  nil,
+		stripeHandler: nil,
 		trial:         trialemails.NoopNotifier{},
 	}
 
