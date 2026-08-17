@@ -1569,8 +1569,10 @@ type PlatformMcpCatalogRegistration struct {
 	McpServerOwned         bool
 	McpEndpointID          uuid.NullUUID
 	McpEndpointOwned       bool
-	ConnectionID           uuid.UUID
-	ConnectionGeneration   uuid.UUID
+	ConnectionID           uuid.NullUUID
+	ConnectionGeneration   uuid.NullUUID
+	UserID                 pgtype.Text
+	ActingSurface          pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -1685,8 +1687,10 @@ type PlatformMcpOperationReceipt struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.NullUUID
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 	Operation            string
 	IdempotencyKey       string
 	InputHash            string
