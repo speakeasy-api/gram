@@ -85,7 +85,9 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 // ValidatePrincipal verifies that principal is a valid grant target in the
 // organization. Unlike ResolveUserPrincipals, this is strict: concrete users
 // must be active organization members and role principals must identify an
-// active role in the organization.
+// active role in the organization. Caller-input problems are reported via
+// ErrPrincipalInvalid and ErrPrincipalNotFound; any other error is an
+// infrastructure failure, not a verdict on the principal.
 func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal) error {
 	if organizationID == "" {
 		return fmt.Errorf("organization id is required")
@@ -132,7 +134,7 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 			return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
 		}
 		if row.RoleUrn != principal.String() {
-			return fmt.Errorf("%w: role principal %q does not match active role %q", ErrPrincipalInvalid, principal.String(), row.RoleUrn)
+			return fmt.Errorf("%w: role principal %q does not match active role %q", ErrPrincipalNotFound, principal.String(), row.RoleUrn)
 		}
 	default:
 		return fmt.Errorf("%w: unsupported principal type %q", ErrPrincipalInvalid, principal.Type)

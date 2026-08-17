@@ -305,6 +305,15 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		dayRows []repo.TumBreakdownDayBucket
 		dimRows = make([][]repo.TumBreakdownDimDayBucket, len(tumBreakdownDims))
 	)
+	// The email breakdown folds to canonical identities when the org is on
+	// the fold; every other dimension and all totals are unaffected.
+	canonicalOrg := ""
+	if authCtx, _ := contextvalues.GetAuthContext(ctx); authCtx != nil {
+		if fold, _ := s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID); fold {
+			canonicalOrg = authCtx.ActiveOrganizationID
+		}
+	}
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 	eg.Go(func() error {
@@ -318,7 +327,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	for i, dim := range tumBreakdownDims {
 		eg.Go(func() error {
 			var egErr error
-			dimRows[i], egErr = s.chRepo.GetTumBreakdownDimByDay(egCtx, billedParams, dim)
+			dimRows[i], egErr = s.chRepo.GetTumBreakdownDimByDay(egCtx, billedParams, dim, canonicalOrg)
 			if egErr != nil {
 				return fmt.Errorf("tum breakdown dimension query (%s): %w", dim, egErr)
 			}

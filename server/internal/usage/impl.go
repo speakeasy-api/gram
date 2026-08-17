@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -55,12 +56,17 @@ type Service struct {
 	stripeClient  stripeclient.Client
 	stripeHandler stripeWebhookHandler
 	featureFlags  feature.Provider
+	trial         trialemails.Notifier
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, trialNotifier trialemails.Notifier) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
+
+	if trialNotifier == nil {
+		trialNotifier = trialemails.NoopNotifier{}
+	}
 
 	return &Service{
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
@@ -80,6 +86,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		stripeClient:  stripeClient,
 		stripeHandler: serviceStripeWebhookHandler,
 		featureFlags:  featureFlags,
+		trial:         trialNotifier,
 	}
 }
 
@@ -224,6 +231,14 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		"email":        webhookPayload.Data.Customer.Email,
 	}); err != nil {
 		logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
+	}
+
+	// A paid Polar subscription ends the trial email sequence. trialActive
+	// stays true otherwise, so converted admins keep getting reminder mail.
+	if webhookPayload.Type == "subscription.created" || webhookPayload.Type == "subscription.active" {
+		if err := s.trial.TrialInactive(ctx, refreshedOrg.ID); err != nil {
+			logger.ErrorContext(ctx, "failed to notify trial inactive", attr.SlogError(err), attr.SlogOrganizationID(refreshedOrg.ID))
+		}
 	}
 
 	return nil

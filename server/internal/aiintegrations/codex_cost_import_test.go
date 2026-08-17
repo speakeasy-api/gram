@@ -331,6 +331,32 @@ func TestBuildCodexCostLogParamsDecodeErrorNamesLogAndCause(t *testing.T) {
 	require.Equal(t, body, contentErr.Payload)
 }
 
+// The compliance feed sends identity.groups as objects ({"id","name"}), not
+// strings. This mirrors the feed's COSTS record shape — including the
+// principal and actor envelope fields we ignore — to pin that such rows
+// decode.
+func TestBuildCodexCostLogParamsDecodesGroupObjects(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"event_id":"11111111-2222-4333-8444-555555555555","type":"COSTS","principal":{"id":"org-openai","type":"API_PLATFORM_ORG"},"actor":{"type":"SYSTEM","id":"costs_compliance"},"timestamp":"2026-07-15T14:59:59Z","payload":{"day":"2026-07-15","hour":14,"organization_id":"org-openai","identity":{"user_id":"user_1","email":"Dev@Example.com","name":"Dev User","groups":[{"id":"00000000000000000000000000000abc","name":"Example_Group"}]},"product":"ChatGPT","client":"web","surface":"chatgpt","model":"gpt-5-thinking","reasoning":"high","measures":{"billing":[{"sku":"gpt-5-thinking","quantity":{"value":2,"unit":"counts"},"cost":{"value":20,"unit":"CREDITS"}}]}}}` + "\n")
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_groups",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 15, 15, 0, 0, 0, time.UTC),
+		FileName:   "COSTS_2026-07-15T15:00:00.000000+00:00.jsonl",
+		FileSize:   int64(len(body)),
+		FileSHA256: "",
+	}
+
+	logParams, err := buildCodexCostLogParams(cfg, file, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 1)
+	require.Equal(t, "dev@example.com", logParams[0].UserInfo.Email())
+	require.Equal(t, chatgptUsageMetricsURN, logParams[0].ToolInfo.URN)
+}
+
 // Pagination edge cases (empty windows, non-advancing last_end_time, window
 // truncation, foreign-type filtering) are covered for this source and the
 // ChatGPT conversation source together in logfile_source_pagination_test.go.

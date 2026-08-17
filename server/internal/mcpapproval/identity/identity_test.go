@@ -544,3 +544,131 @@ func TestResolve_CompleteSemverStillPins(t *testing.T) {
 		require.True(t, identity.Resolve(spec).VersionPinned, "%s names one immutable release", spec)
 	}
 }
+
+// A launch command routinely embeds credentials. The redacted form keeps the
+// structure that identifies the server — launcher, package, flags — while
+// every secret-shaped value is removed, and it collapses whitespace so it
+// doubles as a dedupe key.
+func TestRedactCommand_StripsSecretShapedValues(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand(`FAKE_TOKEN=fabricated123 npx  -y mcp-remote https://mcp.example.com/sse?key=fabricated456 --header "Authorization: Bearer fabricated789" --api-key=fabricated000`)
+	require.Equal(t,
+		"FAKE_TOKEN=<redacted> npx -y mcp-remote https://mcp.example.com/sse --header=<redacted> --api-key=<redacted>",
+		got)
+}
+
+// A secret flag with a separate value folds the redacted value into the flag
+// (`--token=<redacted>`), never emitting it as a free-standing token, and
+// non-secret flags keep theirs.
+func TestRedactCommand_SeparateFlagValueIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("npx -y some-server --token fabricated123 --port 8080")
+	require.Equal(t, "npx -y some-server --token=<redacted> --port 8080", got)
+
+	shortHeader := identity.RedactCommand(`npx -y some-server -H "X-Api-Key: fabricated456"`)
+	require.Equal(t, "npx -y some-server -H=<redacted>", shortHeader)
+}
+
+// A credential flag placed before the package spec must not displace the
+// package: the redacted value stays glued to its flag, so resolution of the
+// stored form still reads the real package rather than `<redacted>`.
+func TestRedactCommand_CredentialFlagBeforePackageKeepsResolution(t *testing.T) {
+	t.Parallel()
+
+	redacted := identity.RedactCommand("npx -y --token fabricated123 @scope/server@1.2.3")
+	require.Equal(t, "npx -y --token=<redacted> @scope/server@1.2.3", redacted)
+	require.Equal(t, "npm:@scope/server@1.2.3", identity.Resolve(redacted).ArtifactRef)
+}
+
+// A quoted environment value with spaces splits into several tokens; all of
+// them are the secret, and every one must go.
+func TestRedactCommand_QuotedEnvValueIsFullyConsumed(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand(`FAKE_TOKEN="fabricated one two" npx -y @scope/server`)
+	require.Equal(t, "FAKE_TOKEN=<redacted> npx -y @scope/server", got)
+
+	joined := identity.RedactCommand(`npx -y some-server --header="Authorization: Bearer fabricated123"`)
+	require.Equal(t, "npx -y some-server --header=<redacted>", joined)
+}
+
+// A curl-style short option carries its value attached (`-Hvalue`,
+// `-H"a b"`); the attached value is a credential and must not survive.
+func TestRedactCommand_AttachedShortHeaderValueIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	quoted := identity.RedactCommand(`npx -y some-server -H"Authorization: Bearer fabricated123"`)
+	require.Equal(t, "npx -y some-server -H=<redacted>", quoted)
+
+	bare := identity.RedactCommand("npx -y some-server -HX-Api-Key:fabricated456")
+	require.Equal(t, "npx -y some-server -H=<redacted>", bare)
+}
+
+// A shell-quoted endpoint is still a URL: the quotes must not smuggle its
+// userinfo and query tokens past redaction.
+func TestRedactCommand_QuotedURLIsStillRedacted(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand(`npx -y mcp-remote 'https://user:fabricated@mcp.example.com/sse?key=fabricated123'`)
+	require.Equal(t, "npx -y mcp-remote https://mcp.example.com/sse", got)
+
+	joined := identity.RedactCommand(`npx -y some-server --url="https://mcp.example.com/sse?key=fabricated456"`)
+	require.Equal(t, "npx -y some-server --url=https://mcp.example.com/sse", joined)
+}
+
+// An exact PyPI spec whose package name contains a secret marker is a package,
+// not an environment assignment: the version pin must survive redaction.
+func TestRedactCommand_PyPIExactSpecIsNotAnEnvAssignment(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("uvx authlib==1.3.0")
+	require.Equal(t, "uvx authlib==1.3.0", got)
+	require.Equal(t, "pypi:authlib@1.3.0", identity.Resolve(got).ArtifactRef)
+	require.True(t, identity.Resolve(got).VersionPinned)
+}
+
+// Before the command word no package spec can appear, so a credential whose
+// value happens to start with `=` (`TOKEN==secret cmd`) is a real environment
+// assignment and must still redact — the PyPI-spec exemption only applies to
+// command arguments.
+func TestRedactCommand_EnvPrefixDoubleEqualsStillRedacts(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("MY_TOKEN==fabricated-abc npx -y @scope/server")
+	require.Equal(t, "MY_TOKEN=<redacted> npx -y @scope/server", got)
+
+	// A non-secret assignment before the command keeps the prefix position:
+	// the secret assignment after it still redacts.
+	chained := identity.RedactCommand("NODE_ENV=production MY_TOKEN==fabricated-def npx -y @scope/server")
+	require.Equal(t, "NODE_ENV=production MY_TOKEN=<redacted> npx -y @scope/server", chained)
+}
+
+// Rotated secrets must not split one server into two reviews: the same
+// command with different tokens redacts to the same string.
+func TestRedactCommand_RotatedTokensRedactIdentically(t *testing.T) {
+	t.Parallel()
+
+	first := identity.RedactCommand("MY_API_KEY=fabricated-aaa npx -y @scope/server --auth-token fabricated-bbb")
+	second := identity.RedactCommand("MY_API_KEY=fabricated-ccc  npx -y @scope/server --auth-token fabricated-ddd")
+	require.Equal(t, first, second)
+}
+
+// Redaction must not disturb what identity resolution reads: selector flags,
+// package specs, and non-secret environment prefixes survive, and a URL-shaped
+// token gets the same treatment RedactServerURL gives an endpoint.
+func TestRedactCommand_KeepsNonSecretStructure(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("NODE_ENV=production npx -y -p @scope/pkg@1.2.3 server-bin --verbose")
+	require.Equal(t, "NODE_ENV=production npx -y -p @scope/pkg@1.2.3 server-bin --verbose", got)
+
+	url := identity.RedactCommand("npx -y mcp-remote https://user:fabricated@mcp.example.com/sse#frag")
+	require.Equal(t, "npx -y mcp-remote https://mcp.example.com/sse", url)
+
+	require.Equal(t,
+		identity.Resolve("npx -y @scope/pkg@1.2.3").ArtifactRef,
+		identity.Resolve(identity.RedactCommand("npx -y @scope/pkg@1.2.3 --api-key fabricated")).ArtifactRef,
+		"resolution reads the same package off the redacted form")
+}

@@ -569,8 +569,6 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@22.20.0)(happy-dom@20.11.1)(msw@2.15.0(@types/node@22.20.0)(typescript@7.0.2))(vite@8.2.0(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.5)(yaml@2.9.0))
 
-  hooks: {}
-
   server: {}
 
   ts-framework/create-function:

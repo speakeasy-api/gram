@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -148,7 +149,17 @@ func TestValidatePrincipal(t *testing.T) {
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "principal-validator"))
 	require.ErrorIs(t, err, ErrPrincipalInvalid)
 
+	// A well-formed role id that names no role in the organization is
+	// not-found — the caller's error, distinct from an infrastructure failure.
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+
+	// A role that exists but whose URN does not match the principal as
+	// written (here: claimed as global when the active role is
+	// organization-scoped) is not-found rather than silently accepted.
+	_, rawRoleID, ok := strings.Cut(rolePrincipal.ID, ":")
+	require.True(t, ok)
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+rawRoleID))
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
 	conn.Close()

@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShadowMCP from "./ShadowMCP";
 
@@ -176,13 +177,15 @@ describe("ShadowMCP", () => {
   });
 
   it("renders the Shadow MCP inventory management page", () => {
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
     expect(
-      screen.getByText(
-        "Manage the Shadow MCP server inventory, allow decisions, and requests.",
-      ),
+      screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
     expect(screen.getByText("No Policy")).toBeTruthy();
     expect(
@@ -202,7 +205,11 @@ describe("ShadowMCP", () => {
       isLoading: true,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole("status").getAttribute("aria-label")).toBe(
       "Loading Shadow MCP policies",
@@ -228,7 +235,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     const sectionCTA = within(screen.getByTestId("section-cta"));
     expect(sectionCTA.getByText("Blocking")).toBeTruthy();
@@ -256,7 +267,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Warning")).toBeTruthy();
     expect(
@@ -278,7 +293,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Flagging")).toBeTruthy();
     expect(
@@ -305,7 +324,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("No Policy")).toBeTruthy();
     expect(

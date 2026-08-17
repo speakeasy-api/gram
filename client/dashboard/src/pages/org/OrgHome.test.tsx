@@ -44,6 +44,10 @@ vi.mock("@/contexts/Auth", () => ({
     slug: "acme",
     projects: [{ id: "project-1", name: "Project One", slug: "project-one" }],
   }),
+  useSession: () => ({
+    rawGramAccountType: "enterprise",
+    hasActiveSubscription: true,
+  }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ projects: { create: vi.fn() } }),
@@ -77,6 +81,13 @@ vi.mock("@/routes", () => ({
       Link: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
     team: { goTo: vi.fn() },
+    // Used by the welcome banner's route cards.
+    home: { href: () => "/acme" },
+    setup: { href: () => "/acme/setup" },
+  }),
+  useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
+    exploreDemo: { href: () => "/explore-demo" },
+    home: { href: () => `/acme/projects/${projectSlug}` },
   }),
 }));
 
@@ -104,6 +115,8 @@ vi.mock("react-router", () => ({
     <a {...props}>{children}</a>
   ),
   useNavigate: () => vi.fn(),
+  // Org root path, so the welcome banner's route check passes.
+  useLocation: () => ({ pathname: "/acme" }),
 }));
 vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <>{children}</>,

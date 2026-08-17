@@ -18,6 +18,15 @@ export type ShadowMCPInventoryStatus =
 
 export type ShadowMCPPolicyDisposition = "block_all" | "allow_all";
 
+export type ShadowMCPPolicy = Pick<
+  RiskPolicy,
+  | "audienceType"
+  | "audiencePrincipalUrns"
+  | "id"
+  | "name"
+  | "shadowMcpDisposition"
+>;
+
 /**
  * The effective disposition of the project's enabled blocking shadow MCP
  * policies, or null when none exist. With legacy multi-policy data,
