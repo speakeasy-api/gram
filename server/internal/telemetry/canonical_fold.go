@@ -174,6 +174,11 @@ func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string
 			attr.SlogIdentityFoldCanonicalGroups(len(folded)),
 			attr.SlogIdentityFoldNewKeys(newKeys),
 			attr.SlogIdentityFoldTokenDelta(foldedTokens-literalTokens),
+			// On a truncated page both lists are capped at limit+1 and the
+			// deltas are page-cap artifacts, not divergence — folding frees
+			// slots and pulls in groups past the literal horizon. Readers
+			// deciding a rollout must weigh only truncated=false lines.
+			attr.SlogIdentityFoldTruncated(len(literal) >= params.Limit),
 		)
 	}()
 }

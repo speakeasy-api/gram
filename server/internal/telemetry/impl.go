@@ -933,6 +933,12 @@ func dedupeNonEmpty(values []string) []string {
 // pairing one person's email with another person's user id hand the second
 // person's accounts to the first summary (DNO-509). Best-effort: a lookup
 // failure leaves accounts empty rather than failing the listing.
+//
+// Canonical-fold edge, accepted: if the fold's canonical key fails directory
+// resolution (owner deleted after the last identity-map sync), the email
+// fallback targets the folded-away personal-email summary and the chip
+// attaches nowhere for that page load. Transient — the next map sync drops
+// the deleted owner's entries and the rows return to literal keys.
 func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []*telem_gen.UserSummary, rawUserIDsByKey map[string][]string) {
 	if len(users) == 0 {
 		return

@@ -481,6 +481,7 @@ const (
 	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
 	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
 	IdentityFoldNewKeysKey         = attribute.Key("gram.identity_fold.new_keys")
+	IdentityFoldTruncatedKey       = attribute.Key("gram.identity_fold.truncated")
 	IdentityFoldTokenDeltaKey      = attribute.Key("gram.identity_fold.token_delta")
 	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
 	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
@@ -836,6 +837,11 @@ func SlogIdentityFoldLiteralGroups(v int) slog.Attr {
 func IdentityFoldNewKeys(v int) attribute.KeyValue { return IdentityFoldNewKeysKey.Int(v) }
 func SlogIdentityFoldNewKeys(v int) slog.Attr {
 	return slog.Int(string(IdentityFoldNewKeysKey), v)
+}
+
+func IdentityFoldTruncated(v bool) attribute.KeyValue { return IdentityFoldTruncatedKey.Bool(v) }
+func SlogIdentityFoldTruncated(v bool) slog.Attr {
+	return slog.Bool(string(IdentityFoldTruncatedKey), v)
 }
 
 func IdentityFoldTokenDelta(v int64) attribute.KeyValue { return IdentityFoldTokenDeltaKey.Int64(v) }
