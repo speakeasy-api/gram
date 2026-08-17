@@ -196,6 +196,7 @@ func TestRun(t *testing.T) {
 			"claims": [
 				{"tier": "independently_reported", "text": "cited claim", "citations": [{"url": "https://example.com/a"}], "source_reputation": "reputable"},
 				{"tier": "vendor_claim", "text": "uncited claim, must drop", "citations": []},
+				{"tier": "independently_reported", "text": "plaintext citation, must drop: the run cannot have read an http page", "citations": [{"url": "http://plain.example.com/a"}], "source_reputation": "low"},
 				{"tier": "observed", "text": "briefing restatement, silently dropped — the evidence panel shows it"}
 			]
 		}`,
@@ -209,18 +210,18 @@ func TestRun(t *testing.T) {
 	require.Equal(t, 1, meta.Searches)
 	require.Equal(t, 1, meta.Fetches)
 	require.False(t, meta.TurnLimitReached)
-	require.Equal(t, 1, meta.DroppedUncitedClaims)
+	require.Equal(t, 2, meta.DroppedUncitedClaims)
 	require.Equal(t, int64(250), meta.PromptTokens, "two tool turns at 100 plus the final at 50")
 
 	var document researchagent.Document
 	require.NoError(t, json.Unmarshal(encoded, &document))
 	require.Equal(t, "Little is known.", document.Summary)
 	require.Equal(t, researchagent.CoverageThin, document.Coverage.Level)
-	require.Len(t, document.Claims, 1, "the uncited web claim and the observed restatement are both dropped")
+	require.Len(t, document.Claims, 1, "the uncited claim, the plaintext-cited claim, and the observed restatement are all dropped")
 	require.Equal(t, researchagent.TierIndependentlyReported, document.Claims[0].Tier)
 	require.Equal(t, researchagent.ReputationReputable, document.Claims[0].SourceReputation)
 	require.Equal(t, researchagent.Model, document.Run.Model)
-	require.Equal(t, 1, document.Run.DroppedUncitedClaims)
+	require.Equal(t, 2, document.Run.DroppedUncitedClaims)
 
 	require.Len(t, search.calls, 1)
 	require.Len(t, fetch.calls, 1)

@@ -58,7 +58,7 @@ var systemPrompt string
 // PromptVersion identifies the research prompt a run used, stored on the
 // report so reports stay distinguishable across prompt changes. Bump on any
 // change to prompt.txt or the extraction instructions.
-const PromptVersion = "5"
+const PromptVersion = "6"
 
 // Model is the completion model the research loop runs on.
 const Model = "anthropic/claude-sonnet-5"
