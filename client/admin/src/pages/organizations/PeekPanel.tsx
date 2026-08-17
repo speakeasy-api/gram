@@ -168,7 +168,7 @@ export function PeekPanel({
           list watches for Escape and the arrow keys, and a menu would answer
           Escape before the panel it is drawn in. */}
       <div className="flex min-h-8 items-center gap-2 p-4">
-        <OrganizationActions org={org} layout="footer" />
+        <OrganizationActions org={org} layout="buttons" />
       </div>
     </aside>
   );
