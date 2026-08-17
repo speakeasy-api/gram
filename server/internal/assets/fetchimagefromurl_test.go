@@ -30,10 +30,12 @@ func pngBytes(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
+// The fetch path only accepts https, so the upstream has to be a TLS server
+// whose cert the test policy trusts (see unsafeFetchPolicy).
 func newImageServer(t *testing.T, contentType string, status int, body []byte) *httptest.Server {
 	t.Helper()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if contentType != "" {
 			w.Header().Set("Content-Type", contentType)
 		}
@@ -47,10 +49,10 @@ func newImageServer(t *testing.T, contentType string, status int, body []byte) *
 func TestService_FetchImageFromURL_Success(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	body := pngBytes(t)
 	srv := newImageServer(t, "image/png", http.StatusOK, body)
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	sha := sha256.Sum256(body)
 	expectedSha256 := hex.EncodeToString(sha[:])
@@ -82,9 +84,9 @@ func TestService_FetchImageFromURL_Success(t *testing.T) {
 func TestService_FetchImageFromURL_DeduplicatesByHash(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	srv := newImageServer(t, "image/png", http.StatusOK, pngBytes(t))
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	first, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
@@ -108,10 +110,10 @@ func TestService_FetchImageFromURL_DeduplicatesByHash(t *testing.T) {
 func TestService_FetchImageFromURL_ContentTypeDetectedFromBytes(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	// Neither the declared type nor the extension identifies the image.
 	srv := newImageServer(t, "application/octet-stream", http.StatusOK, pngBytes(t))
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	result, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
@@ -127,10 +129,10 @@ func TestService_FetchImageFromURL_ContentTypeDetectedFromBytes(t *testing.T) {
 func TestService_FetchImageFromURL_NonImageRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	// An HTML error page served with a 200 and an image extension.
 	srv := newImageServer(t, "image/png", http.StatusOK, []byte("<html></html>"))
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	_, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
@@ -147,10 +149,10 @@ func TestService_FetchImageFromURL_NonImageRejected(t *testing.T) {
 func TestService_FetchImageFromURL_SVGRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	// Not in the allowed image types, matching uploadImage.
 	srv := newImageServer(t, "image/svg+xml", http.StatusOK, []byte("<svg></svg>"))
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	_, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
@@ -167,14 +169,12 @@ func TestService_FetchImageFromURL_SVGRejected(t *testing.T) {
 func TestService_FetchImageFromURL_ContentTooLarge(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	// Icon hosts often stream without a Content-Length, so the declared-length
 	// check cannot reject the download up front; the read-one-byte-past-the-cap
 	// guard after the limited copy has to catch it instead. Flushing before the
 	// body forces chunked encoding so no Content-Length is ever declared.
 	oversized := make([]byte, svc.MaxFileSizeImage+1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.WriteHeader(http.StatusOK)
 		if f, ok := w.(http.Flusher); ok {
@@ -183,6 +183,8 @@ func TestService_FetchImageFromURL_ContentTooLarge(t *testing.T) {
 		_, _ = w.Write(oversized)
 	}))
 	t.Cleanup(srv.Close)
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	_, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
@@ -200,9 +202,9 @@ func TestService_FetchImageFromURL_ContentTooLarge(t *testing.T) {
 func TestService_FetchImageFromURL_UpstreamError(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAssetsService(t)
-
 	srv := newImageServer(t, "image/png", http.StatusNotFound, []byte("not found"))
+
+	ctx, ti := newTestAssetsServiceWithPolicy(t, unsafeFetchPolicy(t, []string{}, nil, srv))
 
 	_, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
 		ApikeyToken:      nil,
