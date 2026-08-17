@@ -298,3 +298,56 @@ func TestIngest_AsyncPersist_FilteredProxiedEventStillMarksChat(t *testing.T) {
 	require.True(t, chatRow.LitellmProxied,
 		"a proxied event must mark the chat even when it writes no transcript row")
 }
+
+// A proxied assistant turn that the handler accepts and then drops as a
+// duplicate must still flag the chat. This is the claim the request-path
+// fallback rests on: publishChatMessage hands the marker to the handler, so if
+// the handler silently skipped marking whenever it suppressed a row, proxied
+// sessions would lose the marker exactly when duplicate suppression is doing
+// its job — the case the marker exists for.
+func TestChatPersister_SuppressedProxiedTurnStillMarksChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "suppressed-marks-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	projectID := *authCtx.ProjectID
+
+	// The chat exists, created by the native stream.
+	prompt := "native prompt " + uuid.NewString()
+	native := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	native.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.IngestAuthenticated(t.Context(), authCtx, native)
+	require.NoError(t, err)
+
+	// The session is owned by a stream that reports its own assistant turns, so
+	// the proxy's copy is a duplicate.
+	require.NoError(t, ti.service.cache.Set(t.Context(),
+		sessionNativeHooksCacheKey(projectID.String(), sessionID), "claude", time.Hour))
+
+	msg := newTestHookMessage(sessionID, authCtx.ActiveOrganizationID, chatID, projectID, "assistant", "proxied reply")
+	msg.SetHookSource("litellm")
+	msg.SetSource("litellm")
+
+	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil)
+	stored, err := persister.Persist(t.Context(), msg)
+	require.NoError(t, err)
+	require.False(t, stored, "the duplicate must not be written")
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
+		ChatID: chatID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1, "only the native row survives")
+
+	chatRow, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{
+		ID: chatID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, chatRow.LitellmProxied,
+		"suppressing the proxied row must not also suppress the marker it carries")
+}
