@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { QueryClient } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationStats,
   organizationQuery,
   organizationsListQuery,
+  organizationsStatsQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import type {
@@ -81,6 +83,14 @@ describe("writeOrganizationToCache", () => {
     ...LIVE,
     disabled_at: "2026-08-01T00:00:00Z",
   };
+  // Distinct from anything a cancelled read answers with below.
+  const FRESH = {
+    total: 2,
+    created_last_7_days: 1,
+    trials_ending_soon: 1,
+    disabled: 1,
+    disabled_last_7_days: 1,
+  };
 
   it("answers the detail route by id and by slug", () => {
     const qc = new QueryClient();
@@ -134,6 +144,90 @@ describe("writeOrganizationToCache", () => {
 
     const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);
     expect(after?.organizations[0]).toEqual(DISABLED);
+  });
+
+  // Every write moves one of these, and a single record cannot move a count.
+  it("marks the platform totals for a refetch", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(organizationsStatsQuery.queryKey, {
+      total: 1,
+      created_last_7_days: 0,
+      trials_ending_soon: 0,
+      disabled: 0,
+      disabled_last_7_days: 0,
+    });
+
+    writeOrganizationToCache(qc, DISABLED);
+
+    expect(
+      qc.getQueryState(organizationsStatsQuery.queryKey)?.isInvalidated,
+    ).toBe(true);
+  });
+
+  // The cold-load window: the aggregate is still open, and an invalidation
+  // joins a running fetch rather than replacing it. Its pre-write answer would
+  // fill the cache and read as fresh.
+  it("survives a first stats read that was still open when it landed", async () => {
+    const qc = new QueryClient();
+
+    let land: (stats: unknown) => void = () => {};
+    const stale = new Promise((resolve) => {
+      land = resolve;
+    });
+    const inFlight = qc.prefetchQuery({
+      ...organizationsStatsQuery,
+      queryFn: () => stale as Promise<never>,
+    });
+
+    await cancelOrganizationFetches(qc);
+    writeOrganizationToCache(qc, DISABLED);
+
+    land({ total: 1, disabled: 0 });
+    await inFlight;
+
+    expect(qc.getQueryData(organizationsStatsQuery.queryKey)).toBeUndefined();
+  });
+
+  // The same window, on the path where the write never lands. Nothing is put
+  // in the cache to replace what the cancel dropped, so the read that was
+  // cancelled has to be asked for again or the strip keeps its three dashes.
+  it("asks again for a stats read the cancel dropped when no write follows", async () => {
+    const qc = new QueryClient();
+
+    let land: (stats: unknown) => void = () => {};
+    const stale = new Promise((resolve) => {
+      land = resolve;
+    });
+    let calls = 0;
+    const queryFn = (): Promise<never> => {
+      calls += 1;
+      return (calls === 1 ? stale : Promise.resolve(FRESH)) as Promise<never>;
+    };
+    // Observed, because an invalidation refetches the queries something is
+    // watching. The strip is on screen for every write this covers.
+    const observer = new QueryObserver(qc, {
+      ...organizationsStatsQuery,
+      queryFn,
+    });
+    const unwatch = observer.subscribe(() => {});
+    await vi.waitFor(() => {
+      expect(calls).toBe(1);
+    });
+
+    await cancelOrganizationFetches(qc);
+    invalidateOrganizationStats(qc);
+
+    await vi.waitFor(() => {
+      expect(qc.getQueryData(organizationsStatsQuery.queryKey)).toEqual(FRESH);
+    });
+
+    // The cancelled read, answering late. It is dropped either way, and this
+    // pins that the second answer is not the one overwritten.
+    land({ total: 1, disabled: 0 });
+    await vi.waitFor(() => {
+      expect(qc.getQueryData(organizationsStatsQuery.queryKey)).toEqual(FRESH);
+    });
+    unwatch();
   });
 
   it("leaves a page that never held the record exactly as it was", () => {

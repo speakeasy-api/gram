@@ -260,15 +260,15 @@ func TestPromote_EmptyBypassNoteKeepsTheEarlierJustification(t *testing.T) {
 	require.Equal(t, "the original why", *detail.Requesters[0].Note)
 }
 
-func TestPromote_RequiresDecideScope(t *testing.T) {
+func TestPromote_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "someone", "why")
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	nonAdmin := withProject(t, ctx, ti, ti.projectID, authz.ScopeProjectWrite)
 
-	_, err := ti.service.Promote(readOnly, promotePayload(bypassID.String()))
+	_, err := ti.service.Promote(nonAdmin, promotePayload(bypassID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 

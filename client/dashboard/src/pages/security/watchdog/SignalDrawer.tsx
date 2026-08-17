@@ -123,6 +123,9 @@ function EvidenceRow({
   // behind it instead of a redaction chip over content that may not exist.
   // Judge findings also can't be excluded (their rule id is a constant for
   // the whole detector), so the row offers only false-positive dismissal.
+  // Every other detector gets only Exclude: exclusion rules are the reviewed
+  // dismissal path for pattern detectors, and offering both actions side by
+  // side made per-row false-positive marking the path of least resistance.
   const judge = isJudgeSource(result.source);
   return (
     <div className="border-border overflow-hidden rounded-md border">
@@ -163,7 +166,15 @@ function EvidenceRow({
           {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">
-          {!judge && (
+          {judge ? (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => onDismiss(result)}
+            >
+              <Button.Text>False positive</Button.Text>
+            </Button>
+          ) : (
             <Button
               variant="tertiary"
               size="sm"
@@ -172,13 +183,6 @@ function EvidenceRow({
               <Button.Text>Exclude</Button.Text>
             </Button>
           )}
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => onDismiss(result)}
-          >
-            <Button.Text>False positive</Button.Text>
-          </Button>
         </span>
       </div>
     </div>

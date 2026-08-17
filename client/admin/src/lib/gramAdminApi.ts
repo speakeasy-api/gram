@@ -254,6 +254,18 @@ export function listOrganizations(
   );
 }
 
+export type AdminOrganizationStats = {
+  total: number;
+  created_last_7_days: number;
+  trials_ending_soon: number;
+  disabled: number;
+  disabled_last_7_days: number;
+};
+
+export function getOrganizationStats(): Promise<AdminOrganizationStats> {
+  return gramAdminFetch<AdminOrganizationStats>("/admin/organizations.stats");
+}
+
 export type AdminProjectDetail = {
   id: string;
   name: string;
@@ -295,6 +307,34 @@ export function updateOrganization(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+export type BulkUpdateAccountTypeRequest = {
+  ids: string[];
+  account_type: string;
+};
+
+// `updated_ids` is a set: the server states no order, so nothing may index into
+// it or line it up against the request. `missing_ids` was not written, and a
+// caller that drops it reports the write as having done more than it did.
+export type BulkUpdateAccountTypeResult = {
+  updated_ids: string[];
+  missing_ids: string[];
+};
+
+// One statement for every id: an id that matches nothing comes back in
+// missing_ids rather than failing the batch.
+export function bulkUpdateAccountType(
+  body: BulkUpdateAccountTypeRequest,
+): Promise<BulkUpdateAccountTypeResult> {
+  return gramAdminFetch<BulkUpdateAccountTypeResult>(
+    "/admin/organizations.bulkUpdateAccountType",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export type OrganizationRequest = {
