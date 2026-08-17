@@ -787,6 +787,19 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
 }
 
+// unsetClaudeLaunch clears the env a live Claude Code session exports. Launch
+// recovery reads CLAUDE_PID, then that process's argv and absolute executable —
+// so a test run from inside Claude Code probes the real `claude mcp list`,
+// against the real repo, and collects servers the test never set up. $PATH
+// sandboxing cannot prevent it: the recovered path is absolute. Unset, the
+// probe falls back to a PATH lookup that the sandboxed $PATH fails, which is
+// what these tests assume and what CI gets for free.
+func unsetClaudeLaunch(t *testing.T) {
+	t.Helper()
+	t.Setenv("CLAUDE_PID", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+}
+
 func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
@@ -795,6 +808,7 @@ func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	t.Setenv("PATH", t.TempDir())
+	unsetClaudeLaunch(t)
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
@@ -1637,6 +1651,7 @@ func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	unsetClaudeLaunch(t)
 	payload := []byte(`{"session_id":"ordered-inventory-session","hook_event_name":"PreToolUse","tool_name":"mcp__remote__call","tool_input":{},"tool_use_id":"tool-1"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
