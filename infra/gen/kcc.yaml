@@ -322,6 +322,9 @@ pubsub:
           string field = 21;
           string path = 22;
           string tool_call_id = 23;
+          string excluded_at = 24;
+          string excluded_reason = 25;
+          string excluded_detail = 26;
         }
       type: PROTOCOL_BUFFER
   - labels:

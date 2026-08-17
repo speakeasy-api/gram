@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -155,11 +156,14 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 // mirrorFalsePositiveToClickHouse republishes each affected result onto the
 // shared findings topic (the same one scanners publish to) so
 // FindingCHWriter appends a fresh risk_findings row recording the result's
-// new false_positive_at — set for a mark, cleared for an unmark, read
-// straight off the row the UPDATE ... RETURNING already gave us. Best-effort
-// and detached from the request: Postgres already committed and remains the
-// source of truth, so a publish failure here only delays when the change is
-// reflected in ClickHouse-backed reads, never the RPC.
+// new suppression state — set for a mark, cleared for an unmark, read
+// straight off the row the UPDATE ... RETURNING already gave us. The mark
+// state is published twice over during the suppression convergence:
+// excluded_at/excluded_reason=manual/excluded_detail are the converged
+// fields, false_positive_at the legacy one the read paths still filter on.
+// Best-effort and detached from the request: Postgres already committed and
+// remains the source of truth, so a publish failure here only delays when
+// the change is reflected in ClickHouse-backed reads, never the RPC.
 func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []repo.RiskResult) {
 	if s.findingsPub == nil || len(rows) == 0 {
 		return
@@ -169,43 +173,7 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 	go func() {
 		results := make([]gcp.PublishResult, 0, len(rows))
 		for _, row := range rows {
-			id := row.ID.String()
-			projectID := row.ProjectID.String()
-			riskPolicyID := row.RiskPolicyID.String()
-			createdAt := row.CreatedAt.Time.UTC().Format(time.RFC3339)
-			var chatMessageID string
-			if row.ChatMessageID.Valid {
-				chatMessageID = row.ChatMessageID.UUID.String()
-			}
-			var falsePositiveAt string
-			if row.FalsePositiveAt.Valid {
-				falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339)
-			}
-
-			surface := fpMirrorSurface(row.Source)
-
-			msg := riskv1.Finding_builder{
-				Id:                &id,
-				RequestId:         conv.PtrEmpty(""),
-				ChatMessageId:     &chatMessageID,
-				ProjectId:         &projectID,
-				OrganizationId:    &row.OrganizationID,
-				RiskPolicyId:      &riskPolicyID,
-				RiskPolicyVersion: &row.RiskPolicyVersion,
-				CreatedAt:         &createdAt,
-				RuleId:            &row.RuleID.String,
-				Description:       &row.Description.String,
-				Match:             &row.Match.String,
-				StartPos:          &row.StartPos.Int32,
-				EndPos:            &row.EndPos.Int32,
-				Tags:              row.Tags,
-				Source:            &row.Source,
-				Confidence:        &row.Confidence.Float64,
-				FalsePositiveAt:   &falsePositiveAt,
-				Surface:           &surface,
-			}.Build()
-
-			results = append(results, s.findingsPub.Publish(detached, msg))
+			results = append(results, s.findingsPub.Publish(detached, fpMirrorMessage(row)))
 		}
 
 		for _, res := range results {
@@ -217,6 +185,58 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 			}
 		}
 	}()
+}
+
+// fpMirrorMessage renders one UPDATE ... RETURNING row as the finding message
+// the mirror republishes. falsePositiveAt doubles as the converged
+// excluded_at: same timestamp on a mark (with excluded_reason=manual and the
+// user-supplied reason as excluded_detail), all empty on an unmark. An unmark
+// republish deliberately carries no excluded state so the CH writer re-runs
+// its exclusion check and re-stamps rule suppression when an active exclusion
+// still matches, instead of resurfacing the finding.
+func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
+	id := row.ID.String()
+	projectID := row.ProjectID.String()
+	riskPolicyID := row.RiskPolicyID.String()
+	createdAt := row.CreatedAt.Time.UTC().Format(time.RFC3339)
+	var chatMessageID string
+	if row.ChatMessageID.Valid {
+		chatMessageID = row.ChatMessageID.UUID.String()
+	}
+	var falsePositiveAt string
+	excludedReason := ""
+	excludedDetail := ""
+	if row.FalsePositiveAt.Valid {
+		falsePositiveAt = row.FalsePositiveAt.Time.UTC().Format(time.RFC3339)
+		excludedReason = chrepo.ExcludedReasonManual
+		excludedDetail = row.FalsePositiveReason.String
+	}
+
+	surface := fpMirrorSurface(row.Source)
+
+	return riskv1.Finding_builder{
+		Id:                &id,
+		RequestId:         conv.PtrEmpty(""),
+		ChatMessageId:     &chatMessageID,
+		ProjectId:         &projectID,
+		OrganizationId:    &row.OrganizationID,
+		RiskPolicyId:      &riskPolicyID,
+		RiskPolicyVersion: &row.RiskPolicyVersion,
+		CreatedAt:         &createdAt,
+		RuleId:            &row.RuleID.String,
+		Description:       &row.Description.String,
+		Match:             &row.Match.String,
+		StartPos:          &row.StartPos.Int32,
+		EndPos:            &row.EndPos.Int32,
+		Tags:              row.Tags,
+		Source:            &row.Source,
+		Confidence:        &row.Confidence.Float64,
+		FalsePositiveAt:   &falsePositiveAt,
+		ExcludedAt:        &falsePositiveAt,
+		ExcludedReason:    &excludedReason,
+		ExcludedDetail:    &excludedDetail,
+		Surface:           &surface,
+	}.Build()
 }
 
 // fpMirrorSurface maps a republished Postgres row's source to the text its
