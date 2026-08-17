@@ -323,9 +323,10 @@ func ParseEndpoint(
 		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
 		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
 
-		adminGetProjectFlags                 = flag.NewFlagSet("get-project", flag.ExitOnError)
-		adminGetProjectIDOrSlugFlag          = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
-		adminGetProjectAdminSessionTokenFlag = adminGetProjectFlags.String("admin-session-token", "", "")
+		adminGetProjectFlags                    = flag.NewFlagSet("get-project", flag.ExitOnError)
+		adminGetProjectIDOrSlugFlag             = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
+		adminGetProjectOrganizationIDOrSlugFlag = adminGetProjectFlags.String("organization-id-or-slug", "", "")
+		adminGetProjectAdminSessionTokenFlag    = adminGetProjectFlags.String("admin-session-token", "", "")
 
 		adminUpdateOrganizationFlags                 = flag.NewFlagSet("update-organization", flag.ExitOnError)
 		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
@@ -6412,7 +6413,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
 			case "get-project":
 				endpoint = c.GetProject()
-				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
+				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectOrganizationIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
 			case "update-organization":
 				endpoint = c.UpdateOrganization()
 				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
@@ -8939,6 +8940,7 @@ func adminGetProjectUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin get-project", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id-or-slug STRING")
+	fmt.Fprint(os.Stderr, " -organization-id-or-slug STRING")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -8948,11 +8950,12 @@ func adminGetProjectUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id-or-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -organization-id-or-slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --organization-id-or-slug \"abc123\" --admin-session-token \"abc123\"")
 }
 
 func adminUpdateOrganizationUsage() {

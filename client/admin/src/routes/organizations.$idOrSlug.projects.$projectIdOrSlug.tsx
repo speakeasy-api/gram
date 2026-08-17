@@ -8,7 +8,10 @@ export const Route = createFileRoute(
 )({
   component: ProjectRoute,
   staticData: {
-    crumb: ({ projectIdOrSlug }) =>
-      projectIdOrSlug ? projectQuery(projectIdOrSlug) : undefined,
+    // Both params, so this key matches the one the view under the bar fetches.
+    // The bar only watches the cache, so a key that differs by the organization
+    // would never fill.
+    crumb: ({ projectIdOrSlug, idOrSlug }) =>
+      projectIdOrSlug ? projectQuery(projectIdOrSlug, idOrSlug) : undefined,
   },
 });

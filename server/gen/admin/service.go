@@ -321,6 +321,10 @@ type GetProjectPayload struct {
 	AdminSessionToken *string
 	// Project ID or slug.
 	IDOrSlug string
+	// Organization the project must belong to, by id or slug. A project outside it
+	// is reported as not found. Optional, because the global project lookup has no
+	// organization to scope by.
+	OrganizationIDOrSlug *string
 }
 
 // ListOrganizationMembersPayload is the payload type of the admin service

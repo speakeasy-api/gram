@@ -446,7 +446,7 @@ describe("AppSidebar", () => {
         within(sidebar())
           .getByRole("link", { name: "Projects" })
           .getAttribute("href"),
-      ).toBe(`/organizations/${ORG.slug}/projects/${PROJECT.slug}`);
+      ).toBe(`/organizations/${ORG.slug}/projects/${PROJECT.id}`);
     });
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },

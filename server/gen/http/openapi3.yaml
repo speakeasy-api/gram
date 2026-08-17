@@ -1144,6 +1144,13 @@ paths:
                   schema:
                     type: string
                     description: Project ID or slug.
+                - name: organization_id_or_slug
+                  in: query
+                  description: Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.
             responses:
                 "200":
                     description: OK response.
