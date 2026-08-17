@@ -154,3 +154,35 @@ func TestOnboardingServiceValidatesClientFamily(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(OnboardingClientOpencode), workflow.ClientFamily)
 }
+
+// catalog_explored is one of the milestones the schema requires a connection
+// for. The catalogue search still has to serve a connection-less caller, so
+// the recorder must decline to write rather than fail the search.
+func TestOnboardingServiceSkipsConnectionScopedEvidenceWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_onboarding_no_connection")
+	require.NoError(t, err)
+
+	connected, _ := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ClientID:       AssistantClientID,
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	require.NoError(t, NewOnboardingService(conn).RecordCatalogExplored(ctx, assistant), "a connection-less search must not fail on connection-scoped funnel evidence")
+
+	// The organization's one connection must not have inherited the assistant's
+	// exploration as its own funnel evidence.
+	recorded, err := platformrepo.New(conn).HasPlatformMCPOnboardingCatalogExplored(ctx, platformrepo.HasPlatformMCPOnboardingCatalogExploredParams{
+		OrganizationID:       connected.OrganizationID,
+		ConnectionID:         presentConnection(connectionIDFromPrincipal(t, connected)),
+		ConnectionGeneration: presentConnection(connectionIDFromPrincipalGeneration(t, connected)),
+	})
+	require.NoError(t, err)
+	require.False(t, recorded, "no connection generation explored the catalogue, so no evidence belongs to one")
+}

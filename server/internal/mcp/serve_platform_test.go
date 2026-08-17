@@ -320,6 +320,14 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	require.Contains(t, body, `"list_projects"`)
 	require.Contains(t, body, `"list_project_mcps"`)
 	require.Contains(t, body, `"get_mcp"`)
+	// Admitted once their handlers stopped reaching connection-scoped state.
+	require.Contains(t, body, `"search_mcp_catalog"`)
+	require.Contains(t, body, `"send_platform_mcp_feedback"`)
+	// Still withheld: their state is keyed by an OAuth connection generation
+	// the assistant does not hold.
+	require.NotContains(t, body, `"get_mcp_readiness"`)
+	require.NotContains(t, body, `"get_setup_handoff"`)
+	require.NotContains(t, body, `"add_platform_mcp_to_default_plugin"`)
 	require.NotContains(t, body, platformtools.ToolNameListProjects, "the legacy prefixed set must not be served on this variant")
 
 	// The assistant only ever acts in its own project, so the project the

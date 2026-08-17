@@ -57,3 +57,37 @@ func (l *recordingOperationLimiter) Allow(_ context.Context, key string) (rateli
 	l.keys = append(l.keys, key)
 	return l.result, l.err
 }
+
+// A surface with no OAuth connection still has to be metered. Refusing it the
+// budget outright would make every budgeted tool fail for the assistant, which
+// is indistinguishable to a user from the feature being broken.
+func TestOperationBudgetMetersAConnectionlessCallerPerUser(t *testing.T) {
+	t.Parallel()
+
+	caller := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	assistant := Principal{
+		UserID:         "user-1",
+		OrganizationID: "organization",
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	require.NoError(t, (OperationBudget{Connection: caller, Organization: organization}).Allow(t.Context(), assistant))
+	require.Equal(t, []string{userSubjectURN("user-1")}, caller.keys, "a connection-less caller is metered on its own subject, not on an empty key")
+	require.Equal(t, []string{"organization"}, organization.keys)
+}
+
+// Without a connection and without a user there is nothing to meter, so the
+// budget must refuse rather than share one unbounded bucket.
+func TestOperationBudgetRefusesAnUnidentifiedCaller(t *testing.T) {
+	t.Parallel()
+
+	caller := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+
+	err := (OperationBudget{Connection: caller, Organization: organization}).Allow(t.Context(), Principal{OrganizationID: "organization"})
+	require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
+	require.Empty(t, caller.keys)
+	require.Empty(t, organization.keys)
+}

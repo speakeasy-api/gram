@@ -61,8 +61,8 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 	if err != nil {
 		return ProviderSetupResult{}, fmt.Errorf("load platform mcp setup handoff for dashboard start: %w", err)
 	}
-	principal.ConnectionID = row.ConnectionID.String()
-	principal.Generation = row.ConnectionGeneration.String()
+	principal.ConnectionID = row.ConnectionID.UUID.String()
+	principal.Generation = row.ConnectionGeneration.UUID.String()
 	if err := s.setupBudget.Allow(ctx, principal); err != nil {
 		return ProviderSetupResult{}, err
 	}

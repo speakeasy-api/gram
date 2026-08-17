@@ -136,7 +136,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Platform MCP Feedback",
 			Description: "Send bounded Platform MCP feedback. Feedback is not enabled in the current rollout.",
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
@@ -151,20 +151,23 @@ func registerReadTools(reg *Registrar, reader Reader) {
 }
 
 func registerUnavailableCatalogTools(reg *Registrar) {
+	// Each stub declares the audiences its live counterpart declares, so a tool
+	// does not appear and disappear from a surface with the rollout.
 	for _, tool := range []struct {
 		name        string
 		title       string
 		description string
+		audiences   []Audience
 	}{
-		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout."},
-		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout."},
+		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout.", bothAudiences},
+		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout.", externalOnly},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Audiences: tool.audiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 

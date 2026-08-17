@@ -863,6 +863,14 @@ func principalConnection(principal Principal) (uuid.NullUUID, uuid.NullUUID, err
 	return uuid.NullUUID{UUID: connectionID, Valid: true}, uuid.NullUUID{UUID: generation, Valid: true}, nil
 }
 
+// presentConnection wraps a strictly parsed connection for a column that now
+// permits a null one. Its call sites are the paths that still require a
+// connection, which is why they parse strictly rather than through
+// principalConnection.
+func presentConnection(id uuid.UUID) uuid.NullUUID {
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
 func parseConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
 	connectionID, err := uuid.Parse(principal.ConnectionID)
 	if err != nil {

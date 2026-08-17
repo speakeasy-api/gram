@@ -33,9 +33,9 @@ type Limiter interface {
 	Allow(ctx context.Context, key string) (ratelimit.Result, error)
 }
 
-// OperationBudget applies independently configured connection and organization
-// buckets. Connection is always charged first; a denial prevents the second
-// bucket, mutations, and provider egress.
+// OperationBudget applies independently configured caller and organization
+// buckets. The caller bucket is always charged first; a denial prevents the
+// second bucket, mutations, and provider egress.
 type OperationBudget struct {
 	Connection   Limiter
 	Organization Limiter
@@ -45,11 +45,27 @@ func (b OperationBudget) valid() bool {
 	return b.Connection != nil && b.Organization != nil
 }
 
+// callerBudgetKey names the bucket a single caller is metered in. An OAuth
+// client is metered per connection, so reauthorization does not reset its
+// allowance. A connection-less surface — the project assistant acts under
+// assistant identity — has no connection to meter, so it is metered per acting
+// user instead. Keying on the subject URN keeps the two namespaces disjoint.
+func callerBudgetKey(principal Principal) string {
+	if principal.ConnectionID != "" {
+		return principal.ConnectionID
+	}
+	if principal.UserID == "" {
+		return ""
+	}
+	return userSubjectURN(principal.UserID)
+}
+
 func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
-	if !b.valid() || principal.ConnectionID == "" || principal.OrganizationID == "" {
+	callerKey := callerBudgetKey(principal)
+	if !b.valid() || callerKey == "" || principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
-	connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
+	connection, err := b.Connection.Allow(ctx, callerKey)
 	if err != nil {
 		return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
 	}

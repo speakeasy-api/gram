@@ -146,3 +146,81 @@ func TestFeedbackServiceReturnsUnavailableWithoutDatabase(t *testing.T) {
 	_, err := NewFeedbackService(nil).Submit(context.Background(), testPrincipal(), FeedbackInput{Category: "other", IdempotencyKey: "feedback-unavailable"})
 	require.ErrorIs(t, err, ErrFeedbackUnavailable)
 }
+
+// The project assistant acts under assistant identity and holds no OAuth
+// connection. Feedback is attributed by subject, so it must store, replay and
+// meter exactly as an external client's does.
+func TestFeedbackServiceSubmitsWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_feedback_no_connection")
+	require.NoError(t, err)
+	connected, _ := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ClientID:       AssistantClientID,
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	service := NewFeedbackService(conn)
+	now := time.Now().UTC()
+	service.now = func() time.Time { return now }
+	input := FeedbackInput{Category: "success", ToolName: "search_mcp_catalog", Note: "Useful", IdempotencyKey: "assistant-feedback"}
+
+	created, err := service.Submit(ctx, assistant, input)
+	require.NoError(t, err, "an assistant submission must not require an OAuth connection")
+	require.NotEmpty(t, created.TrackingID)
+	require.False(t, created.Replayed)
+
+	replayed, err := service.Submit(ctx, assistant, input)
+	require.NoError(t, err, "replaying the same key must return the original row, not a unique violation")
+	require.True(t, replayed.Replayed)
+	require.Equal(t, created.TrackingID, replayed.TrackingID)
+
+	var connectionID uuid.NullUUID
+	var generation uuid.NullUUID
+	var subject string
+	err = conn.QueryRow(ctx, `
+SELECT connection_id, connection_generation, subject_urn
+FROM platform_mcp_feedback
+WHERE id = $1`, created.TrackingID).Scan(&connectionID, &generation, &subject)
+	require.NoError(t, err)
+	require.False(t, connectionID.Valid, "no connection applies, which is not the same as a zero uuid")
+	require.False(t, generation.Valid)
+	require.Equal(t, userSubjectURN(assistant.UserID), subject)
+
+	// The per-caller hourly limit follows the subject when there is no
+	// connection; without that it would count nothing and never throttle.
+	for i := range feedbackConnectionHourlyLimit - 1 {
+		_, err := service.Submit(ctx, assistant, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "assistant-limit-" + string(rune('a'+i))})
+		require.NoError(t, err)
+	}
+	_, err = service.Submit(ctx, assistant, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "assistant-limit-over"})
+	require.ErrorIs(t, err, ErrFeedbackRateLimited)
+}
+
+// A connection-less caller must not consume, or be throttled by, the bucket of
+// a connection it does not hold.
+func TestFeedbackServiceMetersConnectionAndSubjectCallersSeparately(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_feedback_caller_buckets")
+	require.NoError(t, err)
+	connected, _ := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{UserID: connected.UserID, OrganizationID: connected.OrganizationID, Surface: SurfaceProjectAssistant}
+
+	service := NewFeedbackService(conn)
+	for i := range feedbackConnectionHourlyLimit {
+		_, err := service.Submit(ctx, connected, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "connected-" + string(rune('a'+i))})
+		require.NoError(t, err)
+	}
+	_, err = service.Submit(ctx, connected, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "connected-over"})
+	require.ErrorIs(t, err, ErrFeedbackRateLimited)
+
+	_, err = service.Submit(ctx, assistant, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "assistant-first"})
+	require.NoError(t, err, "the assistant is metered on its own bucket, not the connection's")
+}

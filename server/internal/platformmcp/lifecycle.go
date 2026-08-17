@@ -135,8 +135,8 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         presentConnection(connectionID),
+		ConnectionGeneration: presentConnection(generation),
 		Intent:               binding.Intent,
 	}); err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("invalidate platform mcp setup handoffs: %w", err)
@@ -146,8 +146,8 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         presentConnection(connectionID),
+		ConnectionGeneration: presentConnection(generation),
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		HandoffHash:          setupHandoffHash(value),
@@ -212,8 +212,8 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         presentConnection(connectionID),
+		ConnectionGeneration: presentConnection(generation),
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		SubjectUrn:           userSubjectURN(principal.UserID),
@@ -388,8 +388,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         presentConnection(connectionID),
+		ConnectionGeneration: presentConnection(generation),
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -397,8 +397,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         presentConnection(connectionID),
+		ConnectionGeneration: presentConnection(generation),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -443,8 +443,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
-		ConnectionID:                     connectionID,
-		ConnectionGeneration:             generation,
+		ConnectionID:                     presentConnection(connectionID),
+		ConnectionGeneration:             presentConnection(generation),
 		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
@@ -456,8 +456,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:                   principal.OrganizationID,
 			ProjectID:                        binding.ProjectID,
 			RegistrationID:                   binding.RegistrationID,
-			ConnectionID:                     connectionID,
-			ConnectionGeneration:             generation,
+			ConnectionID:                     presentConnection(connectionID),
+			ConnectionGeneration:             presentConnection(generation),
 			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		})
 		if loadErr == nil {
@@ -479,8 +479,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            binding.ProjectID,
 			RegistrationID:       binding.RegistrationID,
-			ConnectionID:         connectionID,
-			ConnectionGeneration: generation,
+			ConnectionID:         presentConnection(connectionID),
+			ConnectionGeneration: presentConnection(generation),
 			SubjectUrn:           userSubjectURN(principal.UserID),
 		})
 		switch {
@@ -605,14 +605,16 @@ func setupHandoffHash(value string) string {
 
 func setupHandoffFromRow(row platformrepo.PlatformMcpSetupHandoff) SetupHandoff {
 	return SetupHandoff{
-		ID:                   row.ID,
-		ProjectID:            row.ProjectID,
-		RegistrationID:       row.RegistrationID,
-		ProviderKey:          row.ProviderKey,
-		Intent:               row.Intent,
-		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ID:             row.ID,
+		ProjectID:      row.ProjectID,
+		RegistrationID: row.RegistrationID,
+		ProviderKey:    row.ProviderKey,
+		Intent:         row.Intent,
+		ExpiresAt:      row.ExpiresAt.Time,
+		// Only connection-bearing paths write handoffs today, so a null here
+		// is unreachable rather than meaningfully zero.
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 	}
 }
 
@@ -625,8 +627,8 @@ func readinessFromRow(row platformrepo.PlatformMcpReadiness, now time.Time) Read
 		EvidenceCode:         row.EvidenceCode.String,
 		CheckedAt:            row.CheckedAt.Time,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 		Fresh:                row.ExpiresAt.Valid && row.ExpiresAt.Time.After(now),
 	}
 }

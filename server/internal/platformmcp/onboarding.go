@@ -241,6 +241,14 @@ func (s *OnboardingService) RecordCatalogExplored(ctx context.Context, principal
 	if s == nil || s.db == nil {
 		return ErrUnavailable
 	}
+	// catalog_explored is one of the connection-scoped milestones the
+	// onboarding-milestone CHECK constraint requires a connection for: it
+	// measures the external OAuth onboarding funnel, whose stages a
+	// connection-less surface never passes through. Recording nothing is the
+	// honest outcome, and lets the catalogue search itself serve that surface.
+	if !principal.HasConnection() {
+		return nil
+	}
 	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return err

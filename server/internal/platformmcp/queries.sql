@@ -1239,12 +1239,23 @@ WHERE organization_id = @organization_id
   AND subject_urn = @subject_urn
   AND idempotency_key = @idempotency_key;
 
--- name: CountRecentPlatformMCPFeedbackByConnection :one
+-- name: CountRecentPlatformMCPFeedbackByCaller :one
+-- Meters one caller. A caller holding an OAuth connection is metered on that
+-- connection, so reauthorization does not reset its allowance. A caller with
+-- no connection — the project assistant acts under assistant identity — is
+-- metered on its subject instead. Matching connection-less rows on subject
+-- alone would otherwise count nothing at all.
 SELECT COUNT(*)::bigint
 FROM platform_mcp_feedback
 WHERE organization_id = @organization_id
-  AND connection_id = @connection_id
-  AND created_at >= @since;
+  AND created_at >= @since
+  AND (
+    CASE
+      WHEN sqlc.narg(connection_id)::uuid IS NULL
+        THEN connection_id IS NULL AND subject_urn = @subject_urn
+      ELSE connection_id = sqlc.narg(connection_id)::uuid
+    END
+  );
 
 -- name: CountRecentPlatformMCPFeedbackByOrganization :one
 SELECT COUNT(*)::bigint
@@ -1272,8 +1283,8 @@ INSERT INTO platform_mcp_feedback (
 SELECT
     @organization_id,
     @subject_urn,
-    @connection_id,
-    @connection_generation,
+    sqlc.narg(connection_id)::uuid,
+    sqlc.narg(connection_generation)::uuid,
     @category,
     @rating,
     @success,
@@ -1284,13 +1295,16 @@ SELECT
     @idempotency_key,
     @input_hash,
     @expires_at
-WHERE EXISTS (
+-- A caller presenting a connection must present a live, unrevoked one that is
+-- its own. A caller with no connection has nothing to check here; its identity
+-- was established upstream and the row is attributed by subject_urn.
+WHERE sqlc.narg(connection_id)::uuid IS NULL OR EXISTS (
     SELECT 1
     FROM platform_mcp_connections AS connection
     WHERE connection.organization_id = @organization_id
-      AND connection.id = @connection_id
+      AND connection.id = sqlc.narg(connection_id)::uuid
       AND connection.subject_urn = @subject_urn
-      AND connection.active_generation = @connection_generation
+      AND connection.active_generation = sqlc.narg(connection_generation)::uuid
       AND connection.revoked_at IS NULL
 )
 RETURNING id, delivery_state, expires_at;

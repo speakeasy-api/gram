@@ -143,7 +143,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, err
 	}
-	if err := s.requireFreshReadiness(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID, connectionID, generation); err != nil {
+	if err := s.requireFreshReadiness(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID, presentConnection(connectionID), presentConnection(generation)); err != nil {
 		return Distribution{}, err
 	}
 
@@ -206,8 +206,8 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		existing.State == distributionStateAttached &&
 		existing.PluginServerID.Valid &&
 		existing.PluginServerID.UUID == live.ID &&
-		existing.ConnectionID == connectionID &&
-		existing.ConnectionGeneration == generation {
+		existing.ConnectionID == presentConnection(connectionID) &&
+		existing.ConnectionGeneration == presentConnection(generation) {
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution: %w", err)
 		}
@@ -222,8 +222,8 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		pluginServerID:       uuid.NullUUID{UUID: live.ID, Valid: true},
 		state:                distributionStateAttached,
 		attachmentWasCreated: created,
-		connectionID:         connectionID,
-		connectionGeneration: generation,
+		connectionID:         presentConnection(connectionID),
+		connectionGeneration: presentConnection(generation),
 	})
 	if err != nil {
 		return Distribution{}, err
@@ -345,8 +345,8 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 		pluginServerID:       uuid.NullUUID{},
 		state:                distributionStateRemoved,
 		attachmentWasCreated: false,
-		connectionID:         connectionID,
-		connectionGeneration: generation,
+		connectionID:         presentConnection(connectionID),
+		connectionGeneration: presentConnection(generation),
 	})
 	if err != nil {
 		return Distribution{}, err
@@ -430,7 +430,7 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 	return target, nil
 }
 
-func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo.Queries, principal Principal, projectID, registrationID, connectionID, generation uuid.UUID) error {
+func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo.Queries, principal Principal, projectID, registrationID uuid.UUID, connectionID, generation uuid.NullUUID) error {
 	readiness, err := q.GetLatestPlatformMCPReadinessForLifecycle(ctx, repo.GetLatestPlatformMCPReadinessForLifecycleParams{
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
@@ -459,8 +459,8 @@ type distributionPersistenceInput struct {
 	pluginServerID       uuid.NullUUID
 	state                string
 	attachmentWasCreated bool
-	connectionID         uuid.UUID
-	connectionGeneration uuid.UUID
+	connectionID         uuid.NullUUID
+	connectionGeneration uuid.NullUUID
 }
 
 func getDistribution(ctx context.Context, q *repo.Queries, organizationID string, projectID, registrationID, defaultPluginID uuid.UUID) (repo.PlatformMcpDistribution, bool, error) {

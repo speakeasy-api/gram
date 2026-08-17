@@ -67,8 +67,6 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// Each of these still reaches state keyed by a connection. Remove a name
 	// here in the same change that makes its path connection-less.
 	for _, name := range []string{
-		"search_mcp_catalog",
-		"send_platform_mcp_feedback",
 		"get_setup_handoff",
 		"get_mcp_readiness",
 		"get_mcp_repair_plan",
@@ -80,8 +78,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		require.False(t, admitted[name], "tool %q needs a connection and must not be admitted to the assistant", name)
 	}
 
-	// The reads and the registration path are connection-less end to end.
-	for _, name := range []string{"get_platform_context", "list_projects", "list_project_mcps", "get_mcp", "register_catalog_mcp"} {
+	// The reads, the registration path, the catalogue search and feedback are
+	// connection-less end to end.
+	for _, name := range []string{"get_platform_context", "list_projects", "list_project_mcps", "get_mcp", "register_catalog_mcp", "search_mcp_catalog", "send_platform_mcp_feedback"} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
 }

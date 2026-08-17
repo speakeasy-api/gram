@@ -72,7 +72,7 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 		return FeedbackResult{}, err
 	}
 
-	connectionID, generation, err := parseConnection(principal)
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return FeedbackResult{}, ErrFeedbackInvalid
 	}
@@ -86,15 +86,20 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
-	connection, err := q.GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx, repo.GetActivePlatformMCPConnectionForFeedbackForUpdateParams{
-		ID:             connectionID,
-		OrganizationID: principal.OrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) || err == nil && (connection.SubjectUrn != userSubjectURN(principal.UserID) || connection.ActiveGeneration != generation) {
-		return FeedbackResult{}, ErrFeedbackForbidden
-	}
-	if err != nil {
-		return FeedbackResult{}, fmt.Errorf("resolve active platform mcp feedback connection: %w", err)
+	// A caller that presents a connection must still prove it is live and its
+	// own. A connection-less surface has none to prove; its identity was
+	// established upstream and the row is attributed by subject instead.
+	if connectionID.Valid {
+		connection, err := q.GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx, repo.GetActivePlatformMCPConnectionForFeedbackForUpdateParams{
+			ID:             connectionID.UUID,
+			OrganizationID: principal.OrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && (connection.SubjectUrn != userSubjectURN(principal.UserID) || connection.ActiveGeneration != generation.UUID) {
+			return FeedbackResult{}, ErrFeedbackForbidden
+		}
+		if err != nil {
+			return FeedbackResult{}, fmt.Errorf("resolve active platform mcp feedback connection: %w", err)
+		}
 	}
 	if err := q.LockPlatformMCPFeedbackOrganization(ctx, principal.OrganizationID); err != nil {
 		return FeedbackResult{}, fmt.Errorf("lock platform mcp feedback organization: %w", err)
@@ -129,15 +134,19 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 	}
 
 	since := pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}
-	connectionCount, err := q.CountRecentPlatformMCPFeedbackByConnection(ctx, repo.CountRecentPlatformMCPFeedbackByConnectionParams{
+	// The per-caller hourly limit follows whatever identifies the caller.
+	// Without it, a connection-less surface would be metered only by the far
+	// larger organization bucket.
+	callerCount, err := q.CountRecentPlatformMCPFeedbackByCaller(ctx, repo.CountRecentPlatformMCPFeedbackByCallerParams{
 		OrganizationID: principal.OrganizationID,
-		ConnectionID:   uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionID:   connectionID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
 		Since:          since,
 	})
 	if err != nil {
-		return FeedbackResult{}, fmt.Errorf("count platform mcp feedback by connection: %w", err)
+		return FeedbackResult{}, fmt.Errorf("count platform mcp feedback by caller: %w", err)
 	}
-	if connectionCount >= feedbackConnectionHourlyLimit {
+	if callerCount >= feedbackConnectionHourlyLimit {
 		return FeedbackResult{}, ErrFeedbackRateLimited
 	}
 	organizationCount, err := q.CountRecentPlatformMCPFeedbackByOrganization(ctx, repo.CountRecentPlatformMCPFeedbackByOrganizationParams{
@@ -154,8 +163,8 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 	created, err := q.CreatePlatformMCPFeedback(ctx, repo.CreatePlatformMCPFeedbackParams{
 		OrganizationID:       principal.OrganizationID,
 		SubjectUrn:           userSubjectURN(principal.UserID),
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
 		Category:             input.Category,
 		Rating:               optionalFeedbackRating(input.Rating),
 		Success:              optionalFeedbackSuccess(input.Success),
