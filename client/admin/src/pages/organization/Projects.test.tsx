@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -243,6 +243,32 @@ describe("Projects", () => {
     expect(
       await screen.findByText("No projects in this organization"),
     ).toBeTruthy();
+  });
+
+  it("says it is loading rather than that there are none while the read is paused", async () => {
+    // Offline, so the query is pending and not fetching. React Query calls that
+    // neither loading nor errored, and a table that branches on `isLoading`
+    // reaches the sentence meant for an answered read with no rows. The record
+    // is seeded because its own read pauses too.
+    onlineManager.setOnline(false);
+    try {
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
+
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}/projects`,
+        queryClient: qc,
+      });
+
+      expect(await screen.findByText("Loading...")).toBeTruthy();
+      // An operator told an organization has no projects believes a fact about
+      // the customer that no read ever established.
+      expect(screen.queryByText("No projects in this organization")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("says the projects could not be read rather than that there are none", async () => {

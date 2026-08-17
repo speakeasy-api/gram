@@ -15,8 +15,11 @@ import {
 import type { AdminOrganization, AdminProject } from "@/lib/gramAdminApi";
 import { fmtDateShort } from "@/lib/utils";
 
-function projectsMessage(isLoading: boolean, isError: boolean): string {
-  if (isLoading) return "Loading...";
+// `isPending`, not `isLoading`: React Query makes the second of those
+// `isPending && isFetching`, so a paused read is neither loading nor errored and
+// falls through to the sentence that says the organization has none.
+function projectsMessage(isPending: boolean, isError: boolean): string {
+  if (isPending) return "Loading...";
   if (isError) return "Unable to load projects";
   return "No projects in this organization";
 }
@@ -83,7 +86,7 @@ export function Projects({
   org: AdminOrganization;
 }): JSX.Element {
   const navigate = useNavigate();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isPending, isError } = useQuery({
     ...organizationProjectsQuery(org.id),
     enabled: !!org.id,
   });
@@ -106,10 +109,10 @@ export function Projects({
       <Table cellPadding="condensed">
         <Table.Header table={table} />
         <Table.Body>
-          {isLoading || rows.length === 0 ? (
+          {isPending || rows.length === 0 ? (
             <Table.NoResultsMessage>
               <span className="text-muted-foreground text-sm">
-                {projectsMessage(isLoading, isError)}
+                {projectsMessage(isPending, isError)}
               </span>
             </Table.NoResultsMessage>
           ) : (

@@ -64,8 +64,11 @@ const MEMBER_COLUMNS = memberColumn.columns([
 // A fresh fallback array each render would rebuild the row model every time.
 const NO_MEMBERS: AdminOrganizationMember[] = [];
 
-function membersMessage(isLoading: boolean, isError: boolean): string {
-  if (isLoading) return "Loading...";
+// `isPending`, not `isLoading`: React Query makes the second of those
+// `isPending && isFetching`, so a paused read is neither loading nor errored and
+// falls through to the sentence that says the organization has none.
+function membersMessage(isPending: boolean, isError: boolean): string {
+  if (isPending) return "Loading...";
   if (isError) return "Unable to load members";
   return "No members in this organization";
 }
@@ -78,7 +81,7 @@ export function MembersRoute(): JSX.Element | null {
 }
 
 export function Members({ org }: { org: AdminOrganization }): JSX.Element {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isPending, isError } = useQuery({
     ...organizationMembersQuery(org.id),
     enabled: !!org.id,
   });
@@ -97,10 +100,10 @@ export function Members({ org }: { org: AdminOrganization }): JSX.Element {
       <Table cellPadding="condensed">
         <Table.Header table={table} />
         <Table.Body>
-          {isLoading || rows.length === 0 ? (
+          {isPending || rows.length === 0 ? (
             <Table.NoResultsMessage>
               <span className="text-muted-foreground text-sm">
-                {membersMessage(isLoading, isError)}
+                {membersMessage(isPending, isError)}
               </span>
             </Table.NoResultsMessage>
           ) : (
