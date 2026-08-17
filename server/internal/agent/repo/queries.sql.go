@@ -27,6 +27,43 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 	return err
 }
 
+const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
+UPDATE session_handoff_links s
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), blob_url = ''
+FROM (
+  SELECT l.id, l.blob_url
+  FROM session_handoff_links l
+  JOIN projects p ON p.id = l.project_id
+  WHERE l.token = $1
+    AND l.consumed_at IS NULL
+    AND l.expires_at > clock_timestamp()
+    AND p.deleted IS FALSE
+    AND p.organization_id = l.organization_id
+  FOR UPDATE OF l
+) claimed
+WHERE s.id = claimed.id
+RETURNING claimed.blob_url
+`
+
+// Atomically claim a link on read: exactly one caller can flip consumed_at,
+// so a raced second fetch loses and gets no rows — burn-after-read without a
+// separate lock. Expired, already-consumed, and links whose project has since
+// been soft-deleted all return no rows; callers must serve every case as an
+// indistinguishable 404.
+//
+// The claim returns the blob URL and blanks the stored pointer in the same
+// statement; the caller reads the document from object storage and deletes
+// the blob best-effort (bucket lifecycle is the backstop). RETURNING reads
+// from the subquery because the outer UPDATE's own RETURNING would hand back
+// the blanked value. The join also pins l.organization_id to the project's
+// real owner as a fail-closed consistency guard.
+func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
+	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
+	var blob_url string
+	err := row.Scan(&blob_url)
+	return blob_url, err
+}
+
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
   pr.id AS project_id,
@@ -244,6 +281,53 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at
+)
+SELECT p.id, p.organization_id, $1, $2, $3, $4, $5
+FROM projects p
+WHERE p.id = $6
+  AND p.organization_id = $7
+  AND p.deleted IS FALSE
+RETURNING id, expires_at
+`
+
+type InsertSessionHandoffLinkParams struct {
+	SessionID      string
+	Token          string
+	BlobUrl        string
+	CreatedByEmail string
+	ExpiresAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type InsertSessionHandoffLinkRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Mint a session-handoff capability link. The token is the capability; TTL
+// and burn-after-read (consumed_at) bound a leaked link's exposure window.
+// Minting goes through the tenant-qualified project so a caller whose project
+// and organization disagree, or whose project is soft-deleted, gets no row
+// rather than a live capability URL.
+func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessionHandoffLinkParams) (InsertSessionHandoffLinkRow, error) {
+	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
+		arg.SessionID,
+		arg.Token,
+		arg.BlobUrl,
+		arg.CreatedByEmail,
+		arg.ExpiresAt,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i InsertSessionHandoffLinkRow
+	err := row.Scan(&i.ID, &i.ExpiresAt)
 	return i, err
 }
 

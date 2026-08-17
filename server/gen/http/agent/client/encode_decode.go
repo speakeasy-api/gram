@@ -1418,6 +1418,249 @@ func DecodeReportSessionMovedResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildCreateSessionHandoffRequest instantiates a HTTP request object with
+// method and path set to call the "agent" service "createSessionHandoff"
+// endpoint
+func (c *Client) BuildCreateSessionHandoffRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateSessionHandoffAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "createSessionHandoff", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateSessionHandoffRequest returns an encoder for requests sent to
+// the agent createSessionHandoff server.
+func EncodeCreateSessionHandoffRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.CreateSessionHandoffPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "createSessionHandoff", "*agent.CreateSessionHandoffPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SerialNumber != nil {
+			head := *p.SerialNumber
+			req.Header.Set("Gram-Device-Serial", head)
+		}
+		if p.Hostname != nil {
+			head := *p.Hostname
+			req.Header.Set("Gram-Device-Hostname", head)
+		}
+		body := NewCreateSessionHandoffRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "createSessionHandoff", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateSessionHandoffResponse returns a decoder for responses returned
+// by the agent createSessionHandoff endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateSessionHandoffResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateSessionHandoffResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateSessionHandoffResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			res := NewCreateSessionHandoffResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateSessionHandoffUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateSessionHandoffForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateSessionHandoffBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateSessionHandoffNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateSessionHandoffConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateSessionHandoffUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateSessionHandoffInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateSessionHandoffInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+				}
+				err = ValidateCreateSessionHandoffInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+				}
+				return nil, NewCreateSessionHandoffInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateSessionHandoffUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+				}
+				err = ValidateCreateSessionHandoffUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+				}
+				return nil, NewCreateSessionHandoffUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "createSessionHandoff", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateSessionHandoffGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "createSessionHandoff", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace builds a value
 // of type *agent.AgentMarketplace from a value of type
 // *AgentMarketplaceResponseBody.

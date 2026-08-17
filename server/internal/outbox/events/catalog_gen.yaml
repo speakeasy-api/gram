@@ -654,7 +654,7 @@ webhooks:
                 required: true
     audit_log.billing_metadata_event_v1:
         post:
-            description: Emitted when billing metadata changes or self-serve checkout activity occurs
+            description: Emitted when changes to billing metadata are made
             operationId: audit_log.billing_metadata_event_v1
             requestBody:
                 content:
@@ -762,7 +762,7 @@ webhooks:
                 required: true
     audit_log.chat_session_event_v1:
         post:
-            description: Emitted when a chat session is accessed or moved to another harness
+            description: Emitted when a chat session is accessed, moved to another harness, or exported as a handoff
             operationId: audit_log.chat_session_event_v1
             requestBody:
                 content:

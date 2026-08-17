@@ -5977,6 +5977,107 @@ paths:
             x-speakeasy-name-override: updateGlobalIssuer
             x-speakeasy-react-hook:
                 name: UpdateGlobalRemoteSessionIssuer
+    /rpc/agent.createSessionHandoff:
+        post:
+            description: 'Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).'
+            operationId: createAgentSessionHandoff
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Hardware serial number of the machine minting the link, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Serial
+                  schema:
+                    description: Hardware serial number of the machine minting the link, when the agent can read it.
+                    type: string
+                - allowEmptyValue: true
+                  description: Hostname of the machine minting the link, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Hostname
+                  schema:
+                    description: Hostname of the machine minting the link, when the agent can read it.
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSessionHandoffRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateSessionHandoffResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: createSessionHandoff agent
+            tags:
+                - agent
+            x-speakeasy-name-override: createSessionHandoff
+            x-speakeasy-react-hook:
+                name: CreateAgentSessionHandoff
     /rpc/agent.getConfiguration:
         get:
             description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -60638,6 +60739,42 @@ components:
             required:
                 - remote_mcp_server_id
                 - name
+        CreateSessionHandoffRequestBody:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: The rendered handoff document (markdown). Size-capped; the daemon renders deterministically from the local transcript.
+                    maxLength: 262144
+                session_id:
+                    type: string
+                    description: Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
+                    maxLength: 256
+                source_surface:
+                    type: string
+                    description: Harness the session originated in, as detected by the agent (e.g. claude-code, codex).
+                    maxLength: 64
+                ttl_seconds:
+                    type: integer
+                    description: Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900 when omitted.
+                    example: 900
+                    format: int64
+            required:
+                - session_id
+                - content
+        CreateSessionHandoffResult:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the link stops being served regardless of reads.
+                    format: date-time
+                url:
+                    type: string
+                    description: Capability URL serving the uploaded handoff markdown. Unauthenticated by design — the unguessable token is the credential — and dead after the first read or expiry.
+            required:
+                - url
+                - expires_at
         CreateSignedChatAttachmentURLForm:
             type: object
             properties:
@@ -80009,7 +80146,7 @@ tags:
     - name: admin
       description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: agent
-      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
+      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
     - name: aiIntegrations
       description: Manage organization-level AI provider integrations.
     - name: assets

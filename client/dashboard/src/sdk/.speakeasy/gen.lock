@@ -81,6 +81,7 @@ trackedFiles:
   src/funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
+  src/funcs/agentCreateSessionHandoff.ts: {}
   src/funcs/agentGetConfiguration.ts: {}
   src/funcs/agentGetPlugins.ts: {}
   src/funcs/agentGetSessionMeta.ts: {}
@@ -709,6 +710,8 @@ trackedFiles:
   src/models/components/createroleform.ts: {}
   src/models/components/createserverform.ts: {}
   src/models/components/createserverheaderform.ts: {}
+  src/models/components/createsessionhandoffrequestbody.ts: {}
+  src/models/components/createsessionhandoffresult.ts: {}
   src/models/components/createsignedchatattachmenturlform2.ts: {}
   src/models/components/createsignedchatattachmenturlresult.ts: {}
   src/models/components/createskillrequestbody.ts: {}
@@ -1436,6 +1439,7 @@ trackedFiles:
   src/models/operations/cloneenvironment.ts: {}
   src/models/operations/clonetoolset.ts: {}
   src/models/operations/compileexpr.ts: {}
+  src/models/operations/createagentsessionhandoff.ts: {}
   src/models/operations/createapikey.ts: {}
   src/models/operations/createassistant.ts: {}
   src/models/operations/createawsiamcredential.ts: {}
@@ -2033,6 +2037,7 @@ trackedFiles:
   src/react-query/collectionsListServers.ts: {}
   src/react-query/collectionsUpdate.ts: {}
   src/react-query/createAPIKey.ts: {}
+  src/react-query/createAgentSessionHandoff.ts: {}
   src/react-query/createAwsIamCredential.ts: {}
   src/react-query/createAwsKmsKey.ts: {}
   src/react-query/createCheckout.ts: {}
@@ -3193,6 +3198,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-08-12T19:00:14.438Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>"], "updated_at": "2026-11-16T04:17:02.536Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createAgentSessionHandoff:
+    speakeasy-default-create-agent-session-handoff:
+      requestBody:
+        application/json: {"content": "<value>", "session_id": "<id>", "ttl_seconds": 900}
+      responses:
+        "200":
+          application/json: {"expires_at": "2025-01-06T04:54:23.220Z", "url": "https://small-window.org"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

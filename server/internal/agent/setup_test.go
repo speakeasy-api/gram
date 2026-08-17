@@ -14,6 +14,8 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -68,6 +70,9 @@ type testInstance struct {
 	orgID     string
 	projectID uuid.UUID
 	features  *stubProductFeatures
+	// blobs is the same store the service writes handoff documents to, so
+	// tests can assert a burned handoff left nothing behind in it.
+	blobs assets.BlobStore
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -102,7 +107,8 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	features := &stubProductFeatures{sessionPortability: true}
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL)
+	blobs := assetstest.NewTestBlobStore(t)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs)
 
 	return ctx, &testInstance{
 		service:   svc,
@@ -110,6 +116,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
 		features:  features,
+		blobs:     blobs,
 	}
 }
 

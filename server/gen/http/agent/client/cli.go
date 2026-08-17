@@ -202,3 +202,59 @@ func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentRep
 
 	return v, nil
 }
+
+// BuildCreateSessionHandoffPayload builds the payload for the agent
+// createSessionHandoff endpoint from CLI flags.
+func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agentCreateSessionHandoffApikeyToken string, agentCreateSessionHandoffSerialNumber string, agentCreateSessionHandoffHostname string) (*agent.CreateSessionHandoffPayload, error) {
+	var err error
+	var body CreateSessionHandoffRequestBody
+	{
+		err = json.Unmarshal([]byte(agentCreateSessionHandoffBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }'")
+		}
+		if utf8.RuneCountInString(body.SessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
+		}
+		if utf8.RuneCountInString(body.Content) > 262144 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, utf8.RuneCountInString(body.Content), 262144, false))
+		}
+		if body.SourceSurface != nil {
+			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentCreateSessionHandoffApikeyToken != "" {
+			apikeyToken = &agentCreateSessionHandoffApikeyToken
+		}
+	}
+	var serialNumber *string
+	{
+		if agentCreateSessionHandoffSerialNumber != "" {
+			serialNumber = &agentCreateSessionHandoffSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentCreateSessionHandoffHostname != "" {
+			hostname = &agentCreateSessionHandoffHostname
+		}
+	}
+	v := &agent.CreateSessionHandoffPayload{
+		SessionID:     body.SessionID,
+		Content:       body.Content,
+		SourceSurface: body.SourceSurface,
+		TTLSeconds:    body.TTLSeconds,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}

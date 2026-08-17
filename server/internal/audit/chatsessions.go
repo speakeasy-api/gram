@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -130,6 +131,86 @@ func (l *Logger) LogChatSessionMove(ctx context.Context, dbtx repo.DBTX, event L
 		SubjectType:        string(subjectTypeChatSession),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ChatTitle),
 		SubjectSlug:        conv.ToPGTextEmpty(event.OwnerUserID),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ChatSessionV1})
+}
+
+const ActionChatSessionHandoffExport Action = "chat_session:handoff_export"
+
+type LogChatSessionHandoffExportEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	ChatSessionURN urn.ChatSession
+	ChatTitle      string
+
+	// SourceSurface is the harness the session originated in, when known.
+	SourceSurface string
+	// ContentBytes is the size of the uploaded handoff document. The document
+	// itself never lands in the audit log — this entry records that content
+	// left the device, not what it said.
+	ContentBytes int
+	// TTLSeconds and ExpiresAt bound the minted link's exposure window.
+	TTLSeconds int
+	ExpiresAt  time.Time
+	// DeviceSerial and DeviceHostname attribute the minting machine. Optional.
+	DeviceSerial   string
+	DeviceHostname string
+}
+
+// LogChatSessionHandoffExport records that a rendered session handoff was
+// uploaded and a short-lived capability URL minted for it (session
+// portability). This is the governance moment where session content first
+// transits the server, so the entry is deliberately content-free: size, TTL,
+// and attribution only — never the document or its token. Like the move
+// event there is no surrounding mutation beyond the link insert itself, which
+// callers pass as dbtx for atomicity.
+func (l *Logger) LogChatSessionHandoffExport(ctx context.Context, dbtx repo.DBTX, event LogChatSessionHandoffExportEvent) error {
+	action := ActionChatSessionHandoffExport
+
+	meta := map[string]any{
+		"content_bytes": event.ContentBytes,
+		"ttl_seconds":   event.TTLSeconds,
+		"expires_at":    event.ExpiresAt.UTC().Format(time.RFC3339),
+	}
+	if event.SourceSurface != "" {
+		meta["source_surface"] = event.SourceSurface
+	}
+	if event.DeviceSerial != "" {
+		meta["device_serial"] = event.DeviceSerial
+	}
+	if event.DeviceHostname != "" {
+		meta["device_hostname"] = event.DeviceHostname
+	}
+	metadata, err := marshalAuditPayload(meta)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.ChatSessionURN.ID.String(),
+		SubjectType:        string(subjectTypeChatSession),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ChatTitle),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
