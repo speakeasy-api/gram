@@ -34,12 +34,16 @@ function projectColumns(idOrSlug: string) {
       header: "Name",
       // The link, not the row, carries the keyboard path and the accessible
       // name. It also lets the operator open the project in a new tab.
+      //
+      // Always the id. Project slugs are unique only within an organization, so
+      // project.get resolves a slug across all of them, and "default" matches
+      // one project in every organization.
       cell: ({ row }) => (
         <Link
           to="/organizations/$idOrSlug/projects/$projectIdOrSlug"
           params={{
             idOrSlug,
-            projectIdOrSlug: row.original.slug || row.original.id,
+            projectIdOrSlug: row.original.id,
           }}
           className="text-sm underline-offset-4 hover:underline focus-visible:underline"
         >
@@ -125,7 +129,7 @@ export function Projects({
                     to: "/organizations/$idOrSlug/projects/$projectIdOrSlug",
                     params: {
                       idOrSlug,
-                      projectIdOrSlug: project.slug || project.id,
+                      projectIdOrSlug: project.id,
                     },
                   });
                 }}

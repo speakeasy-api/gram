@@ -105,9 +105,11 @@ describe("RecordNav", () => {
     await mount([aProject()]);
 
     const item = navItem("Projects");
+    // The id, not the slug: project.get resolves a slug across every
+    // organization, and every organization has a project slugged "default".
     expect(
       screen.getByRole("link", { name: "Projects" }).getAttribute("href"),
-    ).toBe("/organizations/test-org/projects/first-project");
+    ).toBe("/organizations/test-org/projects/proj_1");
     expect(item.textContent).not.toMatch(/\d/);
     // The label does not become the project's name. Relabelling would make the
     // nav shift under the operator between records.
