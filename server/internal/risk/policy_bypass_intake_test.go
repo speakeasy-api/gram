@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
@@ -27,8 +28,6 @@ import (
 	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -325,15 +324,11 @@ func (riskIntakeEmptyAdvisoryDB) Do(request *http.Request) (*http.Response, erro
 func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) {
 	t.Parallel()
 
-	var features *productfeatures.Client
+	flags := &feature.InMemory{}
 	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
 		logger := testenv.NewLogger(t)
 		tracerProvider := testenv.NewTracerProvider(t)
-		redisClient, err := infra.NewRedisClient(t, 0)
-		require.NoError(t, err)
-
 		authzEngine := authz.NewEngine(logger, instance.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-		features = productfeatures.NewClient(logger, tracerProvider, instance.conn, redisClient)
 		assembler := evidence.NewAssembler(
 			packagemeta.NewClient(riskIntakeNotFoundRegistry{}),
 			repometa.NewClient(riskIntakeNotFoundRegistry{}),
@@ -345,17 +340,11 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 			riskIntakeQuietProbes{},
 		)
 
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, features, audit.NewLogger(), assembler, nil)
+		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
-	_, err := featurerepo.New(ti.conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureMCPApproval),
-	})
-	require.NoError(t, err)
-	features.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval, true)
+	flags.SetFlag(feature.FlagMCPApproval, authCtx.ActiveOrganizationID, true)
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
 		Scope:    authz.ScopeOrgAdmin,

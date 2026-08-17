@@ -165,15 +165,14 @@ func TestListRequests_RequiresScope(t *testing.T) {
 
 // Reviewing the queue and committing the organisation to a server are separate
 // grants, and the weaker one has to be enough to look.
-func TestListRequests_ReadScopeSuffices(t *testing.T) {
+func TestListRequests_NonAdminIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	nonAdmin := withProject(t, ctx, ti, ti.projectID, authz.ScopeProjectWrite)
 
-	result, err := ti.service.ListRequests(readOnly, listPayload())
-	require.NoError(t, err)
-	require.Len(t, result.Requests, 1)
+	_, err := ti.service.ListRequests(nonAdmin, listPayload())
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

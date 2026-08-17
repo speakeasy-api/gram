@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -241,7 +242,16 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 		AssistantSkillTools:           assistantSkillTools,
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
-		PlatformMCPReadTools:          platformtoolsruntime.PlatformMCPReadTools(platformmcp.NewPostgresReader(conn)),
+		// Composed the way the server composes it: descriptors admitted to the
+		// assistant audience, called directly by the adapter.
+		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
+			platformmcp.NewRuntimeWithLifecycle(
+				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "",
+				platformmcp.NewPostgresReader(conn), nil, nil, nil, nil, nil, nil, nil,
+				platformmcp.CatalogDescriptor{},
+			).AssistantTools(),
+			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
+		),
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}

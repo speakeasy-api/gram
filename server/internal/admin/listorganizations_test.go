@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -259,6 +260,78 @@ func TestUpdateOrganization_AccountTypeAllowList(t *testing.T) {
 		require.Equal(t, "free", after.GramAccountType)
 		require.Equal(t, before.UpdatedAt.Time, after.UpdatedAt.Time)
 	})
+}
+
+func TestUpdateOrganization_AccountTypeMarksTrialInactive(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	notifier := &fakeTrialNotifier{}
+	svc.trial = notifier
+
+	seedOrg(t, ctx, conn, orgFixture{
+		id:          "org_trial_convert",
+		name:        "Trial Convert",
+		slug:        "trial-convert",
+		accountType: "enterprise",
+		whitelisted: true,
+	})
+	newType := "enterprise"
+	res, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{
+		ID:          "org_trial_convert",
+		AccountType: &newType,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", res.AccountType)
+	require.Equal(t, []string{"org_trial_convert"}, notifier.inactive)
+}
+
+func TestUpdateOrganization_WhitelistedOnlyDoesNotMarkTrialInactive(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	notifier := &fakeTrialNotifier{}
+	svc.trial = notifier
+
+	seedOrg(t, ctx, conn, orgFixture{
+		id:          "org_trial_whitelist",
+		name:        "Trial Whitelist",
+		slug:        "trial-whitelist",
+		accountType: "enterprise",
+		whitelisted: true,
+	})
+	notWhitelisted := false
+	res, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{
+		ID:          "org_trial_whitelist",
+		Whitelisted: &notWhitelisted,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Whitelisted)
+	require.Empty(t, notifier.inactive)
+}
+
+func TestUpdateOrganization_TrialInactiveFailureDoesNotFailUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	notifier := &fakeTrialNotifier{inactiveErr: errors.New("loops unavailable")}
+	svc.trial = notifier
+
+	seedOrg(t, ctx, conn, orgFixture{
+		id:          "org_trial_notify_fail",
+		name:        "Trial Notify Fail",
+		slug:        "trial-notify-fail",
+		accountType: "enterprise",
+		whitelisted: true,
+	})
+	newType := "pro"
+	res, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{
+		ID:          "org_trial_notify_fail",
+		AccountType: &newType,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pro", res.AccountType)
+	require.Equal(t, []string{"org_trial_notify_fail"}, notifier.inactive)
 }
 
 func TestGetOrganization_NotFound(t *testing.T) {

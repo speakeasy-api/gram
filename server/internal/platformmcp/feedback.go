@@ -72,7 +72,7 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 		return FeedbackResult{}, err
 	}
 
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return FeedbackResult{}, ErrFeedbackInvalid
 	}

@@ -43,18 +43,6 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
-
-	// ScopeMCPApprovalRead grants sight of the approval queue, the evidence
-	// gathered for each request, and prior decisions.
-	ScopeMCPApprovalRead        Scope = "mcp_approval:read"
-	ScopeMCPApprovalBlockedRead Scope = "mcp_approval:blocked_read"
-
-	// ScopeMCPApprovalDecide grants approving or denying a request. Held
-	// separately from read because reviewing and deciding are different jobs:
-	// someone who assembles the evidence is not automatically someone who
-	// commits the organisation to a server.
-	ScopeMCPApprovalDecide        Scope = "mcp_approval:decide"
-	ScopeMCPApprovalBlockedDecide Scope = "mcp_approval:blocked_decide"
 )
 
 type scopeVisibility int
@@ -81,8 +69,6 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
-	ScopeMCPApprovalRead,
-	ScopeMCPApprovalDecide,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (pin, rename, feedback, delete) is destructive, so both
@@ -124,11 +110,6 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
-
-	ScopeMCPApprovalRead:          scopeVisibilityUserVisible,
-	ScopeMCPApprovalBlockedRead:   scopeVisibilityInternal,
-	ScopeMCPApprovalDecide:        scopeVisibilityUserVisible,
-	ScopeMCPApprovalBlockedDecide: scopeVisibilityInternal,
 }
 
 var memberScopes = []Scope{
@@ -216,13 +197,6 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
-
-	// Deciding implies seeing what you are deciding on, so a decide grant
-	// carries read, matching how a skill write grant carries skill read.
-	ScopeMCPApprovalRead:          {ScopeMCPApprovalDecide},
-	ScopeMCPApprovalBlockedRead:   nil,
-	ScopeMCPApprovalDecide:        nil,
-	ScopeMCPApprovalBlockedDecide: {ScopeMCPApprovalBlockedRead},
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -257,11 +231,6 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
-
-	ScopeMCPApprovalRead:          ScopeMCPApprovalBlockedRead,
-	ScopeMCPApprovalBlockedRead:   "",
-	ScopeMCPApprovalDecide:        ScopeMCPApprovalBlockedDecide,
-	ScopeMCPApprovalBlockedDecide: "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the

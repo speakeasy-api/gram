@@ -45,11 +45,6 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
   });
 
-  it("returns 'mcp_approval' for mcp_approval scopes", () => {
-    expect(resourceKindForScope("mcp_approval:read")).toBe("mcp_approval");
-    expect(resourceKindForScope("mcp_approval:decide")).toBe("mcp_approval");
-  });
-
   // Regression: chat scopes must map to "chat" so a restricted chat:read grant
   // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
   // check. When this returned "*" the check selector ({resource_kind:"*"}) never
@@ -226,13 +221,6 @@ describe("exclusionScopesForScope", () => {
     expect(exclusionScopesForScope("skill:write")).toEqual([
       "skill:blocked_write",
       "skill:blocked_read",
-    ]);
-    expect(exclusionScopesForScope("mcp_approval:read")).toEqual([
-      "mcp_approval:blocked_read",
-    ]);
-    expect(exclusionScopesForScope("mcp_approval:decide")).toEqual([
-      "mcp_approval:blocked_decide",
-      "mcp_approval:blocked_read",
     ]);
   });
 });

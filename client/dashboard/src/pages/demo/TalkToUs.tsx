@@ -9,6 +9,7 @@ import {
 } from "@/lib/trial-status";
 import { getGateCopy } from "@/pages/demo/upgrade-gate-copy";
 import { Link, Navigate } from "react-router";
+import { Button } from "@/components/ui/Button";
 
 const SALES_EMAIL = "sales@speakeasy.com";
 
@@ -111,20 +112,20 @@ function UpgradeGate({
           </div>
         }
       />
-      <div className="flex items-center justify-center gap-4">
-        <Link
-          to="/explore-demo"
-          className="auth-mono text-xs text-(--muted) underline underline-offset-4 transition-colors hover:text-black"
+      <div className="flex items-center justify-center gap-8">
+        <Button variant="secondary" size="md" href={`mailto:${SALES_EMAIL}`}>
+          Email {SALES_EMAIL}
+        </Button>
+
+        <Button
+          variant="primary"
+          size="md"
+          icon="arrow-right"
+          iconAfter
+          href="/explore-demo"
         >
-          Explore demo
-        </Link>
-        <span aria-hidden="true" className="h-3 w-px bg-(--edge)" />
-        <a
-          href={`mailto:${SALES_EMAIL}`}
-          className="auth-mono text-xs text-(--muted) underline underline-offset-4 transition-colors hover:text-black"
-        >
-          Email {SALES_EMAIL} →
-        </a>
+          Explore a Live Demo
+        </Button>
       </div>
     </AuthShell>
   );

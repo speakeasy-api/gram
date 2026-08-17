@@ -28,6 +28,7 @@ func disabledAllRulesPlugin() *plugin {
 				NoClientErrorLogError:      noClientErrorLogErrorSettings{Disabled: true},
 				NoBareSqlstate:             noBareSqlstateSettings{Disabled: true},
 				RpcEndpointFormat:          rpcEndpointFormatSettings{Disabled: true},
+				NoRawUserEmailFilter:       noRawUserEmailFilterSettings{Disabled: true},
 				ResearchImportBoundary:     researchImportBoundarySettings{Disabled: true, Packages: nil},
 			},
 		},

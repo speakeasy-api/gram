@@ -363,9 +363,9 @@ export function ResourceResults({
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
   const isAdmin = hasAnyScope(["org:admin"]);
-  // Approval requests are readable by mcp_approval:read holders (the queue
-  // page gates on it), so reviewers without org:admin still see them here.
-  const canReadApprovals = hasScope("mcp_approval:read");
+  // Approval requests are an org-admin surface, matching the queue page's
+  // own gate.
+  const canReadApprovals = hasScope("org:admin");
   // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
   // the default view and fetch on open. Make them search-only: render (and
   // fetch) the group only once the user types, letting cmdk filter the results.
