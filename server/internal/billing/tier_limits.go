@@ -2,8 +2,12 @@ package billing
 
 import gen "github.com/speakeasy-api/gram/server/gen/usage"
 
-// TUMPricePerMillionUSD is the exact PAYG list price rendered by clients.
-const TUMPricePerMillionUSD = "0.35"
+const (
+	// TUMUnitPriceUSD is the exact Stripe meter price for one managed token.
+	TUMUnitPriceUSD = "0.00000035"
+	// TUMPricePerMillionUSD is the same price in the customer-facing unit.
+	TUMPricePerMillionUSD = "0.35"
+)
 
 // NewPaygTierLimits returns the usage-tier contract shared by every billing
 // provider. Each call returns independently mutable slices.
