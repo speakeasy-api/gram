@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -91,7 +92,7 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	if s == nil || s.db == nil {
 		return IssuedSetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return IssuedSetupHandoff{}, err
 	}
@@ -182,7 +183,7 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 	if s == nil || s.db == nil {
 		return SetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return SetupHandoff{}, err
 	}
@@ -247,7 +248,7 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if s == nil || s.db == nil {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return ProviderSetupResult{}, err
 	}
@@ -311,13 +312,14 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	return result, nil
 }
 
-// ProbeProviderReadiness delegates an authenticated readiness check to the
-// registration's reviewed provider adapter and persists only normalized evidence.
-func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, adapters *ProviderAdapters) (Readiness, error) {
+// ProbeProviderReadiness delegates fixture registrations to their reviewed
+// adapter and browser-catalogue registrations to the persisted Remote MCP
+// source path. Both paths persist only normalized, generation-bound evidence.
+func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, adapters *ProviderAdapters, generic ...CatalogReadinessProber) (Readiness, error) {
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -331,11 +333,7 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
 		return Readiness{}, ErrReadinessInvalid
 	}
-	adapter, err := adapters.Get(registration.CatalogProvider)
-	if err != nil {
-		return Readiness{}, err
-	}
-	result, err := adapter.ProbeReadiness(ctx, ProviderReadinessProbeRequest{
+	request := ProviderReadinessProbeRequest{
 		UserID:              principal.UserID,
 		OrganizationID:      principal.OrganizationID,
 		ProjectID:           projectID,
@@ -343,7 +341,20 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 		UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
 		ConnectionID:        connectionID,
 		Generation:          generation,
-	})
+	}
+	var result ProviderReadinessProbeResult
+	if isBrowserCatalogProviderKey(registration.CatalogProvider) {
+		if len(generic) == 0 || generic[0] == nil {
+			return Readiness{}, ErrProviderAdapterUnavailable
+		}
+		result, err = generic[0].ProbeCatalogReadiness(ctx, principal, projectID, registrationID, registration.RemoteMcpServerID.UUID, registration.UserSessionIssuerID.UUID, connectionID, generation)
+	} else {
+		adapter, adapterErr := adapters.Get(registration.CatalogProvider)
+		if adapterErr != nil {
+			return Readiness{}, adapterErr
+		}
+		result, err = adapter.ProbeReadiness(ctx, request)
+	}
 	if err != nil {
 		return Readiness{}, fmt.Errorf("probe platform mcp provider readiness: %w", err)
 	}
@@ -368,7 +379,7 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return Readiness{}, false, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, false, err
 	}
@@ -406,7 +417,7 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -502,11 +513,11 @@ func (s *RegistrationStore) recordSetupFailure(ctx context.Context, principal Pr
 }
 
 func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principal Principal, registration platformrepo.PlatformMcpCatalogRegistration, handoffID uuid.UUID, milestone string) error {
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return err
 	}
-	if registration.ID == uuid.Nil || registration.ProjectID == uuid.Nil || registration.CatalogProvider == "" || registration.CatalogReference == "" || handoffID == uuid.Nil {
+	if registration.ID == uuid.Nil || registration.ProjectID == uuid.Nil || registration.CatalogProvider == "" || registration.CatalogReference == "" || handoffID == uuid.Nil || !isSetupMilestone(milestone) {
 		return ErrReadinessInvalid
 	}
 	if err := q.RecordPlatformMCPSetupMilestone(ctx, platformrepo.RecordPlatformMCPSetupMilestoneParams{
@@ -523,6 +534,19 @@ func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principa
 	return nil
 }
 
+func isSetupMilestone(value string) bool {
+	switch value {
+	case "provider_setup_started", "provider_setup_failed", "provider_setup_succeeded", "platform_flow_ready":
+		return true
+	default:
+		return false
+	}
+}
+
+// lifecycleRegistration resolves a registration the caller is entitled to act
+// on. Ownership matches the real user; a caller holding an OAuth connection
+// additionally has its generation checked live, which a connectionless surface
+// has no equivalent of and is instead authorized on every call upstream.
 func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, principal Principal, projectID, registrationID uuid.UUID) (platformrepo.PlatformMcpCatalogRegistration, error) {
 	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
@@ -534,6 +558,7 @@ func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, princip
 		ProjectID:            projectID,
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if err != nil {

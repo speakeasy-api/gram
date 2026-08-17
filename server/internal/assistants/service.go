@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -1460,6 +1461,15 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return err
+	}
+	err = triggerrepo.New(tx).DeleteTriggerInstancesByTargetExceptDefinition(ctx, triggerrepo.DeleteTriggerInstancesByTargetExceptDefinitionParams{
+		ProjectID:              projectID,
+		TargetKind:             bgtriggers.TargetKindAssistant,
+		TargetRef:              assistantID.String(),
+		ExcludedDefinitionSlug: bgtriggers.DefinitionSlugWake,
+	})
+	if err != nil {
+		return fmt.Errorf("delete assistant trigger instances: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit delete assistant tx: %w", err)

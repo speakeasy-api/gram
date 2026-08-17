@@ -456,10 +456,12 @@ func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) 
 		ChatID:    chat.SessionIDToChatID(claudeSession),
 		ProjectID: *authCtx.ProjectID,
 	}, 1)
-	require.Equal(t, "claude", messages[0].Source.String)
+	// The bare "claude" adapter slug resolves to the claude-code surface, so
+	// that — not the slug — is what the row and the repaired marker carry.
+	require.Equal(t, "claude-code", messages[0].Source.String)
 	var repairedMarker string
 	require.NoError(t, ti.cache.Get(ctx, fmt.Sprintf("session:native-prompt:v1:%s:%s", authCtx.ProjectID.String(), claudeSession), &repairedMarker))
-	require.Equal(t, "claude", repairedMarker)
+	require.Equal(t, "claude-code", repairedMarker)
 
 	cursorSession := uuid.NewString()
 	ingestNativePrompt("cursor", cursorSession, "generation_"+uuid.NewString())
@@ -481,8 +483,8 @@ func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) 
 	// Claude has no turn ID shared with LiteLLM. LiteLLM-first therefore keeps
 	// both observations, and repeated identical native prompts remain distinct.
 	require.Equal(t, "litellm", messages[0].Source.String)
-	require.Equal(t, "claude", messages[1].Source.String)
-	require.Equal(t, "claude", messages[2].Source.String)
+	require.Equal(t, "claude-code", messages[1].Source.String)
+	require.Equal(t, "claude-code", messages[2].Source.String)
 
 	startedOnlySession := uuid.NewString()
 	_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
@@ -510,6 +512,124 @@ func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) 
 		ProjectID: *authCtx.ProjectID,
 	}, 1)
 	require.Equal(t, "litellm", messages[0].Source.String)
+}
+
+// A Claude Code session routed through LiteLLM reports every turn twice: the
+// proxy sees the completion the moment the model returns it, and Claude's Stop
+// hook reports the same text when the turn ends. Prompts collapse onto a single
+// row through the session's native marker, but assistant turns share no
+// identity across the two observers, so the proxied row has to be dropped or
+// the transcript shows every answer twice.
+func TestRealHooksProxiedAssistantTurnDoesNotDuplicateNativeClaudeStop(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	prompt := "hey again"
+	answer := "Hey! What are you working on today?"
+	role := "assistant"
+	ingestNativeEvent := func(sessionID, eventType string, data *hooksgen.HookIngestData) {
+		t.Helper()
+		_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			Replayed:         nil,
+			SchemaVersion:    "hook.ingest.v1",
+			IdempotencyKey:   new("native-" + uuid.NewString()),
+			Source: &hooksgen.HookIngestSource{
+				Adapter:        "claude",
+				AdapterVersion: nil,
+				RawEventName:   nil,
+				Hostname:       nil,
+				UserEmail:      nil,
+			},
+			Session: &hooksgen.HookIngestSession{ID: &sessionID, TurnID: nil, Cwd: nil, Model: nil},
+			Event:   &hooksgen.HookIngestEvent{Type: eventType, OccurredAt: nil},
+			Data:    data,
+			Raw:     nil,
+		})
+		require.NoError(t, err)
+	}
+	ingestLiteLLMResponse := func(sessionID string) {
+		t.Helper()
+		response := testPayload()
+		response.InputType = "response"
+		response.LitellmCallID = new("call-" + uuid.NewString())
+		response.Texts = []string{answer}
+		response.RequestHeaders = map[string]string{"x-session-id": sessionID}
+		result, err := ti.service.Ingest(ctx, response)
+		require.NoError(t, err)
+		require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+	}
+
+	sessionID := "claude-litellm-" + uuid.NewString()
+	ingestNativeEvent(sessionID, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	ingestLiteLLMResponse(sessionID)
+	ingestNativeEvent(sessionID, "assistant.responded", &hooksgen.HookIngestData{
+		Message: &hooksgen.HookMessageData{Text: &answer, Role: &role, DurationMs: nil},
+	})
+
+	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, prompt, messages[0].Content)
+	require.Equal(t, "assistant", messages[1].Role)
+	require.Equal(t, answer, messages[1].Content)
+	for _, message := range messages {
+		require.Equal(t, "claude-code", message.Source.String,
+			"the native hook stream owns a proxied Claude session's transcript")
+	}
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(sessionID), *authCtx.ProjectID, true,
+		"the suppressed proxied turn must still flag the session as LiteLLM routed")
+
+	// The marker the native prompt wrote is a cache, not the contract: a
+	// session whose marker is gone must still resolve ownership from the
+	// transcript rather than duplicating the turn.
+	expiredMarkerSession := "claude-litellm-expired-" + uuid.NewString()
+	ingestNativeEvent(expiredMarkerSession, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	require.NoError(t, ti.cache.Delete(ctx, fmt.Sprintf("session:native-prompt:v1:%s:%s", authCtx.ProjectID.String(), expiredMarkerSession)))
+	ingestLiteLLMResponse(expiredMarkerSession)
+	ingestNativeEvent(expiredMarkerSession, "assistant.responded", &hooksgen.HookIngestData{
+		Message: &hooksgen.HookMessageData{Text: &answer, Role: &role, DurationMs: nil},
+	})
+
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(expiredMarkerSession),
+		ProjectID: *authCtx.ProjectID,
+	}, 2)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, "assistant", messages[1].Role)
+
+	// A session no native stream captured keeps the proxy's assistant turn:
+	// dropping it there would leave the transcript with no answer at all.
+	proxyOnlySession := "litellm-only-" + uuid.NewString()
+	ingestLiteLLMResponse(proxyOnlySession)
+	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		ChatID:    chat.SessionIDToChatID(proxyOnlySession),
+		ProjectID: *authCtx.ProjectID,
+	}, 1)
+	require.Equal(t, "assistant", messages[0].Role)
+	require.Equal(t, answer, messages[0].Content)
+	require.Equal(t, "litellm", messages[0].Source.String)
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(proxyOnlySession), *authCtx.ProjectID, true,
+		"proxy-only sessions carry the marker too")
+
+	// A session the proxy never observed must not carry the marker.
+	nativeOnlySession := "claude-native-only-" + uuid.NewString()
+	ingestNativeEvent(nativeOnlySession, "prompt.submitted", &hooksgen.HookIngestData{Prompt: &hooksgen.HookPromptData{Text: &prompt}})
+	requireChatLiteLLMProxied(t, ctx, ti.conn, chat.SessionIDToChatID(nativeOnlySession), *authCtx.ProjectID, false,
+		"native-only sessions must not be flagged as LiteLLM routed")
+}
+
+func requireChatLiteLLMProxied(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chatID uuid.UUID, projectID uuid.UUID, want bool, msg string) {
+	t.Helper()
+	row, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, want, row.LitellmProxied, msg)
 }
 
 func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {
@@ -582,7 +702,7 @@ func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {
 		liteLLMCount := 0
 		for _, message := range messages {
 			switch message.Source.String {
-			case "claude":
+			case "claude-code":
 				nativeCount++
 			case "litellm":
 				liteLLMCount++

@@ -5,13 +5,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // The externalKeys service exposes organization-scoped CRUD over external_keys
 // (externally-managed KMS keys Gram signs with, backed by an external
 // credential). Writes are per-provider and strongly typed; reads use a generic,
-// supertype-only list plus per-provider typed detail endpoints. Verification of
-// the key against the cloud provider is intentionally out of scope here.
+// supertype-only list plus per-provider typed detail endpoints. Verification
+// against the cloud provider is per-provider too, and exists only for GCP: an
+// AWS key cannot be probed because Gram holds no AWS identity to assume a
+// customer role from.
 var _ = Service("externalKeys", func() {
 	Description("Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.")
 	Security(security.Session)
@@ -231,6 +234,39 @@ var _ = Service("externalKeys", func() {
 		Meta("openapi:operationId", "getGcpKmsKey")
 		Meta("openapi:extension:x-speakeasy-name-override", "getGcpKms")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetGcpKmsKey"}`)
+	})
+
+	Method("verifyGcpKmsKey", func() {
+		Description("Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
+
+		// Declared here rather than in shared.DeclareErrorResponses because only the
+		// rate-limited endpoints can return it, and putting it in the shared set
+		// would type a 429 onto every method of every service.
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the key to verify.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(VerifyKmsKeyResult)
+
+		HTTP(func() {
+			POST("/rpc/externalKeys.verifyGcpKms")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "verifyGcpKmsKey")
+		Meta("openapi:extension:x-speakeasy-name-override", "verifyGcpKms")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyGcpKmsKey"}`)
 	})
 
 	Method("deleteAwsKmsKey", func() {

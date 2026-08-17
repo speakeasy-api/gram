@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -102,6 +103,46 @@ func (e *ShareableError) String() string {
 // Unwrap returns the underlying cause of the error, if any.
 func (e *ShareableError) Unwrap() error {
 	return e.cause
+}
+
+// Detail renders err for internal diagnostics: worker logs, spans, and
+// Temporal failure messages. Error on a ShareableError intentionally stops at
+// its public message, so Detail appends a trailer carrying the hidden cause
+// chain of every ShareableError in the tree. The natural Error() rendering is
+// kept verbatim — splicing causes into a container's message cannot be done
+// reliably from rendered text, so the hidden chains are appended instead, each
+// prefixed with its boundary's message for correlation.
+func Detail(err error) string {
+	if err == nil {
+		return ""
+	}
+	var hidden []string
+	collectHiddenCauses(err, &hidden)
+	if len(hidden) == 0 {
+		return err.Error()
+	}
+	return err.Error() + " [hidden: " + strings.Join(hidden, "; ") + "]"
+}
+
+// collectHiddenCauses walks the error tree depth-first and records one entry
+// per ShareableError that carries a cause, in traversal order.
+func collectHiddenCauses(err error, out *[]string) {
+	switch node := err.(type) { //nolint:errorlint // Walks the tree one node at a time; wrapped errors are visited through the Unwrap cases below.
+	case nil:
+		return
+	case *ShareableError:
+		if node.cause == nil {
+			return
+		}
+		*out = append(*out, node.String())
+		collectHiddenCauses(node.cause, out)
+	case interface{ Unwrap() []error }:
+		for _, cause := range node.Unwrap() {
+			collectHiddenCauses(cause, out)
+		}
+	case interface{ Unwrap() error }:
+		collectHiddenCauses(node.Unwrap(), out)
+	}
 }
 
 // MarshalJSON implements the json.Marshaler interface.

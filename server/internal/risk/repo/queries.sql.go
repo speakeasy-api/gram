@@ -4561,6 +4561,65 @@ func (q *Queries) RefreshAccountIdentityFindingMatch(ctx context.Context, arg Re
 	return result.RowsAffected(), nil
 }
 
+const resolveRequestedRiskPolicyBypassRequest = `-- name: ResolveRequestedRiskPolicyBypassRequest :one
+UPDATE risk_policy_bypass_requests
+SET status = $1
+  , decided_by = $2
+  , granted_principal_urns = $3
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $4
+  AND project_id = $5
+  AND status = 'requested'
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
+`
+
+type ResolveRequestedRiskPolicyBypassRequestParams struct {
+	Status               string
+	DecidedBy            pgtype.Text
+	GrantedPrincipalUrns []string
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+// Resolves a bypass request only while it still awaits a decision. Used when
+// a promoted approval review is decided: a row already decided through the
+// legacy queue keeps its recorded outcome instead of being overwritten by
+// the review's.
+func (q *Queries) ResolveRequestedRiskPolicyBypassRequest(ctx context.Context, arg ResolveRequestedRiskPolicyBypassRequestParams) (RiskPolicyBypassRequest, error) {
+	row := q.db.QueryRow(ctx, resolveRequestedRiskPolicyBypassRequest,
+		arg.Status,
+		arg.DecidedBy,
+		arg.GrantedPrincipalUrns,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i RiskPolicyBypassRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.TargetKind,
+		&i.TargetLabel,
+		&i.TargetKey,
+		&i.TargetDimensions,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.Note,
+		&i.Status,
+		&i.DecidedBy,
+		&i.GrantedPrincipalUrns,
+		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const reverseExclusionFlagsBatch = `-- name: ReverseExclusionFlagsBatch :many
 
 UPDATE risk_results

@@ -1,7 +1,8 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
@@ -15,9 +16,10 @@ import {
   AdditionalAgentConfigStep,
   ConfirmTrafficStep,
   ConfigurePoliciesStep,
+  PlatformMCPSetupStep,
 } from "./steps";
 
-const STEPS: Step[] = [
+const CORE_STEPS: Step[] = [
   {
     id: "connect-idp",
     title: "Connect identity provider",
@@ -53,20 +55,48 @@ const STEPS: Step[] = [
     title: "Distribute MCP servers",
     description: "Choose some MCP Servers to distribute to your organization",
   },
-  {
-    id: "configure-policies",
-    title: "Configure policies",
-    description: "Pick the categories to flag in agent traffic",
-  },
 ];
+
+const CONFIGURE_POLICIES_STEP: Step = {
+  id: "configure-policies",
+  title: "Configure policies",
+  description: "Pick the categories to flag in agent traffic",
+};
+
+const PLATFORM_MCP_STEP: Step = {
+  id: "platform-mcp",
+  title: "Set up Platform MCP",
+  description: "Optional agent-assisted MCP setup",
+  badge: "Optional",
+};
 
 export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const {
+    enabled: platformMcpDashboardEnabled,
+    isLoading: isPlatformMcpDashboardLoading,
+  } = usePlatformMcpDashboardVisibility();
+  const setupProjectSlug = searchParams.get("projectSlug") ?? undefined;
+  const setupPath = searchParams.get("setupPath");
+  const usesPlatformMcpPath =
+    platformMcpDashboardEnabled && setupPath === "platform-mcp";
+  const steps = useMemo(() => {
+    if (!platformMcpDashboardEnabled) {
+      return [...CORE_STEPS, CONFIGURE_POLICIES_STEP];
+    }
+
+    if (usesPlatformMcpPath) {
+      return [...CORE_STEPS, PLATFORM_MCP_STEP, CONFIGURE_POLICIES_STEP];
+    }
+
+    return [...CORE_STEPS, CONFIGURE_POLICIES_STEP, PLATFORM_MCP_STEP];
+  }, [platformMcpDashboardEnabled, usesPlatformMcpPath]);
+
   // All steps are accessible — SSO and DSYNC are both skippable.
-  const maxAllowedStep = STEPS.length - 1;
+  const maxAllowedStep = steps.length - 1;
 
   const stepSlug = searchParams.get("step");
 
@@ -80,7 +110,10 @@ export function SetupWizard(): JSX.Element {
     useOnboardingStatus();
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
     usePublishStatus();
-  const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
+  const statusLoading =
+    isOnboardingStatusLoading ||
+    isPublishStatusLoading ||
+    isPlatformMcpDashboardLoading;
 
   useEffect(() => {
     if (stepSlug) return;
@@ -98,7 +131,7 @@ export function SetupWizard(): JSX.Element {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("step", STEPS[resumeStep]!.id!);
+        next.set("step", steps[resumeStep]!.id!);
         return next;
       },
       { replace: true },
@@ -109,12 +142,13 @@ export function SetupWizard(): JSX.Element {
     onboardingStatus,
     publishStatus,
     setSearchParams,
+    steps,
   ]);
 
   const requestedStep = stepSlug
     ? Math.max(
         0,
-        STEPS.findIndex((s) => s.id === stepSlug),
+        steps.findIndex((s) => s.id === stepSlug),
       )
     : 0;
 
@@ -125,13 +159,13 @@ export function SetupWizard(): JSX.Element {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set("step", STEPS[index]!.id!);
+          next.set("step", steps[index]!.id!);
           return next;
         },
         { replace: true },
       );
     },
-    [setSearchParams],
+    [setSearchParams, steps],
   );
 
   // Clicking a step in the stepper previews that step (forward or back) by
@@ -149,18 +183,38 @@ export function SetupWizard(): JSX.Element {
 
   const completeCurrentStep = useCallback(() => {
     const nextIndex = currentStep + 1;
-    if (nextIndex < STEPS.length) {
+    if (nextIndex < steps.length) {
       setCurrentStep(nextIndex);
     } else {
-      void navigate(`/${orgSlug}`);
+      const projectSlug = searchParams.get("projectSlug") ?? "default";
+      void navigate(`/${orgSlug}/projects/${projectSlug}`);
     }
-  }, [currentStep, navigate, orgSlug, setCurrentStep]);
+  }, [
+    currentStep,
+    navigate,
+    orgSlug,
+    searchParams,
+    setCurrentStep,
+    steps.length,
+  ]);
 
   const goBack = useCallback(() => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
   }, [currentStep, setCurrentStep]);
+
+  const leavePlatformMcpPath = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("setupPath");
+        next.set("step", "distribute-servers");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   const handleLeave = () => {
     void navigate(`/${orgSlug}`);
@@ -170,36 +224,49 @@ export function SetupWizard(): JSX.Element {
   // flight), keep the page shell visible with skeletons rather than briefly
   // mounting step 0. The resume-step useEffect above will set the slug as soon
   // as the queries resolve (or error, which falls back to step 0).
-  const resolvingResume = !stepSlug && statusLoading;
+  const resolvingResume =
+    isPlatformMcpDashboardLoading || (!stepSlug && statusLoading);
+
+  const startPlatformMcpPath = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("setupPath", "platform-mcp");
+        next.set("step", PLATFORM_MCP_STEP.id);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    switch (steps[currentStep]?.id) {
+      case "connect-idp":
         return (
           <ConnectIdpStep
             onSkip={completeCurrentStep}
             onComplete={completeCurrentStep}
           />
         );
-      case 1:
+      case "directory-sync":
         return (
           <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />
         );
-      case 2:
+      case "create-marketplace":
         return (
           <CreateMarketplaceStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 3:
+      case "instrument-agents":
         return (
           <InstrumentAgentsStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 4:
+      case "additional-agent-config":
         return (
           <AdditionalAgentConfigStep
             onComplete={completeCurrentStep}
@@ -207,29 +274,46 @@ export function SetupWizard(): JSX.Element {
             onBack={goBack}
           />
         );
-      case 5:
+      case "confirm-traffic":
         return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 6:
+      case "distribute-servers":
         return (
           <DistributeServersStep
             onComplete={completeCurrentStep}
             onSkip={completeCurrentStep}
             onBack={goBack}
+            onSetupPlatformMCP={
+              platformMcpDashboardEnabled ? startPlatformMcpPath : undefined
+            }
           />
         );
-      case 7:
+      case "configure-policies":
         return (
           <ConfigurePoliciesStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      default:
+      case "platform-mcp":
+        return (
+          <PlatformMCPSetupStep
+            onComplete={completeCurrentStep}
+            onBack={usesPlatformMcpPath ? leavePlatformMcpPath : goBack}
+            onSkip={completeCurrentStep}
+            currentProjectSlug={setupProjectSlug}
+            continueLabel={
+              usesPlatformMcpPath
+                ? "Continue to Configure policies"
+                : "Finish setup"
+            }
+          />
+        );
+      case undefined:
         return null;
     }
   };
@@ -243,13 +327,13 @@ export function SetupWizard(): JSX.Element {
           <div className="w-64 flex-shrink-0">
             {resolvingResume ? (
               <Skeleton>
-                {STEPS.map((step) => (
+                {steps.map((step) => (
                   <div key={step.id} className="h-8 w-full" />
                 ))}
               </Skeleton>
             ) : (
               <OnboardingStepper
-                steps={STEPS}
+                steps={steps}
                 currentStep={currentStep}
                 onStepClick={goToStep}
                 maxAllowedStep={maxAllowedStep}

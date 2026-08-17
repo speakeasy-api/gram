@@ -1,15 +1,12 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"math"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -152,11 +149,6 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		return nil
 	}
 
-	tableHTML, err := renderWeeklyUsageTable(currentTotal, previousTotal)
-	if err != nil {
-		return fmt.Errorf("render weekly usage table: %w", err)
-	}
-
 	viewUsageURL := ""
 	if a.siteURL != nil {
 		viewUsageURL = a.siteURL.JoinPath(target.OrganizationSlug, "billing").String()
@@ -171,7 +163,6 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		TotalTokens:         formatTokenCount(currentTotal),
 		PreviousTotalTokens: formatTokenCount(previousTotal),
 		TotalChangePercent:  usageChangePercent(currentTotal, previousTotal),
-		UsageTableHTML:      tableHTML,
 		ViewUsageURL:        viewUsageURL,
 	}
 
@@ -227,41 +218,4 @@ func usageChangePercent(current, previous int64) string {
 	}
 	pct := int(math.Round(float64(current-previous) / float64(previous) * 100))
 	return fmt.Sprintf("%+d%%", pct)
-}
-
-// weeklyUsageTableTemplate renders the cycle-total summary table injected
-// into the Loops template as a single HTML variable. Styling is inline and
-// minimal — email clients ignore stylesheets — and kept visually neutral so
-// it sits inside whatever chrome the Loops template provides.
-var weeklyUsageTableTemplate = template.Must(template.New("weekly_usage_table").Parse(strings.TrimSpace(`
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;font-size:14px;color:#111111;">
-	<tr>
-		<td style="padding:8px 0;color:#666666;font-weight:600;">Usage so far this cycle</td>
-		<td align="right" style="padding:8px 0;color:#666666;font-weight:600;">Tokens</td>
-		<td align="right" style="padding:8px 0;color:#666666;font-weight:600;">Change</td>
-	</tr>
-	<tr>
-		<td style="padding:12px 0;border-top:2px solid #111111;font-weight:700;">Total<br /><span style="color:#8a8a8a;font-size:12px;font-weight:400;">Previous cycle at this point: {{.Previous}}</span></td>
-		<td align="right" style="padding:12px 0;border-top:2px solid #111111;font-weight:700;vertical-align:top;">{{.Total}}</td>
-		<td align="right" style="padding:12px 0;border-top:2px solid #111111;font-weight:700;vertical-align:top;">{{.Change}}</td>
-	</tr>
-</table>
-`)))
-
-// renderWeeklyUsageTable renders the tokens-under-management total with its
-// previous-cycle comparison as the email's summary table.
-func renderWeeklyUsageTable(currentTotal, previousTotal int64) (string, error) {
-	var html bytes.Buffer
-	if err := weeklyUsageTableTemplate.Execute(&html, struct {
-		Total    string
-		Previous string
-		Change   string
-	}{
-		Total:    formatTokenCount(currentTotal),
-		Previous: formatTokenCount(previousTotal),
-		Change:   usageChangePercent(currentTotal, previousTotal),
-	}); err != nil {
-		return "", fmt.Errorf("execute weekly usage table template: %w", err)
-	}
-	return html.String(), nil
 }

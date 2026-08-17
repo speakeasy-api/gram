@@ -324,6 +324,17 @@ WHERE chat_id = @chat_id
 ORDER BY created_at DESC, seq DESC
 LIMIT 1;
 
+-- name: MarkChatLiteLLMProxied :exec
+-- Flags a session as observed by the LiteLLM proxy. Set on every proxied
+-- ingest event rather than at chat creation because natively captured
+-- sessions suppress their proxied transcript rows, leaving no message-level
+-- trace of the proxy.
+UPDATE chats
+SET litellm_proxied = TRUE
+WHERE id = @id
+  AND project_id = @project_id
+  AND NOT litellm_proxied;
+
 -- name: CreateChatContentPart :copyfrom
 INSERT INTO chat_content_parts (
     chat_id
@@ -543,6 +554,10 @@ candidate_chats AS (
     )
     AND (
       coalesce(cardinality(@sources::text[]), 0) = 0
+      -- Proxied sessions match the LiteLLM filter even when a native hook
+      -- stream owns every transcript row (proxied rows are suppressed as
+      -- duplicates, so the message-source probe alone would miss them).
+      OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -559,6 +574,7 @@ chat_activity AS (
   -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
+    cc.created_at,
     COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
   CROSS JOIN LATERAL (
@@ -569,8 +585,11 @@ chat_activity AS (
 )
 SELECT COUNT(*) AS total
 FROM chat_activity ca
+-- Interval overlap, mirroring ListChats: last activity after the range opens,
+-- created before it closes. Bounding last_message_timestamp above would evict
+-- an actively-writing chat as soon as a message lands past the caller's @to.
 WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_time)
-  AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
+  AND (@to_time::timestamptz IS NULL OR ca.created_at <= @to_time);
 
 -- name: ListChats :many
 -- Returns the page plus the pre-LIMIT total (total_count window column), so the
@@ -606,6 +625,7 @@ candidate_chats AS (
     c.created_at,
     c.updated_at,
     c.pinned_at,
+    c.litellm_proxied,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -670,6 +690,10 @@ candidate_chats AS (
     )
     AND (
       coalesce(cardinality(@sources::text[]), 0) = 0
+      -- Proxied sessions match the LiteLLM filter even when a native hook
+      -- stream owns every transcript row (proxied rows are suppressed as
+      -- duplicates, so the message-source probe alone would miss them).
+      OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -707,14 +731,21 @@ filtered_chats AS (
     cc.created_at,
     cc.updated_at,
     cc.pinned_at,
+    cc.litellm_proxied,
     cs.num_messages,
     cs.last_message_timestamp,
     cc.account_type,
     cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
+  -- The range test is interval overlap: the chat was active after the range
+  -- opened (last message >= @from_time) and existed before it closed
+  -- (created_at <= @to_time). Bounding last_message_timestamp above instead
+  -- would evict an actively-writing chat the moment a new message lands past
+  -- the caller's @to — the dashboard freezes @to when a range is picked, so
+  -- running sessions would flicker out of the list until the next reload.
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
-    AND (@to_time::timestamptz IS NULL OR cs.last_message_timestamp <= @to_time)
+    AND (@to_time::timestamptz IS NULL OR cc.created_at <= @to_time)
 ),
 limited_chats AS (
   SELECT
@@ -725,6 +756,7 @@ limited_chats AS (
     fc.created_at,
     fc.updated_at,
     fc.pinned_at,
+    fc.litellm_proxied,
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
@@ -777,6 +809,7 @@ SELECT
   lc.external_user_id,
   lc.source,
   lc.originating_client,
+  lc.litellm_proxied,
   lc.created_at,
   lc.updated_at,
   lc.pinned_at,
@@ -801,6 +834,82 @@ SELECT
   lc.assistant_name,
   lc.total_count
 FROM chat_attribution lc;
+
+-- name: GetAssistantSessionSummaryProjection :one
+-- Returns the range-bounded Postgres portion of the assistant activity
+-- summary. Setup/onboarding threads are excluded from runtime activity.
+WITH target_assistant AS (
+  SELECT a.id
+  FROM assistants a
+  WHERE a.id = @assistant_id
+    AND a.project_id = @project_id
+    AND a.deleted IS FALSE
+),
+assistant_chats AS MATERIALIZED (
+  SELECT DISTINCT at.chat_id
+  FROM assistant_threads at
+  JOIN target_assistant a ON a.id = at.assistant_id
+  JOIN chats c
+    ON c.id = at.chat_id
+    AND c.project_id = at.project_id
+    AND c.deleted IS FALSE
+  WHERE at.project_id = @project_id
+    AND at.source_kind <> 'setup'
+    AND at.deleted IS FALSE
+    AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR c.user_id = @user_id::text)
+),
+activity AS (
+  SELECT
+    ac.chat_id,
+    COUNT(*)::bigint AS messages
+  FROM assistant_chats ac
+  JOIN chat_messages cm
+    ON cm.chat_id = ac.chat_id
+    AND cm.project_id = @project_id
+  WHERE cm.created_at >= @from_time
+    AND cm.created_at <= @to_time
+  GROUP BY ac.chat_id
+)
+SELECT
+  EXISTS (SELECT 1 FROM target_assistant) AS assistant_exists,
+  COUNT(*)::bigint AS sessions,
+  COALESCE(SUM(activity.messages), 0)::bigint AS messages
+FROM activity;
+
+-- name: ListAssistantSessionSummaryChats :many
+-- Keyset page over every visible runtime chat for an assistant. This is
+-- deliberately independent of message activity: completion telemetry can be
+-- in range even when its corresponding message was persisted outside the
+-- selected range. The endpoint consumes fixed-size pages so it remains
+-- uncapped without constructing an unbounded UUID array or ClickHouse IN list.
+-- Runtime ingestion maps each live assistant correlation to exactly one chat:
+-- the dashboard correlation is the server-minted chat id, while other sources
+-- derive the chat id from (assistant, correlation), and the live correlation
+-- key is unique. Correlation is immutable after insertion, so it is also a
+-- stable cursor while activity updates the thread. The keyset is backed by
+-- assistant_threads_project_id_assistant_id_correlation_id_key.
+SELECT
+  at.chat_id,
+  at.correlation_id
+FROM assistant_threads at
+JOIN assistants a
+  ON a.id = at.assistant_id
+  AND a.project_id = at.project_id
+  AND a.deleted IS FALSE
+JOIN chats c
+  ON c.id = at.chat_id
+  AND c.project_id = at.project_id
+  AND c.deleted IS FALSE
+WHERE at.assistant_id = @assistant_id
+  AND at.project_id = @project_id
+  AND at.source_kind <> 'setup'
+  AND at.deleted IS FALSE
+  AND at.correlation_id > @after_correlation_id
+  AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR c.user_id = @user_id::text)
+ORDER BY at.correlation_id
+LIMIT @page_limit;
 
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the
@@ -827,7 +936,21 @@ WHERE c.project_id = @project_id
   AND c.deleted IS FALSE
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
   AND (@user_id::text = '' OR c.user_id = @user_id::text)
-ORDER BY latest.source;
+UNION
+-- Natively captured proxied sessions carry no litellm message rows (they are
+-- suppressed as duplicates), so the LiteLLM filter option must also be offered
+-- when any visible chat carries the chat-level proxied marker.
+SELECT 'litellm'
+WHERE EXISTS (
+  SELECT 1
+  FROM chats pc
+  WHERE pc.project_id = @project_id
+    AND pc.deleted IS FALSE
+    AND pc.litellm_proxied
+    AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
+    AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+)
+ORDER BY source;
 
 -- name: GetChat :one
 -- Loads a chat plus the team/personal classification of the AI account that
@@ -1233,6 +1356,47 @@ SET summary = @summary,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING summary, summary_generated_at;
+
+-- name: GetToolCallSummaryContext :one
+-- Fetch the owning call message and its matching result within one project and
+-- chat. The handler validates that tool_calls contains the requested call id.
+SELECT
+  calls.tool_calls,
+  calls.tool_call_summaries,
+  results.content::text AS result_content
+FROM chat_messages AS calls
+JOIN chat_messages AS results
+  ON results.chat_id = calls.chat_id
+  AND results.project_id = calls.project_id
+  AND results.tool_call_id = @tool_call_id
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
+WHERE calls.id = @message_id
+  AND calls.chat_id = @chat_id
+  AND calls.project_id = @project_id::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
+LIMIT 1;
+
+-- name: CreateChatMessageReturningID :one
+-- Inserts a message fixture while exposing its durable id to callers that need
+-- to refer to that exact message in subsequent operations.
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id)
+VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
+RETURNING id;
+
+-- name: StoreToolCallSummary :one
+-- Preserve summaries for sibling calls carried by the same assistant message.
+UPDATE chat_messages
+SET tool_call_summaries = jsonb_set(
+  COALESCE(tool_call_summaries, '{}'::jsonb),
+  ARRAY[@tool_call_id::text],
+  @summary::jsonb
+)
+WHERE id = @message_id
+  AND chat_id = @chat_id
+  AND project_id = @project_id::uuid
+RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
 
 -- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages

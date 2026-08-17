@@ -5,6 +5,7 @@
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
+import { chatGetAssistantSessionSummary } from "../funcs/chatGetAssistantSessionSummary.js";
 import { chatGetWorkUnitsTrend } from "../funcs/chatGetWorkUnitsTrend.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatListSources } from "../funcs/chatListSources.js";
@@ -12,7 +13,9 @@ import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { chatSummarize } from "../funcs/chatSummarize.js";
+import { chatSummarizeToolCall } from "../funcs/chatSummarizeToolCall.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AssistantSessionSummary } from "../models/components/assistantsessionsummary.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
 import { CreditUsageResponseBody } from "../models/components/creditusageresponsebody.js";
@@ -20,6 +23,7 @@ import { GenerateTitleResponseBody } from "../models/components/generatetitleres
 import { ListChatsResult } from "../models/components/listchatsresult.js";
 import { ListSourcesResult } from "../models/components/listsourcesresult.js";
 import { SummarizeChatResult } from "../models/components/summarizechatresult.js";
+import { SummarizeToolCallResult } from "../models/components/summarizetoolcallresult.js";
 import { WorkUnitsTrendResult } from "../models/components/workunitstrendresult.js";
 import {
   CreditUsageRequest,
@@ -33,6 +37,10 @@ import {
   GenerateTitleRequest,
   GenerateTitleSecurity,
 } from "../models/operations/generatetitle.js";
+import {
+  GetAssistantSessionSummaryRequest,
+  GetAssistantSessionSummarySecurity,
+} from "../models/operations/getassistantsessionsummary.js";
 import {
   GetWorkUnitsTrendRequest,
   GetWorkUnitsTrendSecurity,
@@ -61,6 +69,10 @@ import {
   SummarizeChatRequest,
   SummarizeChatSecurity,
 } from "../models/operations/summarizechat.js";
+import {
+  SummarizeToolCallRequest,
+  SummarizeToolCallSecurity,
+} from "../models/operations/summarizetoolcall.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Chat extends ClientSDK {
@@ -114,6 +126,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GenerateTitleResponseBody> {
     return unwrapAsync(chatGenerateTitle(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getAssistantSessionSummary chat
+   *
+   * @remarks
+   * Get assistant session activity totals for a time range.
+   */
+  async getAssistantSessionSummary(
+    request: GetAssistantSessionSummaryRequest,
+    security?: GetAssistantSessionSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AssistantSessionSummary> {
+    return unwrapAsync(chatGetAssistantSessionSummary(
       this,
       request,
       security,
@@ -247,6 +278,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SummarizeChatResult> {
     return unwrapAsync(chatSummarize(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * summarizeToolCall chat
+   *
+   * @remarks
+   * Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.
+   */
+  async summarizeToolCall(
+    request: SummarizeToolCallRequest,
+    security?: SummarizeToolCallSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SummarizeToolCallResult> {
+    return unwrapAsync(chatSummarizeToolCall(
       this,
       request,
       security,

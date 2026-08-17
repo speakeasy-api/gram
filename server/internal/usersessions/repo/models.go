@@ -20,6 +20,8 @@ type UserSession struct {
 	RefreshTokenHash    string
 	RefreshExpiresAt    pgtype.Timestamptz
 	ExpiresAt           pgtype.Timestamptz
+	ToolSelection       []byte
+	LastUsedAt          pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

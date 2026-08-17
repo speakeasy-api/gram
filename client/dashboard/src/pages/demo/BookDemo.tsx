@@ -1,6 +1,6 @@
+import { Button } from "@/components/ui/Button";
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Link } from "react-router";
 import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
@@ -24,7 +24,7 @@ export default function BookDemo(): JSX.Element {
   return (
     <AuthShell
       page="Book a demo"
-      contentClassName="max-w-[560px]"
+      contentClassName="max-w-[50rem] gap-6"
       // The card carries its own prefill footnote instead ("2E Book a demo").
       showTerms={false}
       headerAction={
@@ -38,14 +38,15 @@ export default function BookDemo(): JSX.Element {
       }
     >
       <DemoBookingFlow />
-      <div className="mt-6 text-center">
-        <Link
-          to="/explore-demo"
-          className="auth-mono text-xs text-(--muted) underline underline-offset-4 transition-colors hover:text-black"
-        >
-          Or explore a live demo org →
-        </Link>
-      </div>
+      <Button
+        variant="primary"
+        size="md"
+        icon="arrow-right"
+        iconAfter
+        href="/explore-demo"
+      >
+        Explore a Live Demo
+      </Button>
     </AuthShell>
   );
 }
