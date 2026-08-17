@@ -298,6 +298,16 @@ function ToolbarFilters({
       (d) => !d.pinned && !d.hideChip && isDimensionActive(d, values[d.id]!),
     ).length + customFilters.length;
 
+  // The sheet only earns its trigger when it holds something the chip row
+  // doesn't: unpinned dimensions, hideChip dimensions (which never render a
+  // chip even when pinned), a custom-attribute builder, or active custom
+  // filters. A schema of only pinned dimensions would make "More filters" a
+  // second door to the same controls.
+  const sheetHasMore =
+    schema.some((d) => !d.pinned || d.hideChip) ||
+    customBuilder !== undefined ||
+    customFilters.length > 0;
+
   const hasClearable =
     customFilters.length > 0 ||
     schema.some(
@@ -335,19 +345,21 @@ function ToolbarFilters({
 
       {extraChips}
 
-      <Button
-        variant="secondary"
-        onClick={() => setSheetOpen(true)}
-        className={cn(CONTROL_HEIGHT, "gap-2")}
-      >
-        <SlidersHorizontal className="size-4" />
-        More filters
-        {sheetCount > 0 && (
-          <Badge variant="neutral" className="ml-1 px-1.5">
-            {sheetCount}
-          </Badge>
-        )}
-      </Button>
+      {sheetHasMore && (
+        <Button
+          variant="secondary"
+          onClick={() => setSheetOpen(true)}
+          className={cn(CONTROL_HEIGHT, "gap-2")}
+        >
+          <SlidersHorizontal className="size-4" />
+          More filters
+          {sheetCount > 0 && (
+            <Badge variant="neutral" className="ml-1 px-1.5">
+              {sheetCount}
+            </Badge>
+          )}
+        </Button>
+      )}
 
       {hasClearable && (
         <Button

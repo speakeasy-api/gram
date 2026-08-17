@@ -270,7 +270,7 @@ func hasEmbeddedURIScheme(value string) bool {
 }
 
 func hasUnsafeFeedbackPath(value string) bool {
-	for _, word := range strings.Fields(value) {
+	for word := range strings.FieldsSeq(value) {
 		trimmed := strings.Trim(word, "([{\"'")
 		trimmed = strings.TrimRight(trimmed, ".,;:!?)]}\"")
 		if trimmed == "" {

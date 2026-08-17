@@ -129,7 +129,7 @@ func TestDeleteRiskPolicy_DeletesBypassRequests(t *testing.T) {
 		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, created.ID, "https://mcp.example.com/delete-policy"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, created.ID, request.PolicyID)
+	require.Equal(t, created.ID, redeemedBypassRow(t, ctx, ti, request).PolicyID)
 
 	before, err := ti.service.ListRiskPolicyBypassRequests(ctx, &gen.ListRiskPolicyBypassRequestsPayload{
 		PolicyID: &created.ID,

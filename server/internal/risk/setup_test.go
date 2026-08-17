@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/risk"
+
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
@@ -163,14 +165,19 @@ func (s *stubJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptp
 }
 
 type testInstance struct {
-	service                      *risk.Service
-	conn                         *pgxpool.Pool
-	sessionManager               *sessions.Manager
-	signaler                     *signalerStub
-	chatRepo                     *chatrepo.Queries
-	flags                        *feature.InMemory
-	cacheAdapter                 cache.Cache
-	judge                        *stubJudge
+	service        *risk.Service
+	conn           *pgxpool.Pool
+	sessionManager *sessions.Manager
+	signaler       *signalerStub
+	chatRepo       *chatrepo.Queries
+	flags          *feature.InMemory
+	cacheAdapter   cache.Cache
+	judge          *stubJudge
+	// approvalIntake routes shadow-MCP block-link redemptions into the MCP
+	// approval workflow. Nil in the default harness, so existing tests keep
+	// exercising the legacy bypass path; intake tests set it before the
+	// service is built.
+	approvalIntake               risk.ShadowMCPApprovalIntake
 	reconcileShadowMCPPolicyURLs risk.ShadowMCPPolicyURLReconciler
 	shadowMCPInventoryURLLookup  risk.ShadowMCPInventoryURLLookup
 	completionClient             openrouter.CompletionClient
@@ -233,7 +240,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	for _, configureInstance := range configure {
 		configureInstance(ti)
 	}
-	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
@@ -340,4 +347,24 @@ func riskPolicyExistsByName(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		}
 	}
 	return false
+}
+
+// redeemedBypassRow loads the full bypass request a redemption produced —
+// the create result is a slim redemption receipt, and assertions about the
+// stored row read it back through the list endpoint.
+func redeemedBypassRow(t *testing.T, ctx context.Context, ti *testInstance, redemption *gen.PolicyBypassRedemption) *gen.RiskPolicyBypassRequest {
+	t.Helper()
+
+	require.Equal(t, "bypass_request", redemption.Kind)
+	list, err := ti.service.ListRiskPolicyBypassRequests(ctx, &gen.ListRiskPolicyBypassRequestsPayload{
+		ApikeyToken: nil, SessionToken: nil, ProjectSlugInput: nil, PolicyID: nil, Status: nil,
+	})
+	require.NoError(t, err)
+	for _, row := range list.Requests {
+		if row.ID == redemption.ID {
+			return row
+		}
+	}
+	t.Fatalf("redeemed bypass request %s not found", redemption.ID)
+	return nil
 }

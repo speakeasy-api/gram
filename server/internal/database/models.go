@@ -2490,6 +2490,14 @@ type StripeMeterReport struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type StripeWebhookReceipt struct {
+	StripeEventID  string
+	OrganizationID string
+	EventType      string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 // Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.
 type ToolCallBlock struct {
 	ID             uuid.UUID

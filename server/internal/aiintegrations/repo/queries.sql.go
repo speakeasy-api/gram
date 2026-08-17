@@ -50,20 +50,47 @@ func (q *Queries) AdvanceWatermark(ctx context.Context, arg AdvanceWatermarkPara
 	return err
 }
 
-const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :exec
-UPDATE ai_integration_syncs
-SET auto_paused_at = NULL,
-    consecutive_failures = 0,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $1
+const clearSyncSchedulePauses = `-- name: ClearSyncSchedulePauses :one
+WITH cleared AS (
+  UPDATE ai_integration_syncs
+  SET next_poll_after = CASE
+        WHEN consecutive_failures > 0 OR auto_paused_at IS NOT NULL
+        THEN clock_timestamp()
+        ELSE next_poll_after
+      END,
+      auto_paused_at = NULL,
+      consecutive_failures = 0,
+      updated_at = clock_timestamp()
+  WHERE ai_integration_config_id = $2
+  RETURNING schedule, next_poll_after, consecutive_failures
+)
+SELECT next_poll_after, consecutive_failures
+FROM cleared
+WHERE schedule = $1
 `
+
+type ClearSyncSchedulePausesParams struct {
+	Schedule              string
+	AiIntegrationConfigID uuid.UUID
+}
+
+type ClearSyncSchedulePausesRow struct {
+	NextPollAfter       pgtype.Timestamptz
+	ConsecutiveFailures int32
+}
 
 // ClearSyncSchedulePauses lifts any automatic pause on all of a config's
 // schedules and resets their failure streaks. Runs whenever the user saves
-// the integration so a fixed configuration starts polling again.
-func (q *Queries) ClearSyncSchedulePauses(ctx context.Context, aiIntegrationConfigID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, clearSyncSchedulePauses, aiIntegrationConfigID)
-	return err
+// the integration so a fixed configuration starts polling again. Schedules
+// that were failing also become due immediately: failure backoff can leave
+// next_poll_after hours out, and keeping it would leave a just-fixed
+// integration dark until the backed-off time arrives. Healthy schedules
+// keep their cadence.
+func (q *Queries) ClearSyncSchedulePauses(ctx context.Context, arg ClearSyncSchedulePausesParams) (ClearSyncSchedulePausesRow, error) {
+	row := q.db.QueryRow(ctx, clearSyncSchedulePauses, arg.Schedule, arg.AiIntegrationConfigID)
+	var i ClearSyncSchedulePausesRow
+	err := row.Scan(&i.NextPollAfter, &i.ConsecutiveFailures)
+	return i, err
 }
 
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
@@ -1046,6 +1073,23 @@ func (q *Queries) RetrySyncSchedule(ctx context.Context, arg RetrySyncSchedulePa
 const setSyncScheduleDisabled = `-- name: SetSyncScheduleDisabled :one
 UPDATE ai_integration_syncs
 SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
+    next_poll_after = CASE
+      WHEN NOT $1::bool
+        AND disabled_at IS NOT NULL
+        AND (consecutive_failures > 0 OR auto_paused_at IS NOT NULL)
+      THEN clock_timestamp()
+      ELSE next_poll_after
+    END,
+    consecutive_failures = CASE
+      WHEN NOT $1::bool AND disabled_at IS NOT NULL
+      THEN 0
+      ELSE consecutive_failures
+    END,
+    auto_paused_at = CASE
+      WHEN NOT $1::bool AND disabled_at IS NOT NULL
+      THEN NULL
+      ELSE auto_paused_at
+    END,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $2
   AND schedule = $3
@@ -1060,8 +1104,14 @@ type SetSyncScheduleDisabledParams struct {
 
 // SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
 // sync schedule. Distinct from auto_paused_at: only the user flips this flag.
-// Re-enabling leaves next_poll_after untouched — a stale value is already due,
-// so candidate selection picks the schedule up on the next scheduler tick.
+// Transitioning a schedule from disabled to enabled starts a fresh run: it
+// becomes due immediately when it was failing or auto-paused — failure
+// backoff can leave next_poll_after hours out — its failure streak resets so
+// polling resumes at full cadence instead of continuing the old backoff
+// toward the auto-pause threshold, and any automatic pause lifts, since
+// candidate selection would otherwise never re-enqueue the schedule the user
+// just asked to run. An already-enabled or healthy schedule keeps its
+// next_poll_after, streak, and pause state.
 func (q *Queries) SetSyncScheduleDisabled(ctx context.Context, arg SetSyncScheduleDisabledParams) (AiIntegrationSync, error) {
 	row := q.db.QueryRow(ctx, setSyncScheduleDisabled, arg.Disabled, arg.AiIntegrationConfigID, arg.Schedule)
 	var i AiIntegrationSync

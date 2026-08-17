@@ -83,6 +83,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
+	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
+	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -317,6 +325,11 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
 		&cli.StringFlag{
+			Name:    "github-evidence-token",
+			Usage:   "GitHub API token for MCP evidence repository lookups; unset falls back to the small unauthenticated per-IP budget, after which lookups land in evidence gaps",
+			EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"},
+		},
+		&cli.StringFlag{
 			Name:    "temporal-address",
 			Usage:   "Address of the Temporal server",
 			EnvVars: []string{"TEMPORAL_ADDRESS"},
@@ -361,6 +374,28 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"PYLON_VERIFICATION_SECRET"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "stripe-api-key",
+			Usage:   "The Stripe API key",
+			EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "stripe-webhook-secret",
+			Usage:   "The Stripe webhook signing secret",
+			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-tum",
+			Aliases: []string{"stripe.price_id_tum"},
+			Usage:   "The Stripe metered TUM price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name",
+			Aliases: []string{"stripe.meter_event_name"},
+			Usage:   "The Stripe TUM meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -591,7 +626,12 @@ func newStartCommand() *cli.Command {
 				backgroundWorkOSClient = workos.NewStubClient()
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe client: %w", err)
+			}
+
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -789,7 +829,7 @@ func newStartCommand() *cli.Command {
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			telemetryLoggerShutdown = shutdown
 
-			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 			// Wrap cache for hooks service in local development
 			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
@@ -1211,6 +1251,11 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				completionsClient,
 			))
+			// identityMapRefreshSignaler.Shutdown is NOT registered as a
+			// shutdownFunc, for the same reason riskSignaler's is not: it is
+			// flushed synchronously in the drain goroutine below, while the
+			// Temporal client is still open.
+			identityMapRefreshSignaler := background.NewIdentityMapRefreshSignaler(temporalEnv, logger)
 			hooksService := hooks.NewService(
 				logger,
 				db,
@@ -1232,6 +1277,7 @@ func newStartCommand() *cli.Command {
 				chatWriter,
 				efficacySignaler,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
+				identityMapRefreshSignaler,
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
@@ -1346,6 +1392,21 @@ func newStartCommand() *cli.Command {
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			// One probe serves both the authority and tool-declarations slots:
+			// they are two views of the same remote prober.
+			remoteProber := remoteprobe.New(logger, guardianPolicy)
+			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, auditLogger,
+				mcpapprovalevidence.NewAssembler(
+					packagemeta.NewClient(guardianPolicy.PooledClient()),
+					repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(c.String("github-evidence-token"))),
+					mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
+					domainmeta.NewClient(guardianPolicy.PooledClient()),
+					telemetryrepo.New(chDB),
+					remoteProber,
+					remoteProber,
+					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
+				))
+			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
@@ -1380,7 +1441,7 @@ func newStartCommand() *cli.Command {
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, authzEngine, telemetryrepo.New(chDB), auditLogger))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter, authzEngine, telemetryrepo.New(chDB), auditLogger, trialEmailNotifier))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 
@@ -1411,6 +1472,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
+				mcpApprovalService,
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
@@ -1611,6 +1673,9 @@ func newStartCommand() *cli.Command {
 				}
 				if err := spendUsageTrigger.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(err))
+				}
+				if err := identityMapRefreshSignaler.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending identity map refresh triggers", attr.SlogError(err))
 				}
 			})
 

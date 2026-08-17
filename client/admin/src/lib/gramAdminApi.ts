@@ -178,8 +178,34 @@ export async function logout(): Promise<void> {
   window.location.href = "/admin/auth.login?prompt=select_account";
 }
 
+// Derived server-side from the `trials` table, so it is the only trustworthy
+// account of whether an organization ever trialled.
+//
+// A runtime list with the union derived from it, rather than a bare union: a
+// test can then walk every state the server can send, so a seventh state added
+// here fails a test as well as the build. A type annotation alone is one
+// careless edit from being deleted, and nothing would notice.
+export const TRIAL_STATES = [
+  "none",
+  "running",
+  "ending_soon",
+  "expired",
+  "demoted",
+  "converted",
+] as const;
+
+// Not `string`: a typo in a state name has to be a build failure, because
+// every surface that reads it maps the state to a colour.
+export type TrialState = (typeof TRIAL_STATES)[number];
+
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.
+//
+// `free_trial_started_at` and `free_trial_ends_at` are `NOT NULL` columns with
+// a signup-plus-fourteen-days default that no application code writes, so they
+// report a trial for every organization ever made. Nothing here reads them.
+// They stay declared only because the API still sends them; a follow-up takes
+// them off the wire.
 export type AdminOrganization = {
   id: string;
   name: string;
@@ -190,6 +216,8 @@ export type AdminOrganization = {
   disabled_at?: string;
   free_trial_started_at?: string;
   free_trial_ends_at?: string;
+  trial_state?: TrialState;
+  trial_ends_at?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -200,10 +228,19 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
+// Each filter is a repeated parameter the server reads as a set, and an absent
+// one means no filter of that kind: no account_types is every type, no
+// trial_states is every state, no disabled_states is active organizations only.
+//
+// The scalar `account_type` and the `include_disabled` flag these replaced are
+// still accepted by the server, so its half of this change can merge first.
+// Nothing here sends them, and nothing should: two ways to say the same filter
+// is how the browser and the server end up disagreeing about what is on.
 export type ListOrganizationsParams = {
   q?: string;
-  account_type?: string;
-  include_disabled?: boolean;
+  account_types?: string[];
+  trial_states?: string[];
+  disabled_states?: string[];
   cursor?: string;
   limit?: number;
 };
@@ -215,6 +252,18 @@ export function listOrganizations(
   return gramAdminFetch<ListOrganizationsResult>(
     `/admin/organizations.list${qs ? `?${qs}` : ""}`,
   );
+}
+
+export type AdminOrganizationStats = {
+  total: number;
+  created_last_7_days: number;
+  trials_ending_soon: number;
+  disabled: number;
+  disabled_last_7_days: number;
+};
+
+export function getOrganizationStats(): Promise<AdminOrganizationStats> {
+  return gramAdminFetch<AdminOrganizationStats>("/admin/organizations.stats");
 }
 
 export type AdminProjectDetail = {
@@ -254,6 +303,99 @@ export function updateOrganization(
   body: UpdateOrganizationRequest,
 ): Promise<AdminOrganization> {
   return gramAdminFetch<AdminOrganization>("/admin/organization.update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type BulkUpdateAccountTypeRequest = {
+  ids: string[];
+  account_type: string;
+};
+
+// `updated_ids` is a set: the server states no order, so nothing may index into
+// it or line it up against the request. `missing_ids` was not written, and a
+// caller that drops it reports the write as having done more than it did.
+export type BulkUpdateAccountTypeResult = {
+  updated_ids: string[];
+  missing_ids: string[];
+};
+
+// One statement for every id: an id that matches nothing comes back in
+// missing_ids rather than failing the batch.
+export function bulkUpdateAccountType(
+  body: BulkUpdateAccountTypeRequest,
+): Promise<BulkUpdateAccountTypeResult> {
+  return gramAdminFetch<BulkUpdateAccountTypeResult>(
+    "/admin/organizations.bulkUpdateAccountType",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export type OrganizationRequest = {
+  id: string;
+};
+
+// Both answer the organization in its new state, so a caller updates its cache
+// from the response rather than reading the record back.
+export function disableOrganization(
+  body: OrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function enableOrganization(
+  body: OrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// The server's own bounds, mirrored so a value it would reject never leaves the
+// browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
+// server/internal/constants/trials.go: zero moves nothing but updated_at, a
+// negative shortens a trial through an endpoint named extend, and a year is
+// where a trial becomes a contract.
+export const MIN_TRIAL_EXTENSION_DAYS = 1;
+export const MAX_TRIAL_EXTENSION_DAYS = 365;
+
+export type ExtendTrialRequest = {
+  id: string;
+  days: number;
+};
+
+// The days are added to the trial's current end date, not to today, so an
+// extension applied early does not shorten the trial.
+export function extendTrial(
+  body: ExtendTrialRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type CreateOrganizationRequest = {
+  name: string;
+};
+
+export function createOrganization(
+  body: CreateOrganizationRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/organization.create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

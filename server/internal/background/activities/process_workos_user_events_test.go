@@ -137,7 +137,7 @@ func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testin
 		{ID: "event_directory_user_update", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_directory_user_update", res.LastEventID)

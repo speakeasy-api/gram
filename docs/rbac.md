@@ -26,17 +26,19 @@ Examples:
 
 ```text
 user:user_01abc
-role:admin
-role:member
-role:custom-builder
+role:global:00000000-0000-0000-0000-000000000001
+role:global:00000000-0000-0000-0000-000000000002
+role:organization:00000000-0000-0000-0000-000000000003
 ```
+
+Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
 The current RBAC implementation supports `user` and `role` principals, but there is no hard limitation to those two. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
 
 A request's effective grants are normally loaded from both:
 
 - the authenticated user principal, such as `user:user_01abc`
-- the user's organization role principal, such as `role:admin` or `role:custom-builder`
+- the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
 This lets us give most access through roles while still allowing direct user grants when needed.
 
@@ -140,14 +142,14 @@ principal + scope + selector = grant
 Example:
 
 ```text
-role:member has project:read on project 018f...
+role:global:00000000-0000-0000-0000-000000000002 has project:read on project 018f...
 ```
 
 In database shape:
 
 ```json
 {
-  "principal_urn": "role:member",
+  "principal_urn": "role:global:00000000-0000-0000-0000-000000000002",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -385,9 +387,9 @@ org:admin
 Grants assign that vocabulary to principals:
 
 ```text
-role:admin has project:write on every project
-role:member has mcp:connect on every MCP server
-role:custom-support has mcp:connect on toolset_123, tool=search_docs
+role:global:00000000-0000-0000-0000-000000000001 has project:write on every project
+role:global:00000000-0000-0000-0000-000000000002 has mcp:connect on every MCP server
+role:organization:00000000-0000-0000-0000-000000000003 has mcp:connect on toolset_123, tool=search_docs
 ```
 
 The practical distinction is simple: add a grant when the permission already exists but another principal needs it. Add a scope only when the product needs a new kind of permission that should be independently assignable. Most changes should add or modify grants, not scopes.
@@ -475,7 +477,7 @@ The principal list usually contains the user and their role:
 
 ```text
 user:user_01abc
-role:member
+role:global:00000000-0000-0000-0000-000000000002
 ```
 
 The engine then evaluates checks in memory against the loaded grants.
@@ -752,7 +754,7 @@ Grant row:
 ```json
 {
   "organization_id": "org_123",
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -782,7 +784,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -812,7 +814,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:builder",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000011",
   "scope": "project:write",
   "selectors": {
     "resource_kind": "project",
@@ -842,7 +844,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -870,7 +872,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -907,7 +909,7 @@ Grant rows:
 ```json
 [
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",
@@ -915,7 +917,7 @@ Grant rows:
     }
   },
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",

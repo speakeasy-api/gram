@@ -198,6 +198,17 @@ func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizatio
 	return row.ID.String()
 }
 
+func seededRolePrincipal(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, roleSlug string) urn.Principal {
+	t.Helper()
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     roleSlug,
+	})
+	require.NoError(t, err)
+	return urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+row.ID.String())
+}
+
 func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, role workos.Role) string {
 	t.Helper()
 

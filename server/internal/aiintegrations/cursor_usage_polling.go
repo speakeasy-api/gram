@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
@@ -41,7 +40,7 @@ func NewUsagePollService(store *Store, telemetryLogger *telemetry.Logger, guardi
 // time-window poller.
 func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderCursor {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
+		return fmt.Errorf("unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
 	source, err := NewCursorUsageSource(s.guardianPolicy, cfg, s.telemetryLogger.LogBulk, "", 0)

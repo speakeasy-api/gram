@@ -7,7 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa/v3/security"
+
+	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -16,13 +17,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	oops "github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"goa.design/goa/v3/security"
 )
 
 func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(t *testing.T) {
@@ -55,14 +57,15 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	})
 	require.NoError(t, err)
 	require.NotNil(t, request)
-	assert.Equal(t, policy.ID, request.PolicyID)
 	assert.Equal(t, "requested", request.Status)
-	require.NotNil(t, request.TargetKind)
-	assert.Equal(t, "shadow_mcp_server", *request.TargetKind)
-	require.NotNil(t, request.TargetKey)
-	assert.Equal(t, fullURL, *request.TargetKey)
-	assert.Equal(t, fullURL, request.TargetDimensions[authz.SelectorKeyServerURL])
-	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
+	row := redeemedBypassRow(t, ctx, ti, request)
+	assert.Equal(t, policy.ID, row.PolicyID)
+	require.NotNil(t, row.TargetKind)
+	assert.Equal(t, "shadow_mcp_server", *row.TargetKind)
+	require.NotNil(t, row.TargetKey)
+	assert.Equal(t, fullURL, *row.TargetKey)
+	assert.Equal(t, fullURL, row.TargetDimensions[authz.SelectorKeyServerURL])
+	assert.Equal(t, authCtx.UserID, row.RequesterUserID)
 
 	afterCreateAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
 	require.NoError(t, err)
@@ -132,14 +135,15 @@ func TestCreateApprovePolicyBypassRequest_AddsServerIdentityGrant(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.NotNil(t, request)
-	assert.Equal(t, policy.ID, request.PolicyID)
 	assert.Equal(t, "requested", request.Status)
-	require.NotNil(t, request.TargetKind)
-	assert.Equal(t, "shadow_mcp_server", *request.TargetKind)
-	require.NotNil(t, request.TargetKey)
-	assert.Equal(t, serverIdentity, *request.TargetKey)
-	assert.Equal(t, serverIdentity, request.TargetDimensions[authz.SelectorKeyServerIdentity])
-	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
+	row := redeemedBypassRow(t, ctx, ti, request)
+	assert.Equal(t, policy.ID, row.PolicyID)
+	require.NotNil(t, row.TargetKind)
+	assert.Equal(t, "shadow_mcp_server", *row.TargetKind)
+	require.NotNil(t, row.TargetKey)
+	assert.Equal(t, serverIdentity, *row.TargetKey)
+	assert.Equal(t, serverIdentity, row.TargetDimensions[authz.SelectorKeyServerIdentity])
+	assert.Equal(t, authCtx.UserID, row.RequesterUserID)
 
 	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
 		ID: request.ID,
@@ -525,8 +529,9 @@ func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t 
 	require.NoError(t, err)
 	assert.Equal(t, request.ID, refreshed.ID)
 	assert.Equal(t, "requested", refreshed.Status)
-	assert.Nil(t, refreshed.DecidedBy)
-	assert.Empty(t, refreshed.GrantedPrincipalUrns)
+	refreshedRow := redeemedBypassRow(t, ctx, ti, refreshed)
+	assert.Nil(t, refreshedRow.DecidedBy)
+	assert.Empty(t, refreshedRow.GrantedPrincipalUrns)
 }
 
 func TestCreatePolicyBypassRequest_AfterApprove_PreservesApprovedStateAndGrant(t *testing.T) {
@@ -566,9 +571,10 @@ func TestCreatePolicyBypassRequest_AfterApprove_PreservesApprovedStateAndGrant(t
 	require.NoError(t, err)
 	assert.Equal(t, request.ID, refreshed.ID)
 	assert.Equal(t, "approved", refreshed.Status)
-	assert.Equal(t, approved.DecidedBy, refreshed.DecidedBy)
-	assert.Equal(t, approved.DecidedAt, refreshed.DecidedAt)
-	assert.Equal(t, approved.GrantedPrincipalUrns, refreshed.GrantedPrincipalUrns)
+	refreshedRow := redeemedBypassRow(t, ctx, ti, refreshed)
+	assert.Equal(t, approved.DecidedBy, refreshedRow.DecidedBy)
+	assert.Equal(t, approved.DecidedAt, refreshedRow.DecidedAt)
+	assert.Equal(t, approved.GrantedPrincipalUrns, refreshedRow.GrantedPrincipalUrns)
 	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
@@ -643,12 +649,13 @@ func TestCreatePolicyBypassRequest_WithoutFullURLCreatesWholePolicyTarget(t *tes
 		RequestToken: token,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, policy.ID, request.PolicyID)
 	assert.Equal(t, "requested", request.Status)
-	assert.Nil(t, request.TargetKind)
-	require.NotNil(t, request.TargetKey)
-	assert.Equal(t, "policy", *request.TargetKey)
-	assert.Empty(t, request.TargetDimensions)
+	row := redeemedBypassRow(t, ctx, ti, request)
+	assert.Equal(t, policy.ID, row.PolicyID)
+	assert.Nil(t, row.TargetKind)
+	require.NotNil(t, row.TargetKey)
+	assert.Equal(t, "policy", *row.TargetKey)
+	assert.Empty(t, row.TargetDimensions)
 }
 
 func TestGeneratePolicyBypassRequestToken_RequiresEvidence(t *testing.T) {
@@ -912,6 +919,113 @@ func TestDenyPolicyBypassRequest_AllowAllLeavesBlockedListUntouched(t *testing.T
 	require.Equal(t, []string{blockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
 }
 
+// fakeApprovalIntake stands in for the mcpapproval service at the intake
+// seam, recording what the redemption handed it.
+type fakeApprovalIntake struct {
+	err       error
+	requestID string
+	status    string
+
+	gotOrganizationID string
+	gotProjectID      uuid.UUID
+	gotServerURL      string
+	gotRequesterID    string
+	gotNote           string
+}
+
+func (f *fakeApprovalIntake) AdmitBlockedServer(_ context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, _ string, note string) (string, string, error) {
+	f.gotOrganizationID = organizationID
+	f.gotProjectID = projectID
+	f.gotServerURL = serverURL
+	f.gotRequesterID = requesterUserID
+	f.gotNote = note
+	if f.err != nil {
+		return "", "", f.err
+	}
+	return f.requestID, f.status, nil
+}
+
+// A URL-identified shadow-MCP block link redeems into the approval workflow:
+// the redemption carries the ask to the intake and no bypass row is written.
+func TestCreatePolicyBypassRequest_RedeemsIntoApprovalWorkflow(t *testing.T) {
+	t.Parallel()
+
+	intake := &fakeApprovalIntake{
+		err: nil, requestID: "0195c1f1-0000-7000-8000-00000000abcd", status: "requested",
+		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
+	}
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.approvalIntake = intake
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Approval Intake"),
+	})
+	require.NoError(t, err)
+	fullURL := "https://mcp.example.com/approval-intake"
+
+	redemption, redeemErr := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL),
+	})
+	require.NoError(t, redeemErr)
+	require.Equal(t, "approval_request", redemption.Kind)
+	require.Equal(t, intake.requestID, redemption.ID)
+	require.Equal(t, "requested", redemption.Status)
+
+	// The ask reached the intake with the caller's identity and the server.
+	require.Equal(t, authCtx.ActiveOrganizationID, intake.gotOrganizationID)
+	require.Equal(t, fullURL, intake.gotServerURL)
+	require.Equal(t, authCtx.UserID, intake.gotRequesterID)
+
+	// No bypass row was written.
+	list, err := ti.service.ListRiskPolicyBypassRequests(ctx, &gen.ListRiskPolicyBypassRequestsPayload{
+		ApikeyToken: nil, SessionToken: nil, ProjectSlugInput: nil, PolicyID: &policy.ID, Status: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, list.Requests)
+}
+
+// An intake that reports the approval feature is unavailable falls back to
+// the legacy bypass request, so organizations without the workflow keep the
+// old flow intact.
+func TestCreatePolicyBypassRequest_FallsBackWhenApprovalUnavailable(t *testing.T) {
+	t.Parallel()
+
+	intake := &fakeApprovalIntake{
+		err:       oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization"),
+		requestID: "", status: "",
+		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
+	}
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.approvalIntake = intake
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Approval Intake Fallback"),
+	})
+	require.NoError(t, err)
+
+	redemption, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/fallback"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "bypass_request", redemption.Kind)
+	require.Equal(t, "requested", redemption.Status)
+	require.Equal(t, authCtx.UserID, redeemedBypassRow(t, ctx, ti, redemption).RequesterUserID)
+}
+
 // withAgentKeyAuth rewrites the auth context to look like an API-key-
 // authenticated device agent: no session, the given key scopes, and the key
 // owner as the caller. Mirrors what internal/auth/key.go builds for a
@@ -957,10 +1071,13 @@ func TestCreateRiskPolicyBypassRequest_AgentUserKeyCreatesForKeyOwner(t *testing
 	})
 	require.NoError(t, err)
 	require.NotNil(t, request)
-	assert.Equal(t, "requested", request.Status)
-	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
-	require.NotNil(t, request.TargetKey)
-	assert.Equal(t, fullURL, *request.TargetKey)
+	require.Equal(t, "requested", request.Status)
+	// The stack's redemption result carries only kind/id/status; the row
+	// holds the attribution main's version of this test read directly.
+	row := redeemedBypassRow(t, ctx, ti, request)
+	assert.Equal(t, authCtx.UserID, row.RequesterUserID)
+	require.NotNil(t, row.TargetKey)
+	assert.Equal(t, fullURL, *row.TargetKey)
 
 	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
 	require.NoError(t, err)

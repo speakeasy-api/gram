@@ -75,6 +75,29 @@ const (
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 
+	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
+	// telemetry.listSessions) email filters and group-bys through the
+	// ClickHouse identity_map fold, so one employee's directory, personal,
+	// and case-variant emails read as one identity. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. Removed once the fold
+	// is GA (DNO-856).
+	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
+	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
+	// telemetry.query table read alongside the literal one — serving the
+	// literal result — and logs divergence, validating the fold on real
+	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
+	// when the fold flag is on. Same targeting; removed with the fold flag.
+	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
+
+	// FlagMCPApproval gates the MCP approval workflow end to end: the
+	// approval queue, evidence gathering, deciding, and the promotion of
+	// blocked-server redemptions into approval requests (orgs off the flag
+	// fall back to legacy bypass requests). Targeted by PostHog organization
+	// group (org slug), like FlagBudgets. A rollout gate while the workflow
+	// is dogfooded; if approval becomes a sold capability the durable
+	// entitlement returns through productfeatures alongside this flag.
+	FlagMCPApproval Flag = "gram-mcp-approval"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload

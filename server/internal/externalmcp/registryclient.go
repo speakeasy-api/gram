@@ -93,6 +93,28 @@ type ListServersParams struct {
 	Search *string
 }
 
+// maxRegistryResponseBytes bounds a registry response body. Registry payloads
+// embed full tool definitions with JSON Schemas, so the cap sits well above
+// what real catalogs produce — an oversized response fails loudly rather than
+// truncating into a baffling decode error.
+const maxRegistryResponseBytes = 32 << 20
+
+// readBoundedBody reads a response body up to maxRegistryResponseBytes,
+// reporting an oversized body as a size error rather than as a decode failure
+// on truncated JSON. Shared beyond registry fetches (OAuth metadata probes
+// reuse it), so the error names neither.
+func readBoundedBody(body io.Reader) ([]byte, error) {
+	// Read one byte past the cap so an oversized body is detected as such.
+	data, err := io.ReadAll(io.LimitReader(body, maxRegistryResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+	if len(data) > maxRegistryResponseBytes {
+		return nil, fmt.Errorf("response body exceeded the %d-byte limit", maxRegistryResponseBytes)
+	}
+	return data, nil
+}
+
 const (
 	registryListPageSize = 50
 	// registryListMaxPages bounds the catalog crawl to the expected catalog size
@@ -501,9 +523,9 @@ func (c *RegistryClient) fetchListServersPage(ctx context.Context, req *http.Req
 		return listResponse{}, fmt.Errorf("registry returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedBody(resp.Body)
 	if err != nil {
-		return listResponse{}, fmt.Errorf("read response body: %w", err)
+		return listResponse{}, err
 	}
 
 	var listResp listResponse
@@ -749,7 +771,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, err
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedBody(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read external mcp server details response: %w", err)
 	}
