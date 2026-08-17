@@ -319,7 +319,7 @@ WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
 -- refresh_token_hash is excluded from the projection so the management API
 -- surface cannot accidentally return it.
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
-       s.refresh_expires_at, s.expires_at,
+       s.refresh_expires_at, s.expires_at, s.last_used_at,
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
@@ -633,3 +633,44 @@ WHERE project_id = @project_id
   AND jti = @jti
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
+
+-- name: ListRemoteSessionUpstreamsForSubjects :many
+-- The outbound leg of the brokered connections on one page of user_sessions.
+-- user_sessions and remote_sessions both carry (subject_urn,
+-- user_session_issuer_id), so that pair is the join between "an agent can reach
+-- Gram" and "Gram can reach an upstream on this subject's behalf".
+-- Takes the page's pairs as parallel arrays rather than two independent IN
+-- lists: filtering on subjects and issuers separately would return the cross
+-- product, attributing one subject's upstream session to another subject who
+-- happens to share an issuer.
+-- Token material is never projected — only expiry metadata and a boolean for
+-- whether a refresh grant exists.
+SELECT rs.id,
+       rs.subject_urn,
+       rs.user_session_issuer_id,
+       rs.remote_session_client_id,
+       rc.remote_session_issuer_id,
+       ri.slug AS issuer_slug,
+       rs.access_expires_at,
+       rs.refresh_expires_at,
+       rs.authorization_expires_at,
+       -- Cast so sqlc types this as bool rather than interface{}; the token
+       -- itself is never projected, only whether a refresh grant exists.
+       (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
+       rs.auto_refresh,
+       rs.last_used_at,
+       rs.scopes
+FROM remote_sessions AS rs
+JOIN (
+       SELECT unnest(@subject_urns::text[]) AS subject_urn,
+              unnest(@issuer_ids::uuid[]) AS issuer_id
+     ) AS pair
+  ON rs.subject_urn = pair.subject_urn
+  AND rs.user_session_issuer_id = pair.issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE rc.project_id = @project_id
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+ORDER BY ri.slug ASC, rs.id ASC;
