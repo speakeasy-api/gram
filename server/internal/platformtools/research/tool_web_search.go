@@ -25,6 +25,12 @@ type WebSearch struct {
 	// without limit.
 	budget *callBudget
 
+	// menu receives every result URL, making it fetchable for this run. The
+	// search tool is one of the trusted writers to the menu: result URLs come
+	// out of the search provider's structured response, never the model's
+	// text.
+	menu *URLMenu
+
 	// usage accumulates what those searches cost, keyed by the caller's chat
 	// id — the research runner's report id. The budget caps the count; this
 	// reports the price, which is what the run stores.
@@ -41,8 +47,10 @@ type webSearchResult struct {
 }
 
 // NewWebSearchTool builds the search tool over the supplied search client.
-func NewWebSearchTool(search *SearchClient) *WebSearch {
-	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat), usage: sync.Map{}}
+// The menu must be the same instance the fetch tool checks, or nothing a
+// search returns becomes fetchable.
+func NewWebSearchTool(search *SearchClient, menu *URLMenu) *WebSearch {
+	return &WebSearch{search: search, budget: newCallBudget(maxSearchesPerChat), menu: menu, usage: sync.Map{}}
 }
 
 // DrainUsage returns what this caller's searches have cost since the last
@@ -151,6 +159,10 @@ func (s *WebSearch) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 		return fmt.Errorf("web search failed: %w", err)
 	}
 	s.recordUsage(env.GramChatID, usage)
+
+	for _, result := range results {
+		s.menu.Allow(env.GramChatID, result.URL)
+	}
 
 	return core.EncodeResult(wr, webSearchResult{Results: results})
 }

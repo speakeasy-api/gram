@@ -304,14 +304,21 @@ func NewActivities(
 	// loudly if a research run is ever scheduled there.
 	var mcpResearch *activities.McpResearch
 	if db != nil && chatClient != nil && guardianPolicy != nil && piScanner != nil {
+		// One menu instance shared by search (writer), fetch (enforcer), and
+		// the runner (briefing seeder): the run's fetchable URLs are exactly
+		// what these three observed.
+		researchMenu := platformresearch.NewURLMenu()
 		mcpResearch = activities.NewMcpResearch(logger, db, researchagent.New(
 			chatClient,
 			// Every page the agent fetches goes through the same judge the
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
 			researchagent.NewScannerJudge(piScanner),
-			platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient)),
-			platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client())),
+			researchMenu,
+			researchagent.ProductionToolset(
+				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
+				platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
+			)...,
 		))
 	}
 

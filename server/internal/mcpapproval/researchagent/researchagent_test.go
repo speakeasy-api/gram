@@ -187,7 +187,7 @@ func TestRun(t *testing.T) {
 		}`,
 	}
 
-	runner := researchagent.New(completions, nil, search, fetch)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search), researchagent.EgressSelectTool(fetch))
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -239,7 +239,7 @@ func TestRun_TurnLimitForcesAWrapUp(t *testing.T) {
 		extracted: `{"summary": "ran out", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, search)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search))
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 	require.True(t, meta.TurnLimitReached)
@@ -270,7 +270,7 @@ func TestRun_CapsClaims(t *testing.T) {
 		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
 	}
 
-	runner := researchagent.New(completions, nil)
+	runner := researchagent.New(completions, nil, nil)
 	encoded, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -303,7 +303,7 @@ func TestRun_DropsClaimsWhoseCitationsCannotBeFollowed(t *testing.T) {
 		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
 	}
 
-	runner := researchagent.New(completions, nil)
+	runner := researchagent.New(completions, nil, nil)
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -371,7 +371,7 @@ func TestRun_CountsWhatItsToolsSpent(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, search)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search))
 	input := runInput()
 	_, meta, err := runner.Run(t.Context(), input)
 	require.NoError(t, err)
@@ -405,7 +405,7 @@ func TestRun_LongTranscriptKeepsTheWrapUp(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, fetch)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(fetch))
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -427,7 +427,7 @@ func TestRun_BriefingFencesTheEvidenceAsUntrusted(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil)
+	runner := researchagent.New(completions, nil, nil)
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -465,7 +465,7 @@ func TestRun_RecordsAPageThatTriesToSteerTheAgent(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, judge, fetch)
+	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -507,7 +507,7 @@ func TestRun_RecordsAFlaggedPageOnce(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, judge, fetch)
+	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -537,7 +537,7 @@ func TestRun_CountsPagesTheJudgeCouldNotAnswerFor(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, judge, fetch)
+	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
 	encoded, meta, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err, "research continues; the page is simply unjudged")
 
@@ -560,7 +560,7 @@ func TestRun_RejectsDegenerateExtraction(t *testing.T) {
 		extracted: `{"summary": "placeholder", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil)
+	runner := researchagent.New(completions, nil, nil)
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "degenerate")
@@ -578,7 +578,7 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [{"tier": "verdict", "text": "bad"}]}`,
 	}
 
-	runner := researchagent.New(completions, nil)
+	runner := researchagent.New(completions, nil, nil)
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 
@@ -588,7 +588,7 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "certain"}, "claims": []}`,
 	}
-	runner2 := researchagent.New(completions2, nil)
+	runner2 := researchagent.New(completions2, nil, nil)
 	_, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 }
@@ -610,7 +610,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 		]}`,
 	}
 
-	runner := researchagent.New(completions, nil)
+	runner := researchagent.New(completions, nil, nil)
 	encoded, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -628,7 +628,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 			{"tier": "independently_reported", "text": "bad", "citations": [{"url": "https://example.com/a"}], "source_reputation": "trustworthy"}
 		]}`,
 	}
-	runner2 := researchagent.New(completions2, nil)
+	runner2 := researchagent.New(completions2, nil, nil)
 	_, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "source reputation")
@@ -650,7 +650,7 @@ func TestRun_ToolErrorFeedsBack(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, failing, search)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(failing), researchagent.EgressSelectTool(search))
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 	require.Contains(t, completions.extraction.Prompt, "tool error: fetch budget exhausted")
@@ -672,7 +672,7 @@ func TestRun_AllToolFailuresFailTheRun(t *testing.T) {
 		extracted: `{"summary": "must never be produced", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, failing)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(failing))
 	_, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "every research tool call failed")
