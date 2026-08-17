@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-The MCP approval workflow no longer sits behind the `mcp_approval` product feature. The flag was never enabled anywhere in production and had no enablement surface — approval is part of the shadow-MCP risk surface, gated on `org:admin` like the policies that do the blocking, so a per-organization entitlement added an outage mode without adding control. Blocked-server redemptions now always land in the approval flow rather than falling back to legacy bypass requests when the flag was off.
+The MCP approval workflow's rollout gate moves from the `mcp_approval` product feature to the `gram-mcp-approval` PostHog flag, targeted by organization group like other rollout gates. The product feature had no enablement surface and was never on anywhere, so every approval surface answered 403; the PostHog flag is toggled from the console with no deploy or database access. The gate fails closed, and blocked-server redemptions in orgs off the flag still fall back to legacy bypass requests.

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
@@ -323,6 +324,7 @@ func (riskIntakeEmptyAdvisoryDB) Do(request *http.Request) (*http.Response, erro
 func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) {
 	t.Parallel()
 
+	flags := &feature.InMemory{}
 	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
 		logger := testenv.NewLogger(t)
 		tracerProvider := testenv.NewTracerProvider(t)
@@ -338,10 +340,11 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 			riskIntakeQuietProbes{},
 		)
 
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, audit.NewLogger(), assembler)
+		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler)
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	flags.SetFlag(feature.FlagMCPApproval, authCtx.ActiveOrganizationID, true)
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
 		Scope:    authz.ScopeOrgAdmin,

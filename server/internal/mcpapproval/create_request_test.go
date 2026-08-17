@@ -162,6 +162,10 @@ func TestCreateRequest_NeedsNoScopeButRespectsTheGate(t *testing.T) {
 	created, err := ti.service.CreateRequest(ungranted, createPayload("server_url", "https://mcp.example.com/sse", "no grants held"))
 	require.NoError(t, err)
 	require.Equal(t, 1, created.RequesterCount)
+
+	disableMCPApproval(ti)
+	_, err = ti.service.CreateRequest(ungranted, createPayload("server_url", "https://other.example.com/sse", ""))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestCreateRequest_WritesAnAuditEntry(t *testing.T) {

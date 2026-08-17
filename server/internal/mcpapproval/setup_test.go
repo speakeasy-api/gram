@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
@@ -61,6 +62,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	flags          *feature.InMemory
 	service        *mcpapproval.Service
 	conn           *pgxpool.Pool
 	repo           *repo.Queries
@@ -123,8 +125,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		probes,
 	)
 
+	flags := &feature.InMemory{}
+
 	ti := &testInstance{
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), assembler),
+		flags:          flags,
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, audit.NewLogger(), assembler),
 		conn:           conn,
 		repo:           repo.New(conn),
 		sessionManager: sessionManager,
@@ -134,6 +139,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		probes:         probes,
 	}
 
+	enableMCPApproval(ti)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, organizationID))
 
 	return ctx, ti
@@ -415,4 +421,14 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 	require.NoError(t, err)
 
 	return row.ID
+}
+
+// enableMCPApproval opens the rollout gate for the test organization; tests
+// for the gated-off state close it again explicitly.
+func enableMCPApproval(ti *testInstance) {
+	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, true)
+}
+
+func disableMCPApproval(ti *testInstance) {
+	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, false)
 }

@@ -311,6 +311,27 @@ func TestRecordDecision_WritesAnAuditEntry(t *testing.T) {
 	require.Equal(t, denyBefore+1, denyAfter)
 }
 
+// An org admin must not bypass a closed rollout gate: authorization says who
+// may use the surface, the flag says whether the organization has it yet.
+func TestRecordDecision_GateOffIsForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	disableMCPApproval(ti)
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+
+	_, err = ti.service.ListRequests(ctx, listPayload())
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.GetRequest(ctx, getPayload(requestID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 // The rationale is what gets cited when explaining the decision to the
 // requester, so a blank one is rejected rather than recorded.
 func TestRecordDecision_RequiresARationale(t *testing.T) {
