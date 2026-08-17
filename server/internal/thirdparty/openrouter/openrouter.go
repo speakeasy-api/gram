@@ -695,15 +695,19 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBT
 	}
 
 	// A trial runs on the real enterprise tier, so the account type on its own
-	// cannot tell a trial apart from a paying enterprise customer. A read
+	// cannot tell a trial apart from a paying enterprise customer. The clock
+	// is not the source of truth: an un-demoted, unconverted trial row is
+	// still trial-tier until the demotion sweeper stamps demoted_at. A read
 	// failure falls through to the account type rather than capping a paying
 	// customer on a transient database error.
-	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, org.ID)
+	trial, err := trialsRepo.New(dbtx).GetTrial(ctx, org.ID)
 	switch {
 	case err == nil:
-		return trialCreditLimit
+		if !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid {
+			return trialCreditLimit
+		}
 	case !errors.Is(err, pgx.ErrNoRows):
-		o.logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
+		o.logger.WarnContext(ctx, "error reading trial; using the account type credit limit",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(org.ID),
 		)
