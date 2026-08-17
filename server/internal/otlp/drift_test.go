@@ -30,6 +30,60 @@ type messagePair struct {
 	skip map[protoreflect.FieldNumber]string
 }
 
+// spanCopy describes one self-contained Gram copy of the OTLP span schema.
+// Keeping the copied message and enum descriptors together lets every drift
+// guard cover Span and InboundSpan from the same table.
+type spanCopy struct {
+	name                 string
+	span                 proto.Message
+	event                proto.Message
+	link                 proto.Message
+	status               proto.Message
+	resource             proto.Message
+	instrumentationScope proto.Message
+	anyValue             proto.Message
+	arrayValue           proto.Message
+	keyValueList         proto.Message
+	keyValue             proto.Message
+	spanKind             protoreflect.EnumDescriptor
+	statusCode           protoreflect.EnumDescriptor
+}
+
+func spanCopies() []spanCopy {
+	return []spanCopy{
+		{
+			name:                 "Span",
+			span:                 &otelv1.Span{},
+			event:                &otelv1.Span_Event{},
+			link:                 &otelv1.Span_Link{},
+			status:               &otelv1.Span_Status{},
+			resource:             &otelv1.Span_Resource{},
+			instrumentationScope: &otelv1.Span_InstrumentationScope{},
+			anyValue:             &otelv1.Span_AnyValue{},
+			arrayValue:           &otelv1.Span_ArrayValue{},
+			keyValueList:         &otelv1.Span_KeyValueList{},
+			keyValue:             &otelv1.Span_KeyValue{},
+			spanKind:             otelv1.Span_SPAN_KIND_UNSPECIFIED.Descriptor(),
+			statusCode:           otelv1.Span_STATUS_CODE_UNSPECIFIED.Descriptor(),
+		},
+		{
+			name:                 "InboundSpan",
+			span:                 &otelv1.InboundSpan{},
+			event:                &otelv1.InboundSpan_Event{},
+			link:                 &otelv1.InboundSpan_Link{},
+			status:               &otelv1.InboundSpan_Status{},
+			resource:             &otelv1.InboundSpan_Resource{},
+			instrumentationScope: &otelv1.InboundSpan_InstrumentationScope{},
+			anyValue:             &otelv1.InboundSpan_AnyValue{},
+			arrayValue:           &otelv1.InboundSpan_ArrayValue{},
+			keyValueList:         &otelv1.InboundSpan_KeyValueList{},
+			keyValue:             &otelv1.InboundSpan_KeyValue{},
+			spanKind:             otelv1.InboundSpan_SPAN_KIND_UNSPECIFIED.Descriptor(),
+			statusCode:           otelv1.InboundSpan_STATUS_CODE_UNSPECIFIED.Descriptor(),
+		},
+	}
+}
+
 // entityRefsSkip omits Resource.entity_refs: Development status upstream, so
 // it is not carried and its field number is reserved in our copies.
 var entityRefsSkip = map[protoreflect.FieldNumber]string{
@@ -57,28 +111,32 @@ var keyStrIndexSkip = map[protoreflect.FieldNumber]string{
 // type. The common.v1 types are copied once per top-level message (a Pub/Sub
 // schema must be a single self-contained file), so each copy is checked.
 func messagePairs() []messagePair {
-	return []messagePair{
+	pairs := []messagePair{
 		{name: "logs.v1.LogRecord", upstream: &otlplogs.LogRecord{}, ours: &otelv1.LogRecord{}},
-		{name: "trace.v1.Span", upstream: &otlptrace.Span{}, ours: &otelv1.Span{}},
-		{name: "trace.v1.Span.Event", upstream: &otlptrace.Span_Event{}, ours: &otelv1.Span_Event{}},
-		{name: "trace.v1.Span.Link", upstream: &otlptrace.Span_Link{}, ours: &otelv1.Span_Link{}},
-		{name: "trace.v1.Status", upstream: &otlptrace.Status{}, ours: &otelv1.Span_Status{}},
-
 		{name: "resource.v1.Resource (LogRecord)", upstream: &otlpresource.Resource{}, ours: &otelv1.LogRecord_Resource{}, skip: entityRefsSkip},
-		{name: "resource.v1.Resource (Span)", upstream: &otlpresource.Resource{}, ours: &otelv1.Span_Resource{}, skip: entityRefsSkip},
-
 		{name: "common.v1.InstrumentationScope (LogRecord)", upstream: &otlpcommon.InstrumentationScope{}, ours: &otelv1.LogRecord_InstrumentationScope{}},
-		{name: "common.v1.InstrumentationScope (Span)", upstream: &otlpcommon.InstrumentationScope{}, ours: &otelv1.Span_InstrumentationScope{}},
-
 		{name: "common.v1.AnyValue (LogRecord)", upstream: &otlpcommon.AnyValue{}, ours: &otelv1.LogRecord_AnyValue{}, skip: strIndexSkip},
-		{name: "common.v1.AnyValue (Span)", upstream: &otlpcommon.AnyValue{}, ours: &otelv1.Span_AnyValue{}, skip: strIndexSkip},
 		{name: "common.v1.ArrayValue (LogRecord)", upstream: &otlpcommon.ArrayValue{}, ours: &otelv1.LogRecord_ArrayValue{}},
-		{name: "common.v1.ArrayValue (Span)", upstream: &otlpcommon.ArrayValue{}, ours: &otelv1.Span_ArrayValue{}},
 		{name: "common.v1.KeyValueList (LogRecord)", upstream: &otlpcommon.KeyValueList{}, ours: &otelv1.LogRecord_KeyValueList{}},
-		{name: "common.v1.KeyValueList (Span)", upstream: &otlpcommon.KeyValueList{}, ours: &otelv1.Span_KeyValueList{}},
 		{name: "common.v1.KeyValue (LogRecord)", upstream: &otlpcommon.KeyValue{}, ours: &otelv1.LogRecord_KeyValue{}, skip: keyStrIndexSkip},
-		{name: "common.v1.KeyValue (Span)", upstream: &otlpcommon.KeyValue{}, ours: &otelv1.Span_KeyValue{}, skip: keyStrIndexSkip},
 	}
+
+	for _, copy := range spanCopies() {
+		pairs = append(pairs,
+			messagePair{name: fmt.Sprintf("trace.v1.Span (%s)", copy.name), upstream: &otlptrace.Span{}, ours: copy.span},
+			messagePair{name: fmt.Sprintf("trace.v1.Span.Event (%s)", copy.name), upstream: &otlptrace.Span_Event{}, ours: copy.event},
+			messagePair{name: fmt.Sprintf("trace.v1.Span.Link (%s)", copy.name), upstream: &otlptrace.Span_Link{}, ours: copy.link},
+			messagePair{name: fmt.Sprintf("trace.v1.Status (%s)", copy.name), upstream: &otlptrace.Status{}, ours: copy.status},
+			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", copy.name), upstream: &otlpresource.Resource{}, ours: copy.resource, skip: entityRefsSkip},
+			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", copy.name), upstream: &otlpcommon.InstrumentationScope{}, ours: copy.instrumentationScope},
+			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", copy.name), upstream: &otlpcommon.AnyValue{}, ours: copy.anyValue, skip: strIndexSkip},
+			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", copy.name), upstream: &otlpcommon.ArrayValue{}, ours: copy.arrayValue},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", copy.name), upstream: &otlpcommon.KeyValueList{}, ours: copy.keyValueList},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", copy.name), upstream: &otlpcommon.KeyValue{}, ours: copy.keyValue, skip: keyStrIndexSkip},
+		)
+	}
+
+	return pairs
 }
 
 // TestNoUpstreamFieldsMissing walks every field upstream declares and asserts
@@ -181,26 +239,33 @@ func TestGramAdditionsStayOutOfUpstreamRange(t *testing.T) {
 func TestUpstreamEnumsMatch(t *testing.T) {
 	t.Parallel()
 
-	enumPairs := []struct {
+	type enumPair struct {
 		name     string
 		upstream protoreflect.EnumDescriptor
 		ours     protoreflect.EnumDescriptor
-	}{
+	}
+
+	enumPairs := []enumPair{
 		{
 			name:     "logs.v1.SeverityNumber",
 			upstream: otlplogs.SeverityNumber(0).Descriptor(),
 			ours:     otelv1.LogRecord_SEVERITY_NUMBER_UNSPECIFIED.Descriptor(),
 		},
-		{
-			name:     "trace.v1.Span.SpanKind",
-			upstream: otlptrace.Span_SPAN_KIND_UNSPECIFIED.Descriptor(),
-			ours:     otelv1.Span_SPAN_KIND_UNSPECIFIED.Descriptor(),
-		},
-		{
-			name:     "trace.v1.Status.StatusCode",
-			upstream: otlptrace.Status_STATUS_CODE_UNSET.Descriptor(),
-			ours:     otelv1.Span_STATUS_CODE_UNSPECIFIED.Descriptor(),
-		},
+	}
+
+	for _, copy := range spanCopies() {
+		enumPairs = append(enumPairs,
+			enumPair{
+				name:     fmt.Sprintf("trace.v1.Span.SpanKind (%s)", copy.name),
+				upstream: otlptrace.Span_SPAN_KIND_UNSPECIFIED.Descriptor(),
+				ours:     copy.spanKind,
+			},
+			enumPair{
+				name:     fmt.Sprintf("trace.v1.Status.StatusCode (%s)", copy.name),
+				upstream: otlptrace.Status_STATUS_CODE_UNSET.Descriptor(),
+				ours:     copy.statusCode,
+			},
+		)
 	}
 
 	for _, pair := range enumPairs {

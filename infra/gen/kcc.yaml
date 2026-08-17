@@ -56,6 +56,113 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-span
+    name: gram-otel-v1-inbound-span
+    spec:
+      definition: |
+        edition = "2024";
+        message InboundSpan {
+          bytes trace_id = 1;
+          bytes span_id = 2;
+          string trace_state = 3;
+          bytes parent_span_id = 4;
+          string name = 5;
+          SpanKind kind = 6;
+          fixed64 start_time_unix_nano = 7;
+          fixed64 end_time_unix_nano = 8;
+          repeated KeyValue attributes = 9;
+          uint32 dropped_attributes_count = 10;
+          repeated Event events = 11;
+          uint32 dropped_events_count = 12;
+          repeated Link links = 13;
+          uint32 dropped_links_count = 14;
+          Status status = 15;
+          fixed32 flags = 16;
+          reserved 1000;
+          Resource resource = 1001;
+          string resource_schema_url = 1002;
+          InstrumentationScope scope = 1003;
+          string scope_schema_url = 1004;
+          Provenance provenance = 1005;
+          message Provenance {
+            string source = 1;
+            string organization_id = 2;
+            string project_id = 3;
+            string organization_slug = 4;
+            string project_slug = 5;
+            string api_key_id = 6;
+            string api_key_name = 7;
+          }
+          message Resource {
+            reserved 3;
+            repeated KeyValue attributes = 1;
+            uint32 dropped_attributes_count = 2;
+          }
+          message InstrumentationScope {
+            string name = 1;
+            string version = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          enum SpanKind {
+            SPAN_KIND_UNSPECIFIED = 0;
+            SPAN_KIND_INTERNAL = 1;
+            SPAN_KIND_SERVER = 2;
+            SPAN_KIND_CLIENT = 3;
+            SPAN_KIND_PRODUCER = 4;
+            SPAN_KIND_CONSUMER = 5;
+          }
+          enum StatusCode {
+            STATUS_CODE_UNSPECIFIED = 0;
+            STATUS_CODE_OK = 1;
+            STATUS_CODE_ERROR = 2;
+          }
+          message Status {
+            reserved 1;
+            string message = 2;
+            StatusCode code = 3;
+          }
+          message Event {
+            fixed64 time_unix_nano = 1;
+            string name = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          message Link {
+            bytes trace_id = 1;
+            bytes span_id = 2;
+            string trace_state = 3;
+            repeated KeyValue attributes = 4;
+            uint32 dropped_attributes_count = 5;
+            fixed32 flags = 6;
+          }
+          message AnyValue {
+            reserved 8;
+            oneof value {
+              string string_value = 1;
+              bool bool_value = 2;
+              int64 int_value = 3;
+              double double_value = 4;
+              ArrayValue array_value = 5;
+              KeyValueList kvlist_value = 6;
+              bytes bytes_value = 7;
+            }
+          }
+          message ArrayValue {
+            repeated AnyValue values = 1;
+          }
+          message KeyValueList {
+            repeated KeyValue values = 1;
+          }
+          message KeyValue {
+            reserved 3;
+            string key = 1;
+            AnyValue value = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
     name: gram-otel-v1-log-record
     spec:
@@ -182,6 +289,10 @@ pubsub:
             string source = 1;
             string organization_id = 2;
             string project_id = 3;
+            string organization_slug = 4;
+            string project_slug = 5;
+            string api_key_id = 6;
+            string api_key_name = 7;
           }
           message Resource {
             reserved 3;
@@ -490,6 +601,42 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-span-transformer
+      topic_proto_message: gram-otel-v1-inbound-span
+    name: gram-otel-v1-inbound-span-transformer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-inbound-span-transformer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-inbound-span
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-span-relay
+      topic_proto_message: gram-otel-v1-span
+    name: gram-otel-v1-span-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-span-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-span
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-processor
       topic_proto_message: gram-ping-v2-message
     name: gram-ping-v2-processor
@@ -659,6 +806,22 @@ pubsub:
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-span
+    name: gram-otel-v1-inbound-span
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-otel-v1-inbound-span
+  - labels:
+      dlq_for: gram-otel-v1-inbound-span-transformer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-span-transformer
+    name: gram-otel-v1-inbound-span-transformer-dlq
+    spec: {}
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
     name: gram-otel-v1-log-record
     spec:
@@ -677,6 +840,12 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-otel-v1-span
+  - labels:
+      dlq_for: gram-otel-v1-span-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-span-relay
+    name: gram-otel-v1-span-relay-dlq
+    spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-message

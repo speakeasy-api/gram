@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -87,15 +88,10 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	// RiskFindings is the shared findings topic the ClickHouse risk_findings
-	// writer consumes. The batch path publishes only sources with no stream
-	// publisher on it (see risk_analysis.batchOnlyFindingSources).
-	RiskFindings  gcp.Publisher[*riskv1.Finding]
-	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
-	// Outbox publishes whatever the publish_outbox table holds. It resolves its
-	// topic per message rather than being bound to one, because the destination
-	// is a property of the row and not of this wiring.
-	Outbox topics.Publisher
+	RiskFindings            gcp.Publisher[*riskv1.Finding]
+	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
+	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
+	Outbox                  topics.Publisher
 }
 
 type Activities struct {

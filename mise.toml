@@ -239,6 +239,8 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ## nothing in the Go setup needs to know about it.
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
 
+GRAM_ENABLE_OTEL_SPAN_RELAY = 1
+
 ################################
 ## Local development settings ##
 ################################

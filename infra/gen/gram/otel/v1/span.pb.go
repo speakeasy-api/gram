@@ -795,14 +795,18 @@ func (b0 Span_builder) Build() *Span {
 // observed, and would need their own submessage if they are ever pinned onto
 // a record.
 type Span_Provenance struct {
-	state                     protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Source         *string                `protobuf:"bytes,1,opt,name=source"`
-	xxx_hidden_OrganizationId *string                `protobuf:"bytes,2,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_ProjectId      *string                `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
-	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
-	XXX_presence              [1]uint32
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Source           *string                `protobuf:"bytes,1,opt,name=source"`
+	xxx_hidden_OrganizationId   *string                `protobuf:"bytes,2,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_ProjectId        *string                `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
+	xxx_hidden_OrganizationSlug *string                `protobuf:"bytes,4,opt,name=organization_slug,json=organizationSlug"`
+	xxx_hidden_ProjectSlug      *string                `protobuf:"bytes,5,opt,name=project_slug,json=projectSlug"`
+	xxx_hidden_ApiKeyId         *string                `protobuf:"bytes,6,opt,name=api_key_id,json=apiKeyId"`
+	xxx_hidden_ApiKeyName       *string                `protobuf:"bytes,7,opt,name=api_key_name,json=apiKeyName"`
+	XXX_raceDetectHookData      protoimpl.RaceDetectHookData
+	XXX_presence                [1]uint32
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *Span_Provenance) Reset() {
@@ -860,19 +864,79 @@ func (x *Span_Provenance) GetProjectId() string {
 	return ""
 }
 
+func (x *Span_Provenance) GetOrganizationSlug() string {
+	if x != nil {
+		if x.xxx_hidden_OrganizationSlug != nil {
+			return *x.xxx_hidden_OrganizationSlug
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Span_Provenance) GetProjectSlug() string {
+	if x != nil {
+		if x.xxx_hidden_ProjectSlug != nil {
+			return *x.xxx_hidden_ProjectSlug
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Span_Provenance) GetApiKeyId() string {
+	if x != nil {
+		if x.xxx_hidden_ApiKeyId != nil {
+			return *x.xxx_hidden_ApiKeyId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Span_Provenance) GetApiKeyName() string {
+	if x != nil {
+		if x.xxx_hidden_ApiKeyName != nil {
+			return *x.xxx_hidden_ApiKeyName
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Span_Provenance) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 7)
 }
 
 func (x *Span_Provenance) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 7)
 }
 
 func (x *Span_Provenance) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 7)
+}
+
+func (x *Span_Provenance) SetOrganizationSlug(v string) {
+	x.xxx_hidden_OrganizationSlug = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 7)
+}
+
+func (x *Span_Provenance) SetProjectSlug(v string) {
+	x.xxx_hidden_ProjectSlug = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 7)
+}
+
+func (x *Span_Provenance) SetApiKeyId(v string) {
+	x.xxx_hidden_ApiKeyId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 7)
+}
+
+func (x *Span_Provenance) SetApiKeyName(v string) {
+	x.xxx_hidden_ApiKeyName = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 7)
 }
 
 func (x *Span_Provenance) HasSource() bool {
@@ -896,6 +960,34 @@ func (x *Span_Provenance) HasProjectId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
+func (x *Span_Provenance) HasOrganizationSlug() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *Span_Provenance) HasProjectSlug() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *Span_Provenance) HasApiKeyId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *Span_Provenance) HasApiKeyName() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
 func (x *Span_Provenance) ClearSource() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Source = nil
@@ -911,16 +1003,39 @@ func (x *Span_Provenance) ClearProjectId() {
 	x.xxx_hidden_ProjectId = nil
 }
 
+func (x *Span_Provenance) ClearOrganizationSlug() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_OrganizationSlug = nil
+}
+
+func (x *Span_Provenance) ClearProjectSlug() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_ProjectSlug = nil
+}
+
+func (x *Span_Provenance) ClearApiKeyId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_ApiKeyId = nil
+}
+
+func (x *Span_Provenance) ClearApiKeyName() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_ApiKeyName = nil
+}
+
 type Span_Provenance_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Emitting component, e.g. risk, mcp-gateway, rbac.
 	Source *string
 	// Tenancy, stamped by the ingesting edge from authenticated state. Resource
 	// attributes are producer-controlled, so tenancy is never read back out of
 	// them.
-	OrganizationId *string
-	ProjectId      *string
+	OrganizationId   *string
+	ProjectId        *string
+	OrganizationSlug *string
+	ProjectSlug      *string
+	ApiKeyId         *string
+	ApiKeyName       *string
 }
 
 func (b0 Span_Provenance_builder) Build() *Span_Provenance {
@@ -928,16 +1043,32 @@ func (b0 Span_Provenance_builder) Build() *Span_Provenance {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 7)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 7)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 7)
 		x.xxx_hidden_ProjectId = b.ProjectId
+	}
+	if b.OrganizationSlug != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 7)
+		x.xxx_hidden_OrganizationSlug = b.OrganizationSlug
+	}
+	if b.ProjectSlug != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 7)
+		x.xxx_hidden_ProjectSlug = b.ProjectSlug
+	}
+	if b.ApiKeyId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 7)
+		x.xxx_hidden_ApiKeyId = b.ApiKeyId
+	}
+	if b.ApiKeyName != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 7)
+		x.xxx_hidden_ApiKeyName = b.ApiKeyName
 	}
 	return m0
 }
@@ -2301,7 +2432,7 @@ var File_gram_otel_v1_span_proto protoreflect.FileDescriptor
 
 const file_gram_otel_v1_span_proto_rawDesc = "" +
 	"\n" +
-	"\x17gram/otel/v1/span.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xac\x15\n" +
+	"\x17gram/otel/v1/span.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbd\x16\n" +
 	"\x04Span\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\fR\atraceId\x12\x17\n" +
 	"\aspan_id\x18\x02 \x01(\fR\x06spanId\x12\x1f\n" +
@@ -2329,13 +2460,19 @@ const file_gram_otel_v1_span_proto_rawDesc = "" +
 	"\x10scope_schema_url\x18\xec\a \x01(\tR\x0escopeSchemaUrl\x12>\n" +
 	"\n" +
 	"provenance\x18\xed\a \x01(\v2\x1d.gram.otel.v1.Span.ProvenanceR\n" +
-	"provenance\x1al\n" +
+	"provenance\x1a\xfc\x01\n" +
 	"\n" +
 	"Provenance\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\x1a\x87\x01\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\x12+\n" +
+	"\x11organization_slug\x18\x04 \x01(\tR\x10organizationSlug\x12!\n" +
+	"\fproject_slug\x18\x05 \x01(\tR\vprojectSlug\x12\x1c\n" +
+	"\n" +
+	"api_key_id\x18\x06 \x01(\tR\bapiKeyId\x12 \n" +
+	"\fapi_key_name\x18\a \x01(\tR\n" +
+	"apiKeyName\x1a\x87\x01\n" +
 	"\bResource\x12;\n" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2\x1b.gram.otel.v1.Span.KeyValueR\n" +

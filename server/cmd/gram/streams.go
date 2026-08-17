@@ -26,6 +26,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -39,12 +40,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -509,11 +510,27 @@ func newStreamsCommand() *cli.Command {
 				return errors.Join(handlerErrors...)
 			})
 
-			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
+			spanPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				stopErr := spanPub.Stop(ctx)
+				closeErr := pubsubShutdown(ctx)
+				return errors.Join(stopErr, closeErr)
+			})
+
+			spanRelayHandler := otelsvc.NewSpanRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
 
 			// Start subscription receivers in this block
 			{
-				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
+				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
@@ -524,17 +541,13 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				mustReceive(
-					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},
-					authz.NewChallengeCHWriter(logger, chConn),
-				)
+				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
+
+				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(logger, meterProvider, spanPub))
+				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				if enableCHRiskWrites {
-					mustReceiveBatch(
-						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
-						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
-						risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter),
-					)
+					mustReceiveBatch(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				}
 			}
 
@@ -699,8 +712,8 @@ func receiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,
 	subscription proto.Message,
-	settings gcp.BatchReceiveSettings,
 	handler streams.BatchHandler[M],
+	settings gcp.BatchReceiveSettings,
 	options ...gcp.SubscriberOption,
 ) error {
 	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
@@ -766,24 +779,22 @@ func mustReceiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,
 	subscription proto.Message,
-	settings gcp.BatchReceiveSettings,
 	handler streams.BatchHandler[M],
+	settings gcp.BatchReceiveSettings,
 	options ...gcp.SubscriberOption,
 ) {
-	must.Nil(receiveBatch(g, msg, subscription, settings, handler, options...))
+	must.Nil(receiveBatch(g, msg, subscription, handler, settings, options...))
 }
 
 // receiveBatchWithResult registers a BatchResultHandler whose messages can
 // stage individual failures without changing the all-or-nothing BatchHandler
 // contract.
-//
-//nolint:unused // Available for result-aware stream registrations.
 func receiveBatchWithResult[M proto.Message](
 	g receiverGroup,
 	msg M,
 	subscription proto.Message,
-	settings gcp.BatchReceiveSettings,
 	handler streams.BatchResultHandler[M],
+	settings gcp.BatchReceiveSettings,
 	options ...gcp.SubscriberOption,
 ) error {
 	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
@@ -835,14 +846,13 @@ func receiveBatchWithResult[M proto.Message](
 	return nil
 }
 
-//nolint:unused // Available for result-aware stream registrations.
 func mustReceiveBatchWithResult[M proto.Message](
 	g receiverGroup,
 	msg M,
 	subscription proto.Message,
-	settings gcp.BatchReceiveSettings,
 	handler streams.BatchResultHandler[M],
+	settings gcp.BatchReceiveSettings,
 	options ...gcp.SubscriberOption,
 ) {
-	must.Nil(receiveBatchWithResult(g, msg, subscription, settings, handler, options...))
+	must.Nil(receiveBatchWithResult(g, msg, subscription, handler, settings, options...))
 }

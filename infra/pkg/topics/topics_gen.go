@@ -26,6 +26,8 @@ type Topic string
 const (
 	// GramAuthzV1Challenge publishes to gram-authz-v1-challenge.
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
+	// GramOtelV1InboundSpan publishes to gram-otel-v1-inbound-span.
+	GramOtelV1InboundSpan Topic = "gram.otel.v1.InboundSpan"
 	// GramOtelV1LogRecord publishes to gram-otel-v1-log-record.
 	GramOtelV1LogRecord Topic = "gram.otel.v1.LogRecord"
 	// GramOtelV1Span publishes to gram-otel-v1-span.
@@ -54,6 +56,7 @@ const (
 func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
+		GramOtelV1InboundSpan,
 		GramOtelV1LogRecord,
 		GramOtelV1Span,
 		GramPingV2Message,
@@ -73,6 +76,8 @@ func Lookup(name string) (Topic, bool) {
 	switch Topic(name) {
 	case GramAuthzV1Challenge:
 		return GramAuthzV1Challenge, true
+	case GramOtelV1InboundSpan:
+		return GramOtelV1InboundSpan, true
 	case GramOtelV1LogRecord:
 		return GramOtelV1LogRecord, true
 	case GramOtelV1Span:
@@ -108,6 +113,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 	switch topic {
 	case GramAuthzV1Challenge:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1InboundSpan:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundSpan{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1LogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.LogRecord{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1Span:
