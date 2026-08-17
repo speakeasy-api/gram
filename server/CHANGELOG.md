@@ -1,5 +1,105 @@
 # server
 
+## 1.13.0
+
+### Minor Changes
+
+- 340f6f3: Add a client detail sheet for user-session clients with a CIMD metadata
+  refresh. The per-client view now exposes the metadata document's cache state
+  (source URL, last successful read, cache expiry, ETag), and a new
+  `userSessionClients.refreshCIMD` endpoint forces a re-read: it purges the
+  stored validators before fetching, so a host answering 304 Not Modified cannot
+  re-confirm the copy being discarded, and it carries a 30s per-client
+  server-side cooldown because purge-then-fetch deliberately bypasses the
+  document cache. The dashboard's Clients listing opens the sheet from each row;
+  DCR clients show the base detail without the CIMD panel.
+- 0e5a8f7: Add `externalKeys.verifyGcpKms`, which proves end to end that Gram can reach an
+  organization's GCP KMS key and use it to sign: it reads the key's public half,
+  confirms the algorithm matches the one recorded, signs a probe digest, and
+  verifies that signature locally. Nothing is persisted. The result reports a
+  machine-readable outcome alongside human-readable detail, so a missing
+  `roles/cloudkms.signerVerifier` grant, a DISABLED key version, an algorithm
+  mismatch, and a transient failure worth retrying are all distinguishable rather
+  than one opaque failure. It performs a real signing operation billed to the
+  key's owner, so it requires `org:admin` and is rate limited per organization.
+
+  Deleting an external credential is now refused while a live external key still
+  references it. Previously the delete succeeded and silently left every key
+  behind that credential unusable, with the breakage surfacing only at signing
+  time.
+
+- 92cef9b: MCP approval surfaces are now gated on `org:admin`, the same authorization as the Observe pages and the policies that do the blocking. The dedicated `mcp_approval:read`/`mcp_approval:decide` scope family is retired: it required per-organization grant provisioning that existing organizations never received, leaving every approval surface answering 403 in production. Org admins now work on deploy with nothing to provision. Delegable reviewer scopes can return additively if a customer ever needs non-admin reviewers.
+- 6d2507e: Add organization-tier and platform-tier asset upload endpoints. `organizationAssets.uploadImage` lets org admins upload images owned by the organization (for example remote identity provider logos), and `adminAssets.uploadImage` lets platform admins upload platform-wide images. Project-tier asset writes now also record the owning `organization_id` (dual-write), including repairing it on upsert conflicts, ahead of a manual backfill of existing rows.
+- bd8e8a2: The MCP approval workflow's rollout gate moves from the `mcp_approval` product feature to the `gram-mcp-approval` PostHog flag, targeted by organization group like other rollout gates. The product feature had no enablement surface and was never on anywhere, so every approval surface answered 403; the PostHog flag is toggled from the console with no deploy or database access. The gate fails closed, and blocked-server redemptions in orgs off the flag still fall back to legacy bypass requests.
+- 60f8609: The Watchdog findings KPI now follows the selected time range. The tile was
+  hardwired to the trailing 24 hours ending at the window's edge, so picking a
+  different range with the date picker left the number unchanged while every
+  other tile updated. The riskSignals result now reports window-scoped
+  `findings` / `previous_findings` (replacing `findings_24h` /
+  `previous_findings_24h`), computed from the same deduplicated window counts
+  the risk score already used, and the tile compares against the equal-length
+  previous period like its neighbors.
+
+### Patch Changes
+
+- 038c7eb: Opening a project from an organization record could hang forever. Every link
+  into a project now addresses it by id, and `project.get` resolves a slug to one
+  project before it reads that project's detail.
+
+  Project slugs are unique only within an organization, so a slug the whole
+  platform uses matches one project per organization. The detail read counts six
+  child tables for every row it matches, and two of those counts have no index on
+  `project_id` to use, so a common slug cost one full table scan per organization
+  and the read never returned. It now resolves the slug to a single id first and
+  counts once.
+
+  `project.get` also takes the organization now. Inside an organization record the
+  project is read scoped to it, so a slug names one project rather than an
+  arbitrary one, and a project outside that organization is reported as not found
+  whichever way it is addressed.
+
+- b2640a3: Classify AI integration poll failures caused by provider outages (persistent 429/5xx or transport errors) so they skip the in-run Temporal retries and defer to the schedule-level failure backoff, and surface the provider's final HTTP status and error body when the guardian retry client exhausts its budget instead of the opaque "giving up" message.
+- 18ab66a: Extending an enterprise trial now writes an entry to the organization's audit
+  feed, so it is no longer the one trial lifecycle event that leaves no trace
+  alongside a trial being armed, demoted and re-armed. The entry names the
+  Speakeasy team rather than the operator who acted, and carries the end date the
+  trial held before the extension, the end date it holds now, and the number of
+  days applied. The write and the entry commit together, so an extension can never
+  land silently.
+
+  The activity log reads the new entry as "extended enterprise trial", alongside
+  the "started", "ended" and "restarted" entries it already gives the rest of the
+  trial lifecycle.
+
+- 6002b21: Extend canonical identity folding to the hooks pages and unproxied MCP usage:
+  behind the same rollout flag, the user dimension, unique-user counts, and
+  email drill filters fold one employee's linked emails into one identity
+  across the hooks summary, skill breakdown, hooks breakdown, timeseries, and
+  unproxied MCP server user usage. Literal behavior is unchanged with the flag
+  off.
+- 472b0f2: Fold the employee list (searchUsers raw-logs path) through the canonical identity map behind the same rollout flag, with a dedicated list-divergence shadow mode.
+- 0e5a8f7: Make external credentials and external keys exercisable in local development.
+  The real GCP resolver screens customer-supplied service accounts against Gram's
+  own project, which requires Gram to be running as a user-managed service
+  account, so on a developer machine every credential and key write failed closed
+  and the feature could not be run at all. Local development now gets a stub
+  identity and an in-process KMS signer, selected the same way the billing and
+  WorkOS stubs already are.
+
+  The stand-in signs with RS256 by default, configurable through
+  `GRAM_LOCAL_KMS_SIGNING_ALGORITHM`. It is deliberately independent of what any
+  key records, so a key recorded with the other algorithm still reports a
+  mismatch: agreeing by construction is what the verify probe exists to disprove.
+
+- fd32c6f: Add a glint rule (no-raw-user-email-filter) forbidding raw user_email
+  matching or bucketing in squirrel-built ClickHouse queries: the email
+  dimension must go through the canonical identity fold so one employee's
+  linked emails read as one identity. Known legacy sites carry explicit
+  nolint annotations that double as the GA cleanup checklist.
+- cdc15c3: Persist the captured agent session's working directory (`session.cwd`) onto chats at hook ingest. The value was already on the wire for canonical (hook.ingest.v1), legacy Claude, and legacy Codex events but previously discarded; it is groundwork for session portability (materializing a moved session into the right project directory).
+- 1c1a561: Record `last_used_at` on user sessions and remote sessions when they carry traffic, so a connection that has not been used is distinguishable from one whose token merely keeps refreshing. Writes are coalesced to a five-minute window on both token paths and are best-effort, so they never fail a request that holds a valid credential.
+- a268d10: Withhold Polar `credits` and `included_credits` from non-platform-admin callers of `usage.getPeriodUsage`. The fields are now optional and omitted unless `authCtx.IsAdmin` is set, matching the existing admin-only billing meter in the dashboard.
+
 ## 1.12.0
 
 ### Minor Changes

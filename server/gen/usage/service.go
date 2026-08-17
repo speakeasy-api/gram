@@ -105,10 +105,11 @@ type PeriodUsage struct {
 	IncludedServers int
 	// The number of servers enabled at the time of the request
 	ActualEnabledServerCount int
-	// The number of credits used
-	Credits int
-	// The number of credits included in the tier
-	IncludedCredits int
+	// The number of credits used. Only populated for platform admins.
+	Credits *int
+	// The number of credits included in the tier. Only populated for platform
+	// admins.
+	IncludedCredits *int
 	// Whether the project has an active subscription
 	HasActiveSubscription bool
 }

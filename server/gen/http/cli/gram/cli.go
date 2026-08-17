@@ -16,6 +16,7 @@ import (
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
+	adminassetsc "github.com/speakeasy-api/gram/server/gen/http/admin_assets/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
 	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
 	adminopenrouterkeysc "github.com/speakeasy-api/gram/server/gen/http/admin_open_router_keys/client"
@@ -53,6 +54,7 @@ import (
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
+	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/client"
@@ -99,9 +101,10 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats)",
-		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
+		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
@@ -115,7 +118,7 @@ func UsageCommands() []string {
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|verify-gcp-iam-credential|get-gcp-setup-info|delete-aws-iam-credential|delete-gcp-iam-credential)",
-		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
+		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -133,9 +136,10 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
+		"admin-assets upload-platform-image",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
-		"admin-open-router-keys (list-keys|get-key-usage|encrypt-key|disable-key|enable-key)",
+		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
@@ -162,7 +166,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
-		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
+		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -319,9 +323,10 @@ func ParseEndpoint(
 		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
 		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
 
-		adminGetProjectFlags                 = flag.NewFlagSet("get-project", flag.ExitOnError)
-		adminGetProjectIDOrSlugFlag          = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
-		adminGetProjectAdminSessionTokenFlag = adminGetProjectFlags.String("admin-session-token", "", "")
+		adminGetProjectFlags                    = flag.NewFlagSet("get-project", flag.ExitOnError)
+		adminGetProjectIDOrSlugFlag             = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
+		adminGetProjectOrganizationIDOrSlugFlag = adminGetProjectFlags.String("organization-id-or-slug", "", "")
+		adminGetProjectAdminSessionTokenFlag    = adminGetProjectFlags.String("admin-session-token", "", "")
 
 		adminUpdateOrganizationFlags                 = flag.NewFlagSet("update-organization", flag.ExitOnError)
 		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
@@ -397,6 +402,16 @@ func ParseEndpoint(
 		agentUpdateConfigurationFlags            = flag.NewFlagSet("update-configuration", flag.ExitOnError)
 		agentUpdateConfigurationBodyFlag         = agentUpdateConfigurationFlags.String("body", "REQUIRED", "")
 		agentUpdateConfigurationSessionTokenFlag = agentUpdateConfigurationFlags.String("session-token", "", "")
+
+		agentGetSessionMetaFlags           = flag.NewFlagSet("get-session-meta", flag.ExitOnError)
+		agentGetSessionMetaSessionIdsFlag  = agentGetSessionMetaFlags.String("session-ids", "REQUIRED", "")
+		agentGetSessionMetaApikeyTokenFlag = agentGetSessionMetaFlags.String("apikey-token", "", "")
+
+		agentReportSessionMovedFlags            = flag.NewFlagSet("report-session-moved", flag.ExitOnError)
+		agentReportSessionMovedBodyFlag         = agentReportSessionMovedFlags.String("body", "REQUIRED", "")
+		agentReportSessionMovedApikeyTokenFlag  = agentReportSessionMovedFlags.String("apikey-token", "", "")
+		agentReportSessionMovedSerialNumberFlag = agentReportSessionMovedFlags.String("serial-number", "", "")
+		agentReportSessionMovedHostnameFlag     = agentReportSessionMovedFlags.String("hostname", "", "")
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
 
@@ -507,6 +522,14 @@ func ParseEndpoint(
 
 		assetsServeChatAttachmentSignedFlags     = flag.NewFlagSet("serve-chat-attachment-signed", flag.ExitOnError)
 		assetsServeChatAttachmentSignedTokenFlag = assetsServeChatAttachmentSignedFlags.String("token", "REQUIRED", "")
+
+		organizationAssetsFlags = flag.NewFlagSet("organization-assets", flag.ContinueOnError)
+
+		organizationAssetsUploadOrganizationImageFlags             = flag.NewFlagSet("upload-organization-image", flag.ExitOnError)
+		organizationAssetsUploadOrganizationImageContentTypeFlag   = organizationAssetsUploadOrganizationImageFlags.String("content-type", "REQUIRED", "")
+		organizationAssetsUploadOrganizationImageContentLengthFlag = organizationAssetsUploadOrganizationImageFlags.String("content-length", "REQUIRED", "")
+		organizationAssetsUploadOrganizationImageSessionTokenFlag  = organizationAssetsUploadOrganizationImageFlags.String("session-token", "", "")
+		organizationAssetsUploadOrganizationImageStreamFlag        = organizationAssetsUploadOrganizationImageFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		assistantMemoriesFlags = flag.NewFlagSet("assistant-memories", flag.ContinueOnError)
 
@@ -1026,6 +1049,10 @@ func ParseEndpoint(
 		externalKeysGetGcpKmsKeyFlags            = flag.NewFlagSet("get-gcp-kms-key", flag.ExitOnError)
 		externalKeysGetGcpKmsKeyIDFlag           = externalKeysGetGcpKmsKeyFlags.String("id", "REQUIRED", "")
 		externalKeysGetGcpKmsKeySessionTokenFlag = externalKeysGetGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysVerifyGcpKmsKeyFlags            = flag.NewFlagSet("verify-gcp-kms-key", flag.ExitOnError)
+		externalKeysVerifyGcpKmsKeyIDFlag           = externalKeysVerifyGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysVerifyGcpKmsKeySessionTokenFlag = externalKeysVerifyGcpKmsKeyFlags.String("session-token", "", "")
 
 		externalKeysDeleteAwsKmsKeyFlags            = flag.NewFlagSet("delete-aws-kms-key", flag.ExitOnError)
 		externalKeysDeleteAwsKmsKeyIDFlag           = externalKeysDeleteAwsKmsKeyFlags.String("id", "REQUIRED", "")
@@ -1557,6 +1584,14 @@ func ParseEndpoint(
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
 
+		adminAssetsFlags = flag.NewFlagSet("admin-assets", flag.ContinueOnError)
+
+		adminAssetsUploadPlatformImageFlags             = flag.NewFlagSet("upload-platform-image", flag.ExitOnError)
+		adminAssetsUploadPlatformImageContentTypeFlag   = adminAssetsUploadPlatformImageFlags.String("content-type", "REQUIRED", "")
+		adminAssetsUploadPlatformImageContentLengthFlag = adminAssetsUploadPlatformImageFlags.String("content-length", "REQUIRED", "")
+		adminAssetsUploadPlatformImageSessionTokenFlag  = adminAssetsUploadPlatformImageFlags.String("session-token", "", "")
+		adminAssetsUploadPlatformImageStreamFlag        = adminAssetsUploadPlatformImageFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
 		adminChatAnalysisFlags = flag.NewFlagSet("admin-chat-analysis", flag.ContinueOnError)
 
 		adminChatAnalysisGetSettingsFlags            = flag.NewFlagSet("get-settings", flag.ExitOnError)
@@ -1608,10 +1643,6 @@ func ParseEndpoint(
 		adminOpenRouterKeysGetKeyUsageOrganizationIDFlag = adminOpenRouterKeysGetKeyUsageFlags.String("organization-id", "REQUIRED", "")
 		adminOpenRouterKeysGetKeyUsageKeyTypeFlag        = adminOpenRouterKeysGetKeyUsageFlags.String("key-type", "REQUIRED", "")
 		adminOpenRouterKeysGetKeyUsageSessionTokenFlag   = adminOpenRouterKeysGetKeyUsageFlags.String("session-token", "", "")
-
-		adminOpenRouterKeysEncryptKeyFlags            = flag.NewFlagSet("encrypt-key", flag.ExitOnError)
-		adminOpenRouterKeysEncryptKeyBodyFlag         = adminOpenRouterKeysEncryptKeyFlags.String("body", "REQUIRED", "")
-		adminOpenRouterKeysEncryptKeySessionTokenFlag = adminOpenRouterKeysEncryptKeyFlags.String("session-token", "", "")
 
 		adminOpenRouterKeysDisableKeyFlags            = flag.NewFlagSet("disable-key", flag.ExitOnError)
 		adminOpenRouterKeysDisableKeyBodyFlag         = adminOpenRouterKeysDisableKeyFlags.String("body", "REQUIRED", "")
@@ -3236,6 +3267,12 @@ func ParseEndpoint(
 		userSessionClientsGetUserSessionClientApikeyTokenFlag      = userSessionClientsGetUserSessionClientFlags.String("apikey-token", "", "")
 		userSessionClientsGetUserSessionClientProjectSlugInputFlag = userSessionClientsGetUserSessionClientFlags.String("project-slug-input", "", "")
 
+		userSessionClientsRefreshUserSessionClientCIMDFlags                = flag.NewFlagSet("refresh-user-session-client-cimd", flag.ExitOnError)
+		userSessionClientsRefreshUserSessionClientCIMDIDFlag               = userSessionClientsRefreshUserSessionClientCIMDFlags.String("id", "REQUIRED", "")
+		userSessionClientsRefreshUserSessionClientCIMDSessionTokenFlag     = userSessionClientsRefreshUserSessionClientCIMDFlags.String("session-token", "", "")
+		userSessionClientsRefreshUserSessionClientCIMDApikeyTokenFlag      = userSessionClientsRefreshUserSessionClientCIMDFlags.String("apikey-token", "", "")
+		userSessionClientsRefreshUserSessionClientCIMDProjectSlugInputFlag = userSessionClientsRefreshUserSessionClientCIMDFlags.String("project-slug-input", "", "")
+
 		userSessionClientsRevokeUserSessionClientFlags                = flag.NewFlagSet("revoke-user-session-client", flag.ExitOnError)
 		userSessionClientsRevokeUserSessionClientIDFlag               = userSessionClientsRevokeUserSessionClientFlags.String("id", "REQUIRED", "")
 		userSessionClientsRevokeUserSessionClientSessionTokenFlag     = userSessionClientsRevokeUserSessionClientFlags.String("session-token", "", "")
@@ -3440,6 +3477,8 @@ func ParseEndpoint(
 	agentListSyncedUsersFlags.Usage = agentListSyncedUsersUsage
 	agentGetConfigurationFlags.Usage = agentGetConfigurationUsage
 	agentUpdateConfigurationFlags.Usage = agentUpdateConfigurationUsage
+	agentGetSessionMetaFlags.Usage = agentGetSessionMetaUsage
+	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
 
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
@@ -3462,6 +3501,9 @@ func ParseEndpoint(
 	assetsServeChatAttachmentFlags.Usage = assetsServeChatAttachmentUsage
 	assetsCreateSignedChatAttachmentURLFlags.Usage = assetsCreateSignedChatAttachmentURLUsage
 	assetsServeChatAttachmentSignedFlags.Usage = assetsServeChatAttachmentSignedUsage
+
+	organizationAssetsFlags.Usage = organizationAssetsUsage
+	organizationAssetsUploadOrganizationImageFlags.Usage = organizationAssetsUploadOrganizationImageUsage
 
 	assistantMemoriesFlags.Usage = assistantMemoriesUsage
 	assistantMemoriesListAssistantMemoriesFlags.Usage = assistantMemoriesListAssistantMemoriesUsage
@@ -3588,6 +3630,7 @@ func ParseEndpoint(
 	externalKeysListGcpKmsKeysFlags.Usage = externalKeysListGcpKmsKeysUsage
 	externalKeysGetAwsKmsKeyFlags.Usage = externalKeysGetAwsKmsKeyUsage
 	externalKeysGetGcpKmsKeyFlags.Usage = externalKeysGetGcpKmsKeyUsage
+	externalKeysVerifyGcpKmsKeyFlags.Usage = externalKeysVerifyGcpKmsKeyUsage
 	externalKeysDeleteAwsKmsKeyFlags.Usage = externalKeysDeleteAwsKmsKeyUsage
 	externalKeysDeleteGcpKmsKeyFlags.Usage = externalKeysDeleteGcpKmsKeyUsage
 
@@ -3716,6 +3759,9 @@ func ParseEndpoint(
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
 
+	adminAssetsFlags.Usage = adminAssetsUsage
+	adminAssetsUploadPlatformImageFlags.Usage = adminAssetsUploadPlatformImageUsage
+
 	adminChatAnalysisFlags.Usage = adminChatAnalysisUsage
 	adminChatAnalysisGetSettingsFlags.Usage = adminChatAnalysisGetSettingsUsage
 	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
@@ -3733,7 +3779,6 @@ func ParseEndpoint(
 	adminOpenRouterKeysFlags.Usage = adminOpenRouterKeysUsage
 	adminOpenRouterKeysListKeysFlags.Usage = adminOpenRouterKeysListKeysUsage
 	adminOpenRouterKeysGetKeyUsageFlags.Usage = adminOpenRouterKeysGetKeyUsageUsage
-	adminOpenRouterKeysEncryptKeyFlags.Usage = adminOpenRouterKeysEncryptKeyUsage
 	adminOpenRouterKeysDisableKeyFlags.Usage = adminOpenRouterKeysDisableKeyUsage
 	adminOpenRouterKeysEnableKeyFlags.Usage = adminOpenRouterKeysEnableKeyUsage
 
@@ -4066,6 +4111,7 @@ func ParseEndpoint(
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
 	userSessionClientsGetUserSessionClientFlags.Usage = userSessionClientsGetUserSessionClientUsage
+	userSessionClientsRefreshUserSessionClientCIMDFlags.Usage = userSessionClientsRefreshUserSessionClientCIMDUsage
 	userSessionClientsRevokeUserSessionClientFlags.Usage = userSessionClientsRevokeUserSessionClientUsage
 
 	userSessionConsentsFlags.Usage = userSessionConsentsUsage
@@ -4129,6 +4175,8 @@ func ParseEndpoint(
 			svcf = aiIntegrationsFlags
 		case "assets":
 			svcf = assetsFlags
+		case "organization-assets":
+			svcf = organizationAssetsFlags
 		case "assistant-memories":
 			svcf = assistantMemoriesFlags
 		case "assistants":
@@ -4191,6 +4239,8 @@ func ParseEndpoint(
 			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
+		case "admin-assets":
+			svcf = adminAssetsFlags
 		case "admin-chat-analysis":
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
@@ -4414,6 +4464,12 @@ func ParseEndpoint(
 			case "update-configuration":
 				epf = agentUpdateConfigurationFlags
 
+			case "get-session-meta":
+				epf = agentGetSessionMetaFlags
+
+			case "report-session-moved":
+				epf = agentReportSessionMovedFlags
+
 			}
 
 		case "ai-integrations":
@@ -4475,6 +4531,13 @@ func ParseEndpoint(
 
 			case "serve-chat-attachment-signed":
 				epf = assetsServeChatAttachmentSignedFlags
+
+			}
+
+		case "organization-assets":
+			switch epn {
+			case "upload-organization-image":
+				epf = organizationAssetsUploadOrganizationImageFlags
 
 			}
 
@@ -4826,6 +4889,9 @@ func ParseEndpoint(
 			case "get-gcp-kms-key":
 				epf = externalKeysGetGcpKmsKeyFlags
 
+			case "verify-gcp-kms-key":
+				epf = externalKeysVerifyGcpKmsKeyFlags
+
 			case "delete-aws-kms-key":
 				epf = externalKeysDeleteAwsKmsKeyFlags
 
@@ -5175,6 +5241,13 @@ func ParseEndpoint(
 
 			}
 
+		case "admin-assets":
+			switch epn {
+			case "upload-platform-image":
+				epf = adminAssetsUploadPlatformImageFlags
+
+			}
+
 		case "admin-chat-analysis":
 			switch epn {
 			case "get-settings":
@@ -5220,9 +5293,6 @@ func ParseEndpoint(
 
 			case "get-key-usage":
 				epf = adminOpenRouterKeysGetKeyUsageFlags
-
-			case "encrypt-key":
-				epf = adminOpenRouterKeysEncryptKeyFlags
 
 			case "disable-key":
 				epf = adminOpenRouterKeysDisableKeyFlags
@@ -6166,6 +6236,9 @@ func ParseEndpoint(
 			case "get-user-session-client":
 				epf = userSessionClientsGetUserSessionClientFlags
 
+			case "refresh-user-session-client-cimd":
+				epf = userSessionClientsRefreshUserSessionClientCIMDFlags
+
 			case "revoke-user-session-client":
 				epf = userSessionClientsRevokeUserSessionClientFlags
 
@@ -6365,7 +6438,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
 			case "get-project":
 				endpoint = c.GetProject()
-				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
+				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectOrganizationIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
 			case "update-organization":
 				endpoint = c.UpdateOrganization()
 				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
@@ -6418,6 +6491,12 @@ func ParseEndpoint(
 			case "update-configuration":
 				endpoint = c.UpdateConfiguration()
 				data, err = agentc.BuildUpdateConfigurationPayload(*agentUpdateConfigurationBodyFlag, *agentUpdateConfigurationSessionTokenFlag)
+			case "get-session-meta":
+				endpoint = c.GetSessionMeta()
+				data, err = agentc.BuildGetSessionMetaPayload(*agentGetSessionMetaSessionIdsFlag, *agentGetSessionMetaApikeyTokenFlag)
+			case "report-session-moved":
+				endpoint = c.ReportSessionMoved()
+				data, err = agentc.BuildReportSessionMovedPayload(*agentReportSessionMovedBodyFlag, *agentReportSessionMovedApikeyTokenFlag, *agentReportSessionMovedSerialNumberFlag, *agentReportSessionMovedHostnameFlag)
 			}
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6492,6 +6571,16 @@ func ParseEndpoint(
 			case "serve-chat-attachment-signed":
 				endpoint = c.ServeChatAttachmentSigned()
 				data, err = assetsc.BuildServeChatAttachmentSignedPayload(*assetsServeChatAttachmentSignedTokenFlag)
+			}
+		case "organization-assets":
+			c := organizationassetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "upload-organization-image":
+				endpoint = c.UploadOrganizationImage()
+				data, err = organizationassetsc.BuildUploadOrganizationImagePayload(*organizationAssetsUploadOrganizationImageContentTypeFlag, *organizationAssetsUploadOrganizationImageContentLengthFlag, *organizationAssetsUploadOrganizationImageSessionTokenFlag)
+				if err == nil {
+					data, err = organizationassetsc.BuildUploadOrganizationImageStreamPayload(data, *organizationAssetsUploadOrganizationImageStreamFlag)
+				}
 			}
 		case "assistant-memories":
 			c := assistantmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6842,6 +6931,9 @@ func ParseEndpoint(
 			case "get-gcp-kms-key":
 				endpoint = c.GetGcpKmsKey()
 				data, err = externalkeysc.BuildGetGcpKmsKeyPayload(*externalKeysGetGcpKmsKeyIDFlag, *externalKeysGetGcpKmsKeySessionTokenFlag)
+			case "verify-gcp-kms-key":
+				endpoint = c.VerifyGcpKmsKey()
+				data, err = externalkeysc.BuildVerifyGcpKmsKeyPayload(*externalKeysVerifyGcpKmsKeyIDFlag, *externalKeysVerifyGcpKmsKeySessionTokenFlag)
 			case "delete-aws-kms-key":
 				endpoint = c.DeleteAwsKmsKey()
 				data, err = externalkeysc.BuildDeleteAwsKmsKeyPayload(*externalKeysDeleteAwsKmsKeyIDFlag, *externalKeysDeleteAwsKmsKeySessionTokenFlag)
@@ -7190,6 +7282,16 @@ func ParseEndpoint(
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
 			}
+		case "admin-assets":
+			c := adminassetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "upload-platform-image":
+				endpoint = c.UploadPlatformImage()
+				data, err = adminassetsc.BuildUploadPlatformImagePayload(*adminAssetsUploadPlatformImageContentTypeFlag, *adminAssetsUploadPlatformImageContentLengthFlag, *adminAssetsUploadPlatformImageSessionTokenFlag)
+				if err == nil {
+					data, err = adminassetsc.BuildUploadPlatformImageStreamPayload(data, *adminAssetsUploadPlatformImageStreamFlag)
+				}
+			}
 		case "admin-chat-analysis":
 			c := adminchatanalysisc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -7237,9 +7339,6 @@ func ParseEndpoint(
 			case "get-key-usage":
 				endpoint = c.GetKeyUsage()
 				data, err = adminopenrouterkeysc.BuildGetKeyUsagePayload(*adminOpenRouterKeysGetKeyUsageOrganizationIDFlag, *adminOpenRouterKeysGetKeyUsageKeyTypeFlag, *adminOpenRouterKeysGetKeyUsageSessionTokenFlag)
-			case "encrypt-key":
-				endpoint = c.EncryptKey()
-				data, err = adminopenrouterkeysc.BuildEncryptKeyPayload(*adminOpenRouterKeysEncryptKeyBodyFlag, *adminOpenRouterKeysEncryptKeySessionTokenFlag)
 			case "disable-key":
 				endpoint = c.DisableKey()
 				data, err = adminopenrouterkeysc.BuildDisableKeyPayload(*adminOpenRouterKeysDisableKeyBodyFlag, *adminOpenRouterKeysDisableKeySessionTokenFlag)
@@ -8181,6 +8280,9 @@ func ParseEndpoint(
 			case "get-user-session-client":
 				endpoint = c.GetUserSessionClient()
 				data, err = usersessionclientsc.BuildGetUserSessionClientPayload(*userSessionClientsGetUserSessionClientIDFlag, *userSessionClientsGetUserSessionClientSessionTokenFlag, *userSessionClientsGetUserSessionClientApikeyTokenFlag, *userSessionClientsGetUserSessionClientProjectSlugInputFlag)
+			case "refresh-user-session-client-cimd":
+				endpoint = c.RefreshUserSessionClientCIMD()
+				data, err = usersessionclientsc.BuildRefreshUserSessionClientCIMDPayload(*userSessionClientsRefreshUserSessionClientCIMDIDFlag, *userSessionClientsRefreshUserSessionClientCIMDSessionTokenFlag, *userSessionClientsRefreshUserSessionClientCIMDApikeyTokenFlag, *userSessionClientsRefreshUserSessionClientCIMDProjectSlugInputFlag)
 			case "revoke-user-session-client":
 				endpoint = c.RevokeUserSessionClient()
 				data, err = usersessionclientsc.BuildRevokeUserSessionClientPayload(*userSessionClientsRevokeUserSessionClientIDFlag, *userSessionClientsRevokeUserSessionClientSessionTokenFlag, *userSessionClientsRevokeUserSessionClientApikeyTokenFlag, *userSessionClientsRevokeUserSessionClientProjectSlugInputFlag)
@@ -8872,6 +8974,7 @@ func adminGetProjectUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin get-project", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id-or-slug STRING")
+	fmt.Fprint(os.Stderr, " -organization-id-or-slug STRING")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -8881,11 +8984,12 @@ func adminGetProjectUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id-or-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -organization-id-or-slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --organization-id-or-slug \"abc123\" --admin-session-token \"abc123\"")
 }
 
 func adminUpdateOrganizationUsage() {
@@ -9155,6 +9259,8 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
 	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
 	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
+	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
+	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
@@ -9237,6 +9343,50 @@ func agentUpdateConfigurationUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent update-configuration --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+}
+
+func agentGetSessionMetaUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent get-session-meta", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-ids JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-session-meta --session-ids '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --apikey-token \"abc123\"")
+}
+
+func agentReportSessionMovedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent report-session-moved", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -serial-number STRING")
+	fmt.Fprint(os.Stderr, " -hostname STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
+	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-session-moved --body '{\n      \"email\": \"abc123\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"target_harness\": \"aaa\"\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
 }
 
 // aiIntegrationsUsage displays the usage of the ai-integrations command and
@@ -9702,6 +9852,41 @@ func assetsServeChatAttachmentSignedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment-signed --token \"abc123\"")
+}
+
+// organizationAssetsUsage displays the usage of the organization-assets
+// command and its subcommands.
+func organizationAssetsUsage() {
+	fmt.Fprintln(os.Stderr, `Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organization-assets COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    upload-organization-image: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organization-assets COMMAND --help\n", os.Args[0])
+}
+func organizationAssetsUploadOrganizationImageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-assets upload-organization-image", os.Args[0])
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-assets upload-organization-image --content-type \"abc123\" --content-length 1 --session-token \"abc123\" --stream \"goa.png\"")
 }
 
 // assistantMemoriesUsage displays the usage of the assistant-memories command
@@ -11641,8 +11826,8 @@ func externalCredentialsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-gcp-iam-credential: Get a GCP IAM external credential by ID. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    verify-gcp-iam-credential: Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-gcp-setup-info: Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    delete-aws-iam-credential: Soft-delete an AWS IAM external credential by ID. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-credential: Soft-delete a GCP IAM external credential by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-iam-credential: Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-credential: Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s external-credentials COMMAND --help\n", os.Args[0])
@@ -11870,7 +12055,7 @@ func externalCredentialsDeleteAwsIamCredentialUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete an AWS IAM external credential by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -11890,7 +12075,7 @@ func externalCredentialsDeleteGcpIamCredentialUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a GCP IAM external credential by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -11916,6 +12101,7 @@ func externalKeysUsage() {
 	fmt.Fprintln(os.Stderr, `    list-gcp-kms-keys: List the organization's GCP KMS external keys. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-aws-kms-key: Get an AWS KMS external key by ID. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-gcp-kms-key: Get a GCP KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    verify-gcp-kms-key: Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.`)
 	fmt.Fprintln(os.Stderr)
@@ -12096,6 +12282,26 @@ func externalKeysGetGcpKmsKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysVerifyGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys verify-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys verify-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func externalKeysDeleteAwsKmsKeyUsage() {
@@ -14463,6 +14669,41 @@ func packagesPublishUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// adminAssetsUsage displays the usage of the admin-assets command and its
+// subcommands.
+func adminAssetsUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-assets COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    upload-platform-image: Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-assets COMMAND --help\n", os.Args[0])
+}
+func adminAssetsUploadPlatformImageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-assets upload-platform-image", os.Args[0])
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-assets upload-platform-image --content-type \"abc123\" --content-length 1 --session-token \"abc123\" --stream \"goa.png\"")
+}
+
 // adminChatAnalysisUsage displays the usage of the admin-chat-analysis command
 // and its subcommands.
 func adminChatAnalysisUsage() {
@@ -14695,9 +14936,8 @@ func adminOpenRouterKeysUsage() {
 	fmt.Fprintln(os.Stderr, `Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-open-router-keys COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-key-usage: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    encrypt-key: Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    disable-key: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    enable-key: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -14712,7 +14952,7 @@ func adminOpenRouterKeysListKeysUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `List every organization's platform OpenRouter keys. Requires platform admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -14742,26 +14982,6 @@ func adminOpenRouterKeysGetKeyUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys get-key-usage --organization-id \"abc123\" --key-type \"internal\" --session-token \"abc123\"")
-}
-
-func adminOpenRouterKeysEncryptKeyUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-open-router-keys encrypt-key", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-open-router-keys encrypt-key --body '{\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func adminOpenRouterKeysDisableKeyUsage() {
@@ -21751,6 +21971,7 @@ func userSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-session-clients: List user_session_clients in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-client: Get a user_session_client by id.`)
+	fmt.Fprintln(os.Stderr, `    refresh-user-session-client-cimd: Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session-client: Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21806,6 +22027,30 @@ func userSessionClientsGetUserSessionClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients get-user-session-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionClientsRefreshUserSessionClientCIMDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients refresh-user-session-client-cimd", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients refresh-user-session-client-cimd --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionClientsRevokeUserSessionClientUsage() {

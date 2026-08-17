@@ -23,6 +23,8 @@ type Server struct {
 	ListSyncedUsers     http.Handler
 	GetConfiguration    http.Handler
 	UpdateConfiguration http.Handler
+	GetSessionMeta      http.Handler
+	ReportSessionMoved  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,11 +58,15 @@ func New(
 			{"ListSyncedUsers", "GET", "/rpc/agent.listSyncedUsers"},
 			{"GetConfiguration", "GET", "/rpc/agent.getConfiguration"},
 			{"UpdateConfiguration", "POST", "/rpc/agent.updateConfiguration"},
+			{"GetSessionMeta", "GET", "/rpc/agent.getSessionMeta"},
+			{"ReportSessionMoved", "POST", "/rpc/agent.reportSessionMoved"},
 		},
 		GetPlugins:          NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
 		ListSyncedUsers:     NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
 		GetConfiguration:    NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
 		UpdateConfiguration: NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
+		GetSessionMeta:      NewGetSessionMetaHandler(e.GetSessionMeta, mux, decoder, encoder, errhandler, formatter),
+		ReportSessionMoved:  NewReportSessionMovedHandler(e.ReportSessionMoved, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,6 +79,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSyncedUsers = m(s.ListSyncedUsers)
 	s.GetConfiguration = m(s.GetConfiguration)
 	s.UpdateConfiguration = m(s.UpdateConfiguration)
+	s.GetSessionMeta = m(s.GetSessionMeta)
+	s.ReportSessionMoved = m(s.ReportSessionMoved)
 }
 
 // MethodNames returns the methods served.
@@ -84,6 +92,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSyncedUsersHandler(mux, h.ListSyncedUsers)
 	MountGetConfigurationHandler(mux, h.GetConfiguration)
 	MountUpdateConfigurationHandler(mux, h.UpdateConfiguration)
+	MountGetSessionMetaHandler(mux, h.GetSessionMeta)
+	MountReportSessionMovedHandler(mux, h.ReportSessionMoved)
 }
 
 // Mount configures the mux to serve the agent endpoints.
@@ -280,6 +290,112 @@ func NewUpdateConfigurationHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateConfiguration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSessionMetaHandler configures the mux to serve the "agent" service
+// "getSessionMeta" endpoint.
+func MountGetSessionMetaHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agent.getSessionMeta", f)
+}
+
+// NewGetSessionMetaHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agent" service "getSessionMeta" endpoint.
+func NewGetSessionMetaHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSessionMetaRequest(mux, decoder)
+		encodeResponse = EncodeGetSessionMetaResponse(encoder)
+		encodeError    = EncodeGetSessionMetaError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSessionMeta")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReportSessionMovedHandler configures the mux to serve the "agent"
+// service "reportSessionMoved" endpoint.
+func MountReportSessionMovedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.reportSessionMoved", f)
+}
+
+// NewReportSessionMovedHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "reportSessionMoved" endpoint.
+func NewReportSessionMovedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReportSessionMovedRequest(mux, decoder)
+		encodeResponse = EncodeReportSessionMovedResponse(encoder)
+		encodeError    = EncodeReportSessionMovedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "reportSessionMoved")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

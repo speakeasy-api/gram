@@ -97,10 +97,16 @@ func BuildLogoutPayload(adminLogoutSessionID string) (*admin.LogoutPayload, erro
 
 // BuildGetProjectPayload builds the payload for the admin getProject endpoint
 // from CLI flags.
-func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
+func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectOrganizationIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
 	var idOrSlug string
 	{
 		idOrSlug = adminGetProjectIDOrSlug
+	}
+	var organizationIDOrSlug *string
+	{
+		if adminGetProjectOrganizationIDOrSlug != "" {
+			organizationIDOrSlug = &adminGetProjectOrganizationIDOrSlug
+		}
 	}
 	var adminSessionToken *string
 	{
@@ -110,6 +116,7 @@ func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdmin
 	}
 	v := &admin.GetProjectPayload{}
 	v.IDOrSlug = idOrSlug
+	v.OrganizationIDOrSlug = organizationIDOrSlug
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

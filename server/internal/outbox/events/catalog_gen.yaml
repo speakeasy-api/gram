@@ -762,7 +762,7 @@ webhooks:
                 required: true
     audit_log.chat_session_event_v1:
         post:
-            description: Emitted when a chat session is accessed
+            description: Emitted when a chat session is accessed or moved to another harness
             operationId: audit_log.chat_session_event_v1
             requestBody:
                 content:
@@ -1626,7 +1626,7 @@ webhooks:
                 required: true
     audit_log.organization_enterprise_trial_event_v1:
         post:
-            description: Emitted when the organization's enterprise trial is armed, demoted, or re-armed
+            description: Emitted when the organization's enterprise trial is armed, extended, demoted, or re-armed
             operationId: audit_log.organization_enterprise_trial_event_v1
             requestBody:
                 content:

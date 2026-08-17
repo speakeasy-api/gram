@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const projects = vi.hoisted(() => ({
@@ -8,6 +8,9 @@ const setupEligible = vi.hoisted(() => ({ current: true }));
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: projects.current }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme" }),
 }));
 vi.mock("@/hooks/useOnboardingCta", () => ({
   useOnboardingCta: () => ({ eligible: setupEligible.current }),
@@ -27,8 +30,18 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("react-router", () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
+  Link: ({
+    to,
+    children,
+    onClick,
+  }: {
+    to: string;
+    children: React.ReactNode;
+    onClick?: () => void;
+  }) => (
+    <a href={to} onClick={onClick}>
+      {children}
+    </a>
   ),
 }));
 
@@ -51,6 +64,24 @@ describe("OrgWelcomeBanner", () => {
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha");
     expect(hrefFor("Begin rollout")).toBe("/acme/setup");
+  });
+
+  it("records rollout intent when the setup card is clicked", () => {
+    render(<OrgWelcomeBanner />);
+
+    fireEvent.click(screen.getByText("Begin rollout"));
+
+    expect(localStorage.getItem("gram-org-welcome-rollout-started:acme")).toBe(
+      "true",
+    );
+  });
+
+  it("shows resume copy after rollout intent is recorded", () => {
+    localStorage.setItem("gram-org-welcome-rollout-started:acme", "true");
+    render(<OrgWelcomeBanner />);
+
+    expect(screen.getByText("Continue enterprise rollout")).toBeTruthy();
+    expect(hrefFor("Resume rollout")).toBe("/acme/setup");
   });
 
   it("drops the setup card when the org cannot run the wizard", () => {

@@ -31,6 +31,7 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:update",
   "chat_analysis_settings:upsert",
   "chat_session:access",
+  "chat_session:move",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
@@ -76,6 +77,7 @@ export const AUDIT_ACTIONS = [
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
@@ -174,6 +176,7 @@ export const AUDIT_ACTIONS = [
   "tunneled-mcp:update",
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
+  "user-session-client:cimd-refresh",
   "user-session-client:revoke",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
@@ -271,6 +274,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated chat analysis settings";
     case "chat_session:access":
       return "opened chat session";
+    case "chat_session:move":
+      return "moved chat session";
 
     case "custom_domains:create":
       return "added custom domain";
@@ -370,6 +375,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_extended":
+      return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
 
@@ -583,6 +590,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "user-session:revoke":
       return "revoked user session";
+    case "user-session-client:cimd-refresh":
+      return "refreshed the client metadata document for";
     case "user-session-client:revoke":
       return "revoked user session client";
     case "user-session-consent:revoke":

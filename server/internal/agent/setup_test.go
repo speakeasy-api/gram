@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -47,11 +48,26 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// stubProductFeatures controls org feature state without database rows. The
+// session-portability endpoints are the only feature-gated agent surface;
+// tests flip the field to exercise the gate.
+type stubProductFeatures struct {
+	sessionPortability bool
+}
+
+func (s *stubProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	if feature == productfeatures.FeatureSessionPortability {
+		return s.sessionPortability, nil
+	}
+	return false, nil
+}
+
 type testInstance struct {
 	service   *agent.Service
 	conn      *pgxpool.Pool
 	orgID     string
 	projectID uuid.UUID
+	features  *stubProductFeatures
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -85,13 +101,15 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), testServerURL)
+	features := &stubProductFeatures{sessionPortability: true}
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL)
 
 	return ctx, &testInstance{
 		service:   svc,
 		conn:      conn,
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
+		features:  features,
 	}
 }
 

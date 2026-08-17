@@ -220,11 +220,24 @@ export function invalidateOrganizations(qc: QueryClient): Promise<void> {
   ).then(() => undefined);
 }
 
+// The organization is part of the key, not just the request: the same slug names
+// a different project in each one, so two organizations must not share a cache
+// entry. It is the route's own address for the organization, id or slug as
+// typed, because the breadcrumb builds this key from route params alone and can
+// never know the resolved id.
 export function projectQuery(
   idOrSlug: string,
-): AdminQuery<AdminProjectDetail, readonly ["gram-admin-project", string]> {
+  organizationIdOrSlug?: string,
+): AdminQuery<
+  AdminProjectDetail,
+  readonly ["gram-admin-project", string, string | null]
+> {
   return queryOptions({
-    queryKey: ["gram-admin-project", idOrSlug] as const,
-    queryFn: () => getProject(idOrSlug),
+    queryKey: [
+      "gram-admin-project",
+      idOrSlug,
+      organizationIdOrSlug ?? null,
+    ] as const,
+    queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
   });
 }
