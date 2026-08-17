@@ -98,6 +98,36 @@ func canonicalEmailFilter(orgLiteral, column string, values []string) squirrel.S
 	return canonicalEmailPredicate(orgLiteral, column, values)
 }
 
+// canonicalEmailOpPredicate is the single home of the drill-filter operator
+// contract on the email dimension: eq considers only the first value
+// (mirroring the literal path), in matches all values, and not_eq negates the
+// whole folded identity — excluding a bucket must exclude every linked email,
+// or the excluded employee reappears as a partial bucket. Any other operator
+// (contains, exists, not_exists) returns ok=false and keeps literal
+// semantics: emptiness is fold-neutral and substring matching has no
+// meaningful fold.
+func canonicalEmailOpPredicate(orgLiteral, column, op string, values []string) (pred squirrel.Sqlizer, ok bool) {
+	if len(values) == 0 {
+		return nil, false
+	}
+	switch op {
+	case "", "eq":
+		return canonicalEmailPredicate(orgLiteral, column, values[:1]), true
+	case "in":
+		return canonicalEmailPredicate(orgLiteral, column, values), true
+	case "not_eq":
+		inner, args, err := canonicalEmailPredicate(orgLiteral, column, values[:1]).ToSql()
+		if err != nil {
+			// Expression building cannot fail for these shapes; fall back to
+			// the literal filter rather than dropping the exclusion.
+			return nil, false
+		}
+		return squirrel.Expr("NOT ("+inner+")", args...), true
+	default:
+		return nil, false
+	}
+}
+
 // canonicalScalarRowPredicate mirrors sessionScalarRowPredicate with the fold
 // applied to both sides: a requested "" means "this row has an empty value".
 func canonicalScalarRowPredicate(orgLiteral, expr string, values []string) squirrel.Sqlizer {

@@ -340,29 +340,13 @@ func applyHookFiltersToBuilderCanonical(sb squirrel.SelectBuilder, filters []Att
 	}
 	rest := make([]AttributeFilter, 0, len(filters))
 	for _, filter := range filters {
-		op := filter.Op
-		if resolveAttributeColumn(filter.Path) != "user_email" || len(filter.Values) == 0 {
-			rest = append(rest, filter)
-			continue
-		}
-		switch op {
-		case "", "eq":
-			// Mirror the literal path: eq considers only the first value.
-			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, emailCol, filter.Values[:1]))
-		case "in":
-			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, emailCol, filter.Values))
-		case "not_eq":
-			// Excluding a folded bucket must exclude every linked email, or
-			// the excluded identity reappears as a partial bucket.
-			pred, args, err := canonicalEmailFilter(canonicalOrgLit, emailCol, filter.Values[:1]).ToSql()
-			if err == nil {
-				sb = sb.Where(squirrel.Expr("NOT ("+pred+")", args...))
+		if resolveAttributeColumn(filter.Path) == "user_email" {
+			if pred, ok := canonicalEmailOpPredicate(canonicalOrgLit, emailCol, filter.Op, filter.Values); ok {
+				sb = sb.Where(pred)
+				continue
 			}
-		default:
-			// contains/exists/not_exists keep literal semantics: emptiness is
-			// fold-neutral and substring matching has no meaningful fold.
-			rest = append(rest, filter)
 		}
+		rest = append(rest, filter)
 	}
 	return applyHookFiltersToBuilder(sb, rest, typesToInclude)
 }
@@ -373,6 +357,14 @@ func applyHookFiltersToBuilderCanonical(sb squirrel.SelectBuilder, filters []Att
 // BY with that alias.
 func hookCanonicalEmailKey(canonicalOrgLit string) string {
 	return canonicalEmailExpr(canonicalOrgLit, "trace_summaries.user_email")
+}
+
+// hookUnknownWrapped labels the empty identity bucket "Unknown". The hooks
+// group queries project this wrap and, in canonical mode, must GROUP BY the
+// same wrapped expression — pre-fold they grouped by the bare column and
+// relied on ClickHouse substituting the SELECT alias.
+func hookUnknownWrapped(expr string) string {
+	return "if(" + expr + " = '', 'Unknown', " + expr + ")"
 }
 
 // InsertTelemetryLogParams contains the parameters for inserting a telemetry log.
@@ -5746,7 +5738,7 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		emailKey = hookCanonicalEmailKey(orgLit)
 	}
 	sb := sq.Select(
-		"if("+emailKey+" = '', 'Unknown', "+emailKey+") as user_email",
+		hookUnknownWrapped(emailKey)+" as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
 		"sum(if(has_result = 1 AND has_error = 0, 1, 0)) as success_count",
@@ -5766,7 +5758,7 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		// Pre-fold, GROUP BY user_email resolved to the SELECT alias (the
 		// Unknown-wrapped expression); group by the same wrapped form so ''
 		// and a literal 'Unknown' merge identically in both modes.
-		groupEmailKey = "if(" + emailKey + " = '', 'Unknown', " + emailKey + ")"
+		groupEmailKey = hookUnknownWrapped(emailKey)
 	}
 	sb = sb.GroupBy(groupEmailKey).
 		OrderBy("event_count DESC")
@@ -5974,7 +5966,7 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 		emailKey = hookCanonicalEmailKey(orgLit)
 	}
 	sb := sq.Select(
-		"if("+emailKey+" = '', 'Unknown', "+emailKey+") as user_email",
+		hookUnknownWrapped(emailKey)+" as user_email",
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"hook_source",
 		"tool_name",
@@ -5991,7 +5983,7 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 
 	groupEmailKey := emailKey
 	if orgLit != "" {
-		groupEmailKey = "if(" + emailKey + " = '', 'Unknown', " + emailKey + ")"
+		groupEmailKey = hookUnknownWrapped(emailKey)
 	}
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	sb = sb.GroupBy(groupEmailKey, "server_name", "hook_source", "tool_name").
@@ -6060,7 +6052,7 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 	sb := sq.Select(
 		fmt.Sprintf("intDiv(start_time_unix_nano, %d) * %d as bucket_start", arg.BucketSizeNs, arg.BucketSizeNs),
 		"if(tool_source = '', 'local', tool_source) as server_name",
-		"if("+emailKey+" = '', 'Unknown', "+emailKey+") as user_email",
+		hookUnknownWrapped(emailKey)+" as user_email",
 		"count(*) as event_count",
 		"sumIf(has_error, has_error = 1) as failure_count",
 	).
@@ -6074,7 +6066,7 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 
 	groupEmailKey := emailKey
 	if orgLit != "" {
-		groupEmailKey = "if(" + emailKey + " = '', 'Unknown', " + emailKey + ")"
+		groupEmailKey = hookUnknownWrapped(emailKey)
 	}
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	sb = sb.GroupBy("bucket_start", "server_name", groupEmailKey).
@@ -6234,18 +6226,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		// The drill target must fold like the buckets that link to it, or a
 		// folded bucket's count and its trace list disagree (eq/in/not_eq on
 		// the user email; other ops keep literal semantics).
-		if orgLit != "" && isMaterialized && materializedCol == "user_email" && len(filter.Values) > 0 {
-			switch filter.Op {
-			case "eq", "":
-				sb = sb.Where(canonicalEmailFilter(orgLit, "trace_summaries.user_email", filter.Values[:1]))
-				continue
-			case "in":
-				sb = sb.Where(canonicalEmailFilter(orgLit, "trace_summaries.user_email", filter.Values))
-				continue
-			case "not_eq":
-				if pred, args, err := canonicalEmailFilter(orgLit, "trace_summaries.user_email", filter.Values[:1]).ToSql(); err == nil {
-					sb = sb.Where(squirrel.Expr("NOT ("+pred+")", args...))
-				}
+		if orgLit != "" && isMaterialized && materializedCol == "user_email" {
+			if pred, ok := canonicalEmailOpPredicate(orgLit, "trace_summaries.user_email", filter.Op, filter.Values); ok {
+				sb = sb.Where(pred)
 				continue
 			}
 		}
