@@ -7,8 +7,8 @@ export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {
     <Page.Section>
       <Page.Section.Title>MCP Servers</Page.Section.Title>
       <Page.Section.Description className="max-w-2xl">
-        Hosted MCP servers expose your tools to Claude Desktop, Cursor, or any
-        MCP client.
+        Hosted MCP servers expose your tools to ChatGPT Desktop, Claude Desktop,
+        Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">

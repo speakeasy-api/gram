@@ -23,6 +23,7 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   // compliance import — distinct surfaces from the Codex agent, split at
   // ingest by hook_source so they stay separable in the summaries.
   chatgpt: "ChatGPT",
+  "chatgpt-desktop": "ChatGPT Desktop",
   "chatgpt-work": "ChatGPT Work",
   opencode: "opencode",
   litellm: "LiteLLM",

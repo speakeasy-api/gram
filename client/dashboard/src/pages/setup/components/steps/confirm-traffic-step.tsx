@@ -28,6 +28,7 @@ const SOURCE_ICONS: Record<string, string> = {
   cursor: "/icons/platforms/cursor.svg",
   codex: "/icons/platforms/openai.svg",
   chatgpt: "/icons/platforms/openai.svg",
+  "chatgpt-desktop": "/icons/platforms/openai.svg",
   "chatgpt-work": "/icons/platforms/openai.svg",
 };
 
@@ -49,6 +50,8 @@ function sourceLabel(source: string): string {
       return "Codex";
     case "chatgpt":
       return "ChatGPT";
+    case "chatgpt-desktop":
+      return "ChatGPT Desktop";
     case "chatgpt-work":
       return "ChatGPT Work";
     case "cowork":
