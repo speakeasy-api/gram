@@ -14,8 +14,9 @@
 //  1. In-loop tools are egress-only, and the model selects rather than
 //     synthesizes: fetch targets come from the trusted URL menu (search
 //     results, harvested links, briefing seeds), and free-form parameters
-//     are registrable only toward recipients that already hold the run's
-//     full context. See Capability and the golden capability test.
+//     are registrable only toward recipients inside the run's vendor trust
+//     path whose stream no attacker can observe. See Capability and the
+//     golden capability test.
 //  2. Tenant data enters only through the briefing, compiled by trusted
 //     code before the model reads anything untrusted, and redacted of
 //     person-identifying material. A tool that reads tenant data cannot be

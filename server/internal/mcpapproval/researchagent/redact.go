@@ -31,9 +31,11 @@ func redactEmails(s string) string {
 
 // harvestHTTPSURLs scans trusted text for https URLs, for seeding the fetch
 // menu from the briefing. The scan is deliberately simple — take each
-// https:// run up to whitespace, then shed the punctuation that prose and
+// https:// run up to a delimiter, then shed the punctuation that prose and
 // JSON wrap URLs in — because the menu's canonicalization discards anything
-// that does not survive parsing anyway.
+// that does not survive parsing anyway. Quotes and angle brackets end a
+// token like whitespace does: briefing evidence is JSON, often compact, and
+// a quote-delimited URL must not swallow the fields after it.
 func harvestHTTPSURLs(text string) []string {
 	var urls []string
 	for remaining := text; ; {
@@ -42,11 +44,13 @@ func harvestHTTPSURLs(text string) []string {
 			break
 		}
 		candidate := remaining[start:]
-		end := strings.IndexFunc(candidate, unicode.IsSpace)
+		end := strings.IndexFunc(candidate, func(r rune) bool {
+			return unicode.IsSpace(r) || r == '"' || r == '<' || r == '>' || r == '\\'
+		})
 		if end < 0 {
 			end = len(candidate)
 		}
-		token := strings.TrimRight(candidate[:end], `.,;:!?)"'`+"`"+`]}>`)
+		token := trimTrailingURLPunct(candidate[:end])
 		if token != "https://" {
 			urls = append(urls, token)
 		}
@@ -54,4 +58,22 @@ func harvestHTTPSURLs(text string) []string {
 	}
 
 	return urls
+}
+
+// trimTrailingURLPunct sheds the punctuation prose and JSON wrap URLs in,
+// while keeping a close paren that the URL itself opened — Wikipedia-style
+// paths legitimately end in ")".
+func trimTrailingURLPunct(token string) string {
+	for len(token) > 0 {
+		last := token[len(token)-1]
+		if !strings.ContainsRune(".,;:!?)'`]}", rune(last)) {
+			break
+		}
+		if last == ')' && strings.Count(token, "(") >= strings.Count(token, ")") {
+			break
+		}
+		token = token[:len(token)-1]
+	}
+
+	return token
 }

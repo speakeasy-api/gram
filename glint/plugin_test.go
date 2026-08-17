@@ -50,5 +50,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 17)
+	require.Len(t, analyzers, 18)
 }
