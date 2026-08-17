@@ -513,6 +513,249 @@ func DecodeGetUserSessionClientResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildRefreshUserSessionClientCIMDRequest instantiates a HTTP request object
+// with method and path set to call the "userSessionClients" service
+// "refreshUserSessionClientCIMD" endpoint
+func (c *Client) BuildRefreshUserSessionClientCIMDRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshUserSessionClientCIMDUserSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessionClients", "refreshUserSessionClientCIMD", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshUserSessionClientCIMDRequest returns an encoder for requests
+// sent to the userSessionClients refreshUserSessionClientCIMD server.
+func EncodeRefreshUserSessionClientCIMDRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessionclients.RefreshUserSessionClientCIMDPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessionClients", "refreshUserSessionClientCIMD", "*usersessionclients.RefreshUserSessionClientCIMDPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRefreshUserSessionClientCIMDResponse returns a decoder for responses
+// returned by the userSessionClients refreshUserSessionClientCIMD endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeRefreshUserSessionClientCIMDResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshUserSessionClientCIMDResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshUserSessionClientCIMDResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			res := NewRefreshUserSessionClientCIMDUserSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshUserSessionClientCIMDUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshUserSessionClientCIMDForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshUserSessionClientCIMDBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshUserSessionClientCIMDNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshUserSessionClientCIMDConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshUserSessionClientCIMDUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshUserSessionClientCIMDInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshUserSessionClientCIMDInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+				}
+				err = ValidateRefreshUserSessionClientCIMDInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+				}
+				return nil, NewRefreshUserSessionClientCIMDInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshUserSessionClientCIMDUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+				}
+				err = ValidateRefreshUserSessionClientCIMDUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+				}
+				return nil, NewRefreshUserSessionClientCIMDUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessionClients", "refreshUserSessionClientCIMD", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshUserSessionClientCIMDGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			err = ValidateRefreshUserSessionClientCIMDGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "refreshUserSessionClientCIMD", err)
+			}
+			return nil, NewRefreshUserSessionClientCIMDGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessionClients", "refreshUserSessionClientCIMD", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRevokeUserSessionClientRequest instantiates a HTTP request object with
 // method and path set to call the "userSessionClients" service
 // "revokeUserSessionClient" endpoint
@@ -748,16 +991,19 @@ func DecodeRevokeUserSessionClientResponse(decoder func(*http.Response) goahttp.
 // *UserSessionClientResponseBody.
 func unmarshalUserSessionClientResponseBodyToTypesUserSessionClient(v *UserSessionClientResponseBody) *types.UserSessionClient {
 	res := &types.UserSessionClient{
-		ID:                    *v.ID,
-		UserSessionIssuerID:   *v.UserSessionIssuerID,
-		ClientID:              *v.ClientID,
-		ClientIDMetadataURI:   v.ClientIDMetadataURI,
-		ClientName:            *v.ClientName,
-		ClientIDIssuedAt:      *v.ClientIDIssuedAt,
-		ClientSecretExpiresAt: v.ClientSecretExpiresAt,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
-		ActiveSessionCount:    *v.ActiveSessionCount,
+		ID:                             *v.ID,
+		UserSessionIssuerID:            *v.UserSessionIssuerID,
+		ClientID:                       *v.ClientID,
+		ClientIDMetadataURI:            v.ClientIDMetadataURI,
+		ClientIDMetadataFetchedAt:      v.ClientIDMetadataFetchedAt,
+		ClientIDMetadataCacheExpiresAt: v.ClientIDMetadataCacheExpiresAt,
+		ClientIDMetadataEtag:           v.ClientIDMetadataEtag,
+		ClientName:                     *v.ClientName,
+		ClientIDIssuedAt:               *v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:          v.ClientSecretExpiresAt,
+		CreatedAt:                      *v.CreatedAt,
+		UpdatedAt:                      *v.UpdatedAt,
+		ActiveSessionCount:             *v.ActiveSessionCount,
 	}
 	res.RedirectUris = make([]string, len(v.RedirectUris))
 	for i, val := range v.RedirectUris {

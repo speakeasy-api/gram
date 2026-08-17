@@ -764,6 +764,8 @@ tags:
     description: Manage organization-level AI provider integrations.
   - name: assets
     description: Manages assets used by Gram projects.
+  - name: organizationAssets
+    description: Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.
   - name: assistantMemories
     description: Manage assistant memory records.
   - name: assistants
@@ -826,6 +828,8 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: adminAssets
+    description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials

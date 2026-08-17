@@ -16,6 +16,7 @@ import (
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
+	adminassetsc "github.com/speakeasy-api/gram/server/gen/http/admin_assets/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
 	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
 	adminopenrouterkeysc "github.com/speakeasy-api/gram/server/gen/http/admin_open_router_keys/client"
@@ -53,6 +54,7 @@ import (
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
+	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_sessions/client"
@@ -102,6 +104,7 @@ func UsageCommands() []string {
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
@@ -133,6 +136,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
+		"admin-assets upload-platform-image",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|encrypt-key|disable-key|enable-key)",
@@ -162,7 +166,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
-		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
+		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -517,6 +521,14 @@ func ParseEndpoint(
 
 		assetsServeChatAttachmentSignedFlags     = flag.NewFlagSet("serve-chat-attachment-signed", flag.ExitOnError)
 		assetsServeChatAttachmentSignedTokenFlag = assetsServeChatAttachmentSignedFlags.String("token", "REQUIRED", "")
+
+		organizationAssetsFlags = flag.NewFlagSet("organization-assets", flag.ContinueOnError)
+
+		organizationAssetsUploadOrganizationImageFlags             = flag.NewFlagSet("upload-organization-image", flag.ExitOnError)
+		organizationAssetsUploadOrganizationImageContentTypeFlag   = organizationAssetsUploadOrganizationImageFlags.String("content-type", "REQUIRED", "")
+		organizationAssetsUploadOrganizationImageContentLengthFlag = organizationAssetsUploadOrganizationImageFlags.String("content-length", "REQUIRED", "")
+		organizationAssetsUploadOrganizationImageSessionTokenFlag  = organizationAssetsUploadOrganizationImageFlags.String("session-token", "", "")
+		organizationAssetsUploadOrganizationImageStreamFlag        = organizationAssetsUploadOrganizationImageFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		assistantMemoriesFlags = flag.NewFlagSet("assistant-memories", flag.ContinueOnError)
 
@@ -1570,6 +1582,14 @@ func ParseEndpoint(
 		packagesPublishApikeyTokenFlag      = packagesPublishFlags.String("apikey-token", "", "")
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
+
+		adminAssetsFlags = flag.NewFlagSet("admin-assets", flag.ContinueOnError)
+
+		adminAssetsUploadPlatformImageFlags             = flag.NewFlagSet("upload-platform-image", flag.ExitOnError)
+		adminAssetsUploadPlatformImageContentTypeFlag   = adminAssetsUploadPlatformImageFlags.String("content-type", "REQUIRED", "")
+		adminAssetsUploadPlatformImageContentLengthFlag = adminAssetsUploadPlatformImageFlags.String("content-length", "REQUIRED", "")
+		adminAssetsUploadPlatformImageSessionTokenFlag  = adminAssetsUploadPlatformImageFlags.String("session-token", "", "")
+		adminAssetsUploadPlatformImageStreamFlag        = adminAssetsUploadPlatformImageFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		adminChatAnalysisFlags = flag.NewFlagSet("admin-chat-analysis", flag.ContinueOnError)
 
@@ -3247,6 +3267,12 @@ func ParseEndpoint(
 		userSessionClientsGetUserSessionClientApikeyTokenFlag      = userSessionClientsGetUserSessionClientFlags.String("apikey-token", "", "")
 		userSessionClientsGetUserSessionClientProjectSlugInputFlag = userSessionClientsGetUserSessionClientFlags.String("project-slug-input", "", "")
 
+		userSessionClientsRefreshUserSessionClientCIMDFlags                = flag.NewFlagSet("refresh-user-session-client-cimd", flag.ExitOnError)
+		userSessionClientsRefreshUserSessionClientCIMDIDFlag               = userSessionClientsRefreshUserSessionClientCIMDFlags.String("id", "REQUIRED", "")
+		userSessionClientsRefreshUserSessionClientCIMDSessionTokenFlag     = userSessionClientsRefreshUserSessionClientCIMDFlags.String("session-token", "", "")
+		userSessionClientsRefreshUserSessionClientCIMDApikeyTokenFlag      = userSessionClientsRefreshUserSessionClientCIMDFlags.String("apikey-token", "", "")
+		userSessionClientsRefreshUserSessionClientCIMDProjectSlugInputFlag = userSessionClientsRefreshUserSessionClientCIMDFlags.String("project-slug-input", "", "")
+
 		userSessionClientsRevokeUserSessionClientFlags                = flag.NewFlagSet("revoke-user-session-client", flag.ExitOnError)
 		userSessionClientsRevokeUserSessionClientIDFlag               = userSessionClientsRevokeUserSessionClientFlags.String("id", "REQUIRED", "")
 		userSessionClientsRevokeUserSessionClientSessionTokenFlag     = userSessionClientsRevokeUserSessionClientFlags.String("session-token", "", "")
@@ -3475,6 +3501,9 @@ func ParseEndpoint(
 	assetsServeChatAttachmentFlags.Usage = assetsServeChatAttachmentUsage
 	assetsCreateSignedChatAttachmentURLFlags.Usage = assetsCreateSignedChatAttachmentURLUsage
 	assetsServeChatAttachmentSignedFlags.Usage = assetsServeChatAttachmentSignedUsage
+
+	organizationAssetsFlags.Usage = organizationAssetsUsage
+	organizationAssetsUploadOrganizationImageFlags.Usage = organizationAssetsUploadOrganizationImageUsage
 
 	assistantMemoriesFlags.Usage = assistantMemoriesUsage
 	assistantMemoriesListAssistantMemoriesFlags.Usage = assistantMemoriesListAssistantMemoriesUsage
@@ -3729,6 +3758,9 @@ func ParseEndpoint(
 	packagesListPackagesFlags.Usage = packagesListPackagesUsage
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
+
+	adminAssetsFlags.Usage = adminAssetsUsage
+	adminAssetsUploadPlatformImageFlags.Usage = adminAssetsUploadPlatformImageUsage
 
 	adminChatAnalysisFlags.Usage = adminChatAnalysisUsage
 	adminChatAnalysisGetSettingsFlags.Usage = adminChatAnalysisGetSettingsUsage
@@ -4079,6 +4111,7 @@ func ParseEndpoint(
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
 	userSessionClientsGetUserSessionClientFlags.Usage = userSessionClientsGetUserSessionClientUsage
+	userSessionClientsRefreshUserSessionClientCIMDFlags.Usage = userSessionClientsRefreshUserSessionClientCIMDUsage
 	userSessionClientsRevokeUserSessionClientFlags.Usage = userSessionClientsRevokeUserSessionClientUsage
 
 	userSessionConsentsFlags.Usage = userSessionConsentsUsage
@@ -4142,6 +4175,8 @@ func ParseEndpoint(
 			svcf = aiIntegrationsFlags
 		case "assets":
 			svcf = assetsFlags
+		case "organization-assets":
+			svcf = organizationAssetsFlags
 		case "assistant-memories":
 			svcf = assistantMemoriesFlags
 		case "assistants":
@@ -4204,6 +4239,8 @@ func ParseEndpoint(
 			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
+		case "admin-assets":
+			svcf = adminAssetsFlags
 		case "admin-chat-analysis":
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
@@ -4494,6 +4531,13 @@ func ParseEndpoint(
 
 			case "serve-chat-attachment-signed":
 				epf = assetsServeChatAttachmentSignedFlags
+
+			}
+
+		case "organization-assets":
+			switch epn {
+			case "upload-organization-image":
+				epf = organizationAssetsUploadOrganizationImageFlags
 
 			}
 
@@ -5194,6 +5238,13 @@ func ParseEndpoint(
 
 			case "publish":
 				epf = packagesPublishFlags
+
+			}
+
+		case "admin-assets":
+			switch epn {
+			case "upload-platform-image":
+				epf = adminAssetsUploadPlatformImageFlags
 
 			}
 
@@ -6185,6 +6236,9 @@ func ParseEndpoint(
 			case "get-user-session-client":
 				epf = userSessionClientsGetUserSessionClientFlags
 
+			case "refresh-user-session-client-cimd":
+				epf = userSessionClientsRefreshUserSessionClientCIMDFlags
+
 			case "revoke-user-session-client":
 				epf = userSessionClientsRevokeUserSessionClientFlags
 
@@ -6517,6 +6571,16 @@ func ParseEndpoint(
 			case "serve-chat-attachment-signed":
 				endpoint = c.ServeChatAttachmentSigned()
 				data, err = assetsc.BuildServeChatAttachmentSignedPayload(*assetsServeChatAttachmentSignedTokenFlag)
+			}
+		case "organization-assets":
+			c := organizationassetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "upload-organization-image":
+				endpoint = c.UploadOrganizationImage()
+				data, err = organizationassetsc.BuildUploadOrganizationImagePayload(*organizationAssetsUploadOrganizationImageContentTypeFlag, *organizationAssetsUploadOrganizationImageContentLengthFlag, *organizationAssetsUploadOrganizationImageSessionTokenFlag)
+				if err == nil {
+					data, err = organizationassetsc.BuildUploadOrganizationImageStreamPayload(data, *organizationAssetsUploadOrganizationImageStreamFlag)
+				}
 			}
 		case "assistant-memories":
 			c := assistantmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7217,6 +7281,16 @@ func ParseEndpoint(
 			case "publish":
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
+			}
+		case "admin-assets":
+			c := adminassetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "upload-platform-image":
+				endpoint = c.UploadPlatformImage()
+				data, err = adminassetsc.BuildUploadPlatformImagePayload(*adminAssetsUploadPlatformImageContentTypeFlag, *adminAssetsUploadPlatformImageContentLengthFlag, *adminAssetsUploadPlatformImageSessionTokenFlag)
+				if err == nil {
+					data, err = adminassetsc.BuildUploadPlatformImageStreamPayload(data, *adminAssetsUploadPlatformImageStreamFlag)
+				}
 			}
 		case "admin-chat-analysis":
 			c := adminchatanalysisc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8206,6 +8280,9 @@ func ParseEndpoint(
 			case "get-user-session-client":
 				endpoint = c.GetUserSessionClient()
 				data, err = usersessionclientsc.BuildGetUserSessionClientPayload(*userSessionClientsGetUserSessionClientIDFlag, *userSessionClientsGetUserSessionClientSessionTokenFlag, *userSessionClientsGetUserSessionClientApikeyTokenFlag, *userSessionClientsGetUserSessionClientProjectSlugInputFlag)
+			case "refresh-user-session-client-cimd":
+				endpoint = c.RefreshUserSessionClientCIMD()
+				data, err = usersessionclientsc.BuildRefreshUserSessionClientCIMDPayload(*userSessionClientsRefreshUserSessionClientCIMDIDFlag, *userSessionClientsRefreshUserSessionClientCIMDSessionTokenFlag, *userSessionClientsRefreshUserSessionClientCIMDApikeyTokenFlag, *userSessionClientsRefreshUserSessionClientCIMDProjectSlugInputFlag)
 			case "revoke-user-session-client":
 				endpoint = c.RevokeUserSessionClient()
 				data, err = usersessionclientsc.BuildRevokeUserSessionClientPayload(*userSessionClientsRevokeUserSessionClientIDFlag, *userSessionClientsRevokeUserSessionClientSessionTokenFlag, *userSessionClientsRevokeUserSessionClientApikeyTokenFlag, *userSessionClientsRevokeUserSessionClientProjectSlugInputFlag)
@@ -9773,6 +9850,41 @@ func assetsServeChatAttachmentSignedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment-signed --token \"abc123\"")
+}
+
+// organizationAssetsUsage displays the usage of the organization-assets
+// command and its subcommands.
+func organizationAssetsUsage() {
+	fmt.Fprintln(os.Stderr, `Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organization-assets COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    upload-organization-image: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organization-assets COMMAND --help\n", os.Args[0])
+}
+func organizationAssetsUploadOrganizationImageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-assets upload-organization-image", os.Args[0])
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-assets upload-organization-image --content-type \"abc123\" --content-length 1 --session-token \"abc123\" --stream \"goa.png\"")
 }
 
 // assistantMemoriesUsage displays the usage of the assistant-memories command
@@ -14553,6 +14665,41 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// adminAssetsUsage displays the usage of the admin-assets command and its
+// subcommands.
+func adminAssetsUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-assets COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    upload-platform-image: Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-assets COMMAND --help\n", os.Args[0])
+}
+func adminAssetsUploadPlatformImageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-assets upload-platform-image", os.Args[0])
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -content-length INT64")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-length INT64: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-assets upload-platform-image --content-type \"abc123\" --content-length 1 --session-token \"abc123\" --stream \"goa.png\"")
 }
 
 // adminChatAnalysisUsage displays the usage of the admin-chat-analysis command
@@ -21824,6 +21971,7 @@ func userSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-session-clients: List user_session_clients in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-client: Get a user_session_client by id.`)
+	fmt.Fprintln(os.Stderr, `    refresh-user-session-client-cimd: Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session-client: Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21879,6 +22027,30 @@ func userSessionClientsGetUserSessionClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients get-user-session-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionClientsRefreshUserSessionClientCIMDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients refresh-user-session-client-cimd", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients refresh-user-session-client-cimd --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionClientsRevokeUserSessionClientUsage() {

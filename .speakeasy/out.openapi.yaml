@@ -1836,6 +1836,101 @@ paths:
       x-speakeasy-react-hook:
         name: UpdateShadowMCPInventoryServerName
         type: mutation
+  /rpc/adminAssets.uploadImage:
+    post:
+      description: Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.
+      operationId: uploadPlatformImage
+      parameters:
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Length
+          required: true
+          schema:
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadImageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: uploadPlatformImage adminAssets
+      tags:
+        - adminAssets
+      x-speakeasy-name-override: uploadImage
+      x-speakeasy-react-hook:
+        name: UploadPlatformImage
   /rpc/adminChatAnalysis.getSettings:
     get:
       description: Get the active organization's chat analysis settings. Requires platform admin.
@@ -23870,6 +23965,101 @@ paths:
       x-speakeasy-name-override: upsertKey
       x-speakeasy-react-hook:
         name: UpsertModelProviderKey
+  /rpc/organizationAssets.uploadImage:
+    post:
+      description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
+      operationId: uploadOrganizationImage
+      parameters:
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Length
+          required: true
+          schema:
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadImageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: uploadOrganizationImage organizationAssets
+      tags:
+        - organizationAssets
+      x-speakeasy-name-override: uploadImage
+      x-speakeasy-react-hook:
+        name: UploadOrganizationImage
   /rpc/organizationRemoteSessionClients.create:
     post:
       description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
@@ -52916,6 +53106,114 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessionClients
+  /rpc/userSessionClients.refreshCIMD:
+    post:
+      description: 'Force a CIMD client''s metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.'
+      operationId: refreshUserSessionClientCIMD
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: refreshUserSessionClientCIMD userSessionClients
+      tags:
+        - userSessionClients
+      x-speakeasy-name-override: refreshCIMD
+      x-speakeasy-react-hook:
+        name: RefreshUserSessionClientCIMD
   /rpc/userSessionClients.revoke:
     post:
       description: 'Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control''s job, not revocation''s.'
@@ -67536,14 +67834,14 @@ components:
           format: int64
         credits:
           type: integer
-          description: The number of credits used
+          description: The number of credits used. Only populated for platform admins.
           format: int64
         has_active_subscription:
           type: boolean
           description: Whether the project has an active subscription
         included_credits:
           type: integer
-          description: The number of credits included in the tier
+          description: The number of credits included in the tier. Only populated for platform admins.
           format: int64
         included_servers:
           type: integer
@@ -67567,8 +67865,6 @@ components:
         - servers
         - included_servers
         - actual_enabled_server_count
-        - credits
-        - included_credits
         - has_active_subscription
     PlatformMCPOnboardingSetupHandoff:
       type: object
@@ -77932,6 +78228,32 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
+    UploadOrganizationImageForm:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        session_token:
+          type: string
+      required:
+        - content_type
+        - content_length
+    UploadPlatformImageForm:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        session_token:
+          type: string
+      required:
+        - content_type
+        - content_length
     UploadSkillContentPayload:
       type: object
       properties:
@@ -78307,6 +78629,17 @@ components:
           description: The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
         client_id_issued_at:
           type: string
+          format: date-time
+        client_id_metadata_cache_expires_at:
+          type: string
+          description: When the cached metadata document lapses and the next /authorize revalidates it against the host. Null for DCR clients, and null after a refresh purge until the re-read lands.
+          format: date-time
+        client_id_metadata_etag:
+          type: string
+          description: ETag the document host returned on the last full read; sent as If-None-Match when revalidating. Null when the host offers no validator, and null for DCR clients.
+        client_id_metadata_fetched_at:
+          type: string
+          description: When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.
           format: date-time
         client_id_metadata_uri:
           type: string
@@ -78906,6 +79239,8 @@ tags:
     description: Manage organization-level AI provider integrations.
   - name: assets
     description: Manages assets used by Gram projects.
+  - name: organizationAssets
+    description: Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.
   - name: assistantMemories
     description: Manage assistant memory records.
   - name: assistants
@@ -78968,6 +79303,8 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: adminAssets
+    description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
