@@ -485,8 +485,11 @@ SELECT
     COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state = 'confirmed'), 0)::bigint AS confirmed_tokens
   , COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state IN ('pending', 'ambiguous', 'confirmed')), 0)::bigint AS intended_tokens
 FROM stripe_meter_reports
-WHERE organization_id = @organization_id
-  AND billing_cycle_usage_id = @billing_cycle_usage_id;
+JOIN billing_cycle_usage
+  ON billing_cycle_usage.organization_id = stripe_meter_reports.organization_id
+ AND billing_cycle_usage.cycle_start = stripe_meter_reports.cycle_start
+WHERE billing_cycle_usage.organization_id = @organization_id
+  AND billing_cycle_usage.id = @billing_cycle_usage_id;
 
 -- name: ConfirmReconciledTUMMeterReports :execrows
 UPDATE stripe_meter_reports

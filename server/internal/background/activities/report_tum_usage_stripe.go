@@ -285,7 +285,7 @@ func (r *ReportTUMUsageToStripe) reconcileExpiredAmbiguity(
 
 		totals, totalsErr := queries.GetTUMMeterReportTotals(ctx, usagerepo.GetTUMMeterReportTotalsParams{
 			OrganizationID:      organizationIDParam,
-			BillingCycleUsageID: cycle.BillingCycleUsageID,
+			BillingCycleUsageID: cycle.BillingCycleUsageID.UUID,
 		})
 		if totalsErr != nil {
 			errs = append(errs, fmt.Errorf("get report totals for cycle %s: %w", cycle.CycleStart.Time, totalsErr))
