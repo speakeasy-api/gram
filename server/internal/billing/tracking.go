@@ -111,7 +111,7 @@ func ModelUsageSourceStrings() []string {
 // traffic, and everything Gram itself spends (reactive scanning inference
 // and user-initiated hosted chat alike) is out of scope.
 func GramHostedHookSourceStrings() []string {
-	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), "")
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), string(ModelUsageSourceMCPResearch), "")
 }
 
 type ModelUsageEvent struct {

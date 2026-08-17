@@ -684,6 +684,38 @@ func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningRe
 	return i, err
 }
 
+const interruptStaleResearchReports = `-- name: InterruptStaleResearchReports :execrows
+UPDATE mcp_research_reports
+SET status = 'failed'
+  , error = 'the research run was interrupted and did not resolve'
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE mcp_approval_request_id = $1
+  AND project_id = $2
+  AND status = 'running'
+  AND started_at < $3
+  AND deleted IS FALSE
+`
+
+type InterruptStaleResearchReportsParams struct {
+	McpApprovalRequestID uuid.UUID
+	ProjectID            uuid.UUID
+	StaleBefore          pgtype.Timestamptz
+}
+
+// A running report older than the workflow's absolute deadline can only be a
+// stranded row (crashed worker, exhausted or skipped compensation, terminated
+// workflow) -- no live run outlives the Temporal run timeout. Resolving it
+// durably reopens the one-run-per-request gate; the read path independently
+// presents stale running rows as failed so polling recovers without a start.
+func (q *Queries) InterruptStaleResearchReports(ctx context.Context, arg InterruptStaleResearchReportsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, interruptStaleResearchReports, arg.McpApprovalRequestID, arg.ProjectID, arg.StaleBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listApprovalRequestTargets = `-- name: ListApprovalRequestTargets :many
 SELECT
   r.id

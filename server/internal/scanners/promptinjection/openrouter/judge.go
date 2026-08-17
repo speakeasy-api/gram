@@ -317,6 +317,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Messages:                  messages,
 		ProjectID:                 req.ProjectID,
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               &c.temperature,
 		Model:                     c.model,
 		Stream:                    false,

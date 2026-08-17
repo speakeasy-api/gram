@@ -20,13 +20,17 @@ func TestRun_SeedsMenuFromBriefing(t *testing.T) {
 
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
 	menu := research.NewURLMenu()
-	runner := researchagent.New(completions, nil, menu)
+	runner := researchagent.New(completions, nil, menu, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 
 	input := researchagent.RunInput{
 		OrgID:       "org-1",
@@ -67,12 +71,16 @@ func TestRun_BriefingRedactsEmails(t *testing.T) {
 
 	completions := &scriptedCompletions{
 		turns: []*openrouter.CompletionResponse{
+			// One successful search first: a run that never called a tool
+			// fails the honesty guard by contract, and these tests are about
+			// what happens after research, not about the guard.
+			toolCallResponse("platform_web_search", `{"query": "q"}`),
 			{Content: "done", Usage: openrouter.Usage{}},
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil)
+	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	input := runInput()
 	input.Evidence = json.RawMessage(`{"usage": {"requesters": ["alex@corp.example.com", "sam@corp.example.com", "alex@corp.example.com"]}}`)
 

@@ -71,10 +71,41 @@ func ConfigureFetchClient(client *guardian.HTTPClient) *guardian.HTTPClient {
 		if req.URL.Scheme != "https" {
 			return fmt.Errorf("refusing redirect to %q: every hop must stay on https", req.URL.Scheme)
 		}
+		// The menu check on the initial request is the allowlist; without
+		// this, any menu URL could 302 to an arbitrary never-observed host
+		// whose content becomes evidence and whose anchors grow the menu.
+		// Same-site moves (path redirects, apex↔www) are the redirects real
+		// pages do and stay on the host trusted code observed; anything
+		// cross-site must independently be in the run's menu. Fails closed
+		// when no authorizer rode in on the context.
+		prev := via[len(via)-1].URL
+		if !sameRedirectSite(prev, req.URL) {
+			authorize, _ := req.Context().Value(redirectAuthorizerKey{}).(redirectAuthorizer)
+			if authorize == nil || !authorize(req.URL) {
+				return fmt.Errorf("refusing cross-site redirect to %q: the target is not among this run's observed sources", req.URL.Hostname())
+			}
+		}
 		return nil
 	}
 
 	return client
+}
+
+// redirectAuthorizer reports whether a cross-site redirect target may be
+// followed; the fetch tool injects one per request, closing over the run's
+// menu.
+type redirectAuthorizer func(target *url.URL) bool
+
+// redirectAuthorizerKey carries the authorizer through the request context —
+// CheckRedirect is configured at wiring time, long before any run exists.
+type redirectAuthorizerKey struct{}
+
+// sameRedirectSite reports whether a redirect stays on the site the previous
+// hop was on: the same hostname, or its apex↔www twin — the one cross-host
+// shape ordinary sites redirect through as a matter of course.
+func sameRedirectSite(prev, next *url.URL) bool {
+	a, b := prev.Hostname(), next.Hostname()
+	return a == b || "www."+a == b || a == "www."+b
 }
 
 // NewFetchPageTool builds the page-fetch tool. Pass the client through
@@ -140,6 +171,14 @@ func (s *FetchPage) Call(ctx context.Context, env toolconfig.ToolCallEnv, payloa
 	if !s.budget.take(env.GramChatID, time.Now()) {
 		return fmt.Errorf("this run's fetch budget of %d pages is exhausted: work with what is already fetched", maxFetchesPerChat)
 	}
+
+	// The redirect authorizer lets a cross-site hop through only when its
+	// target is independently in this run's menu (see ConfigureFetchClient).
+	runID := env.GramChatID
+	ctx = context.WithValue(ctx, redirectAuthorizerKey{}, redirectAuthorizer(func(u *url.URL) bool {
+		_, allowed := s.menu.Allowed(runID, u.String())
+		return allowed
+	}))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
