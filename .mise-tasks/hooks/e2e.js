@@ -3121,18 +3121,19 @@ async function runShadowMCPSuite(args) {
     for (const provider of args.providers) {
       // Copilot routes MCP tools as "<server>-<tool>", which neither
       // agenthooks' ParseMCPName nor the server's toolref.IsMCPToolName
-      // recognises, and agenthooks has no Copilot case in
-      // loadMCPConfigEntries — so a Copilot MCP call reaches ingest with no
-      // data.mcp block and is classified as a plain tool call. Shadow MCP
-      // cannot fire until the Copilot codec resolves MCP calls; skipping is
-      // honest, driving the scenario would only assert a known gap.
+      // recognises by name. agenthooks resolves them from config instead
+      // (resolveCopilotMCP matches the "<server>-" prefix against
+      // ~/.copilot/mcp-config.json plus the workspace .github/mcp.json and
+      // .mcp.json), so a call carries a data.mcp block only when the shadow
+      // server is on disk where agenthooks looks. This harness does not put
+      // it there yet, so the scenario is skipped rather than asserted.
       if (provider === "copilot") {
         checks.push({
           provider,
           feature: "shadow_mcp.blocked",
           status: "SKIP",
           detail:
-            "Copilot MCP tool calls carry no MCP identity yet (agenthooks ParseMCPName / loadMCPConfigEntries have no Copilot case)",
+            "Copilot MCP identity depends on agenthooks resolving <server>-<tool> against on-disk MCP config; this harness does not seed the shadow server there yet",
         });
         continue;
       }

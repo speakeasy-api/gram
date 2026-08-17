@@ -690,8 +690,8 @@ github.com/sorairolake/lzip-go v0.3.5 h1:ms5Xri9o1JBIWvOFAorYtUNik6HI3HgBTkISiqu
 github.com/sorairolake/lzip-go v0.3.5/go.mod h1:N0KYq5iWrMXI0ZEXKXaS9hCyOjZUQdBDEIbXfoUwbdk=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
-github.com/speakeasy-api/agenthooks v0.6.1-0.20260816234923-46452cc13fca h1:X8OIdtSJJFxDyGiN3+VCclSiNHHAt2cQbyPzUw9LkV8=
-github.com/speakeasy-api/agenthooks v0.6.1-0.20260816234923-46452cc13fca/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
+github.com/speakeasy-api/agenthooks v0.6.1-0.20260817001929-df71ee1c3884 h1:0SWESuFT5uan+E8VDTlffHhLf0nezrYHzVwi93GQSwU=
+github.com/speakeasy-api/agenthooks v0.6.1-0.20260817001929-df71ee1c3884/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
 github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xhOW9rJxU=
 github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.0 h1:y6/KsyZErJegJJR4P9l1PFXU+jyBWKKhnLmzl96ikgc=
