@@ -1,0 +1,99 @@
+edition = "2024";
+
+package gram.chat.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1;chatv1";
+
+// HookMessage carries one transcript row captured from /rpc/hooks.ingest, from
+// the API server to the streams process that persists it.
+//
+// The producer resolves the row (the pure payload → columns mapping) and this
+// message carries the result; everything downstream of it needs the database
+// and therefore runs in the handler: the session-capture entitlement check, the
+// proxied-turn duplicate check, the chat upsert, and the prompt-correlation
+// lock. That split is the point of the topic — the hook request path does no
+// database work for the transcript.
+//
+// `id` is minted by the producer, not by the database, and is inserted
+// verbatim. It is what makes redelivery safe: the handler inserts ON CONFLICT
+// (id) DO NOTHING, so at-least-once delivery cannot double-write a row. Never
+// let the handler generate it.
+//
+// Only fields the ingest path actually varies appear here. Columns that path
+// always leaves empty or zero (content_raw, content_asset_url, storage_error,
+// origin, ip_address, the three token counts, generation) are set by the
+// handler and deliberately absent, so a reader can tell what this producer
+// controls from the message alone.
+message HookMessage {
+  // Row identity, minted at publish time. See the note above.
+  string id = 1;
+
+  string chat_id = 2;
+  string project_id = 3;
+
+  string role = 4;
+  string content = 5;
+  string model = 6;
+  // Carries the agent-prompt correlation id when the event had one. Its
+  // presence is what routes the handler to the correlated upsert.
+  string message_id = 7;
+  string tool_call_id = 8;
+  string user_id = 9;
+  string external_user_id = 10;
+  string finish_reason = 11;
+  // Serialized JSON, stored verbatim in the tool_calls jsonb column.
+  bytes tool_calls = 12;
+  string user_agent = 13;
+  string source = 14;
+  // Redelivery from a device's offline spool (X-Gram-Replayed).
+  bool replayed = 15;
+  // The event's occurred_at, NOT the insert time: spool replays arrive after
+  // newer live rows and transcript readers order by (created_at, seq).
+  // Must be UTC RFC3339 at nanosecond precision, e.g.
+  // 2023-01-01T00:00:00.123456789Z. Precision is not cosmetic: the transcript
+  // index is (chat_id, generation, created_at, seq), so rows truncated to the
+  // same second tie on created_at and fall back to seq — which here is Pub/Sub
+  // delivery order, not event order.
+  string created_at = 16;
+
+  // SessionRef is the session identity the handler needs to create the chat
+  // row and to check the org's session-capture entitlement. It mirrors the
+  // subset of the hook service's SessionMetadata that persistence reads.
+  //
+  // Nested rather than top-level: a topic's schema proto must declare exactly
+  // one top-level message, since the file is what carries the schema.
+  message SessionRef {
+    string session_id = 1;
+    string organization_id = 2;
+    string user_id = 3;
+    string user_email = 4;
+    string user_account_id = 5;
+  }
+
+  // Routing that the handler cannot re-derive from the row alone.
+  SessionRef session = 17;
+  // The adapter's hook source, e.g. the value stored in the source column
+  // before normalization. Decides the proxied-transcript branch.
+  string hook_source = 18;
+  // Adapter slug from the payload (source.adapter). Decides the
+  // native-transcript-fallback branch, which is not the same question as
+  // hook_source answers.
+  string adapter = 19;
+  // Title to give the chat if the handler has to create it.
+  string chat_title = 20;
+  // Set when the prompt carried no correlation id and the session's transcript
+  // is owned by a proxied or native-fallback source: routes the handler to the
+  // lock-taking insert instead of the plain one.
+  bool uncorrelated_prompt = 21;
+  // Set when the adapter uses the native transcript fallback. Read together
+  // with uncorrelated_prompt.
+  bool native_prompt = 22;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

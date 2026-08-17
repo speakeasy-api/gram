@@ -36,6 +36,17 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
+	// FlagChatMessageAsyncPersist routes hook-captured transcript rows onto the
+	// gram.chat.v1.HookMessage topic instead of writing them to Postgres on the
+	// hook request path. Evaluated locally (this is the hottest path in the
+	// product; a decide call per hook is not affordable) with distinctID = the
+	// project ID, so a project is consistently on or off and a single session's
+	// rows never split across both paths.
+	//
+	// Degrades to the synchronous write on any error: a slower write is always
+	// safer than a dropped transcript row.
+	FlagChatMessageAsyncPersist Flag = "chat-message-async-persist"
+
 	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document
 	// (CIMD) support on the user-session authorization server: URL-shaped
 	// client_id values on /mcp/{slug}/authorize are resolved by fetching the

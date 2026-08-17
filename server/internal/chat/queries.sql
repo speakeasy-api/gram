@@ -237,6 +237,57 @@ VALUES (
   , @created_at
 );
 
+-- name: CreateChatMessageIdempotent :execrows
+-- The insert for rows that arrive over Pub/Sub, where at-least-once delivery
+-- means the same row can be presented more than once.
+--
+-- Unlike CreateChatMessage this supplies id rather than letting the column
+-- default generate one: the publisher mints the uuid before the message is
+-- published, so every redelivery of that message carries the same id and the
+-- primary key is what rejects the duplicate. That is the whole reason this
+-- query exists separately — CreateChatMessage is :copyfrom, and COPY admits no
+-- ON CONFLICT clause.
+--
+-- Returns the affected row count, so a caller can tell a first delivery (1)
+-- from a redelivery (0) without a second query.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , finish_reason
+  , tool_calls
+  , user_agent
+  , source
+  , replayed
+  , created_at
+)
+VALUES (
+    @id::uuid
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @finish_reason
+  , @tool_calls
+  , @user_agent
+  , @source
+  , @replayed
+  , @created_at
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- name: UpsertCorrelatedChatMessage :execrows
 INSERT INTO chat_messages (
     chat_id

@@ -56,6 +56,45 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-chat-v1-hook-message
+    name: gram-chat-v1-hook-message
+    spec:
+      definition: |
+        edition = "2024";
+        message HookMessage {
+          string id = 1;
+          string chat_id = 2;
+          string project_id = 3;
+          string role = 4;
+          string content = 5;
+          string model = 6;
+          string message_id = 7;
+          string tool_call_id = 8;
+          string user_id = 9;
+          string external_user_id = 10;
+          string finish_reason = 11;
+          bytes tool_calls = 12;
+          string user_agent = 13;
+          string source = 14;
+          bool replayed = 15;
+          string created_at = 16;
+          message SessionRef {
+            string session_id = 1;
+            string organization_id = 2;
+            string user_id = 3;
+            string user_email = 4;
+            string user_account_id = 5;
+          }
+          SessionRef session = 17;
+          string hook_source = 18;
+          string adapter = 19;
+          string chat_title = 20;
+          bool uncorrelated_prompt = 21;
+          bool native_prompt = 22;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
     name: gram-otel-v1-log-record
     spec:
@@ -487,6 +526,23 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-chat-v1-hook-message-persister
+      topic_proto_message: gram-chat-v1-hook-message
+    name: gram-chat-v1-hook-message-persister
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-chat-v1-hook-message-persister-dlq
+        maxDeliveryAttempts: 5
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 5s
+      topicRef:
+        name: gram-chat-v1-hook-message
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-processor
       topic_proto_message: gram-ping-v2-message
     name: gram-ping-v2-processor
@@ -653,6 +709,22 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-authz-v1-challenge-ch-writer
     name: gram-authz-v1-challenge-ch-writer-dlq
+    spec: {}
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-chat-v1-hook-message
+    name: gram-chat-v1-hook-message
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-chat-v1-hook-message
+  - labels:
+      dlq_for: gram-chat-v1-hook-message-persister
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-chat-v1-hook-message-persister
+    name: gram-chat-v1-hook-message-persister-dlq
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator

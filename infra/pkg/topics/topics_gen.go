@@ -9,6 +9,7 @@ import (
 	"cloud.google.com/go/pubsub/v2"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -26,6 +27,8 @@ type Topic string
 const (
 	// GramAuthzV1Challenge publishes to gram-authz-v1-challenge.
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
+	// GramChatV1HookMessage publishes to gram-chat-v1-hook-message.
+	GramChatV1HookMessage Topic = "gram.chat.v1.HookMessage"
 	// GramOtelV1LogRecord publishes to gram-otel-v1-log-record.
 	GramOtelV1LogRecord Topic = "gram.otel.v1.LogRecord"
 	// GramOtelV1Span publishes to gram-otel-v1-span.
@@ -54,6 +57,7 @@ const (
 func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
+		GramChatV1HookMessage,
 		GramOtelV1LogRecord,
 		GramOtelV1Span,
 		GramPingV2Message,
@@ -73,6 +77,8 @@ func Lookup(name string) (Topic, bool) {
 	switch Topic(name) {
 	case GramAuthzV1Challenge:
 		return GramAuthzV1Challenge, true
+	case GramChatV1HookMessage:
+		return GramChatV1HookMessage, true
 	case GramOtelV1LogRecord:
 		return GramOtelV1LogRecord, true
 	case GramOtelV1Span:
@@ -108,6 +114,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 	switch topic {
 	case GramAuthzV1Challenge:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
+	case GramChatV1HookMessage:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &chatv1.HookMessage{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1LogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.LogRecord{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1Span:

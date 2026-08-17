@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -184,6 +185,7 @@ func ForDeploymentProcessing(
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			ChatMessages:            gcp.NewNoopPublisher[*chatv1.HookMessage](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,

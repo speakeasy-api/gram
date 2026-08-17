@@ -1385,13 +1385,21 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	if sessionID == "" || authCtx.ProjectID == nil {
 		return false, nil
 	}
+	// Resolved once, before anything acts on it: the branches below differ in
+	// which process does the database work, and asking the flag twice could
+	// answer differently mid-event and leave the row half-handled by each.
+	async := s.asyncChatPersist(ctx, authCtx)
+
 	// Proxied events flag the chat whether or not their transcript row
 	// survives: natively captured sessions suppress proxied rows as
 	// duplicates, so the marker is the only durable trace that the session
 	// was routed through LiteLLM. Deferred so the flag lands after whichever
 	// persistence path created the chat row; when no chat exists yet the
 	// update is a no-op and a later event in the session sets it.
-	if proxiedTranscriptSource(hookSource) {
+	//
+	// On the async path the handler owns this, for the same reason it owns the
+	// insert — marking here would put the write back on the request path.
+	if !async && proxiedTranscriptSource(hookSource) {
 		defer s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
@@ -1456,7 +1464,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		// collapses the two observations into one row; assistant turns carry
 		// none, so a proxied row for a natively captured session is dropped
 		// instead of persisted alongside the native one.
-		if proxiedTranscriptSource(hookSource) {
+		//
+		// The async path defers this to the handler: the check reads the
+		// database, so running it here would leave the request path doing the
+		// very work the topic exists to move off it.
+		if !async && proxiedTranscriptSource(hookSource) {
 			duplicate, err := s.proxiedTurnDuplicatesNativeStream(ctx, metadata, sessionIDToUUID(sessionID), *authCtx.ProjectID)
 			if err != nil {
 				return false, err
@@ -1509,6 +1521,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 
 	title := canonicalChatTitle(payload, titleContent)
+
+	if async {
+		// Reports no capture: whether a row was stored is not knowable here,
+		// and the caller only uses that answer to mark the session natively
+		// captured. The handler makes the same mark once it knows.
+		err := s.publishChatMessage(ctx, metadata, authCtx, msg, title, hookSource, payload.Source.Adapter, uncorrelatedPrompt, nativePrompt)
+		return false, err
+	}
+
 	if uncorrelatedPrompt {
 		return s.insertUncorrelatedAgentPrompt(ctx, metadata, msg, title, nativePrompt)
 	}

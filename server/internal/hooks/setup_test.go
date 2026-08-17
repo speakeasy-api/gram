@@ -18,6 +18,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -70,6 +73,11 @@ type testInstance struct {
 	assetStorage    assets.BlobStore
 	efficacySignals *recordingEfficacySignaler
 	identitySignals *recordingIdentityMapSignaler
+	// chatMessages captures what the async transcript path published. The flag
+	// that routes to it is off by default, so a test that wants the async path
+	// enables it on flags first.
+	chatMessages *recordingChatMessagePublisher
+	flags        *feature.InMemory
 }
 
 // recordingIdentityMapSignaler captures identity map refresh requests emitted
@@ -91,6 +99,46 @@ func (r *recordingIdentityMapSignaler) refreshCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.count
+}
+
+// recordingChatMessagePublisher captures published transcript rows. Preferred
+// over gcp.MockPublisher here because these tests assert on what was published
+// rather than that a publish happened, and the publish is issued from a path
+// that never awaits its result.
+type recordingChatMessagePublisher struct {
+	mu       sync.Mutex
+	messages []*chatv1.HookMessage
+	err      error
+}
+
+func (p *recordingChatMessagePublisher) Publish(_ context.Context, msg *chatv1.HookMessage) gcp.PublishResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.messages = append(p.messages, msg)
+	if p.err != nil {
+		return failedPublishResult{err: p.err}
+	}
+	return gcp.NewSuccessPublishResult()
+}
+
+type failedPublishResult struct{ err error }
+
+func (r failedPublishResult) Ready() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+
+func (r failedPublishResult) Get(context.Context) (string, error) { return "", r.err }
+
+func (p *recordingChatMessagePublisher) Stop(context.Context) error { return nil }
+
+// published returns a copy so a caller can read it while the detached ack
+// drain the publish path starts is still running.
+func (p *recordingChatMessagePublisher) published() []*chatv1.HookMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.messages)
 }
 
 // recordingEfficacySignaler captures the skill efficacy wakes a hook path
@@ -210,6 +258,9 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	spendGate, err := spendrules.NewGate(logger, spendGateCache, spendCelEngine)
 	require.NoError(t, err)
+	chatMessages := &recordingChatMessagePublisher{}
+	flags := &feature.InMemory{}
+
 	svc := NewService(
 		logger,
 		conn,
@@ -235,6 +286,8 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
+		chatMessages,
+		flags,
 	)
 
 	return ctx, &testInstance{
@@ -247,6 +300,8 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		assetStorage:    assetStorage,
 		efficacySignals: efficacySignals,
 		identitySignals: identitySignals,
+		chatMessages:    chatMessages,
+		flags:           flags,
 	}
 }
 
