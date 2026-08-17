@@ -84,6 +84,12 @@ func NewFetchPageTool(client *guardian.HTTPClient, menu *URLMenu) *FetchPage {
 	return &FetchPage{http: client, budget: newCallBudget(maxFetchesPerChat), menu: menu}
 }
 
+// Menu exposes the menu this tool enforces, so a registrar can verify a
+// select-class tool really is menu-locked rather than trusting the label.
+func (s *FetchPage) Menu() *URLMenu {
+	return s.menu
+}
+
 func (s *FetchPage) Descriptor() core.ToolDescriptor {
 	return core.ToolDescriptor{
 		SourceSlug:  "research",
