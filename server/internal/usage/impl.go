@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -203,7 +204,14 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	if previousAccountType != updatedAccountType {
 		for _, keyType := range openrouter.AllKeyTypes {
-			if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil); err != nil {
+			err := keybillinglock.With(ctx, logger, s.db, refreshedOrg.ID, keyType, func(_ *pgxpool.Conn) error {
+				_, refreshErr := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, keyType, nil)
+				if refreshErr != nil {
+					return fmt.Errorf("refresh OpenRouter %s key after account type change: %w", keyType, refreshErr)
+				}
+				return nil
+			})
+			if err != nil {
 				// Keys are provisioned lazily on first use (chat on the first
 				// completion, internal on the first judge call), so an org
 				// that changes account type before ever running a completion

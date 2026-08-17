@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -88,7 +89,9 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// organization reads as enterprise with a dead key until the next sweep
 	// completes the demotion.
 	for _, keyType := range openrouter.AllKeyTypes {
-		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
+		if err := keybillinglock.With(ctx, d.logger, d.db, args.OrganizationID, keyType, func(_ *pgxpool.Conn) error {
+			return d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType)
+		}); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
 		}
 	}

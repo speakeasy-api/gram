@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -72,6 +73,8 @@ type TrialKeyReviver interface {
 
 // ErrKeyRevivalUnavailable reports a deployment that cannot reach OpenRouter.
 var ErrKeyRevivalUnavailable = errors.New("no usable OpenRouter configuration")
+
+const keyBillingLockWaitTimeout = 5 * time.Second
 
 // TrialKeysUnavailable lets the admin server boot without OpenRouter.
 type TrialKeysUnavailable struct{}
@@ -905,46 +908,49 @@ func (s *Service) rejectRearm(ctx context.Context, logger *slog.Logger, organiza
 // It runs on the pool, not the caller's transaction, so a revived key survives
 // a later rollback. That is the safe direction.
 func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string) ([]openrouter.KeyType, error) {
-	keys := orrepo.New(s.db)
-
 	var uncapped []openrouter.KeyType
 
 	for _, keyType := range openrouter.AllKeyTypes {
-		row, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
-			OrganizationID: organizationID,
-			KeyType:        string(keyType),
+		err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+			row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
+				OrganizationID: organizationID,
+				KeyType:        string(keyType),
+			})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return nil
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
+			case !row.Disabled:
+				return nil
+			}
+
+			// The ceiling recorded on the row, not the policy default: a trial
+			// key is minted well below that default. A zero resolves from the
+			// pre-commit free-tier projection and is corrected after commit.
+			if row.MonthlyCredits == 0 {
+				uncapped = append(uncapped, keyType)
+			}
+			limit := conv.PtrEmpty(int(row.MonthlyCredits))
+			_, err = s.openRouter.ReinstateAPIKeyLimit(ctx, organizationID, keyType, limit)
+			switch {
+			case errors.Is(err, ErrKeyRevivalUnavailable):
+				return oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
+			case err != nil:
+				return oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+			default:
+				return nil
+			}
 		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			continue
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
-		}
-
-		if !row.Disabled {
-			continue
-		}
-
-		// The ceiling recorded on the row, not the policy default: a trial key
-		// is minted well below that default.
-		//
-		// A zero becomes a nil limit, which RefreshAPIKeyLimit resolves on the
-		// pool: pre-commit that reads free. recapRevivedKeys fixes those after.
-		if row.MonthlyCredits == 0 {
-			uncapped = append(uncapped, keyType)
-		}
-		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.ReinstateAPIKeyLimit(ctx, organizationID, keyType, limit)
-		switch {
-		case errors.Is(err, ErrKeyRevivalUnavailable):
-			// CodeInvalid and not CodeGatewayError: the admin app trusts a
-			// response body only below 500, and this names a deployment setting
-			// to fix rather than a call to retry.
-			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
-		case err != nil:
-			// OpenRouter refusing: the operator's action is to retry, not to
-			// read a stack trace.
-			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+		if err != nil {
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) {
+				return nil, shareable
+			}
+			if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+				return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for trial re-arm", keyType).LogError(ctx, logger)
 		}
 	}
 
@@ -959,7 +965,13 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, orga
 // here would report an armed trial as unarmed.
 func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) {
 	for _, keyType := range keyTypes {
-		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, nil); err != nil {
+		if err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(_ *pgxpool.Conn) error {
+			_, refreshErr := s.openRouter.RefreshAPIKeyLimit(ctx, organizationID, keyType, nil)
+			if refreshErr != nil {
+				return fmt.Errorf("refresh re-armed OpenRouter %s key: %w", keyType, refreshErr)
+			}
+			return nil
+		}); err != nil {
 			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
 				attr.SlogError(err),
 				attr.SlogOpenRouterKeyType(string(keyType)),

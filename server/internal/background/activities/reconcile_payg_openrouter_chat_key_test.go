@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -102,13 +103,22 @@ func setupPaygChatKeyReconciler(t *testing.T, accountType string, subscriptionID
 	return reconciler, provisioner, db, organizationID
 }
 
+func requireAccountTypeCreditLimit(t *testing.T, tier billing.Tier) int {
+	t.Helper()
+
+	limit, ok := openrouter.AccountTypeCreditLimit(tier)
+	require.True(t, ok)
+	return limit
+}
+
 func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateEnablesOtherInferenceWhenSecurityIsAbsent(t *testing.T) {
 	t.Parallel()
 
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
+	paygLimit := requireAccountTypeCreditLimit(t, billing.TierPayg)
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 100
-	})).Return(100, nil).Once()
+		return limit != nil && *limit == paygLimit
+	})).Return(paygLimit, nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
 	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
@@ -119,6 +129,7 @@ func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateReenablesSecurityAtItsRec
 	t.Parallel()
 
 	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
+	paygLimit := requireAccountTypeCreditLimit(t, billing.TierPayg)
 	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(openrouter.KeyTypeInternal),
@@ -149,8 +160,8 @@ func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateReenablesSecurityAtItsRec
 	}))
 
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 100
-	})).Return(100, nil).Once()
+		return limit != nil && *limit == paygLimit
+	})).Return(paygLimit, nil).Once()
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.MatchedBy(func(limit *int) bool {
 		return limit != nil && *limit == 37
 	})).Return(37, nil).Once()
@@ -164,6 +175,7 @@ func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateReplacesUnchosenSecurityP
 	t.Parallel()
 
 	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
+	paygLimit := requireAccountTypeCreditLimit(t, billing.TierPayg)
 	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(openrouter.KeyTypeInternal),
@@ -175,11 +187,11 @@ func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateReplacesUnchosenSecurityP
 	require.NoError(t, err)
 
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 100
-	})).Return(100, nil).Once()
+		return limit != nil && *limit == paygLimit
+	})).Return(paygLimit, nil).Once()
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 100
-	})).Return(100, nil).Once()
+		return limit != nil && *limit == paygLimit
+	})).Return(paygLimit, nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
 	provisioner.AssertExpectations(t)
@@ -200,6 +212,7 @@ func TestReconcilePaygOpenRouterChatKeyCurrentFreeStateDisablesOtherAndClampsSec
 	t.Parallel()
 
 	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
+	baseLimit := requireAccountTypeCreditLimit(t, billing.TierBase)
 	_, err := openrouterrepo.New(db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(openrouter.KeyTypeInternal),
@@ -211,8 +224,8 @@ func TestReconcilePaygOpenRouterChatKeyCurrentFreeStateDisablesOtherAndClampsSec
 	require.NoError(t, err)
 	provisioner.On("DisableAPIKey", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 5
-	})).Return(5, nil).Once()
+		return limit != nil && *limit == baseLimit
+	})).Return(baseLimit, nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}))
 	provisioner.AssertExpectations(t)
@@ -338,7 +351,7 @@ func TestRefreshOpenRouterChatKeyDoesNotReinstateCommittedSubscriptionLoss(t *te
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-func TestRefreshOpenRouterChatKeyHoldsBillingLockAcrossUpstreamPatch(t *testing.T) {
+func TestRefreshOpenRouterInternalKeyHoldsBillingLockAcrossUpstreamPatch(t *testing.T) {
 	t.Parallel()
 
 	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
@@ -348,7 +361,7 @@ func TestRefreshOpenRouterChatKeyHoldsBillingLockAcrossUpstreamPatch(t *testing.
 	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
 	t.Cleanup(release)
 
-	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.Anything).Run(func(mock.Arguments) {
+	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.Anything).Run(func(mock.Arguments) {
 		close(patchStarted)
 		<-releasePatch
 	}).Return(100, nil).Once()
@@ -359,14 +372,14 @@ func TestRefreshOpenRouterChatKeyHoldsBillingLockAcrossUpstreamPatch(t *testing.
 		refreshDone <- refresh.Do(t.Context(), activities.RefreshOpenRouterKeyArgs{
 			OrgID:   organizationID,
 			Limit:   nil,
-			KeyType: string(openrouter.KeyTypeChat),
+			KeyType: string(openrouter.KeyTypeInternal),
 		})
 	}()
 
 	select {
 	case <-patchStarted:
 	case <-time.After(5 * time.Second):
-		require.FailNow(t, "legacy chat-key refresh did not reach upstream PATCH")
+		require.FailNow(t, "legacy Security inference key refresh did not reach upstream PATCH")
 	}
 
 	contender, err := db.Acquire(t.Context())
@@ -376,12 +389,12 @@ func TestRefreshOpenRouterChatKeyHoldsBillingLockAcrossUpstreamPatch(t *testing.
 	go func() {
 		queries := activitiesrepo.New(contender)
 		lockErr := queries.AcquireOpenRouterKeyBillingLock(t.Context(), activitiesrepo.AcquireOpenRouterKeyBillingLockParams{
-			KeyType:        string(openrouter.KeyTypeChat),
+			KeyType:        string(openrouter.KeyTypeInternal),
 			OrganizationID: organizationID,
 		})
 		if lockErr == nil {
 			_, lockErr = queries.ReleaseOpenRouterKeyBillingLock(t.Context(), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{
-				KeyType:        string(openrouter.KeyTypeChat),
+				KeyType:        string(openrouter.KeyTypeInternal),
 				OrganizationID: organizationID,
 			})
 		}
@@ -400,7 +413,7 @@ func TestRefreshOpenRouterChatKeyHoldsBillingLockAcrossUpstreamPatch(t *testing.
 	case refreshErr := <-refreshDone:
 		require.NoError(t, refreshErr)
 	case <-time.After(5 * time.Second):
-		require.FailNow(t, "legacy chat-key refresh did not finish")
+		require.FailNow(t, "legacy Security inference key refresh did not finish")
 	}
 	select {
 	case lockErr := <-lockDone:

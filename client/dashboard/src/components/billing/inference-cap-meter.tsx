@@ -44,7 +44,9 @@ export function InferenceCapMeter({
 
   // Without a cap the spend has nothing to be a proportion of, and a full-width
   // bar would read as a limit that was reached. The figure still shows: it is
-  // the only place this month's spend on this key appears.
+  // the only place this month's spend on this key appears. So does the billing
+  // note — an uncapped key still spends money, and whether that money reaches
+  // the invoice is exactly what the note is there to say.
   if (!(cap.monthlyCredits > 0)) {
     return (
       <Stack gap={1}>
@@ -52,6 +54,7 @@ export function InferenceCapMeter({
         <Text muted small className="tabular-nums">
           {spent} spent this month. No cap is set.
         </Text>
+        <Footnote text={note ?? ""} />
       </Stack>
     );
   }
@@ -89,12 +92,24 @@ export function InferenceCapMeter({
           style={{ width: `${percent}%` }}
         />
       </div>
-      {footnote !== "" && (
-        <Text muted small>
-          {footnote}
-        </Text>
-      )}
+      <Footnote text={footnote} />
     </Stack>
+  );
+}
+
+/**
+ * The line under a meter, dropped entirely when there is nothing to say.
+ *
+ * Both branches render one, and both can end up with an empty string — below
+ * the first threshold there is no threshold note, and the cap's own control
+ * passes no billing note at all — so an empty line must not take up space.
+ */
+function Footnote({ text }: { text: string }): JSX.Element | null {
+  if (text === "") return null;
+  return (
+    <Text muted small>
+      {text}
+    </Text>
   );
 }
 
@@ -113,16 +128,19 @@ function meterFillClass(threshold: SpendCapThreshold): string {
   }
 }
 
+// The bands are entered *at* their percentage, not past it: spend of exactly
+// half the cap is already the 50 band. So the copy is inclusive — "over 50%" on
+// a meter reading $50.00 of $100.00 contradicts the figure beside it.
 function capNote(threshold: SpendCapThreshold): string {
   switch (threshold) {
     case 100:
       return "This month's cap is reached, so this inference is stopped until the month rolls over or the cap is raised.";
     case 90:
-      return "You've used over 90% of this month's cap.";
+      return "You've used at least 90% of this month's cap.";
     case 75:
-      return "You've used over 75% of this month's cap.";
+      return "You've used at least 75% of this month's cap.";
     case 50:
-      return "You've used over half of this month's cap.";
+      return "You've used at least half of this month's cap.";
     case 0:
       return "";
   }

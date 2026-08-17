@@ -395,11 +395,14 @@ describe("PaygUsageSection", () => {
       expect(meter()?.getAttribute("aria-valuenow")).toBe(String(expected));
     });
 
+    // Each band is entered *at* its percentage, so the boundary itself is the
+    // case the copy has to be true for: a meter reading "$50.00 of $100.00"
+    // can't be captioned "over half".
     it.each<[string, number, RegExp | null]>([
-      ["under half", 40, null],
-      ["over half", 50, /over half of this month's cap/],
-      ["over three quarters", 80, /over 75% of this month's cap/],
-      ["near the cap", 95, /over 90% of this month's cap/],
+      ["under half", 49, null],
+      ["at exactly half", 50, /at least half of this month's cap/],
+      ["at exactly three quarters", 75, /at least 75% of this month's cap/],
+      ["at exactly nine tenths", 90, /at least 90% of this month's cap/],
       ["at the cap", 100, /cap is reached/],
     ])("notes spend %s", (_label, used, note) => {
       inferenceCapsQuery([cap({ creditsUsed: used, monthlyCredits: 100 })]);
@@ -423,6 +426,28 @@ describe("PaygUsageSection", () => {
 
       expect(meters()).toHaveLength(0);
       expect(screen.getByText(/\$10\.00 spent this month/)).toBeTruthy();
+    });
+
+    // Uncapped spend is still spend, and one of these keys is invoiced while
+    // the other never is — so the note that tells them apart has to survive the
+    // no-cap branch too.
+    it("keeps the billing note on an uncapped meter", () => {
+      inferenceCapsQuery([
+        cap({ keyType: "chat", creditsUsed: 10, monthlyCredits: 0 }),
+        cap({ keyType: "internal", creditsUsed: 20, monthlyCredits: 0 }),
+      ]);
+
+      render(<PaygUsageSection />);
+
+      expect(meters()).toHaveLength(0);
+      expect(
+        screen.getByText(/billed to this organization as its own line/i),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(
+          /Gram funds this inference, so it never reaches your invoice/,
+        ),
+      ).toBeTruthy();
     });
 
     it("renders no meters when the cap read fails", () => {

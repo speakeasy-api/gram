@@ -43,8 +43,8 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 	if err := keyType.Validate(); err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid openrouter key type").LogError(ctx, o.logger)
 	}
-	if keyType == openrouter.KeyTypeChat {
-		return withOpenRouterKeyBillingLock(ctx, o.logger, o.db, args.OrgID, keyType, func(queries *repo.Queries) error {
+	return withOpenRouterKeyBillingLock(ctx, o.logger, o.db, args.OrgID, keyType, func(queries *repo.Queries) error {
+		if keyType == openrouter.KeyTypeChat {
 			projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrgID)
 			if err != nil {
 				return fmt.Errorf("read billing state before OpenRouter chat key refresh: %w", err)
@@ -61,12 +61,10 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 				// not reinstate it after that committed transition.
 				return nil
 			}
+		}
 
-			return o.refresh(ctx, args, keyType)
-		})
-	}
-
-	return o.refresh(ctx, args, keyType)
+		return o.refresh(ctx, args, keyType)
+	})
 }
 
 func (o *RefreshOpenRouterKey) refresh(ctx context.Context, args RefreshOpenRouterKeyArgs, keyType openrouter.KeyType) error {

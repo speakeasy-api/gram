@@ -144,6 +144,13 @@ func (s *stubProvisioner) UsageCalls() []string {
 	return out
 }
 
+func (s *stubProvisioner) RefreshCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.refreshCalls...)
+}
+
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 	ctx := t.Context()
