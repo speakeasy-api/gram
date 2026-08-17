@@ -45,10 +45,6 @@ export const Scope = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
-  McpApprovalRead: "mcp_approval:read",
-  McpApprovalBlockedRead: "mcp_approval:blocked_read",
-  McpApprovalDecide: "mcp_approval:decide",
-  McpApprovalBlockedDecide: "mcp_approval:blocked_decide",
 } as const;
 /**
  * The scope slug this grant applies to.

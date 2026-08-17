@@ -2031,8 +2031,8 @@ var RiskSignalsResult = Type("RiskSignalsResult", func() {
 	})
 	Attribute("org_risk_score", Float64, "Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.")
 	Attribute("previous_org_risk_score", Float64, "Organization risk score computed the same way over the equal-length window immediately before from.")
-	Attribute("findings_24h", Int64, "Deduplicated findings in the 24 hours ending at to.")
-	Attribute("previous_findings_24h", Int64, "Deduplicated findings in the 24 hours before that.")
+	Attribute("findings", Int64, "Deduplicated live findings in the window.")
+	Attribute("previous_findings", Int64, "Deduplicated live findings in the equal-length window immediately before from.")
 	Attribute("open_signals", Int64, "Signals with at least one live finding in the window.")
 	Attribute("critical_signals", Int64, "Signals rated critical in the window.")
 	Attribute("users_exposed", Int64, "Distinct users with at least one finding in the window.")
@@ -2040,5 +2040,5 @@ var RiskSignalsResult = Type("RiskSignalsResult", func() {
 	Attribute("exposure", ArrayOf(RiskExposureSlice), "Finding counts by category, largest first.")
 	Attribute("signals", ArrayOf(RiskSignal), "Signals ranked by risk score, highest first.")
 
-	Required("from", "to", "org_risk_score", "previous_org_risk_score", "findings_24h", "previous_findings_24h", "open_signals", "critical_signals", "users_exposed", "previous_users_exposed", "exposure", "signals")
+	Required("from", "to", "org_risk_score", "previous_org_risk_score", "findings", "previous_findings", "open_signals", "critical_signals", "users_exposed", "previous_users_exposed", "exposure", "signals")
 })

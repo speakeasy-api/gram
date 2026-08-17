@@ -115,12 +115,15 @@ type RetryConfig struct {
 // only a few fields need to be overridden.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		WaitMin:      1 * time.Second,
-		WaitMax:      30 * time.Second,
-		MaxAttempts:  4,
-		CheckRetry:   retryablehttp.DefaultRetryPolicy,
-		Backoff:      retryablehttp.DefaultBackoff,
-		ErrorHandler: nil,
+		WaitMin:     1 * time.Second,
+		WaitMax:     30 * time.Second,
+		MaxAttempts: 4,
+		CheckRetry:  retryablehttp.DefaultRetryPolicy,
+		Backoff:     retryablehttp.DefaultBackoff,
+		// Exhausted retries surface as *RetriesExhaustedError so callers
+		// keep the final attempt's status and body instead of the opaque
+		// "giving up" message that discards the response.
+		ErrorHandler: retriesExhaustedErrorHandler,
 		PrepareRetry: nil,
 	}
 }

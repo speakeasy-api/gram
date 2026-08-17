@@ -268,10 +268,6 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
 		{scope: authz.ScopeChatWrite, description: "Pin, rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read transcripts without being able to delete them.", resourceType: "chat"},
-		{scope: authz.ScopeMCPApprovalRead, description: "View the MCP approval queue, the evidence gathered for each request, and prior decisions.", resourceType: "mcp_approval"},
-		{scope: authz.ScopeMCPApprovalBlockedRead, description: "Store exceptions for MCP approval read access.", resourceType: "mcp_approval"},
-		{scope: authz.ScopeMCPApprovalDecide, description: "Approve or deny MCP approval requests, deciding which servers the organization's members may use.", resourceType: "mcp_approval"},
-		{scope: authz.ScopeMCPApprovalBlockedDecide, description: "Store exceptions for MCP approval decide access.", resourceType: "mcp_approval"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -623,8 +619,6 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
-		{Scope: string(authz.ScopeMCPApprovalRead), Selectors: nil},
-		{Scope: string(authz.ScopeMCPApprovalDecide), Selectors: nil},
 	}
 }
 

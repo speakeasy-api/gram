@@ -34,7 +34,6 @@ export const ResourceKind = {
   Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
-  McpApproval: "mcp_approval",
   Wildcard: "*",
 } as const;
 /**

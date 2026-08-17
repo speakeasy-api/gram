@@ -103,6 +103,7 @@ func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {
 
 	storedDeniedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 		ProjectID:      project.ID,
 		Operation:      operationRegisterCatalogMCP,
@@ -352,6 +353,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 
 	storedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 		ProjectID:      project.ID,
 		Operation:      operationRegisterCatalogMCP,
@@ -804,4 +806,59 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
+}
+
+// The project assistant holds no OAuth connection. Its writes must still land,
+// attributed to the real user and its acting surface, and must still replay
+// idempotently — the property that breaks first if a read path joins through
+// the connection it does not have.
+func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_no_connection")
+	require.NoError(t, err)
+
+	connected, project := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "gram-project-assistant",
+		Surface:        SurfaceProjectAssistant,
+	}
+	require.False(t, assistant.HasConnection())
+
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+
+	request := registrationRequest(project, "assistant-registered", "assistant-key")
+	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err, "an assistant write must not require an OAuth connection")
+	require.False(t, receipt.ConnectionID.Valid, "no connection applies, which is not the same as a zero uuid")
+
+	receipt, err = store.ConvergeRegistration(ctx, assistant, project, request, receipt)
+	require.NoError(t, err)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, assistant, project, request, receipt, "https://reviewed.example.test/assistant")
+	require.NoError(t, err)
+	require.True(t, receipt.RegistrationID.Valid)
+
+	stored, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: assistant.OrganizationID,
+		UserID:         conv.ToPGText(assistant.UserID),
+		SubjectUrn:     userSubjectURN(assistant.UserID),
+		ProjectID:      project.ID,
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: request.IdempotencyKey,
+	})
+	require.NoError(t, err, "a connection-less receipt must still be readable, or its idempotency key is poisoned")
+	require.False(t, stored.ConnectionID.Valid)
+	require.Equal(t, assistant.UserID, stored.UserID.String)
+	require.Equal(t, string(SurfaceProjectAssistant), stored.ActingSurface.String)
+
+	replay, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err, "replaying the same key must return the original receipt, not a unique violation")
+	require.True(t, replay.Replayed)
+	require.Equal(t, receipt.ID, replay.ID)
 }

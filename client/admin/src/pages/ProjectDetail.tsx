@@ -1,12 +1,6 @@
 import type { JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  useNavigate,
-  useParams,
-  useRouter,
-  Link,
-} from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { useParams, Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { projectQuery } from "@/lib/adminQueries";
 import { errorMessage } from "@/lib/gramAdminApi";
@@ -41,11 +35,10 @@ function CountTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function ProjectDetail(): JSX.Element {
-  const { idOrSlug } = useParams({ from: "/projects/$idOrSlug" });
-  const navigate = useNavigate();
-  const router = useRouter();
-
+// The id arrives as a prop rather than out of `useParams`, because this page is
+// reached by two routes: the global project list and the organization record's
+// own project view. Each names the parameter differently.
+export function ProjectDetail({ idOrSlug }: { idOrSlug: string }): JSX.Element {
   const { data, isLoading, isError, error } = useQuery({
     ...projectQuery(idOrSlug),
     enabled: !!idOrSlug,
@@ -54,29 +47,11 @@ export function ProjectDetail(): JSX.Element {
   return (
     <div className="space-y-6">
       <section>
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h4 className="text-[1.438rem] leading-[1.6] font-light">
-              {data ? data.name : "Project"}
-            </h4>
-            <span className="text-muted-foreground text-sm">{idOrSlug}</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => {
-              if (data?.organization_id) {
-                void navigate({
-                  to: "/organizations/$idOrSlug",
-                  params: { idOrSlug: data.organization_id },
-                });
-              } else {
-                router.history.back();
-              }
-            }}
-          >
-            ← Back to organization
-          </Button>
+        <div className="mb-4">
+          <h4 className="text-[1.438rem] leading-[1.6] font-light">
+            {data ? data.name : "Project"}
+          </h4>
+          <span className="text-muted-foreground text-sm">{idOrSlug}</span>
         </div>
 
         {isLoading && (
@@ -158,4 +133,9 @@ export function ProjectDetail(): JSX.Element {
       </section>
     </div>
   );
+}
+
+export function ProjectDetailRoute(): JSX.Element {
+  const { idOrSlug } = useParams({ from: "/projects/$idOrSlug" });
+  return <ProjectDetail idOrSlug={idOrSlug} />;
 }

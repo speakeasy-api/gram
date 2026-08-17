@@ -3171,6 +3171,100 @@ paths:
             x-speakeasy-react-hook:
                 name: UpdateShadowMCPInventoryServerName
                 type: mutation
+    /rpc/adminAssets.uploadImage:
+        post:
+            description: Upload a platform-tier image (e.g. a global remote identity provider logo). Requires platform admin.
+            operationId: uploadPlatformImage
+            parameters:
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Type
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Length
+                  required: true
+                  schema:
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadImageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: uploadPlatformImage adminAssets
+            tags:
+                - adminAssets
+            x-speakeasy-name-override: uploadImage
+            x-speakeasy-react-hook:
+                name: UploadPlatformImage
     /rpc/adminChatAnalysis.getSettings:
         get:
             description: Get the active organization's chat analysis settings. Requires platform admin.
@@ -16637,7 +16731,7 @@ paths:
                 name: CreateGcpIamCredential
     /rpc/externalCredentials.deleteAwsIam:
         delete:
-            description: Soft-delete an AWS IAM external credential by ID. Requires org:admin.
+            description: Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
             operationId: deleteAwsIamCredential
             parameters:
                 - allowEmptyValue: true
@@ -16723,7 +16817,7 @@ paths:
                 name: DeleteAwsIamCredential
     /rpc/externalCredentials.deleteGcpIam:
         delete:
-            description: Soft-delete a GCP IAM external credential by ID. Requires org:admin.
+            description: Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.
             operationId: deleteGcpIamCredential
             parameters:
                 - allowEmptyValue: true
@@ -17565,6 +17659,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
                 "500":
                     content:
                         application/json:
@@ -18538,6 +18638,102 @@ paths:
             x-speakeasy-name-override: updateGcpKms
             x-speakeasy-react-hook:
                 name: UpdateGcpKmsKey
+    /rpc/externalKeys.verifyGcpKms:
+        post:
+            description: 'Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key''s public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key''s owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
+            operationId: verifyGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to verify.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to verify.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyKmsKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: verifyGcpKms
+            x-speakeasy-react-hook:
+                name: VerifyGcpKmsKey
     /rpc/hooks.claude:
         post:
             tags:
@@ -24677,6 +24873,100 @@ paths:
             x-speakeasy-name-override: upsertKey
             x-speakeasy-react-hook:
                 name: UpsertModelProviderKey
+    /rpc/organizationAssets.uploadImage:
+        post:
+            description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
+            operationId: uploadOrganizationImage
+            parameters:
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Type
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Length
+                  required: true
+                  schema:
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadImageResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: uploadOrganizationImage organizationAssets
+            tags:
+                - organizationAssets
+            x-speakeasy-name-override: uploadImage
+            x-speakeasy-react-hook:
+                name: UploadOrganizationImage
     /rpc/organizationRemoteSessionClients.create:
         post:
             description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
@@ -65533,10 +65823,6 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - mcp_approval:read
-                        - mcp_approval:blocked_read
-                        - mcp_approval:decide
-                        - mcp_approval:blocked_decide
                 selectors:
                     type: array
                     items:
@@ -65574,10 +65860,6 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
-                            - mcp_approval:read
-                            - mcp_approval:blocked_read
-                            - mcp_approval:decide
-                            - mcp_approval:blocked_decide
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -70022,8 +70304,6 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
-                        - mcp_approval:read
-                        - mcp_approval:decide
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -71311,9 +71591,9 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskExposureSlice'
                     description: Finding counts by category, largest first.
-                findings_24h:
+                findings:
                     type: integer
-                    description: Deduplicated findings in the 24 hours ending at to.
+                    description: Deduplicated live findings in the window.
                     format: int64
                 from:
                     type: string
@@ -71327,9 +71607,9 @@ components:
                     type: number
                     description: Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.
                     format: double
-                previous_findings_24h:
+                previous_findings:
                     type: integer
-                    description: Deduplicated findings in the 24 hours before that.
+                    description: Deduplicated live findings in the equal-length window immediately before from.
                     format: int64
                 previous_org_risk_score:
                     type: number
@@ -71357,8 +71637,8 @@ components:
                 - to
                 - org_risk_score
                 - previous_org_risk_score
-                - findings_24h
-                - previous_findings_24h
+                - findings
+                - previous_findings
                 - open_signals
                 - critical_signals
                 - users_exposed
@@ -71534,10 +71814,6 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - mcp_approval:read
-                        - mcp_approval:blocked_read
-                        - mcp_approval:decide
-                        - mcp_approval:blocked_decide
                 selectors:
                     type: array
                     items:
@@ -71659,8 +71935,6 @@ components:
                         - skill:blocked_read
                         - skill:blocked_write
                         - risk_policy:bypass
-                        - mcp_approval:blocked_read
-                        - mcp_approval:blocked_decide
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.
@@ -71672,7 +71946,6 @@ components:
                         - skill
                         - risk_policy
                         - chat
-                        - mcp_approval
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -71704,10 +71977,6 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - mcp_approval:read
-                        - mcp_approval:blocked_read
-                        - mcp_approval:decide
-                        - mcp_approval:blocked_decide
                 visibility:
                     type: string
                     description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -72192,7 +72461,6 @@ components:
                         - skill
                         - risk_policy
                         - chat
-                        - mcp_approval
                         - '*'
                 server_url:
                     type: string
@@ -78403,6 +78671,32 @@ components:
                     $ref: '#/components/schemas/Asset'
             required:
                 - asset
+        UploadOrganizationImageForm:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - content_type
+                - content_length
+        UploadPlatformImageForm:
+            type: object
+            properties:
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - content_type
+                - content_length
         UploadSkillContentPayload:
             type: object
             properties:
@@ -79150,6 +79444,35 @@ components:
             description: Result of a live probe that Gram can assume the identity the credential names.
             required:
                 - verified
+        VerifyKmsKeyResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+                probe_outcome:
+                    type: string
+                    description: The machine-readable outcome of the probe.
+                    enum:
+                        - verified
+                        - credential_deleted
+                        - credential_unusable
+                        - invalid_resource_name
+                        - key_not_found
+                        - permission_denied
+                        - key_unusable
+                        - unsupported_algorithm
+                        - algorithm_mismatch
+                        - signature_invalid
+                        - unavailable
+                        - unexpected
+                verified:
+                    type: boolean
+                    description: Whether the key produced a signature that validated against its own public half.
+            description: Result of a live probe that Gram can reach an external key and use it to sign.
+            required:
+                - verified
+                - probe_outcome
         VerifyOnboardingHooksSetupResult:
             type: object
             properties:
@@ -79348,6 +79671,8 @@ tags:
       description: Manage organization-level AI provider integrations.
     - name: assets
       description: Manages assets used by Gram projects.
+    - name: organizationAssets
+      description: Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.
     - name: assistantMemories
       description: Manage assistant memory records.
     - name: assistants
@@ -79410,6 +79735,8 @@ tags:
       description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
     - name: packages
       description: Manages packages in Gram.
+    - name: adminAssets
+      description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminChatAnalysis
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminExternalCredentials
