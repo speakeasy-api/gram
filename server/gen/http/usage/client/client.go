@@ -41,6 +41,10 @@ type Client struct {
 	// createCheckout endpoint.
 	CreateCheckoutDoer goahttp.Doer
 
+	// CreateStripeCheckout Doer is the HTTP client used to make requests to the
+	// createStripeCheckout endpoint.
+	CreateStripeCheckoutDoer goahttp.Doer
+
 	// CreateTopUpCheckout Doer is the HTTP client used to make requests to the
 	// createTopUpCheckout endpoint.
 	CreateTopUpCheckoutDoer goahttp.Doer
@@ -71,6 +75,7 @@ func NewClient(
 		GetUsageTiersDoer:            doer,
 		CreateCustomerSessionDoer:    doer,
 		CreateCheckoutDoer:           doer,
+		CreateStripeCheckoutDoer:     doer,
 		CreateTopUpCheckoutDoer:      doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
@@ -214,6 +219,30 @@ func (c *Client) CreateCheckout() goa.Endpoint {
 		resp, err := c.CreateCheckoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "createCheckout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateStripeCheckout returns an endpoint that makes HTTP requests to the
+// usage service createStripeCheckout server.
+func (c *Client) CreateStripeCheckout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateStripeCheckoutRequest(c.encoder)
+		decodeResponse = DecodeCreateStripeCheckoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateStripeCheckoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateStripeCheckoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createStripeCheckout", err)
 		}
 		return decodeResponse(resp)
 	}

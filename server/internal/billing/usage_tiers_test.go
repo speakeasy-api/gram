@@ -28,7 +28,12 @@ func TestNewPaygTierLimits(t *testing.T) {
 	require.Zero(t, want.IncludedCredits)
 	require.Zero(t, want.PricePerAdditionalToolCall)
 	require.Zero(t, want.PricePerAdditionalServer)
-	require.Empty(t, want.IncludedBullets)
+	require.NotNil(t, want.TumPricePerMillionUsd)
+	require.Equal(t, billing.TUMPricePerMillionUSD, *want.TumPricePerMillionUsd)
+	require.Equal(t, []string{
+		"Other inference billed at provider cost",
+		"Security inference funded by Speakeasy",
+	}, want.IncludedBullets)
 	require.Empty(t, want.AddOnBullets)
 	require.Equal(t, []string{
 		"Oauth 2.1 proxy support",

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -43,6 +44,7 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	serverURL     *url.URL
+	siteURL       *url.URL
 	db            *pgxpool.Pool
 	repo          *repo.Queries
 	billingRepo   billing.Repository
@@ -53,12 +55,13 @@ type Service struct {
 	openRouter    openrouter.Provisioner
 	stripeClient  stripeclient.Client
 	stripeHandler stripeWebhookHandler
+	featureFlags  feature.Provider
 	trial         trialemails.Notifier
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, trialNotifier trialemails.Notifier) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -71,6 +74,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
 		serverURL:     serverURL,
+		siteURL:       siteURL,
 		db:            db,
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
@@ -81,6 +85,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		openRouter:    openRouter,
 		stripeClient:  stripeClient,
 		stripeHandler: serviceStripeWebhookHandler,
+		featureFlags:  featureFlags,
 		trial:         trialNotifier,
 	}
 }

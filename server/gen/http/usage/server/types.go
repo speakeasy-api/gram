@@ -1217,6 +1217,192 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateStripeCheckoutUnauthorizedResponseBody is the type of the "usage"
+// service "createStripeCheckout" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateStripeCheckoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutForbiddenResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body for the "forbidden" error.
+type CreateStripeCheckoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutBadRequestResponseBody is the type of the "usage"
+// service "createStripeCheckout" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateStripeCheckoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutNotFoundResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body for the "not_found" error.
+type CreateStripeCheckoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutConflictResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body for the "conflict" error.
+type CreateStripeCheckoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutUnsupportedMediaResponseBody is the type of the "usage"
+// service "createStripeCheckout" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateStripeCheckoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutInvalidResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body for the "invalid" error.
+type CreateStripeCheckoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutInvariantViolationResponseBody is the type of the
+// "usage" service "createStripeCheckout" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateStripeCheckoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutUnexpectedResponseBody is the type of the "usage"
+// service "createStripeCheckout" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateStripeCheckoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateStripeCheckoutGatewayErrorResponseBody is the type of the "usage"
+// service "createStripeCheckout" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateStripeCheckoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateTopUpCheckoutUnauthorizedResponseBody is the type of the "usage"
 // service "createTopUpCheckout" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1443,6 +1629,8 @@ type TierLimitsResponseBody struct {
 	IncludedBullets []string `form:"included_bullets" json:"included_bullets" xml:"included_bullets"`
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
+	// Exact USD list price per million tokens under management (optional)
+	TumPricePerMillionUsd *string `form:"tum_price_per_million_usd,omitempty" json:"tum_price_per_million_usd,omitempty" xml:"tum_price_per_million_usd,omitempty"`
 }
 
 // NewGetPeriodUsageResponseBody builds the HTTP response body from the result
@@ -2396,6 +2584,156 @@ func NewCreateCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateChe
 	return body
 }
 
+// NewCreateStripeCheckoutUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutUnauthorizedResponseBody(res *goa.ServiceError) *CreateStripeCheckoutUnauthorizedResponseBody {
+	body := &CreateStripeCheckoutUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutForbiddenResponseBody builds the HTTP response body
+// from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutForbiddenResponseBody(res *goa.ServiceError) *CreateStripeCheckoutForbiddenResponseBody {
+	body := &CreateStripeCheckoutForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutBadRequestResponseBody builds the HTTP response body
+// from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutBadRequestResponseBody(res *goa.ServiceError) *CreateStripeCheckoutBadRequestResponseBody {
+	body := &CreateStripeCheckoutBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutNotFoundResponseBody builds the HTTP response body
+// from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutNotFoundResponseBody(res *goa.ServiceError) *CreateStripeCheckoutNotFoundResponseBody {
+	body := &CreateStripeCheckoutNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutConflictResponseBody builds the HTTP response body
+// from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutConflictResponseBody(res *goa.ServiceError) *CreateStripeCheckoutConflictResponseBody {
+	body := &CreateStripeCheckoutConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateStripeCheckoutUnsupportedMediaResponseBody {
+	body := &CreateStripeCheckoutUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutInvalidResponseBody builds the HTTP response body
+// from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutInvalidResponseBody(res *goa.ServiceError) *CreateStripeCheckoutInvalidResponseBody {
+	body := &CreateStripeCheckoutInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createStripeCheckout" endpoint of the
+// "usage" service.
+func NewCreateStripeCheckoutInvariantViolationResponseBody(res *goa.ServiceError) *CreateStripeCheckoutInvariantViolationResponseBody {
+	body := &CreateStripeCheckoutInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutUnexpectedResponseBody(res *goa.ServiceError) *CreateStripeCheckoutUnexpectedResponseBody {
+	body := &CreateStripeCheckoutUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createStripeCheckout" endpoint of the "usage"
+// service.
+func NewCreateStripeCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateStripeCheckoutGatewayErrorResponseBody {
+	body := &CreateStripeCheckoutGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateTopUpCheckoutUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "createTopUpCheckout" endpoint of the "usage" service.
 func NewCreateTopUpCheckoutUnauthorizedResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutUnauthorizedResponseBody {
@@ -2583,6 +2921,15 @@ func NewCreateCustomerSessionPayload(sessionToken *string) *usage.CreateCustomer
 // payload.
 func NewCreateCheckoutPayload(sessionToken *string) *usage.CreateCheckoutPayload {
 	v := &usage.CreateCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateStripeCheckoutPayload builds a usage service createStripeCheckout
+// endpoint payload.
+func NewCreateStripeCheckoutPayload(sessionToken *string) *usage.CreateStripeCheckoutPayload {
+	v := &usage.CreateStripeCheckoutPayload{}
 	v.SessionToken = sessionToken
 
 	return v

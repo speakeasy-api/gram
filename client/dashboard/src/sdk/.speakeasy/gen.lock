@@ -549,6 +549,7 @@ trackedFiles:
   src/funcs/unproxiedMcpListTools.ts: {}
   src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
+  src/funcs/usageCreateStripeCheckout.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetTokensUnderManagement.ts: {}
@@ -1475,6 +1476,7 @@ trackedFiles:
   src/models/operations/createsignedchatattachmenturl.ts: {}
   src/models/operations/createskill.ts: {}
   src/models/operations/createspendrule.ts: {}
+  src/models/operations/createstripecheckout.ts: {}
   src/models/operations/createtemplate.ts: {}
   src/models/operations/createtoolset.ts: {}
   src/models/operations/createtopupcheckout.ts: {}
@@ -2062,6 +2064,7 @@ trackedFiles:
   src/react-query/createRole.ts: {}
   src/react-query/createSignedChatAttachmentURL.ts: {}
   src/react-query/createSkill.ts: {}
+  src/react-query/createStripeCheckout.ts: {}
   src/react-query/createTemplate.ts: {}
   src/react-query/createToolset.ts: {}
   src/react-query/createTopUpCheckout.ts: {}
@@ -3662,6 +3665,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createStripeCheckout:
+    speakeasy-default-create-stripe-checkout:
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createTemplate:
     speakeasy-default-create-template:
       requestBody:

@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
+		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
@@ -3245,6 +3245,9 @@ func ParseEndpoint(
 		usageCreateCheckoutFlags            = flag.NewFlagSet("create-checkout", flag.ExitOnError)
 		usageCreateCheckoutSessionTokenFlag = usageCreateCheckoutFlags.String("session-token", "", "")
 
+		usageCreateStripeCheckoutFlags            = flag.NewFlagSet("create-stripe-checkout", flag.ExitOnError)
+		usageCreateStripeCheckoutSessionTokenFlag = usageCreateStripeCheckoutFlags.String("session-token", "", "")
+
 		usageCreateTopUpCheckoutFlags            = flag.NewFlagSet("create-top-up-checkout", flag.ExitOnError)
 		usageCreateTopUpCheckoutSessionTokenFlag = usageCreateTopUpCheckoutFlags.String("session-token", "", "")
 
@@ -4102,6 +4105,7 @@ func ParseEndpoint(
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
+	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
 	usageCreateTopUpCheckoutFlags.Usage = usageCreateTopUpCheckoutUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
@@ -6216,6 +6220,9 @@ func ParseEndpoint(
 			case "create-checkout":
 				epf = usageCreateCheckoutFlags
 
+			case "create-stripe-checkout":
+				epf = usageCreateStripeCheckoutFlags
+
 			case "create-top-up-checkout":
 				epf = usageCreateTopUpCheckoutFlags
 
@@ -8257,6 +8264,9 @@ func ParseEndpoint(
 			case "create-checkout":
 				endpoint = c.CreateCheckout()
 				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag)
+			case "create-stripe-checkout":
+				endpoint = c.CreateStripeCheckout()
+				data, err = usagec.BuildCreateStripeCheckoutPayload(*usageCreateStripeCheckoutSessionTokenFlag)
 			case "create-top-up-checkout":
 				endpoint = c.CreateTopUpCheckout()
 				data, err = usagec.BuildCreateTopUpCheckoutPayload(*usageCreateTopUpCheckoutSessionTokenFlag)
@@ -21803,6 +21813,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
+	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create a Stripe Checkout link for starting PAYG billing`)
 	fmt.Fprintln(os.Stderr, `    create-top-up-checkout: Create a checkout link for a one-time credit top-up purchase`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21914,6 +21925,24 @@ func usageCreateCheckoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\"")
+}
+
+func usageCreateStripeCheckoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage create-stripe-checkout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a Stripe Checkout link for starting PAYG billing`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-stripe-checkout --session-token \"abc123\"")
 }
 
 func usageCreateTopUpCheckoutUsage() {

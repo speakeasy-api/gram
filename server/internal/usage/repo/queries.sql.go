@@ -42,6 +42,23 @@ func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg Cr
 	return err
 }
 
+const createStripeSubscriptionBillingMetadataFixture = `-- name: CreateStripeSubscriptionBillingMetadataFixture :exec
+INSERT INTO billing_metadata (organization_id, stripe_customer_id, stripe_subscription_id)
+VALUES ($1, $2, $3)
+`
+
+type CreateStripeSubscriptionBillingMetadataFixtureParams struct {
+	OrganizationID       string
+	StripeCustomerID     pgtype.Text
+	StripeSubscriptionID pgtype.Text
+}
+
+// Test-only fixture for checkout tests that need an existing Stripe subscription.
+func (q *Queries) CreateStripeSubscriptionBillingMetadataFixture(ctx context.Context, arg CreateStripeSubscriptionBillingMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, createStripeSubscriptionBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID, arg.StripeSubscriptionID)
+	return err
+}
+
 const getBillingMetadata = `-- name: GetBillingMetadata :one
 SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
@@ -197,6 +214,41 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 		return nil, err
 	}
 	return items, nil
+}
+
+const storeStripeCustomer = `-- name: StoreStripeCustomer :one
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES ($1, $2)
+ON CONFLICT (organization_id) DO UPDATE SET
+    stripe_customer_id = COALESCE(billing_metadata.stripe_customer_id, EXCLUDED.stripe_customer_id)
+  , updated_at = CASE
+      WHEN billing_metadata.stripe_customer_id IS NULL THEN clock_timestamp()
+      ELSE billing_metadata.updated_at
+    END
+RETURNING id, organization_id, stripe_customer_id, stripe_subscription_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
+`
+
+type StoreStripeCustomerParams struct {
+	OrganizationID   string
+	StripeCustomerID pgtype.Text
+}
+
+func (q *Queries) StoreStripeCustomer(ctx context.Context, arg StoreStripeCustomerParams) (BillingMetadatum, error) {
+	row := q.db.QueryRow(ctx, storeStripeCustomer, arg.OrganizationID, arg.StripeCustomerID)
+	var i BillingMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
+		&i.TumMonthlyTokenLimit,
+		&i.AlertEmail,
+		&i.BillingCycleAnchorDay,
+		&i.TunneledMcpServerLimit,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one

@@ -125,6 +125,21 @@ func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.
 	return v, nil
 }
 
+// BuildCreateStripeCheckoutPayload builds the payload for the usage
+// createStripeCheckout endpoint from CLI flags.
+func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken string) (*usage.CreateStripeCheckoutPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateStripeCheckoutSessionToken != "" {
+			sessionToken = &usageCreateStripeCheckoutSessionToken
+		}
+	}
+	v := &usage.CreateStripeCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateTopUpCheckoutPayload builds the payload for the usage
 // createTopUpCheckout endpoint from CLI flags.
 func BuildCreateTopUpCheckoutPayload(usageCreateTopUpCheckoutSessionToken string) (*usage.CreateTopUpCheckoutPayload, error) {

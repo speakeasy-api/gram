@@ -33,6 +33,7 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("feature_bullets", ArrayOf(String), "Key feature bullets of the tier")
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
+	Attribute("tum_price_per_million_usd", String, "Exact USD list price per million tokens under management (optional)")
 
 	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "feature_bullets", "included_bullets")
 })
@@ -225,6 +226,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "createCheckout")
 		Meta("openapi:extension:x-speakeasy-name-override", "createCheckout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
+	})
+
+	Method("createStripeCheckout", func() {
+		Description("Create a Stripe Checkout link for starting PAYG billing")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createStripeCheckout")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createStripeCheckout")
+		Meta("openapi:extension:x-speakeasy-name-override", "createStripeCheckout")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripeCheckout"}`)
 	})
 
 	Method("createTopUpCheckout", func() {
