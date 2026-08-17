@@ -162,34 +162,48 @@ func (s *Service) shadowCompareSearchUsersFold(ctx context.Context, orgID string
 			literalKeys[u.UserID] = struct{}{}
 			literalTokens += u.TotalInputTokens + u.TotalOutputTokens
 		}
-		foldedKeys := make(map[string]struct{}, len(folded))
 		newKeys := 0
 		for _, u := range folded {
-			foldedKeys[u.UserID] = struct{}{}
 			foldedTokens += u.TotalInputTokens + u.TotalOutputTokens
 			if _, ok := literalKeys[u.UserID]; !ok {
 				newKeys++
 			}
 		}
 
-		// Ordering divergence is only well-defined on the keys both lists
-		// share — folded keys are canonicalized, so the key spaces differ by
-		// construction. If the shared keys appear in a different relative
-		// order, folding moved someone (a merged identity's last-seen is the
-		// max across its emails), which the ticket's list-divergence spec
-		// requires surfacing alongside membership and counts.
-		var commonLiteral, commonFolded []string
+		// Ordering divergence is measured over the shared keys the fold did
+		// NOT touch — same last-seen and same token sums in both lists. A
+		// merged identity legitimately moves (its folded last-seen is the max
+		// across its emails), so including merge targets would make this
+		// signal permanently true for any org with real folds; untouched
+		// groups have identical sort keys in both queries, and any reorder
+		// among them is a genuine ordering bug, which is the divergence the
+		// spec needs surfaced alongside membership and counts.
+		type sortIdentity struct {
+			lastSeen int64
+			tokens   int64
+		}
+		literalSort := make(map[string]sortIdentity, len(literal))
 		for _, u := range literal {
-			if _, ok := foldedKeys[u.UserID]; ok {
-				commonLiteral = append(commonLiteral, u.UserID)
+			literalSort[u.UserID] = sortIdentity{lastSeen: u.LastSeenUnixNano, tokens: u.TotalInputTokens + u.TotalOutputTokens}
+		}
+		untouched := make(map[string]struct{}, len(folded))
+		for _, u := range folded {
+			if lit, ok := literalSort[u.UserID]; ok && lit == (sortIdentity{lastSeen: u.LastSeenUnixNano, tokens: u.TotalInputTokens + u.TotalOutputTokens}) {
+				untouched[u.UserID] = struct{}{}
+			}
+		}
+		var untouchedLiteral, untouchedFolded []string
+		for _, u := range literal {
+			if _, ok := untouched[u.UserID]; ok {
+				untouchedLiteral = append(untouchedLiteral, u.UserID)
 			}
 		}
 		for _, u := range folded {
-			if _, ok := literalKeys[u.UserID]; ok {
-				commonFolded = append(commonFolded, u.UserID)
+			if _, ok := untouched[u.UserID]; ok {
+				untouchedFolded = append(untouchedFolded, u.UserID)
 			}
 		}
-		orderChanged := !slices.Equal(commonLiteral, commonFolded)
+		orderChanged := !slices.Equal(untouchedLiteral, untouchedFolded)
 
 		s.logger.InfoContext(bgCtx, "identity fold shadow employee list comparison",
 			attr.SlogOrganizationID(orgID),

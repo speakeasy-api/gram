@@ -441,7 +441,10 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	// Internal grouping folds one employee's linked emails into one summary
-	// when the org is on the canonical fold; external ids never fold.
+	// when the org is on the canonical fold; external ids never fold. A
+	// canonical cursor minted under the fold stops resolving if the flag
+	// flips off mid-pagination (short page, no error) — transient, inherent
+	// to per-request flag evaluation.
 	fold, shadow := false, false
 	if groupBy != "external_user_id" {
 		fold, shadow = s.canonicalIdentityMode(ctx, params.organizationID)

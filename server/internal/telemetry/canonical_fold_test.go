@@ -703,8 +703,10 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
 
 	// Staggered last-seen so page order is deterministic; the employee's most
-	// recent row is the personal one, making a merged canonical key the page-1
-	// cursor value — the case where cursor resolution must go through the fold.
+	// recent row is the personal one, so the merged identity leads the list
+	// and — at Limit 1 — becomes the page-1 cursor value, whose folded max
+	// last-seen (-5m) differs from its literal one (-30m): cursor resolution
+	// must go through the fold or page 2 comes back empty.
 	now := time.Now().UTC()
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-30*time.Minute), userID, workEmail, 100, 50, 1.0)
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
@@ -714,11 +716,11 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
-	page := func(cursor *string) *gen.SearchUsersResult {
+	page := func(limit int, cursor *string) *gen.SearchUsersResult {
 		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 			Filter:   &gen.SearchUsersFilter{From: from, To: to},
 			UserType: "internal",
-			Limit:    2,
+			Limit:    limit,
 			Sort:     "desc",
 			Cursor:   cursor,
 		})
@@ -726,18 +728,36 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 		return res
 	}
 
-	first := page(nil)
-	require.Len(t, first.Users, 2)
+	// Limit 1 walks the list one group at a time, so page 1's cursor IS the
+	// merged canonical key — the case a fold-unaware cursor subquery fails
+	// (its literal max last-seen would mismatch the folded HAVING tuple and
+	// page 2 would be empty).
+	first := page(1, nil)
+	require.Len(t, first.Users, 1)
 	require.Equal(t, workEmail, first.Users[0].UserID, "the merged identity sorts by its latest (personal) row")
-	require.Equal(t, strangerB, first.Users[1].UserID)
+	require.Equal(t, int64(300), first.Users[0].TotalInputTokens, "the merged summary carries both emails' tokens")
 	require.NotNil(t, first.NextCursor)
+	require.Equal(t, workEmail, *first.NextCursor, "the cursor handed out is the merged canonical key")
 
-	second := page(first.NextCursor)
-	require.Len(t, second.Users, 1, "no duplicate and no resurrected personal key on page 2")
-	require.Equal(t, strangerC, second.Users[0].UserID)
+	second := page(1, first.NextCursor)
+	require.Len(t, second.Users, 1, "a canonical cursor resolves through the fold")
+	require.Equal(t, strangerB, second.Users[0].UserID)
+	require.NotNil(t, second.NextCursor)
 
-	// The merged summary carries both emails' tokens wherever it appears.
-	require.Equal(t, int64(300), first.Users[0].TotalInputTokens)
+	third := page(1, second.NextCursor)
+	require.Len(t, third.Users, 1)
+	require.Equal(t, strangerC, third.Users[0].UserID)
+
+	// A wider page hands out an unmapped cursor instead; pagination must not
+	// duplicate or resurrect the personal key either way.
+	wideFirst := page(2, nil)
+	require.Len(t, wideFirst.Users, 2)
+	require.Equal(t, workEmail, wideFirst.Users[0].UserID)
+	require.Equal(t, strangerB, wideFirst.Users[1].UserID)
+
+	wideSecond := page(2, wideFirst.NextCursor)
+	require.Len(t, wideSecond.Users, 1, "no duplicate and no resurrected personal key on page 2")
+	require.Equal(t, strangerC, wideSecond.Users[0].UserID)
 }
 
 func TestSearchUsers_CanonicalFold_IDDrillReachesFoldedSummary(t *testing.T) {
