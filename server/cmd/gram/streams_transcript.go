@@ -95,17 +95,25 @@ func newTranscriptWriter(
 	writer.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
 
 	shutdown := func(ctx context.Context) error {
-		// Order matters, and mirrors the API server's drain (see start.go):
+		// Signalers first, then the writer, then Temporal.
 		//
-		// Writer first — it owns the goroutines that call into the signalers, so
-		// flushing under them would race new signals against the flush.
+		// Flushing before the writer is cancelled is the whole point of this
+		// order. notifyMessagesStored fires observers on a detached goroutine
+		// whose context is cancelled by the writer's shutdown, so cancelling
+		// first actively kills the wakes still in flight — the flush then has
+		// nothing left to push. The API server has the same constraint and
+		// solves it the same way: it flushes only after the HTTP server is
+		// drained, and never cancels its writer first (see start.go).
 		//
-		// Then the signalers, sequentially and while Temporal is still open: a
-		// trailing-edge flush signals over the same gRPC connection, so closing
-		// Temporal first turns the flush into "the client connection is closing".
-		if err := writerShutdown(ctx); err != nil {
-			return fmt.Errorf("shutdown transcript writer: %w", err)
-		}
+		// Temporal last because a trailing-edge flush signals over its gRPC
+		// connection; closing it first turns the flush into "the client
+		// connection is closing".
+		//
+		// This narrows the window rather than closing it. Observers are
+		// fire-and-forget goroutines and the writer offers no way to wait for
+		// them, so a wake started in the final moments can still be missed. That
+		// gap is shared with the API server path and wants a real drain on
+		// ChatMessageWriter to fix properly.
 		for _, s := range []struct {
 			name     string
 			signaler *background.ThrottledSignaler
@@ -117,6 +125,9 @@ func newTranscriptWriter(
 			if err := s.signaler.Shutdown(ctx); err != nil {
 				return fmt.Errorf("flush %s coordinator signals: %w", s.name, err)
 			}
+		}
+		if err := writerShutdown(ctx); err != nil {
+			return fmt.Errorf("shutdown transcript writer: %w", err)
 		}
 		if err := temporalShutdown(ctx); err != nil {
 			return fmt.Errorf("shutdown transcript writer temporal client: %w", err)

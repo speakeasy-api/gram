@@ -1400,16 +1400,25 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	// On the async path the handler owns this, for the same reason it owns the
 	// insert — marking here would put the write back on the request path.
 	//
-	// But only when there is a row for it to own. Several event kinds below
+	// But only when there is a message for it to own. Several event kinds below
 	// return without producing one (permission previews, unnamed tools, empty
 	// tool results, unhandled types), and those publish nothing, so nothing
 	// downstream can mark the chat. Falling back to marking here keeps the
 	// marker's meaning identical on both paths; it costs one UPDATE on the
 	// request path for exactly the events that were never going to write a row.
-	published := false
+	//
+	// handedToConsumer means the message reached the topic, not that a row
+	// exists. Those differ in two ways, both deliberate. A message the handler
+	// accepts and then drops as a duplicate is still marked — the handler
+	// registers its own marker defer before that check, so suppression keeps the
+	// marker. A publish that fails after this function returns is not marked,
+	// and cannot be: the result is never awaited, and that row is already lost
+	// (see FlagChatMessageAsyncPersist). Marking a chat whose only proxied row
+	// vanished would assert something no transcript supports.
+	handedToConsumer := false
 	if proxiedTranscriptSource(hookSource) {
 		defer func() {
-			if async && published {
+			if async && handedToConsumer {
 				return
 			}
 			s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
@@ -1542,7 +1551,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		err := s.publishChatMessage(ctx, metadata, authCtx, msg, title, hookSource, payload.Source.Adapter, uncorrelatedPrompt, nativePrompt)
 		// Hands the LiteLLM marker to the handler: it owns the chat row this
 		// message creates, so it can mark without touching the request path.
-		published = err == nil
+		handedToConsumer = err == nil
 		return false, err
 	}
 
