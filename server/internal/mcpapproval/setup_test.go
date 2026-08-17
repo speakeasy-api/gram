@@ -140,7 +140,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 
 	enableMCPApproval(t, ctx, ti)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPApprovalDecide, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, organizationID))
 
 	return ctx, ti
 }
@@ -195,7 +195,13 @@ func withProject(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 
 	exact := make([]authz.Grant, len(grants))
 	for i, scope := range grants {
-		exact[i] = authz.NewGrant(scope, projectID.String())
+		// org:admin selects the organization; everything else in these tests
+		// is project-scoped.
+		selector := projectID.String()
+		if scope == authz.ScopeOrgAdmin {
+			selector = ti.organizationID
+		}
+		exact[i] = authz.NewGrant(scope, selector)
 	}
 
 	return authztest.WithExactGrants(t, scoped, exact...)

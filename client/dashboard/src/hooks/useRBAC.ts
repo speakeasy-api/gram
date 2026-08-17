@@ -15,7 +15,6 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("skill:")) return "skill";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
-  if (scope.startsWith("mcp_approval:")) return "mcp_approval";
   return "*";
 }
 
@@ -70,11 +69,6 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
-  "mcp_approval:read": ["mcp_approval:blocked_read"],
-  "mcp_approval:decide": [
-    "mcp_approval:blocked_decide",
-    "mcp_approval:blocked_read",
-  ],
 };
 
 export function exclusionScopesForScope(scope: Scope): readonly string[] {

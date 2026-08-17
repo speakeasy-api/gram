@@ -164,21 +164,24 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// project resolves the caller's project and enforces scope.
+// project resolves the caller's project and enforces org:admin.
 //
 // Every read and write in this service goes through here, so no handler can
-// reach the database without a project id that the server derived and a scope
-// the caller actually holds.
-func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, string, error) {
+// reach the database without a project id the server derived and an admin
+// caller. Reviewing and deciding MCP access is an org-admin surface — the
+// same gate as the Observe pages and the policies that do the blocking. An
+// admin who can edit the blocking policy holds decision authority already,
+// so no dedicated scope family stands between them and this surface.
+func (s *Service) project(ctx context.Context) (uuid.UUID, string, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
+		Scope:        authz.ScopeOrgAdmin,
 		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
+		ResourceID:   authCtx.ActiveOrganizationID,
 		Dimensions:   nil,
 	}); err != nil {
 		return uuid.Nil, "", fmt.Errorf("authorize mcp approval access: %w", err)
@@ -406,7 +409,7 @@ func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string,
 // actually requests the server. Reading evidence must never require deciding
 // first, so the server page calls this for any URL it shows.
 func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureServerReviewPayload) (*gen.ApprovalRequestSummary, error) {
-	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, organizationID, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +627,7 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 }
 
 func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*gen.ApprovalRequestSummary, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -727,7 +730,7 @@ func bypassServerURL(bypass repo.GetBypassRequestForPromotionRow) string {
 }
 
 func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPayload) (*gen.ListApprovalRequestsResult, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +758,7 @@ func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPay
 }
 
 func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload) (*gen.ApprovalRequestDetail, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +786,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // carries strictly less than what it would replace, so the write is skipped
 // and the failure surfaced.
 func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	projectID, _, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -928,7 +931,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 }
 
 func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisionPayload) (*gen.ApprovalDecision, error) {
-	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	projectID, organizationID, err := s.project(ctx)
 	if err != nil {
 		return nil, err
 	}

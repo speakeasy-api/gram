@@ -64738,10 +64738,6 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
-            - mcp_approval:read
-            - mcp_approval:blocked_read
-            - mcp_approval:decide
-            - mcp_approval:blocked_decide
         selectors:
           type: array
           items:
@@ -64779,10 +64775,6 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
-              - mcp_approval:read
-              - mcp_approval:blocked_read
-              - mcp_approval:decide
-              - mcp_approval:blocked_decide
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -69227,8 +69219,6 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
-            - mcp_approval:read
-            - mcp_approval:decide
       description: Form for requesting access to a scope.
       required:
         - scope
@@ -70739,10 +70729,6 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
-            - mcp_approval:read
-            - mcp_approval:blocked_read
-            - mcp_approval:decide
-            - mcp_approval:blocked_decide
         selectors:
           type: array
           items:
@@ -70864,8 +70850,6 @@ components:
             - skill:blocked_read
             - skill:blocked_write
             - risk_policy:bypass
-            - mcp_approval:blocked_read
-            - mcp_approval:blocked_decide
         resource_type:
           type: string
           description: The type of resource this scope applies to.
@@ -70877,7 +70861,6 @@ components:
             - skill
             - risk_policy
             - chat
-            - mcp_approval
         slug:
           type: string
           description: Unique scope identifier.
@@ -70909,10 +70892,6 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
-            - mcp_approval:read
-            - mcp_approval:blocked_read
-            - mcp_approval:decide
-            - mcp_approval:blocked_decide
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -71397,7 +71376,6 @@ components:
             - skill
             - risk_policy
             - chat
-            - mcp_approval
             - '*'
         server_url:
           type: string
