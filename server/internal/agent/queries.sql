@@ -184,3 +184,31 @@ SET schema_version = EXCLUDED.schema_version
   , config = EXCLUDED.config
   , updated_at = clock_timestamp()
 RETURNING organization_id, schema_version, config, created_at, updated_at;
+
+-- name: ListOwnedChatSessionMeta :many
+-- Session-picker metadata for captured agent sessions, strictly owner-matched:
+-- only chats whose user_id is the authenticated per-user-key owner, in the
+-- key's enrolled project. Personal-account sessions are included (decision on
+-- session-portability question Q2, 2026-08-10): the caller is the
+-- authenticated owner reading their own metadata. Revisit before any endpoint
+-- serves session CONTENT or admin-facing listings — personal-account
+-- ownership attribution is partly device-bridge-inferred, which is acceptable
+-- for titles but not for transcripts.
+SELECT c.id, c.title, c.updated_at
+FROM chats c
+WHERE c.id = ANY(@chat_ids::uuid[])
+  AND c.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE;
+
+-- name: GetChatTitleForMove :one
+-- Best-effort display enrichment for the chat_session:move audit entry. The
+-- move is recorded even when this returns no rows (the session may not have
+-- been captured yet), so callers treat ErrNoRows as empty, not failure.
+SELECT c.title, c.user_id
+FROM chats c
+WHERE c.id = @id
+  AND c.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE;

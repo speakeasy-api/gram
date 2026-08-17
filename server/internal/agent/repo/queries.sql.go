@@ -175,6 +175,36 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 	return items, nil
 }
 
+const getChatTitleForMove = `-- name: GetChatTitleForMove :one
+SELECT c.title, c.user_id
+FROM chats c
+WHERE c.id = $1
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.deleted IS FALSE
+`
+
+type GetChatTitleForMoveParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetChatTitleForMoveRow struct {
+	Title  pgtype.Text
+	UserID pgtype.Text
+}
+
+// Best-effort display enrichment for the chat_session:move audit entry. The
+// move is recorded even when this returns no rows (the session may not have
+// been captured yet), so callers treat ErrNoRows as empty, not failure.
+func (q *Queries) GetChatTitleForMove(ctx context.Context, arg GetChatTitleForMoveParams) (GetChatTitleForMoveRow, error) {
+	row := q.db.QueryRow(ctx, getChatTitleForMove, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i GetChatTitleForMoveRow
+	err := row.Scan(&i.Title, &i.UserID)
+	return i, err
+}
+
 const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
 SELECT organization_id, schema_version, config, created_at, updated_at
 FROM device_agent_configurations
@@ -249,6 +279,62 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedChatSessionMeta = `-- name: ListOwnedChatSessionMeta :many
+SELECT c.id, c.title, c.updated_at
+FROM chats c
+WHERE c.id = ANY($1::uuid[])
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+`
+
+type ListOwnedChatSessionMetaParams struct {
+	ChatIds        []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type ListOwnedChatSessionMetaRow struct {
+	ID        uuid.UUID
+	Title     pgtype.Text
+	UpdatedAt pgtype.Timestamptz
+}
+
+// Session-picker metadata for captured agent sessions, strictly owner-matched:
+// only chats whose user_id is the authenticated per-user-key owner, in the
+// key's enrolled project. Personal-account sessions are included (decision on
+// session-portability question Q2, 2026-08-10): the caller is the
+// authenticated owner reading their own metadata. Revisit before any endpoint
+// serves session CONTENT or admin-facing listings — personal-account
+// ownership attribution is partly device-bridge-inferred, which is acceptable
+// for titles but not for transcripts.
+func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedChatSessionMetaParams) ([]ListOwnedChatSessionMetaRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatSessionMeta,
+		arg.ChatIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatSessionMetaRow
+	for rows.Next() {
+		var i ListOwnedChatSessionMetaRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -6167,6 +6167,98 @@ paths:
             x-speakeasy-name-override: getPlugins
             x-speakeasy-react-hook:
                 name: AgentPlugins
+    /rpc/agent.getSessionMeta:
+        get:
+            description: 'Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent''s session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.'
+            operationId: getAgentSessionMeta
+            parameters:
+                - allowEmptyValue: true
+                  description: Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.
+                  in: query
+                  name: session_ids
+                  required: true
+                  schema:
+                    description: Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.
+                    items:
+                        type: string
+                    maxItems: 50
+                    type: array
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetSessionMetaResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: getSessionMeta agent
+            tags:
+                - agent
+            x-speakeasy-name-override: getSessionMeta
+            x-speakeasy-react-hook:
+                name: AgentSessionMeta
     /rpc/agent.listSyncedUsers:
         get:
             description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
@@ -6248,6 +6340,103 @@ paths:
             x-speakeasy-name-override: listSyncedUsers
             x-speakeasy-react-hook:
                 name: SyncedAgentUsers
+    /rpc/agent.reportSessionMoved:
+        post:
+            description: 'Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent''s perspective: the daemon must never fail a move because this call failed.'
+            operationId: reportAgentSessionMoved
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Hardware serial number of the machine the move happened on, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Serial
+                  schema:
+                    description: Hardware serial number of the machine the move happened on, when the agent can read it.
+                    type: string
+                - allowEmptyValue: true
+                  description: Hostname of the machine the move happened on, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Hostname
+                  schema:
+                    description: Hostname of the machine the move happened on, when the agent can read it.
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReportSessionMovedRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: reportSessionMoved agent
+            tags:
+                - agent
+            x-speakeasy-name-override: reportSessionMoved
+            x-speakeasy-react-hook:
+                name: ReportAgentSessionMoved
     /rpc/agent.updateConfiguration:
         post:
             description: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
@@ -57304,6 +57493,27 @@ components:
             required:
                 - slug
                 - marketplace_name
+        AgentSessionMeta:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: Gram chat id for the captured session.
+                    format: uuid
+                session_id:
+                    type: string
+                    description: The native harness session identifier this entry resolves, echoed from the request.
+                title:
+                    type: string
+                    description: Generated (or manually set) chat title. Absent when no title has been generated yet.
+                updated_at:
+                    type: string
+                    description: Last activity recorded for the captured session.
+                    format: date-time
+            required:
+                - session_id
+                - chat_id
+                - updated_at
         AgentUsage:
             type: object
             properties:
@@ -63807,6 +64017,16 @@ components:
             required:
                 - message
                 - acknowledged
+        GetSessionMetaResult:
+            type: object
+            properties:
+                sessions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentSessionMeta'
+                    description: Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat or another owner are omitted.
+            required:
+                - sessions
         GetSetupDocsResponseBody:
             type: object
             properties:
@@ -70631,6 +70851,27 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        ReportSessionMovedRequestBody:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+                session_id:
+                    type: string
+                    description: Native harness session identifier of the moved session. Gram derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.
+                    maxLength: 256
+                source_surface:
+                    type: string
+                    description: Harness the session originated in, as detected by the agent (e.g. claude-code, codex).
+                    maxLength: 64
+                target_harness:
+                    type: string
+                    description: Harness the session was moved to (e.g. cursor, codex, claude-code).
+                    maxLength: 64
+            required:
+                - session_id
+                - target_harness
         RequestAccessForm:
             type: object
             properties:
